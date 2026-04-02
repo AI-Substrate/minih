@@ -45,3 +45,4 @@
 | Phase | Changes |
 |-------|---------|
 | Phase 1 | Created domain. Type definitions extracted with frontmatter additions. |
+| Phase 2 | Added folder.ts (discovery + frontmatter), validator.ts (AJV), display.ts (terminal), runner.ts (orchestration), retrospective.json schema. 61 tests. |

@@ -1,0 +1,33 @@
+{
+  "$id": "https://minih.dev/schemas/retrospective.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Agent Retrospective",
+  "description": "Self-improving feedback from an agent run. The magicWand field is the most important — one concrete wish for a better experience.",
+  "type": "object",
+  "required": ["workedWell", "confusing", "magicWand"],
+  "additionalProperties": true,
+  "properties": {
+    "workedWell": {
+      "type": "string",
+      "minLength": 10,
+      "description": "What about the experience worked well? Be specific about WHY."
+    },
+    "confusing": {
+      "type": "string",
+      "minLength": 10,
+      "description": "What was confusing, unclear, or required trial-and-error?"
+    },
+    "magicWand": {
+      "type": "string",
+      "minLength": 20,
+      "description": "If you had a magic wand, what ONE thing would you change? Name a specific command, flag, format, or workflow improvement."
+    },
+    "improvementSuggestions": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 10 },
+      "minItems": 1,
+      "maxItems": 5,
+      "description": "1-5 specific, actionable improvements."
+    }
+  }
+}

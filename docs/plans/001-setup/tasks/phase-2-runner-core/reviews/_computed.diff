@@ -1,0 +1,2081 @@
+diff --git a/docs/domains/runner/domain.md b/docs/domains/runner/domain.md
+index 40c660b..8d00d35 100644
+--- a/docs/domains/runner/domain.md
++++ b/docs/domains/runner/domain.md
+@@ -45,3 +45,4 @@
+ | Phase | Changes |
+ |-------|---------|
+ | Phase 1 | Created domain. Type definitions extracted with frontmatter additions. |
++| Phase 2 | Added folder.ts (discovery + frontmatter), validator.ts (AJV), display.ts (terminal), runner.ts (orchestration), retrospective.json schema. 61 tests. |
+diff --git a/docs/plans/001-setup/tasks/phase-2-runner-core/execution.log.md b/docs/plans/001-setup/tasks/phase-2-runner-core/execution.log.md
+new file mode 100644
+index 0000000..92b2082
+--- /dev/null
++++ b/docs/plans/001-setup/tasks/phase-2-runner-core/execution.log.md
+@@ -0,0 +1,61 @@
++# Execution Log: Phase 2 — Runner Core
++
++**Plan**: miniharness-extraction-plan.md
++**Phase**: Phase 2: Runner Core
++**Started**: 2026-04-02T14:41:00Z
++
++---
++
++## Pre-Phase Harness Validation
++
++- 🔴 UNAVAILABLE — No harness.md exists. Using standard `npm run build && npm test`.
++
++---
++
++## Task Log
++
++### T001: Create src/runner/folder.ts ✅
++- Agent discovery, slug validation, run folder creation, frozen inputs
++- Hand-rolled frontmatter parser (~15 lines) — parses from position 0 only, ignores `---` horizontal rules in body
++- `path.resolve(agentsDir)` applied early for absolute path safety (DYK #5)
++- **Discovery**: Empty frontmatter (`---\n---\n`) needs `indexOf('\n---\n', 3)` not `4` — the closing delimiter starts at position 3
++
++### T002: Write folder.test.ts ✅
++- 21 tests: slug validation (6), frontmatter parsing (6), agent discovery (5), resolveAgent (2), createRunFolder (1), relative path handling (1)
++
++### T003: Create src/runner/validator.ts ✅
++- Fresh AJV instance per call (DYK #2 — no caching bugs)
++- Pre-validation for missing file, empty file, invalid JSON
++- Extracted with minimal adaptation from source
++
++### T004: Write validator.test.ts ✅
++- 10 tests: valid output, invalid output, missing files, empty files, invalid JSON, schema errors, input validation
++
++### T005: Create src/runner/display.ts ✅
++- Terminal formatting with event icons (🔧 💭 📝 📊 ⏸ ❌)
++- Changed `@chainglass/shared` import to local adapter types
++- Lightweight — no tests needed per plan
++
++### T006: Create src/runner/runner.ts ✅
++- Core orchestration: prompt assembly, execution, NDJSON events, validation, completion metadata
++- Preamble path configurable via agentsDir param (DYK #5)
++- Frontmatter stripped from prompt before assembly (DYK #1)
++- **Discovery**: `listArtifacts` runs before `completed.json` is written — so completed.json itself isn't in the artifacts list. This matches source behavior.
++
++### T007: Write runner.test.ts ✅
++- 13 tests: prompt order, frontmatter stripping, {{REPO_ROOT}} replacement, no preamble, no instructions, input params, output hint, NDJSON events, completed.json metadata, degraded status, failed status, frozen copies, input validation fail-fast
++
++### T008: Create retrospective schema ✅
++- JSON Schema 2020-12 with minLength enforcement: workedWell(10), confusing(10), magicWand(20)
++- improvementSuggestions optional array
++
++### T009: Integration test ✅
++- Full end-to-end: agent with frontmatter + schema + instructions + preamble → FakeAgentAdapter with events → verified all artifacts, metadata, validation, prompt assembly
++- Confirms frontmatter parsing doesn't break on `---` horizontal rules in body
++
++### T010: Update runner barrel exports ✅
++- Added runtime exports: listAgents, resolveAgent, validateSlug, createRunFolder, parseFrontmatter, runAgent, validateInput, validateOutput, displayEvent, displayHeader, displaySummary, displayPreflight, formatEvent
++
++### T011: Verify build + all tests ✅
++- `npm run build` → zero errors
++- `npm test` → 61/61 tests pass (5 test files: adapter/fake + runner/folder + runner/validator + runner/runner + runner/integration)
+diff --git a/docs/plans/001-setup/tasks/phase-2-runner-core/tasks.fltplan.md b/docs/plans/001-setup/tasks/phase-2-runner-core/tasks.fltplan.md
+new file mode 100644
+index 0000000..1b1b898
+--- /dev/null
++++ b/docs/plans/001-setup/tasks/phase-2-runner-core/tasks.fltplan.md
+@@ -0,0 +1,137 @@
++# Flight Plan: Phase 2 — Runner Core
++
++**Plan**: [miniharness-extraction-plan.md](../../miniharness-extraction-plan.md)
++**Phase**: Phase 2: Runner Core
++**Generated**: 2026-04-02
++**Status**: Landed ✈️
++
++---
++
++## Departure → Destination
++
++**Where we are**: A compilable package with all type definitions, FakeAgentAdapter test double, and 16 passing tests. No runtime logic — just types and interfaces. Can't discover agents, assemble prompts, or run anything yet.
++
++**Where we're going**: The runner executes agents end-to-end (programmatically, via FakeAgentAdapter). A developer can call `runAgent(adapter, definition, config)` and get back a run folder with frozen inputs, events.ndjson, validated output, and completed.json. Agent discovery finds folders with `prompt.md` and parses frontmatter for descriptions. Schema validation enforces input contracts before execution and output contracts after. All tested with TDD.
++
++---
++
++## Domain Context
++
++### Domains We're Changing
++
++| Domain | What Changes | Key Files |
++|--------|-------------|-----------|
++| runner | Add all runtime logic — discovery, validation, display, orchestration | `src/runner/folder.ts`, `validator.ts`, `display.ts`, `runner.ts` |
++| runner | Update barrel with runtime exports | `src/runner/index.ts` |
++
++### Domains We Depend On (no changes)
++
++| Domain | What We Consume | Contract |
++|--------|----------------|----------|
++| adapter | AgentEvent union, AgentResult | `src/adapter/events.ts` |
++| adapter | IAgentAdapter interface | `src/adapter/interface.ts` |
++| adapter | FakeAgentAdapter (tests) | `src/adapter/fake.ts` |
++
++---
++
++## Flight Status
++
++```mermaid
++stateDiagram-v2
++    classDef pending fill:#9E9E9E,stroke:#757575,color:#fff
++    classDef active fill:#FFC107,stroke:#FFA000,color:#000
++    classDef done fill:#4CAF50,stroke:#388E3C,color:#fff
++    classDef blocked fill:#F44336,stroke:#D32F2F,color:#fff
++
++    state "1: Folder + discovery" as S1
++    state "2: Validator" as S2
++    state "3: Display" as S3
++    state "4: Runner + orchestration" as S4
++    state "5: Integration test + verify" as S5
++
++    [*] --> S1
++    S1 --> S2
++    S2 --> S3
++    S3 --> S4
++    S4 --> S5
++    S5 --> [*]
++
++    class S1,S2,S3,S4,S5 pending
++```
++
++**Legend**: grey = pending | yellow = active | red = blocked/needs input | green = done
++
++---
++
++## Stages
++
++- [x] **Stage 1: Folder + discovery** — Agent discovery, slug validation, run folder creation, frontmatter parsing (`T001`, `T002`)
++- [x] **Stage 2: Validator** — AJV schema validation for inputs and outputs (`T003`, `T004`)
++- [x] **Stage 3: Display** — Terminal formatting for events and summaries (`T005`)
++- [x] **Stage 4: Runner + orchestration** — Prompt assembly, execution, NDJSON streaming, artifacts, retrospective schema (`T006`, `T007`, `T008`)
++- [x] **Stage 5: Integration + verify** — End-to-end test, barrel exports, build verification (`T009`, `T010`, `T011`)
++
++---
++
++## Architecture: Before & After
++
++```mermaid
++flowchart LR
++    classDef existing fill:#E8F5E9,stroke:#4CAF50,color:#000
++    classDef new fill:#E3F2FD,stroke:#2196F3,color:#000
++
++    subgraph Before["Before Phase 2"]
++        B1["adapter/<br/>events, interface, fake"]:::existing
++        B2["runner/<br/>types only"]:::existing
++        B1 --> B2
++    end
++
++    subgraph After["After Phase 2"]
++        A1["adapter/<br/>events, interface, fake"]:::existing
++        A2["runner/folder.ts<br/>discovery + frontmatter"]:::new
++        A3["runner/validator.ts<br/>AJV validation"]:::new
++        A4["runner/display.ts<br/>terminal formatting"]:::new
++        A5["runner/runner.ts<br/>orchestration"]:::new
++        A6["schemas/retrospective.json"]:::new
++        A1 --> A5
++        A2 --> A5
++        A3 --> A5
++        A4 --> A5
++    end
++```
++
++**Legend**: existing (green, unchanged) | new (blue, created)
++
++---
++
++## Acceptance Criteria
++
++- [x] Agent discovery finds folders with prompt.md, skips `_shared`
++- [x] Frontmatter parsed from prompt.md, stripped before prompt assembly
++- [x] Prompt assembly: preamble → instructions → output hint → params → prompt, joined by `\n\n---\n\n`
++- [x] Run folder created with frozen copies of all agent files
++- [x] Events written incrementally to NDJSON
++- [x] Invalid output → status "degraded" (not "failed")
++- [x] Input validation fails fast before execution
++- [x] All tests pass (Phase 1 + Phase 2)
++
++## Goals & Non-Goals
++
++**Goals**: Agent discovery, frontmatter, prompt assembly, NDJSON events, schema validation, frozen inputs, completion metadata, display formatting, retrospective schema, TDD tests
++**Non-Goals**: No CLI commands, no SDK adapter, no init scaffolding, no doctor/check
++
++---
++
++## Checklist
++
++- [x] T001: Create src/runner/folder.ts (discovery + frontmatter)
++- [x] T002: Write folder.test.ts (TDD)
++- [x] T003: Create src/runner/validator.ts (AJV validation)
++- [x] T004: Write validator.test.ts (TDD)
++- [x] T005: Create src/runner/display.ts (terminal formatting)
++- [x] T006: Create src/runner/runner.ts (orchestration)
++- [x] T007: Write runner.test.ts (TDD)
++- [x] T008: Create retrospective schema (src/schemas/retrospective.json)
++- [x] T009: Integration test (end-to-end runner)
++- [x] T010: Update runner barrel exports
++- [x] T011: Verify build + all tests pass
+diff --git a/docs/plans/001-setup/tasks/phase-2-runner-core/tasks.md b/docs/plans/001-setup/tasks/phase-2-runner-core/tasks.md
+new file mode 100644
+index 0000000..44aac7e
+--- /dev/null
++++ b/docs/plans/001-setup/tasks/phase-2-runner-core/tasks.md
+@@ -0,0 +1,260 @@
++# Phase 2: Runner Core — Tasks
++
++**Plan**: [miniharness-extraction-plan.md](../../miniharness-extraction-plan.md)
++**Phase**: Phase 2: Runner Core
++**Generated**: 2026-04-02
++**Status**: Ready for implementation
++
++---
++
++## Executive Briefing
++
++**Purpose**: Extract and adapt the runner logic — agent discovery, schema validation, terminal display, and prompt assembly/execution. This is the heart of minih: the code that turns a folder with `prompt.md` into a fully-observed agent run with frozen inputs, NDJSON events, validated output, and completion metadata.
++
++**What We're Building**: Four runtime modules (folder.ts, validator.ts, display.ts, runner.ts) plus a reusable retrospective schema fragment. All tested with FakeAgentAdapter via TDD. After this phase, the runner can execute an agent end-to-end programmatically — CLI wrapping comes in Phase 4.
++
++**Goals**:
++- ✅ Agent discovery from filesystem (folders with `prompt.md`)
++- ✅ Frontmatter parsing (description, tags) — new code, hand-rolled
++- ✅ Prompt assembly: preamble → instructions → output hint → params → prompt
++- ✅ Frontmatter stripped before prompt assembly
++- ✅ Run folder creation with frozen copies of all inputs
++- ✅ NDJSON event streaming (incremental append)
++- ✅ AJV 2020-12 schema validation (input + output)
++- ✅ Degraded vs failed vs completed status logic
++- ✅ Terminal display formatting (events, summary, preflight)
++- ✅ Retrospective schema fragment shipped
++- ✅ TDD tests for folder, validator, runner
++
++**Non-Goals**:
++- ❌ No CLI commands (Phase 4)
++- ❌ No SDK adapter implementation (Phase 3)
++- ❌ No `minih init` scaffolding (Phase 5)
++- ❌ No `minih doctor` or `minih check` (Phase 5)
++
++---
++
++## Prior Phase Context
++
++### Phase 1: Project Scaffold + Types
++
++**A. Deliverables**:
++- `src/adapter/events.ts` — full AgentEvent union (10 types), AgentResult, AgentRunOptions
++- `src/adapter/interface.ts` — IAgentAdapter (run/compact/terminate)
++- `src/adapter/fake.ts` — FakeAgentAdapter with test helpers
++- `src/runner/types.ts` — AgentDefinition (with description/tags), AgentRunConfig, CompletedMetadata, AgentRunResult, ValidationResult, RunEventStats
++- Barrel exports, CLI placeholder, build pipeline, vitest
++
++**B. Dependencies Available**:
++- `AgentEvent` discriminated union (switch on `event.type`)
++- `AgentResult` — `{ output, sessionId, status, exitCode, stderr?, tokens }`
++- `IAgentAdapter` — `run(options)`, `compact(sessionId)`, `terminate(sessionId)`
++- `FakeAgentAdapter` — configurable test double with `setEvents()`, `emitToolCall()`, etc.
++- `AgentDefinition` — `{ slug, description, tags, dir, promptPath, schemaPath, instructionsPath, inputSchemaPath }`
++- `AgentRunConfig` — `{ slug, model?, reasoningEffort?, timeout?, cwd?, params? }`
++- `CompletedMetadata`, `AgentRunResult`, `ValidationResult`, `RunEventStats`
++
++**C. Gotchas**:
++- `rootDir: "src"` in tsconfig (not `.`) — dist layout is `dist/runner/folder.js` not `dist/src/runner/folder.js`
++- FakeAgentAdapter events emitted synchronously — may not model async streaming perfectly
++- Use explicit `.js` extensions in all imports (ESM)
++
++**D. Incomplete Items**: None — all Phase 1 tasks complete.
++
++**E. Patterns to Follow**:
++- Import direction: `cli → runner → adapter` (no upward imports)
++- Plain TypeScript types (no zod)
++- Barrel exports for public API
++- FakeAgentAdapter as canonical test double
++- ESM-only with `.js` import extensions
++
++---
++
++## Pre-Implementation Check
++
++| File | Exists? | Domain | Notes |
++|------|---------|--------|-------|
++| `src/runner/folder.ts` | ❌ create | runner | Extract from harness folder.ts + add frontmatter parsing |
++| `src/runner/validator.ts` | ❌ create | runner | Extract from harness validator.ts — minimal adaptation |
++| `src/runner/display.ts` | ❌ create | runner | Extract from harness display.ts — change imports |
++| `src/runner/runner.ts` | ❌ create | runner | Extract from harness runner.ts — most adaptation needed |
++| `src/runner/index.ts` | ✅ modify | runner | Add runtime exports (listAgents, runAgent, etc.) |
++| `src/schemas/retrospective.json` | ❌ create | runner | New — from Workshop 001 design |
++| `test/runner/folder.test.ts` | ❌ create | runner | TDD tests |
++| `test/runner/validator.test.ts` | ❌ create | runner | TDD tests |
++| `test/runner/runner.test.ts` | ❌ create | runner | TDD tests |
++
++No concept duplication found — all modules are new to minih.
++No agent harness — implementation will use `npm run build && npm test`.
++
++---
++
++## Architecture Map
++
++```mermaid
++flowchart TD
++    classDef completed fill:#4CAF50,stroke:#388E3C,color:#fff
++    classDef pending fill:#9E9E9E,stroke:#757575,color:#fff
++
++    subgraph Phase1["Phase 1 (completed)"]
++        Events["adapter/events.ts<br/>AgentEvent union"]:::completed
++        Interface["adapter/interface.ts<br/>IAgentAdapter"]:::completed
++        Fake["adapter/fake.ts<br/>FakeAgentAdapter"]:::completed
++        Types["runner/types.ts<br/>AgentDefinition etc."]:::completed
++    end
++
++    subgraph Phase2["Phase 2: Runner Core"]
++        Folder["T001-T002: folder.ts<br/>discovery + frontmatter"]:::pending
++        Validator["T003-T004: validator.ts<br/>AJV validation"]:::pending
++        Display["T005: display.ts<br/>terminal formatting"]:::pending
++        Runner["T006-T007: runner.ts<br/>prompt assembly + execution"]:::pending
++        Schema["T008: retrospective.json"]:::pending
++        IntTest["T009: integration test"]:::pending
++
++        Folder --> Runner
++        Validator --> Runner
++        Display --> Runner
++        Schema --> Validator
++        Runner --> IntTest
++    end
++
++    Events --> Display
++    Events --> Runner
++    Interface --> Runner
++    Fake --> IntTest
++    Types --> Folder
++    Types --> Runner
++
++    subgraph Source["Source (extract from)"]
++        S1["harness/src/agent/folder.ts"]:::pending
++        S2["harness/src/agent/validator.ts"]:::pending
++        S3["harness/src/agent/display.ts"]:::pending
++        S4["harness/src/agent/runner.ts"]:::pending
++    end
++
++    S1 -.-> Folder
++    S2 -.-> Validator
++    S3 -.-> Display
++    S4 -.-> Runner
++```
++
++---
++
++## Tasks
++
++| Status | ID | Task | Domain | Path(s) | Done When | Notes |
++|--------|-----|------|--------|---------|-----------|-------|
++| [ ] | T001 | Create src/runner/folder.ts | runner | `src/runner/folder.ts` | `validateSlug()`, `listAgents(agentsDir)`, `resolveAgent(slug, agentsDir)`, `createRunFolder(agentDef)`, `parseFrontmatter(content)` all work. Agents dir passed as param (not hardcoded). Frontmatter parsed from prompt.md. Underscore-prefixed folders skipped. Frozen copies of all agent files in run folder. | Source: harness/src/agent/folder.ts (144 LOC). Adaptations: configurable root, frontmatter parsing (hand-roll ~15 lines, DYK #4), `AgentDefinition.description/tags` populated. |
++| [ ] | T002 | Write folder.test.ts (TDD) | runner | `test/runner/folder.test.ts` | Tests: (1) slug validation — valid, invalid chars, traversal, empty, too long. (2) agent discovery — finds prompt.md, skips _shared, skips no-prompt dirs, skips invalid slugs, sorted alphabetically. (3) frontmatter — extracts description/tags, handles missing frontmatter, handles empty frontmatter, handles no tags. (4) run folder creation — timestamp format, frozen copies of prompt/instructions/schemas, output/ dir created. | TDD — write tests first. Use temp dirs (fs.mkdtempSync). |
++| [ ] | T003 | Create src/runner/validator.ts | runner | `src/runner/validator.ts` | `validateInput(schemaPath, params)` and `validateOutput(schemaPath, outputPath)` both work. AJV 2020-12 with allErrors. Pre-validation: missing file, empty file, invalid JSON. Returns `ValidationResult { valid, errors }`. | Source: harness/src/agent/validator.ts (128 LOC). Minimal adaptation — change import path for ValidationResult. |
++| [ ] | T004 | Write validator.test.ts (TDD) | runner | `test/runner/validator.test.ts` | Tests: (1) valid output passes. (2) invalid output returns errors with paths. (3) missing output file handled. (4) empty output file handled. (5) invalid JSON handled. (6) schema compilation error handled. (7) input validation — required field missing fails, valid params pass. | TDD — write tests first. Create temp schema + output files. |
++| [ ] | T005 | Create src/runner/display.ts | runner | `src/runner/display.ts` | `displayHeader()`, `displayPreflight()`, `displayEvent()`, `formatEvent()`, `displaySummary()` all work. Events formatted with icons (🔧 💭 📝 📊 etc.). Output goes to stderr. | Source: harness/src/agent/display.ts (109 LOC). Change `@chainglass/shared` import to local `../adapter/events.js`. |
++| [ ] | T006 | Create src/runner/runner.ts | runner | `src/runner/runner.ts` | `runAgent(adapter, definition, config, onEvent?)` works end-to-end. Prompt assembly: preamble → instructions → output hint → params → prompt, joined by `\n\n---\n\n`. Frontmatter stripped from prompt.md before assembly. `{{REPO_ROOT}}` replaced in preamble. Events written to NDJSON incrementally. Completion metadata written. Degraded status for invalid output. Timeout handling with adapter.terminate(). | Source: harness/src/agent/runner.ts (283 LOC). Adaptations: preamble path configurable (not hardcoded to `resolveHarnessRoot()`), frontmatter stripping, import paths changed. |
++| [ ] | T007 | Write runner.test.ts (TDD) | runner | `test/runner/runner.test.ts` | Tests: (1) prompt assembly order verified. (2) frontmatter stripped from prompt. (3) preamble `{{REPO_ROOT}}` replaced. (4) no preamble = prompt only. (5) no instructions = skipped. (6) params formatted as `## Input Parameters`. (7) output hint included when schema exists. (8) events written to NDJSON. (9) completed.json written with correct metadata. (10) degraded status when output fails validation. (11) failed status on adapter error. (12) timeout handling. (13) frozen copies in run folder verified. | TDD — most critical tests. Use FakeAgentAdapter + temp agent dirs. |
++| [ ] | T008 | Create retrospective schema | runner | `src/schemas/retrospective.json` | JSON Schema 2020-12 with required `workedWell`, `confusing`, `magicWand`. minLength: 10/10/20 respectively. `improvementSuggestions` optional array. `additionalProperties: true`. | Per Workshop 001. New file — not in source. |
++| [ ] | T009 | Integration test | runner | `test/runner/integration.test.ts` | Full end-to-end: create temp agent dir with prompt.md (with frontmatter) + output-schema.json (with retrospective required) + instructions.md. Run with FakeAgentAdapter configured to return valid output. Verify: run folder created, frozen copies present, events.ndjson written, completed.json has all fields, output/report.json exists, status = completed, validation passes. | End-to-end runner test. Proves all modules work together. |
++| [ ] | T010 | Update runner barrel exports | runner | `src/runner/index.ts` | Barrel re-exports runtime functions: `listAgents`, `resolveAgent`, `validateSlug`, `createRunFolder`, `runAgent`, `validateInput`, `validateOutput`, `parseFrontmatter`, `displayEvent`, `displayHeader`, `displaySummary`, `displayPreflight`, `formatEvent`. | Add runtime exports alongside existing type exports. |
++| [ ] | T011 | Verify build + all tests | — | — | `npm run build` succeeds. All tests pass (Phase 1 + Phase 2). No regressions. | Final verification gate. |
++
++---
++
++## Context Brief
++
++**Key findings from plan**:
++- Finding 02: AgentEvent union fully expanded in Phase 1 → display.ts and runner.ts can switch on `event.type` safely
++- Finding 04: No frontmatter parser in source — hand-roll ~15 lines (DYK #4 confirmed by user)
++- Finding 05: Zod dropped — validator.ts uses AJV directly, no zod dependency
++- Finding 06: Vitest for testing — TDD for folder, validator, runner
++- Finding 07: FakeAgentAdapter ready from Phase 1 — use for all runner tests
++
++**Domain dependencies** (from `docs/domains/*/domain.md`):
++- `adapter`: AgentEvent union (`src/adapter/events.ts`) — runner switches on event.type for NDJSON writing and stats counting
++- `adapter`: IAgentAdapter (`src/adapter/interface.ts`) — runner.ts accepts as parameter for adapter-agnostic execution
++- `adapter`: FakeAgentAdapter (`src/adapter/fake.ts`) — all Phase 2 tests use this as the test double
++- `adapter`: AgentResult (`src/adapter/events.ts`) — runner processes result output, status, tokens
++
++**Domain constraints**:
++- All Phase 2 code lives in `src/runner/` — runner domain only
++- runner imports from adapter (events, interface) — never the reverse
++- runner does NOT import from cli — cli wraps runner in Phase 4
++- Schema file at `src/schemas/` — owned by runner domain
++
++**No agent harness** — implementation uses `npm run build && npm test`.
++
++**Reusable from Phase 1**:
++- `FakeAgentAdapter` with `setEvents()`, `emitToolCall()`, `emitToolResult()` for simulating agent behavior
++- All type definitions (`AgentDefinition`, `CompletedMetadata`, etc.)
++- Vitest setup with `test/` directory structure
++
++**Source file mapping** (what to extract from where):
++
++| Minih Target | Source File | LOC | Adaptation Needed |
++|-------------|------------|-----|-------------------|
++| `src/runner/folder.ts` | `harness/src/agent/folder.ts` | 144 | Configurable agents dir (not hardcoded). Add `parseFrontmatter()`. Populate `AgentDefinition.description/tags`. |
++| `src/runner/validator.ts` | `harness/src/agent/validator.ts` | 128 | Change import path for `ValidationResult`. Otherwise copy as-is. |
++| `src/runner/display.ts` | `harness/src/agent/display.ts` | 109 | Change `@chainglass/shared` import to `../adapter/events.js`. |
++| `src/runner/runner.ts` | `harness/src/agent/runner.ts` | 283 | Preamble path configurable. Frontmatter stripping. Replace `resolveHarnessRoot()` with agentsDir param. Change all `@chainglass/shared` imports. |
++
++**Prompt assembly flow**:
++```mermaid
++flowchart LR
++    A["_shared/preamble.md<br/>(optional)"] --> F["filter(Boolean)"]
++    B["instructions.md<br/>(optional)"] --> F
++    C["Output hint<br/>(if schema exists)"] --> F
++    D["Input params<br/>(if --param)"] --> F
++    E["prompt.md<br/>(frontmatter stripped)"] --> F
++    F --> G["join('\\n\\n---\\n\\n')"]
++    G --> H["fullPrompt"]
++```
++
++**Run lifecycle sequence**:
++```mermaid
++sequenceDiagram
++    participant CLI as CLI (Phase 4)
++    participant Runner as runner.ts
++    participant Folder as folder.ts
++    participant Adapter as IAgentAdapter
++    participant FS as Filesystem
++
++    CLI->>Runner: runAgent(adapter, def, config)
++    Runner->>Folder: createRunFolder(def)
++    Folder->>FS: mkdir + freeze copies
++    Folder-->>Runner: { runDir, runId }
++    Runner->>FS: read prompt.md (strip frontmatter)
++    Runner->>FS: read instructions.md (optional)
++    Runner->>FS: read preamble.md (optional, replace {{REPO_ROOT}})
++    Runner->>Runner: assemble fullPrompt
++    Runner->>Adapter: adapter.run({ prompt, model, ... })
++    Adapter-->>Runner: events via onEvent callback
++    Runner->>FS: appendFile events.ndjson (per event)
++    Adapter-->>Runner: AgentResult
++    Runner->>FS: write output/report.json
++    Runner->>Runner: validateOutput (if schema)
++    Runner->>Runner: determine status (completed/degraded/failed/timeout)
++    Runner->>FS: write completed.json
++    Runner-->>CLI: AgentRunResult
++```
++
++---
++
++## Discoveries & Learnings
++
++_Populated during implementation by plan-6._
++
++| Date | Task | Type | Discovery | Resolution | References |
++|------|------|------|-----------|------------|------------|
++
++---
++
++## Directory Layout
++
++```
++docs/plans/001-setup/
++  ├── miniharness-extraction-plan.md
++  └── tasks/
++      ├── phase-1-project-scaffold-types/   (completed)
++      └── phase-2-runner-core/
++          ├── tasks.md                      ← this file
++          ├── tasks.fltplan.md              ← flight plan
++          └── execution.log.md             ← created by plan-6
++```
+diff --git a/src/runner/display.ts b/src/runner/display.ts
+new file mode 100644
+index 0000000..f8ff319
+--- /dev/null
++++ b/src/runner/display.ts
+@@ -0,0 +1,104 @@
++/**
++ * Agent display — rich terminal output for agent execution.
++ *
++ * Outputs to stderr (stdout reserved for JSON envelope).
++ * Provides header box, real-time event streaming, and completion summary.
++ *
++ * Extracted from: harness/src/agent/display.ts
++ */
++
++import type { AgentEvent } from '../adapter/events.js';
++import type { AgentRunResult, CompletedMetadata } from './types.js';
++
++const c = {
++  reset: '\x1b[0m',
++  bold: '\x1b[1m',
++  dim: '\x1b[2m',
++  red: '\x1b[31m',
++  green: '\x1b[32m',
++  yellow: '\x1b[33m',
++  cyan: '\x1b[36m',
++  magenta: '\x1b[35m',
++};
++
++function ts(): string {
++  return new Date().toISOString().slice(11, 23);
++}
++
++export function displayHeader(slug: string, runId: string, model?: string): void {
++  const line = '─'.repeat(50);
++  process.stderr.write(`\n${c.bold}╭${line}╮${c.reset}\n`);
++  process.stderr.write(`${c.bold}│  Agent: ${c.cyan}${slug}${c.reset}${' '.repeat(Math.max(0, 40 - slug.length))}│${c.reset}\n`);
++  process.stderr.write(`${c.bold}│  Run:   ${c.dim}${runId.slice(0, 38)}${c.reset}${' '.repeat(Math.max(0, 40 - Math.min(runId.length, 38)))}│${c.reset}\n`);
++  if (model) {
++    process.stderr.write(`${c.bold}│  Model: ${c.yellow}${model}${c.reset}${' '.repeat(Math.max(0, 40 - model.length))}│${c.reset}\n`);
++  }
++  process.stderr.write(`${c.bold}╰${line}╯${c.reset}\n\n`);
++}
++
++export function displayPreflight(label: string, ok: boolean, detail?: string): void {
++  const icon = ok ? `${c.green}✓` : `${c.red}✗`;
++  const msg = detail ? ` ${c.dim}(${detail})${c.reset}` : '';
++  process.stderr.write(`  ${icon}${c.reset} ${label}${msg}\n`);
++}
++
++export function formatEvent(event: AgentEvent): string {
++  switch (event.type) {
++    case 'text_delta':
++      return `${c.cyan}[${ts()}]${c.reset} ${c.dim}${event.data.content}${c.reset}`;
++    case 'message':
++      return `${c.cyan}[${ts()}]${c.reset} 📝 ${c.dim}(${event.data.content.length} chars)${c.reset}`;
++    case 'thinking':
++      return `${c.cyan}[${ts()}]${c.reset} 💭 ${c.dim}${event.data.content.slice(0, 80)}${c.reset}`;
++    case 'tool_call': {
++      const input = event.data.input;
++      const preview = typeof input === 'string' ? input
++        : typeof input === 'object' && input !== null
++          ? (input as Record<string, unknown>).command ?? (input as Record<string, unknown>).description ?? JSON.stringify(input)
++          : String(input);
++      return `${c.cyan}[${ts()}]${c.reset} 🔧 ${c.magenta}${event.data.toolName}${c.reset} ${c.dim}${String(preview).slice(0, 100)}${c.reset}`;
++    }
++    case 'tool_result':
++      return `${c.cyan}[${ts()}]${c.reset}    ${event.data.isError ? `${c.red}✗` : `${c.green}✓`}${c.reset} ${c.dim}${event.data.output.slice(0, 80)}${c.reset}`;
++    case 'usage':
++      return `${c.cyan}[${ts()}]${c.reset} 📊 tokens: in=${event.data.inputTokens ?? '?'} out=${event.data.outputTokens ?? '?'}`;
++    case 'session_idle':
++      return `${c.cyan}[${ts()}]${c.reset} ⏸  session idle`;
++    case 'session_error':
++      return `${c.cyan}[${ts()}]${c.reset} ${c.red}❌ ${event.data.message}${c.reset}`;
++    default:
++      return `${c.cyan}[${ts()}]${c.reset} ${c.dim}${event.type}${c.reset}`;
++  }
++}
++
++export function displayEvent(event: AgentEvent): void {
++  if (event.type === 'raw' || event.type === 'session_start') return;
++  process.stderr.write(`${formatEvent(event)}\n`);
++}
++
++export function displaySummary(result: AgentRunResult): void {
++  const { metadata, validation, runDir } = result;
++  const statusColor = metadata.result === 'completed' ? c.green
++    : metadata.result === 'degraded' ? c.yellow
++    : c.red;
++  const durationSec = (metadata.durationMs / 1000).toFixed(1);
++
++  process.stderr.write(`\n${c.bold}─── Summary ───${c.reset}\n`);
++  process.stderr.write(`  Status:     ${statusColor}${metadata.result}${c.reset}\n`);
++  process.stderr.write(`  Duration:   ${durationSec}s\n`);
++  process.stderr.write(`  Session:    ${c.dim}${metadata.sessionId || 'N/A'}${c.reset}\n`);
++  process.stderr.write(`  Events:     ${metadata.eventCount} (${metadata.toolCallCount} tool calls)\n`);
++
++  if (validation) {
++    const vIcon = validation.valid ? `${c.green}✓ passed` : `${c.red}✗ failed`;
++    process.stderr.write(`  Validation: ${vIcon}${c.reset}\n`);
++    if (!validation.valid) {
++      for (const err of validation.errors.slice(0, 5)) {
++        process.stderr.write(`    ${c.red}· ${err}${c.reset}\n`);
++      }
++    }
++  }
++
++  process.stderr.write(`  Run dir:    ${c.dim}${runDir}${c.reset}\n`);
++  process.stderr.write(`  Artifacts:  ${metadata.artifacts.join(', ')}\n`);
++}
+diff --git a/src/runner/folder.ts b/src/runner/folder.ts
+new file mode 100644
+index 0000000..5acae37
+--- /dev/null
++++ b/src/runner/folder.ts
+@@ -0,0 +1,195 @@
++/**
++ * Agent folder management — discovery, slug validation, run folder creation.
++ *
++ * Agent definitions live at <agentsDir>/<slug>/ with at least prompt.md.
++ * Run folders are created under <agentsDir>/<slug>/runs/<timestamp-suffix>/.
++ *
++ * Extracted from: harness/src/agent/folder.ts
++ * Adapted: configurable agents dir, frontmatter parsing (new).
++ */
++
++import * as fs from 'node:fs';
++import * as path from 'node:path';
++import * as crypto from 'node:crypto';
++import type { AgentDefinition } from './types.js';
++
++const SLUG_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
++
++/**
++ * Validate an agent slug for path safety.
++ * @returns null if valid, error message if invalid
++ */
++export function validateSlug(slug: string): string | null {
++  if (!slug) return 'Agent slug cannot be empty';
++  if (slug.includes('..')) return 'Agent slug cannot contain ".."';
++  if (slug.includes('/')) return 'Agent slug cannot contain "/"';
++  if (slug.includes('\\')) return 'Agent slug cannot contain "\\"';
++  if (slug.includes('\0')) return 'Agent slug cannot contain null bytes';
++  if (!SLUG_PATTERN.test(slug)) {
++    return `Agent slug must match [a-zA-Z0-9_-]{1,64}, got: "${slug}"`;
++  }
++  return null;
++}
++
++/**
++ * Parse YAML frontmatter from markdown content.
++ *
++ * Frontmatter must start at position 0 with `---\n`, followed by YAML,
++ * followed by `\n---\n`. Markdown horizontal rules (`---`) in the body
++ * are NOT treated as frontmatter delimiters.
++ *
++ * Hand-rolled (~15 lines) per DYK #4 — no gray-matter dependency.
++ */
++export function parseFrontmatter(content: string): {
++  description: string;
++  tags: string[];
++  body: string;
++} {
++  if (!content.startsWith('---\n')) {
++    return { description: '', tags: [], body: content };
++  }
++
++  // Search for closing \n---\n starting after the opening ---\n
++  // For empty frontmatter (---\n---\n), the closing starts at pos 3
++  const endIndex = content.indexOf('\n---\n', 3);
++  if (endIndex === -1) {
++    // Check for --- at end of file (no trailing newline after closing ---)
++    if (content.endsWith('\n---')) {
++      const yamlBlock = content.slice(4, content.length - 4);
++      const parsed = parseYamlSimple(yamlBlock);
++      return { ...parsed, body: '' };
++    }
++    return { description: '', tags: [], body: content };
++  }
++
++  const yamlBlock = content.slice(4, endIndex);
++  const body = content.slice(endIndex + 5); // skip \n---\n
++  const parsed = parseYamlSimple(yamlBlock);
++  return { ...parsed, body };
++}
++
++/** Minimal YAML parser for frontmatter — handles description and tags only. */
++function parseYamlSimple(yaml: string): { description: string; tags: string[] } {
++  let description = '';
++  let tags: string[] = [];
++
++  for (const line of yaml.split('\n')) {
++    const descMatch = line.match(/^description:\s*"([^"]*)"$/);
++    if (descMatch) {
++      description = descMatch[1];
++      continue;
++    }
++    const descMatchSingle = line.match(/^description:\s*'([^']*)'$/);
++    if (descMatchSingle) {
++      description = descMatchSingle[1];
++      continue;
++    }
++    const descMatchUnquoted = line.match(/^description:\s*(.+)$/);
++    if (descMatchUnquoted && !descMatch && !descMatchSingle) {
++      description = descMatchUnquoted[1].trim();
++      continue;
++    }
++    const tagsMatch = line.match(/^tags:\s*\[([^\]]*)\]$/);
++    if (tagsMatch) {
++      tags = tagsMatch[1]
++        .split(',')
++        .map((t) => t.trim())
++        .filter(Boolean);
++    }
++  }
++
++  return { description, tags };
++}
++
++/**
++ * List all available agent definitions by scanning for prompt.md files.
++ * Skips underscore-prefixed folders (_shared, _templates, etc.).
++ */
++export function listAgents(agentsDir: string): AgentDefinition[] {
++  agentsDir = path.resolve(agentsDir);
++  if (!fs.existsSync(agentsDir)) return [];
++
++  const entries = fs.readdirSync(agentsDir, { withFileTypes: true });
++  const agents: AgentDefinition[] = [];
++
++  for (const entry of entries) {
++    if (!entry.isDirectory()) continue;
++    if (entry.name.startsWith('_')) continue;
++
++    const slugError = validateSlug(entry.name);
++    if (slugError) continue;
++
++    const dir = path.join(agentsDir, entry.name);
++    const promptPath = path.join(dir, 'prompt.md');
++
++    if (!fs.existsSync(promptPath)) continue;
++
++    const schemaPath = path.join(dir, 'output-schema.json');
++    const instructionsPath = path.join(dir, 'instructions.md');
++    const inputSchemaPath = path.join(dir, 'input-schema.json');
++
++    // Parse frontmatter for description and tags
++    const promptContent = fs.readFileSync(promptPath, 'utf-8');
++    const { description, tags } = parseFrontmatter(promptContent);
++
++    agents.push({
++      slug: entry.name,
++      description,
++      tags,
++      dir,
++      promptPath,
++      schemaPath: fs.existsSync(schemaPath) ? schemaPath : null,
++      instructionsPath: fs.existsSync(instructionsPath) ? instructionsPath : null,
++      inputSchemaPath: fs.existsSync(inputSchemaPath) ? inputSchemaPath : null,
++    });
++  }
++
++  return agents.sort((a, b) => a.slug.localeCompare(b.slug));
++}
++
++/**
++ * Resolve an agent definition by slug.
++ * @returns AgentDefinition or null if not found
++ */
++export function resolveAgent(slug: string, agentsDir: string): AgentDefinition | null {
++  const agents = listAgents(agentsDir);
++  return agents.find((a) => a.slug === slug) ?? null;
++}
++
++/**
++ * Create a timestamped run folder under <agent>/runs/.
++ * Freezes copies of prompt, instructions, and schemas.
++ * @returns Absolute path to the created run folder + the run ID
++ */
++export function createRunFolder(agentDef: AgentDefinition): { runDir: string; runId: string } {
++  const now = new Date();
++  const suffix = crypto.randomBytes(2).toString('hex');
++  const yyyy = String(now.getFullYear());
++  const mm = String(now.getMonth() + 1).padStart(2, '0');
++  const dd = String(now.getDate()).padStart(2, '0');
++  const hh = String(now.getHours()).padStart(2, '0');
++  const min = String(now.getMinutes()).padStart(2, '0');
++  const ss = String(now.getSeconds()).padStart(2, '0');
++  const ms = String(now.getMilliseconds()).padStart(3, '0');
++  const runId = `${yyyy}-${mm}-${dd}T${hh}-${min}-${ss}-${ms}Z-${suffix}`;
++
++  const runsDir = path.join(agentDef.dir, 'runs');
++  const runDir = path.join(runsDir, runId);
++  fs.mkdirSync(runDir, { recursive: true });
++
++  // Freeze copies of inputs into run folder
++  fs.copyFileSync(agentDef.promptPath, path.join(runDir, 'prompt.md'));
++  if (agentDef.instructionsPath) {
++    fs.copyFileSync(agentDef.instructionsPath, path.join(runDir, 'instructions.md'));
++  }
++  if (agentDef.schemaPath) {
++    fs.copyFileSync(agentDef.schemaPath, path.join(runDir, 'output-schema.json'));
++  }
++  if (agentDef.inputSchemaPath) {
++    fs.copyFileSync(agentDef.inputSchemaPath, path.join(runDir, 'input-schema.json'));
++  }
++
++  fs.mkdirSync(path.join(runDir, 'output'), { recursive: true });
++
++  return { runDir, runId };
++}
+diff --git a/src/runner/index.ts b/src/runner/index.ts
+index d6c76ec..4d018c4 100644
+--- a/src/runner/index.ts
++++ b/src/runner/index.ts
+@@ -6,3 +6,26 @@ export type {
+   RunEventStats,
+   ValidationResult,
+ } from './types.js';
++
++export {
++  validateSlug,
++  listAgents,
++  resolveAgent,
++  createRunFolder,
++  parseFrontmatter,
++} from './folder.js';
++
++export {
++  validateInput,
++  validateOutput,
++} from './validator.js';
++
++export {
++  displayEvent,
++  displayHeader,
++  displaySummary,
++  displayPreflight,
++  formatEvent,
++} from './display.js';
++
++export { runAgent } from './runner.js';
+diff --git a/src/runner/runner.ts b/src/runner/runner.ts
+new file mode 100644
+index 0000000..ce18820
+--- /dev/null
++++ b/src/runner/runner.ts
+@@ -0,0 +1,278 @@
++/**
++ * Agent runner — pure orchestration function.
++ *
++ * Takes an IAgentAdapter (injected by CLI), an AgentDefinition,
++ * and an AgentRunConfig. Executes the prompt, streams events to NDJSON,
++ * writes completed.json, and returns structured results.
++ *
++ * Zero SDK imports — the runner is adapter-agnostic.
++ *
++ * Extracted from: harness/src/agent/runner.ts
++ * Adapted: configurable preamble path, frontmatter stripping, no hardcoded root.
++ */
++
++import * as fs from 'node:fs';
++import * as path from 'node:path';
++import type { AgentEvent, AgentResult } from '../adapter/events.js';
++import type { IAgentAdapter } from '../adapter/interface.js';
++import type {
++  AgentDefinition,
++  AgentRunConfig,
++  AgentRunResult,
++  CompletedMetadata,
++  RunEventStats,
++  ValidationResult,
++} from './types.js';
++import { createRunFolder } from './folder.js';
++import { validateOutput, validateInput } from './validator.js';
++import { parseFrontmatter } from './folder.js';
++
++/**
++ * Resolve the preamble path for an agents directory.
++ * Convention: <agentsDir>/_shared/preamble.md
++ */
++function resolvePreamblePath(agentsDir: string): string {
++  return path.join(path.resolve(agentsDir), '_shared', 'preamble.md');
++}
++
++/**
++ * Execute an agent from its definition.
++ *
++ * @param adapter - The agent adapter (SdkCopilotAdapter in prod, FakeAgentAdapter in tests)
++ * @param definition - The resolved agent definition (from folder.ts)
++ * @param config - Run configuration (model, timeout, etc.)
++ * @param onEvent - Optional callback for real-time event display
++ * @param agentsDir - Agents directory (for preamble resolution)
++ */
++export async function runAgent(
++  adapter: IAgentAdapter,
++  definition: AgentDefinition,
++  config: AgentRunConfig,
++  onEvent?: (event: AgentEvent) => void,
++  agentsDir?: string,
++): Promise<AgentRunResult> {
++  const startedAt = new Date();
++
++  // Create run folder with frozen copies
++  const { runDir, runId } = createRunFolder(definition);
++  const eventsPath = path.join(runDir, 'events.ndjson');
++
++  fs.writeFileSync(eventsPath, '');
++
++  const outputPath = path.join(runDir, 'output', 'report.json');
++  const stderrPath = path.join(runDir, 'stderr.log');
++
++  // Read prompt and strip frontmatter
++  const rawPrompt = fs.readFileSync(definition.promptPath, 'utf-8');
++  const { body: prompt } = parseFrontmatter(rawPrompt);
++
++  // Read instructions (optional)
++  const instructions = definition.instructionsPath
++    ? fs.readFileSync(definition.instructionsPath, 'utf-8')
++    : null;
++
++  // Shared preamble — injected for all agents with template variables replaced
++  const repoRoot = config.cwd ?? process.cwd();
++  let preamble: string | null = null;
++  if (agentsDir) {
++    const preamblePath = resolvePreamblePath(agentsDir);
++    if (fs.existsSync(preamblePath)) {
++      preamble = fs
++        .readFileSync(preamblePath, 'utf-8')
++        .replaceAll('{{REPO_ROOT}}', repoRoot);
++    }
++  }
++
++  // Validate and format input parameters
++  let paramsHint: string | null = null;
++  if (definition.inputSchemaPath) {
++    const params = config.params ?? {};
++    const inputValidation = validateInput(definition.inputSchemaPath, params);
++    if (!inputValidation.valid) {
++      const errorMsg = `Input parameter validation failed:\n${inputValidation.errors.join('\n')}`;
++      return {
++        agentResult: {
++          output: errorMsg,
++          sessionId: '',
++          status: 'failed',
++          exitCode: 1,
++          tokens: null,
++        },
++        metadata: {
++          slug: definition.slug,
++          runId,
++          startedAt: startedAt.toISOString(),
++          completedAt: new Date().toISOString(),
++          durationMs: Date.now() - startedAt.getTime(),
++          sessionId: '',
++          result: 'failed',
++          exitCode: 1,
++          validated: null,
++          validationErrors: [],
++          eventCount: 0,
++          toolCallCount: 0,
++          artifacts: listArtifacts(runDir),
++        },
++        validation: null,
++        runDir,
++      };
++    }
++    if (Object.keys(params).length > 0) {
++      const lines = Object.entries(params).map(([k, v]) => `${k}: ${v}`);
++      paramsHint = `## Input Parameters\n\n${lines.join('\n')}`;
++    }
++  }
++
++  // Build full prompt (preamble + instructions + output path hint + params + prompt)
++  const outputHint = definition.schemaPath
++    ? `Write your final JSON report to: ${outputPath}`
++    : null;
++  const fullPrompt = [preamble, instructions, outputHint, paramsHint, prompt]
++    .filter(Boolean)
++    .join('\n\n---\n\n');
++
++  // Event tracking
++  const stats: RunEventStats = {
++    total: 0,
++    toolCalls: 0,
++    toolResults: 0,
++    messages: 0,
++    thinking: 0,
++    errors: 0,
++  };
++  let activeSessionId = '';
++  const stderrLines: string[] = [];
++
++  const handleEvent = (event: AgentEvent): void => {
++    stats.total++;
++    switch (event.type) {
++      case 'tool_call': stats.toolCalls++; break;
++      case 'tool_result': stats.toolResults++; break;
++      case 'message': stats.messages++; break;
++      case 'thinking': stats.thinking++; break;
++      case 'session_error':
++        stats.errors++;
++        stderrLines.push(`[${event.timestamp}] ${event.data.errorType ?? 'ERROR'}: ${event.data.message ?? ''}`);
++        break;
++      case 'session_start':
++        if (event.data.sessionId) activeSessionId = event.data.sessionId;
++        break;
++    }
++
++    // Write to NDJSON incrementally
++    fs.appendFileSync(eventsPath, `${JSON.stringify(event)}\n`);
++
++    if (onEvent) onEvent(event);
++  };
++
++  // Execute agent with timeout
++  let agentResult: AgentResult;
++  let timedOut = false;
++  const timeoutMs = (config.timeout ?? 300) * 1000;
++
++  try {
++    agentResult = await Promise.race([
++      adapter.run({
++        prompt: fullPrompt,
++        model: config.model,
++        reasoningEffort: config.reasoningEffort,
++        cwd: config.cwd,
++        onEvent: handleEvent,
++        timeout: timeoutMs,
++      }),
++      new Promise<never>((_, reject) => {
++        setTimeout(() => {
++          timedOut = true;
++          reject(new Error(`Agent timed out after ${config.timeout ?? 300}s`));
++        }, timeoutMs);
++      }),
++    ]);
++  } catch (error) {
++    if (timedOut) {
++      try { await adapter.terminate(activeSessionId); } catch { /* best-effort */ }
++      agentResult = {
++        output: `Agent timed out after ${config.timeout ?? 300}s`,
++        sessionId: '',
++        status: 'killed',
++        exitCode: 124,
++        tokens: null,
++      };
++    } else {
++      const errorMessage = error instanceof Error ? error.message : String(error);
++      agentResult = {
++        output: `Agent execution failed: ${errorMessage}`,
++        sessionId: '',
++        status: 'failed',
++        exitCode: 1,
++        tokens: null,
++      };
++    }
++  }
++
++  const completedAt = new Date();
++  const durationMs = completedAt.getTime() - startedAt.getTime();
++
++  // Write agent output as fallback (if agent didn't write via tool calls)
++  if (agentResult.output && !fs.existsSync(outputPath)) {
++    fs.writeFileSync(outputPath, agentResult.output);
++  }
++
++  // Persist stderr
++  if (agentResult.stderr) {
++    stderrLines.push(agentResult.stderr);
++  }
++  if (stderrLines.length > 0) {
++    fs.writeFileSync(stderrPath, stderrLines.join('\n'));
++  }
++
++  // Validate output if schema exists
++  let validation: ValidationResult | null = null;
++  if (definition.schemaPath) {
++    validation = validateOutput(definition.schemaPath, outputPath);
++  }
++
++  // Determine final result status
++  let resultStatus: CompletedMetadata['result'] = agentResult.status === 'completed' ? 'completed' : 'failed';
++  if (timedOut) resultStatus = 'timeout';
++  if (agentResult.status === 'completed' && validation && !validation.valid) resultStatus = 'degraded';
++
++  const artifacts = listArtifacts(runDir);
++
++  // Write completed.json
++  const metadata: CompletedMetadata = {
++    slug: definition.slug,
++    runId,
++    startedAt: startedAt.toISOString(),
++    completedAt: completedAt.toISOString(),
++    durationMs,
++    sessionId: agentResult.sessionId,
++    result: resultStatus,
++    exitCode: agentResult.exitCode,
++    validated: validation ? validation.valid : null,
++    validationErrors: validation?.errors ?? [],
++    eventCount: stats.total,
++    toolCallCount: stats.toolCalls,
++    artifacts,
++  };
++
++  fs.writeFileSync(
++    path.join(runDir, 'completed.json'),
++    JSON.stringify(metadata, null, 2),
++  );
++
++  return { agentResult, metadata, validation, runDir };
++}
++
++function listArtifacts(dir: string, base?: string): string[] {
++  const files: string[] = [];
++  const entries = fs.readdirSync(dir, { withFileTypes: true });
++  for (const entry of entries) {
++    const rel = base ? path.join(base, entry.name) : entry.name;
++    if (entry.isDirectory()) {
++      files.push(...listArtifacts(path.join(dir, entry.name), rel));
++    } else {
++      files.push(rel);
++    }
++  }
++  return files;
++}
+diff --git a/src/runner/validator.ts b/src/runner/validator.ts
+new file mode 100644
+index 0000000..34b015c
+--- /dev/null
++++ b/src/runner/validator.ts
+@@ -0,0 +1,116 @@
++/**
++ * Agent output validator — JSON Schema validation via AJV.
++ *
++ * Validates agent output against output-schema.json and input params
++ * against input-schema.json. Uses AJV 2020-12 with allErrors.
++ *
++ * Fresh AJV instance per call — simple, no caching bugs (DYK #2).
++ *
++ * Extracted from: harness/src/agent/validator.ts
++ */
++
++import * as fs from 'node:fs';
++import Ajv2020 from 'ajv/dist/2020.js';
++import type { ValidationResult } from './types.js';
++
++/**
++ * Validate input parameters against an input schema.
++ * Used by the runner before prompt assembly to fail fast.
++ */
++export function validateInput(
++  schemaPath: string,
++  params: Record<string, string>,
++): ValidationResult {
++  if (!fs.existsSync(schemaPath)) {
++    return { valid: false, errors: [`Input schema file not found: ${schemaPath}`] };
++  }
++
++  let schemaData: unknown;
++  try {
++    schemaData = JSON.parse(fs.readFileSync(schemaPath, 'utf-8'));
++  } catch (err) {
++    const message = err instanceof Error ? err.message : String(err);
++    return { valid: false, errors: [`Input schema is not valid JSON: ${message}`] };
++  }
++
++  const ajv = new Ajv2020({ allErrors: true });
++
++  let validate: ReturnType<typeof ajv.compile>;
++  try {
++    validate = ajv.compile(schemaData as Record<string, unknown>);
++  } catch (err) {
++    const message = err instanceof Error ? err.message : String(err);
++    return { valid: false, errors: [`Input schema compilation failed: ${message}`] };
++  }
++
++  const valid = validate(params);
++  if (valid) {
++    return { valid: true, errors: [] };
++  }
++
++  const errors = (validate.errors ?? []).map((e) => {
++    const path = e.instancePath || '/';
++    return `${path}: ${e.message ?? 'unknown error'}`;
++  });
++
++  return { valid: false, errors };
++}
++
++/**
++ * Validate an output file against a JSON Schema.
++ *
++ * Pre-validates for: missing file, empty file, invalid JSON.
++ * Validation failure = { valid: false, errors } — never throws.
++ */
++export function validateOutput(schemaPath: string, outputPath: string): ValidationResult {
++  if (!fs.existsSync(schemaPath)) {
++    return { valid: false, errors: [`Schema file not found: ${schemaPath}`] };
++  }
++
++  if (!fs.existsSync(outputPath)) {
++    return { valid: false, errors: [`Output file not found: ${outputPath}`] };
++  }
++
++  const outputContent = fs.readFileSync(outputPath, 'utf-8').trim();
++  if (!outputContent) {
++    return { valid: false, errors: ['Output file is empty'] };
++  }
++
++  let outputData: unknown;
++  try {
++    outputData = JSON.parse(outputContent);
++  } catch (err) {
++    const message = err instanceof Error ? err.message : String(err);
++    return { valid: false, errors: [`Output is not valid JSON: ${message}`] };
++  }
++
++  let schemaData: unknown;
++  try {
++    schemaData = JSON.parse(fs.readFileSync(schemaPath, 'utf-8'));
++  } catch (err) {
++    const message = err instanceof Error ? err.message : String(err);
++    return { valid: false, errors: [`Schema is not valid JSON: ${message}`] };
++  }
++
++  const ajv = new Ajv2020({ allErrors: true });
++
++  let validate: ReturnType<typeof ajv.compile>;
++  try {
++    validate = ajv.compile(schemaData as Record<string, unknown>);
++  } catch (err) {
++    const message = err instanceof Error ? err.message : String(err);
++    return { valid: false, errors: [`Schema compilation failed: ${message}`] };
++  }
++
++  const valid = validate(outputData);
++  if (valid) {
++    return { valid: true, errors: [] };
++  }
++
++  const errors = (validate.errors ?? []).map((e) => {
++    const path = e.instancePath || '/';
++    return `${path}: ${e.message ?? 'unknown error'}`;
++  });
++
++  return { valid: false, errors };
++}
+diff --git a/src/schemas/retrospective.json b/src/schemas/retrospective.json
+new file mode 100644
+index 0000000..97d4bf7
+--- /dev/null
++++ b/src/schemas/retrospective.json
+@@ -0,0 +1,33 @@
++{
++  "$id": "https://minih.dev/schemas/retrospective.json",
++  "$schema": "https://json-schema.org/draft/2020-12/schema",
++  "title": "Agent Retrospective",
++  "description": "Self-improving feedback from an agent run. The magicWand field is the most important — one concrete wish for a better experience.",
++  "type": "object",
++  "required": ["workedWell", "confusing", "magicWand"],
++  "additionalProperties": true,
++  "properties": {
++    "workedWell": {
++      "type": "string",
++      "minLength": 10,
++      "description": "What about the experience worked well? Be specific about WHY."
++    },
++    "confusing": {
++      "type": "string",
++      "minLength": 10,
++      "description": "What was confusing, unclear, or required trial-and-error?"
++    },
++    "magicWand": {
++      "type": "string",
++      "minLength": 20,
++      "description": "If you had a magic wand, what ONE thing would you change? Name a specific command, flag, format, or workflow improvement."
++    },
++    "improvementSuggestions": {
++      "type": "array",
++      "items": { "type": "string", "minLength": 10 },
++      "minItems": 1,
++      "maxItems": 5,
++      "description": "1-5 specific, actionable improvements."
++    }
++  }
++}
+diff --git a/test/runner/folder.test.ts b/test/runner/folder.test.ts
+new file mode 100644
+index 0000000..6208d21
+--- /dev/null
++++ b/test/runner/folder.test.ts
+@@ -0,0 +1,224 @@
++import { describe, it, expect, beforeEach, afterEach } from 'vitest';
++import * as fs from 'node:fs';
++import * as path from 'node:path';
++import * as os from 'node:os';
++import { validateSlug, listAgents, resolveAgent, createRunFolder, parseFrontmatter } from '../../src/runner/folder.js';
++
++let tmpDir: string;
++
++beforeEach(() => {
++  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'minih-test-'));
++});
++
++afterEach(() => {
++  fs.rmSync(tmpDir, { recursive: true, force: true });
++});
++
++describe('validateSlug', () => {
++  it('accepts valid slugs', () => {
++    expect(validateSlug('smoke-test')).toBeNull();
++    expect(validateSlug('code_review')).toBeNull();
++    expect(validateSlug('my-agent-v2')).toBeNull();
++    expect(validateSlug('test123')).toBeNull();
++    expect(validateSlug('a')).toBeNull();
++  });
++
++  it('rejects empty string', () => {
++    expect(validateSlug('')).toMatch(/empty/i);
++  });
++
++  it('rejects path traversal', () => {
++    expect(validateSlug('..')).not.toBeNull();
++    expect(validateSlug('../evil')).not.toBeNull();
++    expect(validateSlug('foo/bar')).not.toBeNull();
++    expect(validateSlug('foo\\bar')).not.toBeNull();
++  });
++
++  it('rejects invalid characters', () => {
++    expect(validateSlug('my agent')).not.toBeNull();
++    expect(validateSlug('hello!')).not.toBeNull();
++    expect(validateSlug('.hidden')).not.toBeNull();
++  });
++
++  it('rejects slugs over 64 chars', () => {
++    expect(validateSlug('a'.repeat(65))).not.toBeNull();
++    expect(validateSlug('a'.repeat(64))).toBeNull();
++  });
++
++  it('rejects null bytes', () => {
++    expect(validateSlug('foo\0bar')).not.toBeNull();
++  });
++});
++
++describe('parseFrontmatter', () => {
++  it('extracts description and tags', () => {
++    const content = `---
++description: "My cool agent"
++tags: [smoke, ci]
++---
++
++# Hello
++
++Body here.`;
++    const result = parseFrontmatter(content);
++    expect(result.description).toBe('My cool agent');
++    expect(result.tags).toEqual(['smoke', 'ci']);
++    expect(result.body).toBe('\n# Hello\n\nBody here.');
++  });
++
++  it('handles missing frontmatter', () => {
++    const content = `# No Frontmatter\n\nJust body.`;
++    const result = parseFrontmatter(content);
++    expect(result.description).toBe('');
++    expect(result.tags).toEqual([]);
++    expect(result.body).toBe(content);
++  });
++
++  it('handles empty frontmatter', () => {
++    const content = `---\n---\n\nBody.`;
++    const result = parseFrontmatter(content);
++    expect(result.description).toBe('');
++    expect(result.tags).toEqual([]);
++    expect(result.body).toBe('\nBody.');
++  });
++
++  it('handles frontmatter with no tags', () => {
++    const content = `---\ndescription: "Just a description"\n---\n\nBody.`;
++    const result = parseFrontmatter(content);
++    expect(result.description).toBe('Just a description');
++    expect(result.tags).toEqual([]);
++  });
++
++  it('does not confuse markdown horizontal rules with frontmatter', () => {
++    const content = `---
++description: "Real frontmatter"
++---
++
++# Title
++
++Some text.
++
++---
++
++More text after horizontal rule.`;
++    const result = parseFrontmatter(content);
++    expect(result.description).toBe('Real frontmatter');
++    expect(result.body).toContain('---');
++    expect(result.body).toContain('More text after horizontal rule.');
++  });
++
++  it('treats mid-file --- as body content, not frontmatter', () => {
++    const content = `# No frontmatter\n\n---\n\ndescription: "not frontmatter"\n---`;
++    const result = parseFrontmatter(content);
++    expect(result.description).toBe('');
++    expect(result.body).toBe(content);
++  });
++});
++
++describe('listAgents', () => {
++  it('finds agents with prompt.md', () => {
++    const agentDir = path.join(tmpDir, 'hello-world');
++    fs.mkdirSync(agentDir);
++    fs.writeFileSync(path.join(agentDir, 'prompt.md'), '---\ndescription: "Say hello"\n---\n\n# Hello');
++
++    const agents = listAgents(tmpDir);
++    expect(agents).toHaveLength(1);
++    expect(agents[0].slug).toBe('hello-world');
++    expect(agents[0].description).toBe('Say hello');
++  });
++
++  it('skips underscore-prefixed folders', () => {
++    const shared = path.join(tmpDir, '_shared');
++    fs.mkdirSync(shared);
++    fs.writeFileSync(path.join(shared, 'preamble.md'), '# Preamble');
++
++    const agentDir = path.join(tmpDir, 'real-agent');
++    fs.mkdirSync(agentDir);
++    fs.writeFileSync(path.join(agentDir, 'prompt.md'), '---\ndescription: "Real"\n---\n\n# Real');
++
++    const agents = listAgents(tmpDir);
++    expect(agents).toHaveLength(1);
++    expect(agents[0].slug).toBe('real-agent');
++  });
++
++  it('skips folders without prompt.md', () => {
++    const noPrompt = path.join(tmpDir, 'no-prompt');
++    fs.mkdirSync(noPrompt);
++    fs.writeFileSync(path.join(noPrompt, 'readme.md'), '# Not a prompt');
++
++    const agents = listAgents(tmpDir);
++    expect(agents).toHaveLength(0);
++  });
++
++  it('returns agents sorted alphabetically', () => {
++    for (const slug of ['zebra', 'alpha', 'middle']) {
++      const dir = path.join(tmpDir, slug);
++      fs.mkdirSync(dir);
++      fs.writeFileSync(path.join(dir, 'prompt.md'), `---\ndescription: "${slug}"\n---\n\n# ${slug}`);
++    }
++
++    const agents = listAgents(tmpDir);
++    expect(agents.map(a => a.slug)).toEqual(['alpha', 'middle', 'zebra']);
++  });
++
++  it('detects optional files', () => {
++    const dir = path.join(tmpDir, 'full-agent');
++    fs.mkdirSync(dir);
++    fs.writeFileSync(path.join(dir, 'prompt.md'), '---\ndescription: "Full"\n---\n\n# Full');
++    fs.writeFileSync(path.join(dir, 'output-schema.json'), '{}');
++    fs.writeFileSync(path.join(dir, 'input-schema.json'), '{}');
++    fs.writeFileSync(path.join(dir, 'instructions.md'), '# Instructions');
++
++    const agents = listAgents(tmpDir);
++    expect(agents[0].schemaPath).not.toBeNull();
++    expect(agents[0].inputSchemaPath).not.toBeNull();
++    expect(agents[0].instructionsPath).not.toBeNull();
++  });
++
++  it('returns empty for nonexistent directory', () => {
++    const agents = listAgents(path.join(tmpDir, 'nonexistent'));
++    expect(agents).toHaveLength(0);
++  });
++});
++
++describe('resolveAgent', () => {
++  it('finds agent by slug', () => {
++    const dir = path.join(tmpDir, 'my-agent');
++    fs.mkdirSync(dir);
++    fs.writeFileSync(path.join(dir, 'prompt.md'), '---\ndescription: "Mine"\n---\n\n# Mine');
++
++    const agent = resolveAgent('my-agent', tmpDir);
++    expect(agent).not.toBeNull();
++    expect(agent!.slug).toBe('my-agent');
++  });
++
++  it('returns null for unknown slug', () => {
++    const agent = resolveAgent('nonexistent', tmpDir);
++    expect(agent).toBeNull();
++  });
++});
++
++describe('createRunFolder', () => {
++  it('creates timestamped run folder with frozen copies', () => {
++    const dir = path.join(tmpDir, 'test-agent');
++    fs.mkdirSync(dir);
++    fs.writeFileSync(path.join(dir, 'prompt.md'), '---\ndescription: "Test"\n---\n\n# Test prompt');
++    fs.writeFileSync(path.join(dir, 'output-schema.json'), '{"type":"object"}');
++    fs.writeFileSync(path.join(dir, 'instructions.md'), '# Instructions');
++
++    const agent = resolveAgent('test-agent', tmpDir)!;
++    const { runDir, runId } = createRunFolder(agent);
++
++    expect(fs.existsSync(runDir)).toBe(true);
++    expect(runId).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z-[0-9a-f]{4}$/);
++
++    // Frozen copies
++    expect(fs.existsSync(path.join(runDir, 'prompt.md'))).toBe(true);
++    expect(fs.existsSync(path.join(runDir, 'output-schema.json'))).toBe(true);
++    expect(fs.existsSync(path.join(runDir, 'instructions.md'))).toBe(true);
++    expect(fs.existsSync(path.join(runDir, 'output'))).toBe(true);
++
++    // Content preserved
++    expect(fs.readFileSync(path.join(runDir, 'prompt.md'), 'utf-8')).toContain('# Test prompt');
++  });
++});
+diff --git a/test/runner/integration.test.ts b/test/runner/integration.test.ts
+new file mode 100644
+index 0000000..40817af
+--- /dev/null
++++ b/test/runner/integration.test.ts
+@@ -0,0 +1,156 @@
++import { describe, it, expect, beforeEach, afterEach } from 'vitest';
++import * as fs from 'node:fs';
++import * as path from 'node:path';
++import * as os from 'node:os';
++import { FakeAgentAdapter } from '../../src/adapter/fake.js';
++import { listAgents, resolveAgent } from '../../src/runner/folder.js';
++import { runAgent } from '../../src/runner/runner.js';
++
++let tmpDir: string;
++
++beforeEach(() => {
++  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'minih-integ-'));
++});
++
++afterEach(() => {
++  fs.rmSync(tmpDir, { recursive: true, force: true });
++});
++
++describe('Runner Integration', () => {
++  it('full end-to-end: agent with schema, instructions, preamble → completed run', async () => {
++    // Set up preamble
++    const sharedDir = path.join(tmpDir, '_shared');
++    fs.mkdirSync(sharedDir, { recursive: true });
++    fs.writeFileSync(path.join(sharedDir, 'preamble.md'),
++      '# Preamble\n\nYour working directory is: {{REPO_ROOT}}\n\n## Feedback\n\nBe honest.');
++
++    // Set up agent
++    const agentDir = path.join(tmpDir, 'smoke-test');
++    fs.mkdirSync(agentDir, { recursive: true });
++
++    fs.writeFileSync(path.join(agentDir, 'prompt.md'), `---
++description: "End-to-end smoke test"
++tags: [smoke, ci, integration]
++---
++
++# Smoke Test
++
++## Objective
++
++Verify the system is working.
++
++## Tasks
++
++1. Check health
++2. Report findings
++
++---
++
++Note: the horizontal rule above should NOT break frontmatter parsing.
++`);
++
++    fs.writeFileSync(path.join(agentDir, 'output-schema.json'), JSON.stringify({
++      $schema: 'https://json-schema.org/draft/2020-12/schema',
++      type: 'object',
++      required: ['status', 'retrospective'],
++      properties: {
++        status: { type: 'string', enum: ['pass', 'fail'] },
++        retrospective: {
++          type: 'object',
++          required: ['workedWell', 'confusing', 'magicWand'],
++          properties: {
++            workedWell: { type: 'string', minLength: 10 },
++            confusing: { type: 'string', minLength: 10 },
++            magicWand: { type: 'string', minLength: 20 },
++          },
++        },
++      },
++    }));
++
++    fs.writeFileSync(path.join(agentDir, 'instructions.md'),
++      '# Smoke Test Agent\n\nYou are a smoke test agent. Be thorough.');
++
++    // Verify discovery
++    const agents = listAgents(tmpDir);
++    expect(agents).toHaveLength(1);
++    expect(agents[0].slug).toBe('smoke-test');
++    expect(agents[0].description).toBe('End-to-end smoke test');
++    expect(agents[0].tags).toEqual(['smoke', 'ci', 'integration']);
++
++    // Configure fake adapter with valid output
++    const validOutput = JSON.stringify({
++      status: 'pass',
++      retrospective: {
++        workedWell: 'Everything worked smoothly in the integration test',
++        confusing: 'Nothing was confusing in this test run',
++        magicWand: 'I wish the test setup was even simpler than it already is',
++      },
++    });
++
++    const fake = new FakeAgentAdapter({
++      output: validOutput,
++      sessionId: 'integ-sess-001',
++      events: [
++        { type: 'thinking', timestamp: new Date().toISOString(), data: { content: 'Planning approach...' } },
++        { type: 'tool_call', timestamp: new Date().toISOString(), data: { toolName: 'bash', input: 'echo hello', toolCallId: 'tc1' } },
++        { type: 'tool_result', timestamp: new Date().toISOString(), data: { toolCallId: 'tc1', output: 'hello', isError: false } },
++        { type: 'message', timestamp: new Date().toISOString(), data: { content: 'Done!' } },
++      ],
++    });
++
++    // Run agent
++    const def = resolveAgent('smoke-test', tmpDir)!;
++    const result = await runAgent(fake, def, {
++      slug: 'smoke-test',
++      cwd: '/test/project',
++    }, undefined, tmpDir);
++
++    // Verify run folder structure
++    expect(fs.existsSync(result.runDir)).toBe(true);
++
++    // Frozen copies
++    expect(fs.existsSync(path.join(result.runDir, 'prompt.md'))).toBe(true);
++    expect(fs.existsSync(path.join(result.runDir, 'instructions.md'))).toBe(true);
++    expect(fs.existsSync(path.join(result.runDir, 'output-schema.json'))).toBe(true);
++
++    // Events NDJSON
++    const eventsPath = path.join(result.runDir, 'events.ndjson');
++    expect(fs.existsSync(eventsPath)).toBe(true);
++    const eventLines = fs.readFileSync(eventsPath, 'utf-8').trim().split('\n');
++    expect(eventLines).toHaveLength(4);
++
++    // Output
++    const reportPath = path.join(result.runDir, 'output', 'report.json');
++    expect(fs.existsSync(reportPath)).toBe(true);
++    const report = JSON.parse(fs.readFileSync(reportPath, 'utf-8'));
++    expect(report.status).toBe('pass');
++    expect(report.retrospective.magicWand).toBeDefined();
++
++    // Completed metadata
++    const completedPath = path.join(result.runDir, 'completed.json');
++    expect(fs.existsSync(completedPath)).toBe(true);
++    const metadata = JSON.parse(fs.readFileSync(completedPath, 'utf-8'));
++    expect(metadata.slug).toBe('smoke-test');
++    expect(metadata.result).toBe('completed');
++    expect(metadata.sessionId).toBe('integ-sess-001');
++    expect(metadata.eventCount).toBe(4);
++    expect(metadata.toolCallCount).toBe(1);
++    expect(metadata.validated).toBe(true);
++    expect(metadata.validationErrors).toEqual([]);
++    expect(metadata.durationMs).toBeGreaterThanOrEqual(0);
++    expect(metadata.artifacts).toContain('events.ndjson');
++    expect(metadata.artifacts).toContain('prompt.md');
++
++    // Verify prompt assembly
++    const sentPrompt = fake.getRunHistory()[0].prompt;
++    expect(sentPrompt).toContain('Your working directory is: /test/project'); // preamble with {{REPO_ROOT}} replaced
++    expect(sentPrompt).toContain('Be thorough'); // instructions
++    expect(sentPrompt).toContain('Write your final JSON report to:'); // output hint
++    expect(sentPrompt).toContain('Verify the system is working.'); // prompt body
++    expect(sentPrompt).not.toContain('description: "End-to-end smoke test"'); // frontmatter stripped
++
++    // Result
++    expect(result.metadata.result).toBe('completed');
++    expect(result.validation!.valid).toBe(true);
++  });
++});
+diff --git a/test/runner/runner.test.ts b/test/runner/runner.test.ts
+new file mode 100644
+index 0000000..0c569b5
+--- /dev/null
++++ b/test/runner/runner.test.ts
+@@ -0,0 +1,275 @@
++import { describe, it, expect, beforeEach, afterEach } from 'vitest';
++import * as fs from 'node:fs';
++import * as path from 'node:path';
++import * as os from 'node:os';
++import { FakeAgentAdapter } from '../../src/adapter/fake.js';
++import { resolveAgent } from '../../src/runner/folder.js';
++import { runAgent } from '../../src/runner/runner.js';
++import type { AgentEvent } from '../../src/adapter/events.js';
++
++let tmpDir: string;
++
++beforeEach(() => {
++  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'minih-runner-'));
++});
++
++afterEach(() => {
++  fs.rmSync(tmpDir, { recursive: true, force: true });
++});
++
++function createAgent(slug: string, opts: {
++  prompt?: string;
++  schema?: object | null;
++  instructions?: string | null;
++  inputSchema?: object | null;
++  preamble?: string | null;
++} = {}) {
++  const agentDir = path.join(tmpDir, slug);
++  fs.mkdirSync(agentDir, { recursive: true });
++
++  const prompt = opts.prompt ?? `---\ndescription: "Test agent"\n---\n\n# ${slug}\n\nDo the thing.`;
++  fs.writeFileSync(path.join(agentDir, 'prompt.md'), prompt);
++
++  if (opts.schema !== null) {
++    const schema = opts.schema ?? {
++      $schema: 'https://json-schema.org/draft/2020-12/schema',
++      type: 'object',
++      required: ['result'],
++      properties: { result: { type: 'string' } },
++    };
++    fs.writeFileSync(path.join(agentDir, 'output-schema.json'), JSON.stringify(schema));
++  }
++
++  if (opts.instructions !== null) {
++    fs.writeFileSync(path.join(agentDir, 'instructions.md'), opts.instructions ?? '# Instructions\n\nBe helpful.');
++  }
++
++  if (opts.inputSchema) {
++    fs.writeFileSync(path.join(agentDir, 'input-schema.json'), JSON.stringify(opts.inputSchema));
++  }
++
++  if (opts.preamble !== undefined && opts.preamble !== null) {
++    const sharedDir = path.join(tmpDir, '_shared');
++    fs.mkdirSync(sharedDir, { recursive: true });
++    fs.writeFileSync(path.join(sharedDir, 'preamble.md'), opts.preamble);
++  }
++
++  return resolveAgent(slug, tmpDir)!;
++}
++
++describe('runAgent', () => {
++  it('assembles prompt in correct order: preamble → instructions → hint → prompt', async () => {
++    const def = createAgent('test-order', {
++      preamble: 'PREAMBLE_CONTENT',
++      instructions: 'INSTRUCTIONS_CONTENT',
++    });
++
++    const fake = new FakeAgentAdapter({ output: '{"result":"ok"}' });
++    await runAgent(fake, def, { slug: 'test-order' }, undefined, tmpDir);
++
++    const history = fake.getRunHistory();
++    expect(history).toHaveLength(1);
++    const prompt = history[0].prompt;
++
++    // Verify order
++    const preambleIdx = prompt.indexOf('PREAMBLE_CONTENT');
++    const instructionsIdx = prompt.indexOf('INSTRUCTIONS_CONTENT');
++    const hintIdx = prompt.indexOf('Write your final JSON report to:');
++    const bodyIdx = prompt.indexOf('Do the thing.');
++
++    expect(preambleIdx).toBeLessThan(instructionsIdx);
++    expect(instructionsIdx).toBeLessThan(hintIdx);
++    expect(hintIdx).toBeLessThan(bodyIdx);
++
++    // Verify separator
++    expect(prompt).toContain('\n\n---\n\n');
++  });
++
++  it('strips frontmatter from prompt', async () => {
++    const def = createAgent('test-strip', {
++      prompt: '---\ndescription: "Should be stripped"\ntags: [test]\n---\n\n# Real Content\n\nBody here.',
++      schema: null,
++      instructions: null,
++      preamble: null,
++    });
++
++    const fake = new FakeAgentAdapter({ output: 'done' });
++    await runAgent(fake, def, { slug: 'test-strip' }, undefined, tmpDir);
++
++    const prompt = fake.getRunHistory()[0].prompt;
++    expect(prompt).not.toContain('description: "Should be stripped"');
++    expect(prompt).toContain('# Real Content');
++    expect(prompt).toContain('Body here.');
++  });
++
++  it('replaces {{REPO_ROOT}} in preamble', async () => {
++    const def = createAgent('test-replace', {
++      preamble: 'Root is: {{REPO_ROOT}}',
++      schema: null,
++      instructions: null,
++    });
++
++    const fake = new FakeAgentAdapter({ output: 'done' });
++    await runAgent(fake, def, { slug: 'test-replace', cwd: '/my/project' }, undefined, tmpDir);
++
++    const prompt = fake.getRunHistory()[0].prompt;
++    expect(prompt).toContain('Root is: /my/project');
++    expect(prompt).not.toContain('{{REPO_ROOT}}');
++  });
++
++  it('works without preamble', async () => {
++    const def = createAgent('no-preamble', {
++      preamble: null,
++      schema: null,
++      instructions: null,
++    });
++
++    const fake = new FakeAgentAdapter({ output: 'done' });
++    await runAgent(fake, def, { slug: 'no-preamble' }, undefined, tmpDir);
++
++    const prompt = fake.getRunHistory()[0].prompt;
++    expect(prompt).toContain('Do the thing.');
++    expect(prompt).not.toContain('---');
++  });
++
++  it('skips instructions when not present', async () => {
++    const def = createAgent('no-instr', {
++      instructions: null,
++      schema: null,
++      preamble: null,
++    });
++
++    const fake = new FakeAgentAdapter({ output: 'done' });
++    await runAgent(fake, def, { slug: 'no-instr' }, undefined, tmpDir);
++
++    const prompt = fake.getRunHistory()[0].prompt;
++    expect(prompt).not.toContain('Instructions');
++  });
++
++  it('formats input params as ## Input Parameters', async () => {
++    const def = createAgent('with-params', {
++      inputSchema: {
++        $schema: 'https://json-schema.org/draft/2020-12/schema',
++        type: 'object',
++        required: ['file_path'],
++        properties: { file_path: { type: 'string' } },
++      },
++      preamble: null,
++      instructions: null,
++      schema: null,
++    });
++
++    const fake = new FakeAgentAdapter({ output: 'done' });
++    await runAgent(fake, def, { slug: 'with-params', params: { file_path: '/src/main.ts' } }, undefined, tmpDir);
++
++    const prompt = fake.getRunHistory()[0].prompt;
++    expect(prompt).toContain('## Input Parameters');
++    expect(prompt).toContain('file_path: /src/main.ts');
++  });
++
++  it('includes output hint when schema exists', async () => {
++    const def = createAgent('with-schema', { preamble: null, instructions: null });
++
++    const fake = new FakeAgentAdapter({ output: '{"result":"ok"}' });
++    await runAgent(fake, def, { slug: 'with-schema' }, undefined, tmpDir);
++
++    const prompt = fake.getRunHistory()[0].prompt;
++    expect(prompt).toContain('Write your final JSON report to:');
++  });
++
++  it('writes events to NDJSON', async () => {
++    const def = createAgent('events-test', { schema: null, instructions: null, preamble: null });
++
++    const fake = new FakeAgentAdapter({
++      output: 'done',
++      events: [
++        { type: 'thinking', timestamp: '2026-01-01T00:00:00Z', data: { content: 'hmm' } },
++        { type: 'tool_call', timestamp: '2026-01-01T00:00:01Z', data: { toolName: 'bash', input: 'ls', toolCallId: 'tc1' } },
++      ],
++    });
++
++    const result = await runAgent(fake, def, { slug: 'events-test' }, undefined, tmpDir);
++
++    const eventsPath = path.join(result.runDir, 'events.ndjson');
++    const lines = fs.readFileSync(eventsPath, 'utf-8').trim().split('\n');
++    expect(lines).toHaveLength(2);
++
++    const event0 = JSON.parse(lines[0]);
++    expect(event0.type).toBe('thinking');
++  });
++
++  it('writes completed.json with correct metadata', async () => {
++    const def = createAgent('meta-test', { schema: null, instructions: null, preamble: null });
++
++    const fake = new FakeAgentAdapter({ output: 'done', sessionId: 'sess-123' });
++    const result = await runAgent(fake, def, { slug: 'meta-test' }, undefined, tmpDir);
++
++    const completedPath = path.join(result.runDir, 'completed.json');
++    const metadata = JSON.parse(fs.readFileSync(completedPath, 'utf-8'));
++
++    expect(metadata.slug).toBe('meta-test');
++    expect(metadata.sessionId).toBe('sess-123');
++    expect(metadata.result).toBe('completed');
++    expect(metadata.startedAt).toBeDefined();
++    expect(metadata.completedAt).toBeDefined();
++    expect(metadata.durationMs).toBeGreaterThanOrEqual(0);
++    expect(metadata.artifacts).toBeInstanceOf(Array);
++  });
++
++  it('sets degraded status when output fails validation', async () => {
++    const def = createAgent('degraded-test', { preamble: null, instructions: null });
++
++    // Output doesn't match schema (missing required 'result' field)
++    const fake = new FakeAgentAdapter({ output: '{"wrong":"field"}' });
++    const result = await runAgent(fake, def, { slug: 'degraded-test' }, undefined, tmpDir);
++
++    expect(result.metadata.result).toBe('degraded');
++    expect(result.validation).not.toBeNull();
++    expect(result.validation!.valid).toBe(false);
++  });
++
++  it('sets failed status on adapter error', async () => {
++    const def = createAgent('fail-test', { schema: null, instructions: null, preamble: null });
++
++    const fake = new FakeAgentAdapter({ output: 'error', status: 'failed', exitCode: 1 });
++    const result = await runAgent(fake, def, { slug: 'fail-test' }, undefined, tmpDir);
++
++    expect(result.metadata.result).toBe('failed');
++    expect(result.metadata.exitCode).toBe(1);
++  });
++
++  it('creates frozen copies in run folder', async () => {
++    const def = createAgent('freeze-test', {
++      preamble: null,
++      instructions: 'Freeze these instructions',
++    });
++
++    const fake = new FakeAgentAdapter({ output: '{"result":"ok"}' });
++    const result = await runAgent(fake, def, { slug: 'freeze-test' }, undefined, tmpDir);
++
++    expect(fs.existsSync(path.join(result.runDir, 'prompt.md'))).toBe(true);
++    expect(fs.existsSync(path.join(result.runDir, 'instructions.md'))).toBe(true);
++    expect(fs.existsSync(path.join(result.runDir, 'output-schema.json'))).toBe(true);
++    expect(fs.existsSync(path.join(result.runDir, 'output', 'report.json'))).toBe(true);
++  });
++
++  it('fails fast on invalid input params', async () => {
++    const def = createAgent('input-fail', {
++      inputSchema: {
++        $schema: 'https://json-schema.org/draft/2020-12/schema',
++        type: 'object',
++        required: ['file_path'],
++        properties: { file_path: { type: 'string' } },
++      },
++      preamble: null,
++      instructions: null,
++      schema: null,
++    });
++
++    const fake = new FakeAgentAdapter({ output: 'should not run' });
++    const result = await runAgent(fake, def, { slug: 'input-fail', params: {} }, undefined, tmpDir);
++
++    expect(result.metadata.result).toBe('failed');
++    expect(fake.getRunHistory()).toHaveLength(0); // Adapter never called
++  });
++});
+diff --git a/test/runner/validator.test.ts b/test/runner/validator.test.ts
+new file mode 100644
+index 0000000..63baea6
+--- /dev/null
++++ b/test/runner/validator.test.ts
+@@ -0,0 +1,130 @@
++import { describe, it, expect, beforeEach, afterEach } from 'vitest';
++import * as fs from 'node:fs';
++import * as path from 'node:path';
++import * as os from 'node:os';
++import { validateInput, validateOutput } from '../../src/runner/validator.js';
++
++let tmpDir: string;
++
++beforeEach(() => {
++  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'minih-val-'));
++});
++
++afterEach(() => {
++  fs.rmSync(tmpDir, { recursive: true, force: true });
++});
++
++function writeJson(name: string, data: unknown): string {
++  const p = path.join(tmpDir, name);
++  fs.writeFileSync(p, JSON.stringify(data, null, 2));
++  return p;
++}
++
++describe('validateOutput', () => {
++  it('valid output passes', () => {
++    const schema = writeJson('schema.json', {
++      $schema: 'https://json-schema.org/draft/2020-12/schema',
++      type: 'object',
++      required: ['name'],
++      properties: { name: { type: 'string' } },
++    });
++    const output = writeJson('report.json', { name: 'hello' });
++
++    const result = validateOutput(schema, output);
++    expect(result.valid).toBe(true);
++    expect(result.errors).toHaveLength(0);
++  });
++
++  it('invalid output returns errors with paths', () => {
++    const schema = writeJson('schema.json', {
++      $schema: 'https://json-schema.org/draft/2020-12/schema',
++      type: 'object',
++      required: ['name', 'age'],
++      properties: {
++        name: { type: 'string' },
++        age: { type: 'number' },
++      },
++    });
++    const output = writeJson('report.json', { name: 123 });
++
++    const result = validateOutput(schema, output);
++    expect(result.valid).toBe(false);
++    expect(result.errors.length).toBeGreaterThan(0);
++  });
++
++  it('handles missing output file', () => {
++    const schema = writeJson('schema.json', { type: 'object' });
++    const result = validateOutput(schema, path.join(tmpDir, 'nonexistent.json'));
++    expect(result.valid).toBe(false);
++    expect(result.errors[0]).toMatch(/not found/i);
++  });
++
++  it('handles empty output file', () => {
++    const schema = writeJson('schema.json', { type: 'object' });
++    const outputPath = path.join(tmpDir, 'empty.json');
++    fs.writeFileSync(outputPath, '');
++
++    const result = validateOutput(schema, outputPath);
++    expect(result.valid).toBe(false);
++    expect(result.errors[0]).toMatch(/empty/i);
++  });
++
++  it('handles invalid JSON in output', () => {
++    const schema = writeJson('schema.json', { type: 'object' });
++    const outputPath = path.join(tmpDir, 'bad.json');
++    fs.writeFileSync(outputPath, '{ not valid json }');
++
++    const result = validateOutput(schema, outputPath);
++    expect(result.valid).toBe(false);
++    expect(result.errors[0]).toMatch(/not valid JSON/i);
++  });
++
++  it('handles missing schema file', () => {
++    const output = writeJson('report.json', { name: 'hello' });
++    const result = validateOutput(path.join(tmpDir, 'no-schema.json'), output);
++    expect(result.valid).toBe(false);
++    expect(result.errors[0]).toMatch(/not found/i);
++  });
++
++  it('handles schema compilation errors', () => {
++    const schema = writeJson('schema.json', { type: 'not-a-type' });
++    const output = writeJson('report.json', { name: 'hello' });
++
++    const result = validateOutput(schema, output);
++    expect(result.valid).toBe(false);
++    expect(result.errors[0]).toMatch(/compilation failed/i);
++  });
++});
++
++describe('validateInput', () => {
++  it('valid params pass', () => {
++    const schema = writeJson('input.json', {
++      $schema: 'https://json-schema.org/draft/2020-12/schema',
++      type: 'object',
++      required: ['file_path'],
++      properties: { file_path: { type: 'string' } },
++    });
++
++    const result = validateInput(schema, { file_path: '/src/main.ts' });
++    expect(result.valid).toBe(true);
++  });
++
++  it('missing required field fails', () => {
++    const schema = writeJson('input.json', {
++      $schema: 'https://json-schema.org/draft/2020-12/schema',
++      type: 'object',
++      required: ['file_path'],
++      properties: { file_path: { type: 'string' } },
++    });
++
++    const result = validateInput(schema, {});
++    expect(result.valid).toBe(false);
++    expect(result.errors.length).toBeGreaterThan(0);
++  });
++
++  it('handles missing schema file', () => {
++    const result = validateInput(path.join(tmpDir, 'no-input.json'), {});
++    expect(result.valid).toBe(false);
++    expect(result.errors[0]).toMatch(/not found/i);
++  });
++});

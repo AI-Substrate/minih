@@ -20,10 +20,11 @@
     "./runner": {
       "import": "./dist/runner/index.js",
       "types": "./dist/runner/index.d.ts"
-    }
+    },
+    "./schemas/retrospective.json": "./dist/schemas/retrospective.json"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && mkdir -p dist/schemas && cp src/schemas/retrospective.json dist/schemas/retrospective.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "clean": "rm -rf dist"
@@ -51,7 +52,6 @@
   },
   "files": [
     "dist",
-    "schemas",
     "LICENSE"
   ]
 }

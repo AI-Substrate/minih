@@ -170,23 +170,23 @@ export async function runAgent(
   let timedOut = false;
   const timeoutMs = (config.timeout ?? 300) * 1000;
 
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
   try {
-    agentResult = await Promise.race([
-      adapter.run({
-        prompt: fullPrompt,
-        model: config.model,
-        reasoningEffort: config.reasoningEffort,
-        cwd: config.cwd,
-        onEvent: handleEvent,
-        timeout: timeoutMs,
-      }),
-      new Promise<never>((_, reject) => {
-        setTimeout(() => {
-          timedOut = true;
-          reject(new Error(`Agent timed out after ${config.timeout ?? 300}s`));
-        }, timeoutMs);
-      }),
-    ]);
+    const runPromise = adapter.run({
+      prompt: fullPrompt,
+      model: config.model,
+      reasoningEffort: config.reasoningEffort,
+      cwd: config.cwd,
+      onEvent: handleEvent,
+      timeout: timeoutMs,
+    });
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutHandle = setTimeout(() => {
+        timedOut = true;
+        reject(new Error(`Agent timed out after ${config.timeout ?? 300}s`));
+      }, timeoutMs);
+    });
+    agentResult = await Promise.race([runPromise, timeoutPromise]);
   } catch (error) {
     if (timedOut) {
       try { await adapter.terminate(activeSessionId); } catch { /* best-effort */ }
@@ -207,6 +207,8 @@ export async function runAgent(
         tokens: null,
       };
     }
+  } finally {
+    if (timeoutHandle) clearTimeout(timeoutHandle);
   }
 
   const completedAt = new Date();

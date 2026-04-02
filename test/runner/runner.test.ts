@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { FakeAgentAdapter } from '../../src/adapter/fake.js';
+import { FakeAgentAdapter } from '../../src/adapter/index.js';
 import { resolveAgent } from '../../src/runner/folder.js';
 import { runAgent } from '../../src/runner/runner.js';
 import type { AgentEvent } from '../../src/adapter/events.js';
@@ -271,5 +271,33 @@ describe('runAgent', () => {
 
     expect(result.metadata.result).toBe('failed');
     expect(fake.getRunHistory()).toHaveLength(0); // Adapter never called
+  });
+
+  it('handles timeout — terminates adapter and reports timeout status', async () => {
+    const def = createAgent('timeout-test', { schema: null, instructions: null, preamble: null });
+
+    const fake = new FakeAgentAdapter({
+      output: 'too slow',
+      sessionId: 'slow-sess',
+      runDuration: 500, // 500ms delay
+      events: [
+        { type: 'session_start', timestamp: new Date().toISOString(), data: { sessionId: 'slow-sess' } },
+      ],
+    });
+
+    const result = await runAgent(fake, def, {
+      slug: 'timeout-test',
+      timeout: 0.1, // 100ms timeout (less than 500ms runDuration)
+    }, undefined, tmpDir);
+
+    expect(result.metadata.result).toBe('timeout');
+    expect(result.metadata.exitCode).toBe(124);
+    // Terminate was attempted (sessionId may be empty if timeout fires before session_start)
+    expect(fake.getTerminateHistory().length).toBeGreaterThan(0);
+
+    // Verify completed.json records timeout
+    const completedPath = path.join(result.runDir, 'completed.json');
+    const metadata = JSON.parse(fs.readFileSync(completedPath, 'utf-8'));
+    expect(metadata.result).toBe('timeout');
   });
 });

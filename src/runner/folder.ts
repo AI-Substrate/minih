@@ -132,6 +132,9 @@ export function listAgents(agentsDir: string): AgentDefinition[] {
     const promptContent = fs.readFileSync(promptPath, 'utf-8');
     const { description, tags } = parseFrontmatter(promptContent);
 
+    // Require frontmatter with description (per spec clarification)
+    if (!description.trim()) continue;
+
     agents.push({
       slug: entry.name,
       description,

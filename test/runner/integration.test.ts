@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { FakeAgentAdapter } from '../../src/adapter/fake.js';
+import { FakeAgentAdapter } from '../../src/adapter/index.js';
 import { listAgents, resolveAgent } from '../../src/runner/folder.js';
 import { runAgent } from '../../src/runner/runner.js';
 

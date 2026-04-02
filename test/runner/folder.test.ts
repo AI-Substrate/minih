@@ -179,6 +179,20 @@ describe('listAgents', () => {
     const agents = listAgents(path.join(tmpDir, 'nonexistent'));
     expect(agents).toHaveLength(0);
   });
+
+  it('skips agents with missing frontmatter description', () => {
+    const noDesc = path.join(tmpDir, 'no-desc');
+    fs.mkdirSync(noDesc);
+    fs.writeFileSync(path.join(noDesc, 'prompt.md'), '# No Frontmatter\n\nJust body.');
+
+    const withDesc = path.join(tmpDir, 'with-desc');
+    fs.mkdirSync(withDesc);
+    fs.writeFileSync(path.join(withDesc, 'prompt.md'), '---\ndescription: "Has description"\n---\n\n# Good');
+
+    const agents = listAgents(tmpDir);
+    expect(agents).toHaveLength(1);
+    expect(agents[0].slug).toBe('with-desc');
+  });
 });
 
 describe('resolveAgent', () => {

@@ -49,6 +49,7 @@ Extract the declarative agent runner from the Chainglass harness into a standalo
 | `test/runner/folder.test.ts` | runner | internal | TDD — folder discovery, slug validation, frontmatter |
 | `test/runner/validator.test.ts` | runner | internal | TDD — AJV input/output validation |
 | `test/runner/runner.test.ts` | runner | internal | TDD — prompt assembly, event handling |
+| `test/runner/integration.test.ts` | runner | internal | End-to-end runner integration test |
 | `test/adapter/fake.test.ts` | adapter | internal | Verify FakeAgentAdapter contract |
 | `test/cli/output.test.ts` | cli | internal | Envelope formatting |
 

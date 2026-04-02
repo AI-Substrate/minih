@@ -22,6 +22,7 @@ Extract the declarative agent runner from the Chainglass harness into a standalo
 
 | File | Domain | Classification | Rationale |
 |------|--------|---------------|-----------|
+| `src/index.ts` | — (root) | contract | Root package public API barrel — re-exports from adapter + runner |
 | `src/adapter/interface.ts` | adapter | contract | IAgentAdapter — public adapter interface |
 | `src/adapter/events.ts` | adapter | contract | AgentEvent union, AgentResult, AgentRunOptions, TokenMetrics |
 | `src/adapter/sdk-copilot.ts` | adapter | internal | SdkCopilotAdapter — wraps @github/copilot-sdk |

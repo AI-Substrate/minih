@@ -15,6 +15,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { AgentEvent, AgentResult } from '../adapter/events.js';
 import type { IAgentAdapter } from '../adapter/interface.js';
+import { createRunFolder, parseFrontmatter } from './folder.js';
 import type {
   AgentDefinition,
   AgentRunConfig,
@@ -23,9 +24,7 @@ import type {
   RunEventStats,
   ValidationResult,
 } from './types.js';
-import { createRunFolder } from './folder.js';
-import { validateOutput, validateInput } from './validator.js';
-import { parseFrontmatter } from './folder.js';
+import { validateInput, validateOutput } from './validator.js';
 
 /**
  * Resolve the preamble path for an agents directory.
@@ -146,13 +145,23 @@ export async function runAgent(
   const handleEvent = (event: AgentEvent): void => {
     stats.total++;
     switch (event.type) {
-      case 'tool_call': stats.toolCalls++; break;
-      case 'tool_result': stats.toolResults++; break;
-      case 'message': stats.messages++; break;
-      case 'thinking': stats.thinking++; break;
+      case 'tool_call':
+        stats.toolCalls++;
+        break;
+      case 'tool_result':
+        stats.toolResults++;
+        break;
+      case 'message':
+        stats.messages++;
+        break;
+      case 'thinking':
+        stats.thinking++;
+        break;
       case 'session_error':
         stats.errors++;
-        stderrLines.push(`[${event.timestamp}] ${event.data.errorType ?? 'ERROR'}: ${event.data.message ?? ''}`);
+        stderrLines.push(
+          `[${event.timestamp}] ${event.data.errorType ?? 'ERROR'}: ${event.data.message ?? ''}`,
+        );
         break;
       case 'session_start':
         if (event.data.sessionId) activeSessionId = event.data.sessionId;
@@ -189,7 +198,11 @@ export async function runAgent(
     agentResult = await Promise.race([runPromise, timeoutPromise]);
   } catch (error) {
     if (timedOut) {
-      try { await adapter.terminate(activeSessionId); } catch { /* best-effort */ }
+      try {
+        await adapter.terminate(activeSessionId);
+      } catch {
+        /* best-effort */
+      }
       agentResult = {
         output: `Agent timed out after ${config.timeout ?? 300}s`,
         sessionId: '',
@@ -198,7 +211,8 @@ export async function runAgent(
         tokens: null,
       };
     } else {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       agentResult = {
         output: `Agent execution failed: ${errorMessage}`,
         sessionId: '',
@@ -234,9 +248,11 @@ export async function runAgent(
   }
 
   // Determine final result status
-  let resultStatus: CompletedMetadata['result'] = agentResult.status === 'completed' ? 'completed' : 'failed';
+  let resultStatus: CompletedMetadata['result'] =
+    agentResult.status === 'completed' ? 'completed' : 'failed';
   if (timedOut) resultStatus = 'timeout';
-  if (agentResult.status === 'completed' && validation && !validation.valid) resultStatus = 'degraded';
+  if (agentResult.status === 'completed' && validation && !validation.valid)
+    resultStatus = 'degraded';
 
   const artifacts = listArtifacts(runDir);
 

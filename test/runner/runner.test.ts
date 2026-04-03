@@ -1,11 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
-import * as path from 'node:path';
 import * as os from 'node:os';
+import * as path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FakeAgentAdapter } from '../../src/adapter/index.js';
 import { resolveAgent } from '../../src/runner/folder.js';
 import { runAgent } from '../../src/runner/runner.js';
-import type { AgentEvent } from '../../src/adapter/events.js';
 
 let tmpDir: string;
 
@@ -17,17 +16,22 @@ afterEach(() => {
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
-function createAgent(slug: string, opts: {
-  prompt?: string;
-  schema?: object | null;
-  instructions?: string | null;
-  inputSchema?: object | null;
-  preamble?: string | null;
-} = {}) {
+function createAgent(
+  slug: string,
+  opts: {
+    prompt?: string;
+    schema?: object | null;
+    instructions?: string | null;
+    inputSchema?: object | null;
+    preamble?: string | null;
+  } = {},
+) {
   const agentDir = path.join(tmpDir, slug);
   fs.mkdirSync(agentDir, { recursive: true });
 
-  const prompt = opts.prompt ?? `---\ndescription: "Test agent"\n---\n\n# ${slug}\n\nDo the thing.`;
+  const prompt =
+    opts.prompt ??
+    `---\ndescription: "Test agent"\n---\n\n# ${slug}\n\nDo the thing.`;
   fs.writeFileSync(path.join(agentDir, 'prompt.md'), prompt);
 
   if (opts.schema !== null) {
@@ -37,15 +41,24 @@ function createAgent(slug: string, opts: {
       required: ['result'],
       properties: { result: { type: 'string' } },
     };
-    fs.writeFileSync(path.join(agentDir, 'output-schema.json'), JSON.stringify(schema));
+    fs.writeFileSync(
+      path.join(agentDir, 'output-schema.json'),
+      JSON.stringify(schema),
+    );
   }
 
   if (opts.instructions !== null) {
-    fs.writeFileSync(path.join(agentDir, 'instructions.md'), opts.instructions ?? '# Instructions\n\nBe helpful.');
+    fs.writeFileSync(
+      path.join(agentDir, 'instructions.md'),
+      opts.instructions ?? '# Instructions\n\nBe helpful.',
+    );
   }
 
   if (opts.inputSchema) {
-    fs.writeFileSync(path.join(agentDir, 'input-schema.json'), JSON.stringify(opts.inputSchema));
+    fs.writeFileSync(
+      path.join(agentDir, 'input-schema.json'),
+      JSON.stringify(opts.inputSchema),
+    );
   }
 
   if (opts.preamble !== undefined && opts.preamble !== null) {
@@ -87,7 +100,8 @@ describe('runAgent', () => {
 
   it('strips frontmatter from prompt', async () => {
     const def = createAgent('test-strip', {
-      prompt: '---\ndescription: "Should be stripped"\ntags: [test]\n---\n\n# Real Content\n\nBody here.',
+      prompt:
+        '---\ndescription: "Should be stripped"\ntags: [test]\n---\n\n# Real Content\n\nBody here.',
       schema: null,
       instructions: null,
       preamble: null,
@@ -110,7 +124,13 @@ describe('runAgent', () => {
     });
 
     const fake = new FakeAgentAdapter({ output: 'done' });
-    await runAgent(fake, def, { slug: 'test-replace', cwd: '/my/project' }, undefined, tmpDir);
+    await runAgent(
+      fake,
+      def,
+      { slug: 'test-replace', cwd: '/my/project' },
+      undefined,
+      tmpDir,
+    );
 
     const prompt = fake.getRunHistory()[0].prompt;
     expect(prompt).toContain('Root is: /my/project');
@@ -160,7 +180,13 @@ describe('runAgent', () => {
     });
 
     const fake = new FakeAgentAdapter({ output: 'done' });
-    await runAgent(fake, def, { slug: 'with-params', params: { file_path: '/src/main.ts' } }, undefined, tmpDir);
+    await runAgent(
+      fake,
+      def,
+      { slug: 'with-params', params: { file_path: '/src/main.ts' } },
+      undefined,
+      tmpDir,
+    );
 
     const prompt = fake.getRunHistory()[0].prompt;
     expect(prompt).toContain('## Input Parameters');
@@ -168,7 +194,10 @@ describe('runAgent', () => {
   });
 
   it('includes output hint when schema exists', async () => {
-    const def = createAgent('with-schema', { preamble: null, instructions: null });
+    const def = createAgent('with-schema', {
+      preamble: null,
+      instructions: null,
+    });
 
     const fake = new FakeAgentAdapter({ output: '{"result":"ok"}' });
     await runAgent(fake, def, { slug: 'with-schema' }, undefined, tmpDir);
@@ -178,17 +207,35 @@ describe('runAgent', () => {
   });
 
   it('writes events to NDJSON', async () => {
-    const def = createAgent('events-test', { schema: null, instructions: null, preamble: null });
+    const def = createAgent('events-test', {
+      schema: null,
+      instructions: null,
+      preamble: null,
+    });
 
     const fake = new FakeAgentAdapter({
       output: 'done',
       events: [
-        { type: 'thinking', timestamp: '2026-01-01T00:00:00Z', data: { content: 'hmm' } },
-        { type: 'tool_call', timestamp: '2026-01-01T00:00:01Z', data: { toolName: 'bash', input: 'ls', toolCallId: 'tc1' } },
+        {
+          type: 'thinking',
+          timestamp: '2026-01-01T00:00:00Z',
+          data: { content: 'hmm' },
+        },
+        {
+          type: 'tool_call',
+          timestamp: '2026-01-01T00:00:01Z',
+          data: { toolName: 'bash', input: 'ls', toolCallId: 'tc1' },
+        },
       ],
     });
 
-    const result = await runAgent(fake, def, { slug: 'events-test' }, undefined, tmpDir);
+    const result = await runAgent(
+      fake,
+      def,
+      { slug: 'events-test' },
+      undefined,
+      tmpDir,
+    );
 
     const eventsPath = path.join(result.runDir, 'events.ndjson');
     const lines = fs.readFileSync(eventsPath, 'utf-8').trim().split('\n');
@@ -199,10 +246,23 @@ describe('runAgent', () => {
   });
 
   it('writes completed.json with correct metadata', async () => {
-    const def = createAgent('meta-test', { schema: null, instructions: null, preamble: null });
+    const def = createAgent('meta-test', {
+      schema: null,
+      instructions: null,
+      preamble: null,
+    });
 
-    const fake = new FakeAgentAdapter({ output: 'done', sessionId: 'sess-123' });
-    const result = await runAgent(fake, def, { slug: 'meta-test' }, undefined, tmpDir);
+    const fake = new FakeAgentAdapter({
+      output: 'done',
+      sessionId: 'sess-123',
+    });
+    const result = await runAgent(
+      fake,
+      def,
+      { slug: 'meta-test' },
+      undefined,
+      tmpDir,
+    );
 
     const completedPath = path.join(result.runDir, 'completed.json');
     const metadata = JSON.parse(fs.readFileSync(completedPath, 'utf-8'));
@@ -217,22 +277,45 @@ describe('runAgent', () => {
   });
 
   it('sets degraded status when output fails validation', async () => {
-    const def = createAgent('degraded-test', { preamble: null, instructions: null });
+    const def = createAgent('degraded-test', {
+      preamble: null,
+      instructions: null,
+    });
 
     // Output doesn't match schema (missing required 'result' field)
     const fake = new FakeAgentAdapter({ output: '{"wrong":"field"}' });
-    const result = await runAgent(fake, def, { slug: 'degraded-test' }, undefined, tmpDir);
+    const result = await runAgent(
+      fake,
+      def,
+      { slug: 'degraded-test' },
+      undefined,
+      tmpDir,
+    );
 
     expect(result.metadata.result).toBe('degraded');
     expect(result.validation).not.toBeNull();
-    expect(result.validation!.valid).toBe(false);
+    expect(result.validation?.valid).toBe(false);
   });
 
   it('sets failed status on adapter error', async () => {
-    const def = createAgent('fail-test', { schema: null, instructions: null, preamble: null });
+    const def = createAgent('fail-test', {
+      schema: null,
+      instructions: null,
+      preamble: null,
+    });
 
-    const fake = new FakeAgentAdapter({ output: 'error', status: 'failed', exitCode: 1 });
-    const result = await runAgent(fake, def, { slug: 'fail-test' }, undefined, tmpDir);
+    const fake = new FakeAgentAdapter({
+      output: 'error',
+      status: 'failed',
+      exitCode: 1,
+    });
+    const result = await runAgent(
+      fake,
+      def,
+      { slug: 'fail-test' },
+      undefined,
+      tmpDir,
+    );
 
     expect(result.metadata.result).toBe('failed');
     expect(result.metadata.exitCode).toBe(1);
@@ -245,12 +328,24 @@ describe('runAgent', () => {
     });
 
     const fake = new FakeAgentAdapter({ output: '{"result":"ok"}' });
-    const result = await runAgent(fake, def, { slug: 'freeze-test' }, undefined, tmpDir);
+    const result = await runAgent(
+      fake,
+      def,
+      { slug: 'freeze-test' },
+      undefined,
+      tmpDir,
+    );
 
     expect(fs.existsSync(path.join(result.runDir, 'prompt.md'))).toBe(true);
-    expect(fs.existsSync(path.join(result.runDir, 'instructions.md'))).toBe(true);
-    expect(fs.existsSync(path.join(result.runDir, 'output-schema.json'))).toBe(true);
-    expect(fs.existsSync(path.join(result.runDir, 'output', 'report.json'))).toBe(true);
+    expect(fs.existsSync(path.join(result.runDir, 'instructions.md'))).toBe(
+      true,
+    );
+    expect(fs.existsSync(path.join(result.runDir, 'output-schema.json'))).toBe(
+      true,
+    );
+    expect(
+      fs.existsSync(path.join(result.runDir, 'output', 'report.json')),
+    ).toBe(true);
   });
 
   it('fails fast on invalid input params', async () => {
@@ -267,28 +362,48 @@ describe('runAgent', () => {
     });
 
     const fake = new FakeAgentAdapter({ output: 'should not run' });
-    const result = await runAgent(fake, def, { slug: 'input-fail', params: {} }, undefined, tmpDir);
+    const result = await runAgent(
+      fake,
+      def,
+      { slug: 'input-fail', params: {} },
+      undefined,
+      tmpDir,
+    );
 
     expect(result.metadata.result).toBe('failed');
     expect(fake.getRunHistory()).toHaveLength(0); // Adapter never called
   });
 
   it('handles timeout — terminates adapter and reports timeout status', async () => {
-    const def = createAgent('timeout-test', { schema: null, instructions: null, preamble: null });
+    const def = createAgent('timeout-test', {
+      schema: null,
+      instructions: null,
+      preamble: null,
+    });
 
     const fake = new FakeAgentAdapter({
       output: 'too slow',
       sessionId: 'slow-sess',
       runDuration: 500, // 500ms delay
       events: [
-        { type: 'session_start', timestamp: new Date().toISOString(), data: { sessionId: 'slow-sess' } },
+        {
+          type: 'session_start',
+          timestamp: new Date().toISOString(),
+          data: { sessionId: 'slow-sess' },
+        },
       ],
     });
 
-    const result = await runAgent(fake, def, {
-      slug: 'timeout-test',
-      timeout: 0.1, // 100ms timeout (less than 500ms runDuration)
-    }, undefined, tmpDir);
+    const result = await runAgent(
+      fake,
+      def,
+      {
+        slug: 'timeout-test',
+        timeout: 0.1, // 100ms timeout (less than 500ms runDuration)
+      },
+      undefined,
+      tmpDir,
+    );
 
     expect(result.metadata.result).toBe('timeout');
     expect(result.metadata.exitCode).toBe(124);

@@ -22,7 +22,10 @@ export function validateInput(
   params: Record<string, string>,
 ): ValidationResult {
   if (!fs.existsSync(schemaPath)) {
-    return { valid: false, errors: [`Input schema file not found: ${schemaPath}`] };
+    return {
+      valid: false,
+      errors: [`Input schema file not found: ${schemaPath}`],
+    };
   }
 
   let schemaData: unknown;
@@ -30,7 +33,10 @@ export function validateInput(
     schemaData = JSON.parse(fs.readFileSync(schemaPath, 'utf-8'));
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return { valid: false, errors: [`Input schema is not valid JSON: ${message}`] };
+    return {
+      valid: false,
+      errors: [`Input schema is not valid JSON: ${message}`],
+    };
   }
 
   const ajv = new Ajv2020({ allErrors: true });
@@ -40,7 +46,10 @@ export function validateInput(
     validate = ajv.compile(schemaData as Record<string, unknown>);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return { valid: false, errors: [`Input schema compilation failed: ${message}`] };
+    return {
+      valid: false,
+      errors: [`Input schema compilation failed: ${message}`],
+    };
   }
 
   const valid = validate(params);
@@ -62,7 +71,10 @@ export function validateInput(
  * Pre-validates for: missing file, empty file, invalid JSON.
  * Validation failure = { valid: false, errors } — never throws.
  */
-export function validateOutput(schemaPath: string, outputPath: string): ValidationResult {
+export function validateOutput(
+  schemaPath: string,
+  outputPath: string,
+): ValidationResult {
   if (!fs.existsSync(schemaPath)) {
     return { valid: false, errors: [`Schema file not found: ${schemaPath}`] };
   }

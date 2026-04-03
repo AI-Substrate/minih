@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import type { AgentEvent } from '../../src/adapter/events.js';
 import { FakeAgentAdapter } from '../../src/adapter/fake.js';
-import type { AgentEvent, AgentRunOptions } from '../../src/adapter/events.js';
 
 describe('FakeAgentAdapter', () => {
   it('implements IAgentAdapter — run returns configured output', async () => {
@@ -58,7 +58,11 @@ describe('FakeAgentAdapter', () => {
   it('does not emit events when onEvent is not provided', async () => {
     const fake = new FakeAgentAdapter({
       events: [
-        { type: 'message', timestamp: '2026-01-01T00:00:00.000Z', data: { content: 'hi' } },
+        {
+          type: 'message',
+          timestamp: '2026-01-01T00:00:00.000Z',
+          data: { content: 'hi' },
+        },
       ],
     });
 
@@ -91,7 +95,9 @@ describe('FakeAgentAdapter', () => {
     const fake = new FakeAgentAdapter();
     await fake.run({ prompt: 'hello' });
 
-    expect(() => fake.assertRunCalled({ prompt: 'goodbye' })).toThrow(/Expected run/);
+    expect(() => fake.assertRunCalled({ prompt: 'goodbye' })).toThrow(
+      /Expected run/,
+    );
   });
 
   it('reset clears all history', async () => {
@@ -154,7 +160,11 @@ describe('FakeAgentAdapter', () => {
     fake.emitThinking('old');
 
     fake.setEvents([
-      { type: 'message', timestamp: '2026-01-01T00:00:00.000Z', data: { content: 'new' } },
+      {
+        type: 'message',
+        timestamp: '2026-01-01T00:00:00.000Z',
+        data: { content: 'new' },
+      },
     ]);
 
     expect(fake.getEvents()).toHaveLength(1);

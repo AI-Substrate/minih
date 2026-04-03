@@ -8,9 +8,9 @@
  * Adapted: configurable agents dir, frontmatter parsing (new).
  */
 
+import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import * as crypto from 'node:crypto';
 import type { AgentDefinition } from './types.js';
 
 const SLUG_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
@@ -69,7 +69,10 @@ export function parseFrontmatter(content: string): {
 }
 
 /** Minimal YAML parser for frontmatter — handles description and tags only. */
-function parseYamlSimple(yaml: string): { description: string; tags: string[] } {
+function parseYamlSimple(yaml: string): {
+  description: string;
+  tags: string[];
+} {
   let description = '';
   let tags: string[] = [];
 
@@ -142,7 +145,9 @@ export function listAgents(agentsDir: string): AgentDefinition[] {
       dir,
       promptPath,
       schemaPath: fs.existsSync(schemaPath) ? schemaPath : null,
-      instructionsPath: fs.existsSync(instructionsPath) ? instructionsPath : null,
+      instructionsPath: fs.existsSync(instructionsPath)
+        ? instructionsPath
+        : null,
       inputSchemaPath: fs.existsSync(inputSchemaPath) ? inputSchemaPath : null,
     });
   }
@@ -154,7 +159,10 @@ export function listAgents(agentsDir: string): AgentDefinition[] {
  * Resolve an agent definition by slug.
  * @returns AgentDefinition or null if not found
  */
-export function resolveAgent(slug: string, agentsDir: string): AgentDefinition | null {
+export function resolveAgent(
+  slug: string,
+  agentsDir: string,
+): AgentDefinition | null {
   const agents = listAgents(agentsDir);
   return agents.find((a) => a.slug === slug) ?? null;
 }
@@ -164,7 +172,10 @@ export function resolveAgent(slug: string, agentsDir: string): AgentDefinition |
  * Freezes copies of prompt, instructions, and schemas.
  * @returns Absolute path to the created run folder + the run ID
  */
-export function createRunFolder(agentDef: AgentDefinition): { runDir: string; runId: string } {
+export function createRunFolder(agentDef: AgentDefinition): {
+  runDir: string;
+  runId: string;
+} {
   const now = new Date();
   const suffix = crypto.randomBytes(2).toString('hex');
   const yyyy = String(now.getFullYear());
@@ -183,13 +194,22 @@ export function createRunFolder(agentDef: AgentDefinition): { runDir: string; ru
   // Freeze copies of inputs into run folder
   fs.copyFileSync(agentDef.promptPath, path.join(runDir, 'prompt.md'));
   if (agentDef.instructionsPath) {
-    fs.copyFileSync(agentDef.instructionsPath, path.join(runDir, 'instructions.md'));
+    fs.copyFileSync(
+      agentDef.instructionsPath,
+      path.join(runDir, 'instructions.md'),
+    );
   }
   if (agentDef.schemaPath) {
-    fs.copyFileSync(agentDef.schemaPath, path.join(runDir, 'output-schema.json'));
+    fs.copyFileSync(
+      agentDef.schemaPath,
+      path.join(runDir, 'output-schema.json'),
+    );
   }
   if (agentDef.inputSchemaPath) {
-    fs.copyFileSync(agentDef.inputSchemaPath, path.join(runDir, 'input-schema.json'));
+    fs.copyFileSync(
+      agentDef.inputSchemaPath,
+      path.join(runDir, 'input-schema.json'),
+    );
   }
 
   fs.mkdirSync(path.join(runDir, 'output'), { recursive: true });

@@ -7,7 +7,6 @@
  * Extracted from: packages/shared/src/fakes/fake-agent-adapter.ts
  */
 
-import type { IAgentAdapter } from './interface.js';
 import type {
   AgentEvent,
   AgentResult,
@@ -15,6 +14,7 @@ import type {
   AgentStatus,
   TokenMetrics,
 } from './events.js';
+import type { IAgentAdapter } from './interface.js';
 
 export interface FakeAgentAdapterOptions {
   sessionId?: string;
@@ -50,7 +50,10 @@ export class FakeAgentAdapter implements IAgentAdapter {
       status: options.status ?? 'completed',
       exitCode: options.exitCode ?? 0,
       stderr: options.stderr,
-      tokens: options.tokens === undefined ? { used: 0, total: 0, limit: 200000 } : options.tokens,
+      tokens:
+        options.tokens === undefined
+          ? { used: 0, total: 0, limit: 200000 }
+          : options.tokens,
     };
     this._runDuration = options.runDuration ?? 0;
     this._events = options.events ?? [];
@@ -139,7 +142,9 @@ export class FakeAgentAdapter implements IAgentAdapter {
   assertTerminateCalled(sessionId: string): void {
     if (!this._terminateHistory.includes(sessionId)) {
       const history =
-        this._terminateHistory.length === 0 ? '(no calls)' : this._terminateHistory.join(', ');
+        this._terminateHistory.length === 0
+          ? '(no calls)'
+          : this._terminateHistory.join(', ');
       throw new Error(
         `Expected terminate() to be called with sessionId "${sessionId}"\nActual calls: ${history}`,
       );
@@ -149,7 +154,9 @@ export class FakeAgentAdapter implements IAgentAdapter {
   assertCompactCalled(sessionId: string): void {
     if (!this._compactHistory.includes(sessionId)) {
       const history =
-        this._compactHistory.length === 0 ? '(no calls)' : this._compactHistory.join(', ');
+        this._compactHistory.length === 0
+          ? '(no calls)'
+          : this._compactHistory.join(', ');
       throw new Error(
         `Expected compact() to be called with sessionId "${sessionId}"\nActual calls: ${history}`,
       );

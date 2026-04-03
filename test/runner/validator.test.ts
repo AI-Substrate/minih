@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
-import * as path from 'node:path';
 import * as os from 'node:os';
+import * as path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { validateInput, validateOutput } from '../../src/runner/validator.js';
 
 let tmpDir: string;
@@ -54,7 +54,10 @@ describe('validateOutput', () => {
 
   it('handles missing output file', () => {
     const schema = writeJson('schema.json', { type: 'object' });
-    const result = validateOutput(schema, path.join(tmpDir, 'nonexistent.json'));
+    const result = validateOutput(
+      schema,
+      path.join(tmpDir, 'nonexistent.json'),
+    );
     expect(result.valid).toBe(false);
     expect(result.errors[0]).toMatch(/not found/i);
   });

@@ -1,8 +1,14 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
-import * as path from 'node:path';
 import * as os from 'node:os';
-import { validateSlug, listAgents, resolveAgent, createRunFolder, parseFrontmatter } from '../../src/runner/folder.js';
+import * as path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import {
+  createRunFolder,
+  listAgents,
+  parseFrontmatter,
+  resolveAgent,
+  validateSlug,
+} from '../../src/runner/folder.js';
 
 let tmpDir: string;
 
@@ -119,7 +125,10 @@ describe('listAgents', () => {
   it('finds agents with prompt.md', () => {
     const agentDir = path.join(tmpDir, 'hello-world');
     fs.mkdirSync(agentDir);
-    fs.writeFileSync(path.join(agentDir, 'prompt.md'), '---\ndescription: "Say hello"\n---\n\n# Hello');
+    fs.writeFileSync(
+      path.join(agentDir, 'prompt.md'),
+      '---\ndescription: "Say hello"\n---\n\n# Hello',
+    );
 
     const agents = listAgents(tmpDir);
     expect(agents).toHaveLength(1);
@@ -134,7 +143,10 @@ describe('listAgents', () => {
 
     const agentDir = path.join(tmpDir, 'real-agent');
     fs.mkdirSync(agentDir);
-    fs.writeFileSync(path.join(agentDir, 'prompt.md'), '---\ndescription: "Real"\n---\n\n# Real');
+    fs.writeFileSync(
+      path.join(agentDir, 'prompt.md'),
+      '---\ndescription: "Real"\n---\n\n# Real',
+    );
 
     const agents = listAgents(tmpDir);
     expect(agents).toHaveLength(1);
@@ -154,17 +166,23 @@ describe('listAgents', () => {
     for (const slug of ['zebra', 'alpha', 'middle']) {
       const dir = path.join(tmpDir, slug);
       fs.mkdirSync(dir);
-      fs.writeFileSync(path.join(dir, 'prompt.md'), `---\ndescription: "${slug}"\n---\n\n# ${slug}`);
+      fs.writeFileSync(
+        path.join(dir, 'prompt.md'),
+        `---\ndescription: "${slug}"\n---\n\n# ${slug}`,
+      );
     }
 
     const agents = listAgents(tmpDir);
-    expect(agents.map(a => a.slug)).toEqual(['alpha', 'middle', 'zebra']);
+    expect(agents.map((a) => a.slug)).toEqual(['alpha', 'middle', 'zebra']);
   });
 
   it('detects optional files', () => {
     const dir = path.join(tmpDir, 'full-agent');
     fs.mkdirSync(dir);
-    fs.writeFileSync(path.join(dir, 'prompt.md'), '---\ndescription: "Full"\n---\n\n# Full');
+    fs.writeFileSync(
+      path.join(dir, 'prompt.md'),
+      '---\ndescription: "Full"\n---\n\n# Full',
+    );
     fs.writeFileSync(path.join(dir, 'output-schema.json'), '{}');
     fs.writeFileSync(path.join(dir, 'input-schema.json'), '{}');
     fs.writeFileSync(path.join(dir, 'instructions.md'), '# Instructions');
@@ -183,11 +201,17 @@ describe('listAgents', () => {
   it('skips agents with missing frontmatter description', () => {
     const noDesc = path.join(tmpDir, 'no-desc');
     fs.mkdirSync(noDesc);
-    fs.writeFileSync(path.join(noDesc, 'prompt.md'), '# No Frontmatter\n\nJust body.');
+    fs.writeFileSync(
+      path.join(noDesc, 'prompt.md'),
+      '# No Frontmatter\n\nJust body.',
+    );
 
     const withDesc = path.join(tmpDir, 'with-desc');
     fs.mkdirSync(withDesc);
-    fs.writeFileSync(path.join(withDesc, 'prompt.md'), '---\ndescription: "Has description"\n---\n\n# Good');
+    fs.writeFileSync(
+      path.join(withDesc, 'prompt.md'),
+      '---\ndescription: "Has description"\n---\n\n# Good',
+    );
 
     const agents = listAgents(tmpDir);
     expect(agents).toHaveLength(1);
@@ -199,11 +223,14 @@ describe('resolveAgent', () => {
   it('finds agent by slug', () => {
     const dir = path.join(tmpDir, 'my-agent');
     fs.mkdirSync(dir);
-    fs.writeFileSync(path.join(dir, 'prompt.md'), '---\ndescription: "Mine"\n---\n\n# Mine');
+    fs.writeFileSync(
+      path.join(dir, 'prompt.md'),
+      '---\ndescription: "Mine"\n---\n\n# Mine',
+    );
 
     const agent = resolveAgent('my-agent', tmpDir);
     expect(agent).not.toBeNull();
-    expect(agent!.slug).toBe('my-agent');
+    expect(agent?.slug).toBe('my-agent');
   });
 
   it('returns null for unknown slug', () => {
@@ -216,7 +243,10 @@ describe('createRunFolder', () => {
   it('creates timestamped run folder with frozen copies', () => {
     const dir = path.join(tmpDir, 'test-agent');
     fs.mkdirSync(dir);
-    fs.writeFileSync(path.join(dir, 'prompt.md'), '---\ndescription: "Test"\n---\n\n# Test prompt');
+    fs.writeFileSync(
+      path.join(dir, 'prompt.md'),
+      '---\ndescription: "Test"\n---\n\n# Test prompt',
+    );
     fs.writeFileSync(path.join(dir, 'output-schema.json'), '{"type":"object"}');
     fs.writeFileSync(path.join(dir, 'instructions.md'), '# Instructions');
 
@@ -224,7 +254,9 @@ describe('createRunFolder', () => {
     const { runDir, runId } = createRunFolder(agent);
 
     expect(fs.existsSync(runDir)).toBe(true);
-    expect(runId).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z-[0-9a-f]{4}$/);
+    expect(runId).toMatch(
+      /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z-[0-9a-f]{4}$/,
+    );
 
     // Frozen copies
     expect(fs.existsSync(path.join(runDir, 'prompt.md'))).toBe(true);
@@ -233,6 +265,8 @@ describe('createRunFolder', () => {
     expect(fs.existsSync(path.join(runDir, 'output'))).toBe(true);
 
     // Content preserved
-    expect(fs.readFileSync(path.join(runDir, 'prompt.md'), 'utf-8')).toContain('# Test prompt');
+    expect(fs.readFileSync(path.join(runDir, 'prompt.md'), 'utf-8')).toContain(
+      '# Test prompt',
+    );
   });
 });

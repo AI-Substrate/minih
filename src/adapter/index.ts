@@ -17,8 +17,7 @@ export type {
   ReasoningEffort,
   TokenMetrics,
 } from './events.js';
-
-export type { IAgentAdapter } from './interface.js';
+export type { FakeAgentAdapterOptions } from './fake.js';
 
 export { FakeAgentAdapter } from './fake.js';
-export type { FakeAgentAdapterOptions } from './fake.js';
+export type { IAgentAdapter } from './interface.js';

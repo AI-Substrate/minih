@@ -40,3 +40,4 @@
 | Phase | Changes |
 |-------|---------|
 | Phase 1 | Created domain. Events, interface, FakeAgentAdapter extracted. |
+| Phase 3 | Added SdkCopilotAdapter (~250 LOC), copilot-types.ts (local SDK interfaces). Event translation, permission auto-approval, prompt validation, duplicate suppression. |

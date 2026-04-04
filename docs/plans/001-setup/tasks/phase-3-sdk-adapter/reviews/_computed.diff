@@ -1,0 +1,897 @@
+diff --git a/docs/domains/adapter/domain.md b/docs/domains/adapter/domain.md
+index 05730c3..d92f648 100644
+--- a/docs/domains/adapter/domain.md
++++ b/docs/domains/adapter/domain.md
+@@ -40,3 +40,4 @@
+ | Phase | Changes |
+ |-------|---------|
+ | Phase 1 | Created domain. Events, interface, FakeAgentAdapter extracted. |
++| Phase 3 | Added SdkCopilotAdapter (~250 LOC), copilot-types.ts (local SDK interfaces). Event translation, permission auto-approval, prompt validation, duplicate suppression. |
+diff --git a/docs/plans/001-setup/tasks/phase-3-sdk-adapter/execution.log.md b/docs/plans/001-setup/tasks/phase-3-sdk-adapter/execution.log.md
+new file mode 100644
+index 0000000..093725d
+--- /dev/null
++++ b/docs/plans/001-setup/tasks/phase-3-sdk-adapter/execution.log.md
+@@ -0,0 +1,40 @@
++# Execution Log: Phase 3 — SDK Adapter
++
++**Plan**: miniharness-extraction-plan.md
++**Phase**: Phase 3: SDK Adapter
++**Started**: 2026-04-04T02:39:00Z
++
++---
++
++## Pre-Phase Harness Validation
++
++- 🔴 UNAVAILABLE — No harness.md exists. Using `just fft`.
++
++---
++
++## Task Log
++
++### T001: Install @github/copilot-sdk as devDependency ✅
++- `npm install --save-dev @github/copilot-sdk` succeeded.
++- SDK available for type resolution at build time, stays as peerDep for consumers.
++
++### T002: Create src/adapter/copilot-types.ts ✅
++- Minimal ~50 LOC (not 300+). Only interfaces the adapter actually touches.
++- ICopilotClient (createSession, resumeSession, stop), ICopilotSession (sendAndWait, on, abort, destroy, sessionId), CopilotSessionEventLike, config types.
++- Used `data?: any` with biome-ignore for SDK event flexibility.
++
++### T003: Create src/adapter/sdk-copilot.ts ✅
++- ~250 LOC (down from ~530 in source). Dropped ILogger, workspaceRoot, debug console.log noise.
++- Constructor simplified to just `(client: ICopilotClient)`.
++- Event translation covers all SDK types: message_delta → text_delta, tool.execution_start → tool_call, reasoning → thinking, etc.
++- Duplicate event suppression preserved (hasStreamedThinking/hasStreamedText).
++- Prompt validation preserved (empty, oversized, control chars).
++- Session destroy guard added (`sessionDestroyed` flag) to prevent double-destroy on timeout.
++- compact() intentionally does NOT destroy session (must stay alive for subsequent turns).
++
++### T004: Update adapter barrel export ✅
++- Added SdkCopilotAdapter, ICopilotClient, ICopilotSession, config types to barrel.
++
++### T005: Verify just fft ✅
++- `just fft` passes end-to-end (lint → format → build → typecheck → test → audit).
++- 63 tests pass. Zero @chainglass imports. Zero lint errors (3 warnings: non-null assertions in tests).
+diff --git a/docs/plans/001-setup/tasks/phase-3-sdk-adapter/tasks.fltplan.md b/docs/plans/001-setup/tasks/phase-3-sdk-adapter/tasks.fltplan.md
+new file mode 100644
+index 0000000..f7b0c1e
+--- /dev/null
++++ b/docs/plans/001-setup/tasks/phase-3-sdk-adapter/tasks.fltplan.md
+@@ -0,0 +1,116 @@
++# Flight Plan: Phase 3 — SDK Adapter
++
++**Plan**: [miniharness-extraction-plan.md](../../miniharness-extraction-plan.md)
++**Phase**: Phase 3: SDK Adapter
++**Generated**: 2026-04-03
++**Status**: Landed ✈️
++
++---
++
++## Departure → Destination
++
++**Where we are**: Runner executes agents end-to-end with FakeAgentAdapter. 63 tests pass. All types defined, prompt assembly works, NDJSON events stream, validation enforced. But no real SDK connection — everything runs against the fake.
++
++**Where we're going**: `SdkCopilotAdapter` compiled and exported. The adapter translates real `@github/copilot-sdk` events into our `AgentEvent` union, auto-approves permissions, validates prompts, and manages session lifecycle. Phase 4 can wire it into the CLI to make `npx minih run` work for real.
++
++---
++
++## Domain Context
++
++### Domains We're Changing
++
++| Domain | What Changes | Key Files |
++|--------|-------------|-----------|
++| adapter | Add SDK adapter implementation + SDK interface types | `src/adapter/sdk-copilot.ts`, `copilot-types.ts`, `index.ts` |
++
++### Domains We Depend On (no changes)
++
++| Domain | What We Consume | Contract |
++|--------|----------------|----------|
++| adapter (self) | AgentEvent, IAgentAdapter, AgentResult | `src/adapter/events.ts`, `interface.ts` |
++
++---
++
++## Flight Status
++
++```mermaid
++stateDiagram-v2
++    classDef pending fill:#9E9E9E,stroke:#757575,color:#fff
++    classDef active fill:#FFC107,stroke:#FFA000,color:#000
++    classDef done fill:#4CAF50,stroke:#388E3C,color:#fff
++    classDef blocked fill:#F44336,stroke:#D32F2F,color:#fff
++
++    state "1: Install SDK + types" as S1
++    state "2: Adapter implementation" as S2
++    state "3: Export + verify" as S3
++
++    [*] --> S1
++    S1 --> S2
++    S2 --> S3
++    S3 --> [*]
++
++    class S1,S2,S3 pending
++```
++
++**Legend**: grey = pending | yellow = active | red = blocked/needs input | green = done
++
++---
++
++## Stages
++
++- [x] **Stage 1: SDK install + interface types** — Install SDK devDep, create local copilot-types.ts (`T001`, `T002`)
++- [x] **Stage 2: Adapter implementation** — Extract and adapt SdkCopilotAdapter (`T003`)
++- [x] **Stage 3: Export + verify** — Update barrel, run `just fft` (`T004`, `T005`)
++
++---
++
++## Architecture: Before & After
++
++```mermaid
++flowchart LR
++    classDef existing fill:#E8F5E9,stroke:#4CAF50,color:#000
++    classDef new fill:#E3F2FD,stroke:#2196F3,color:#000
++
++    subgraph Before["Before Phase 3"]
++        B1["adapter/events.ts"]:::existing
++        B2["adapter/interface.ts"]:::existing
++        B3["adapter/fake.ts"]:::existing
++    end
++
++    subgraph After["After Phase 3"]
++        A1["adapter/events.ts"]:::existing
++        A2["adapter/interface.ts"]:::existing
++        A3["adapter/fake.ts"]:::existing
++        A4["adapter/copilot-types.ts<br/>ICopilotClient, ICopilotSession"]:::new
++        A5["adapter/sdk-copilot.ts<br/>SdkCopilotAdapter"]:::new
++        A4 --> A5
++        A2 --> A5
++        A1 --> A5
++    end
++```
++
++**Legend**: existing (green, unchanged) | new (blue, created)
++
++---
++
++## Acceptance Criteria
++
++- [x] SdkCopilotAdapter compiles with zero @chainglass imports
++- [x] Event translation covers all SDK event types
++- [x] Permission auto-approval implemented
++- [x] `just fft` passes (build + lint + test)
++
++## Goals & Non-Goals
++
++**Goals**: SdkCopilotAdapter, SDK interface types, event translation, permission auto-approval, prompt validation
++**Non-Goals**: No CLI, no adapter unit tests (tested via FakeAgentAdapter), no multi-backend
++
++---
++
++## Checklist
++
++- [x] T001: Install @github/copilot-sdk as devDependency
++- [x] T002: Create src/adapter/copilot-types.ts (SDK interface types)
++- [x] T003: Create src/adapter/sdk-copilot.ts (adapter implementation)
++- [x] T004: Update adapter barrel export
++- [x] T005: Verify just fft passes
+diff --git a/docs/plans/001-setup/tasks/phase-3-sdk-adapter/tasks.md b/docs/plans/001-setup/tasks/phase-3-sdk-adapter/tasks.md
+new file mode 100644
+index 0000000..790e1f1
+--- /dev/null
++++ b/docs/plans/001-setup/tasks/phase-3-sdk-adapter/tasks.md
+@@ -0,0 +1,126 @@
++# Phase 3: SDK Adapter — Tasks
++
++**Plan**: [miniharness-extraction-plan.md](../../miniharness-extraction-plan.md)
++**Phase**: Phase 3: SDK Adapter
++**Generated**: 2026-04-03
++**Status**: Ready for implementation
++
++---
++
++## Executive Briefing
++
++**Purpose**: Extract the `SdkCopilotAdapter` — the only code that touches `@github/copilot-sdk` — into minih's adapter domain. This is the bridge between the adapter-agnostic runner (Phase 2) and the real SDK. After this phase, minih can execute agents for real (once the CLI wires it up in Phase 4).
++
++**What We're Building**: `SdkCopilotAdapter` class that implements `IAgentAdapter`, plus the SDK interface types (`ICopilotClient`, `ICopilotSession`) that describe what the SDK provides. The adapter translates SDK events to our `AgentEvent` union, auto-approves all permissions (yolo), suppresses duplicate consolidated events, and validates prompts.
++
++**Goals**:
++- ✅ `SdkCopilotAdapter` compiles with zero `@chainglass/*` imports
++- ✅ Event translation covers all SDK event types → AgentEvent union
++- ✅ Permission auto-approval (yolo — all tool requests approved)
++- ✅ Duplicate event suppression (streamed deltas then consolidated message)
++- ✅ Prompt validation (empty, oversized, control characters)
++- ✅ SDK interface types inlined locally (ICopilotClient, ICopilotSession)
++- ✅ `just fft` passes
++
++**Non-Goals**:
++- ❌ No CLI commands (Phase 4)
++- ❌ No unit tests for SdkCopilotAdapter (requires real SDK — test via FakeAgentAdapter)
++- ❌ No multi-backend support (copilot-only for V1)
++- ❌ No logger integration (strip ILogger — use console.log for debug)
++
++---
++
++## Prior Phase Context
++
++### Phase 1: Project Scaffold + Types
++- **Deliverables**: All type definitions, FakeAgentAdapter, build pipeline
++- **Available**: `AgentEvent` union, `IAgentAdapter`, `AgentResult`, `AgentRunOptions`, barrel exports
++- **Pattern**: Plain TS types (no zod), ESM with `.js` extensions
++
++### Phase 2: Runner Core
++- **Deliverables**: folder.ts, validator.ts, display.ts, runner.ts, retrospective.json
++- **Available**: `runAgent()` accepts `IAgentAdapter` — adapter-agnostic
++- **Pattern**: Runner never imports SDK — adapter injected at composition root (Phase 4)
++
++---
++
++## Pre-Implementation Check
++
++| File | Exists? | Domain | Notes |
++|------|---------|--------|-------|
++| `src/adapter/sdk-copilot.ts` | ❌ create | adapter | Extract from source (~530 LOC). Drop ILogger, inline SDK types. |
++| `src/adapter/copilot-types.ts` | ❌ create | adapter | ICopilotClient, ICopilotSession, event types — local interfaces for SDK |
++| `src/adapter/index.ts` | ✅ modify | adapter | Add SdkCopilotAdapter export |
++| `package.json` | ✅ modify | — | Add @github/copilot-sdk as devDependency for compilation |
++
++No concept duplication. No harness available.
++
++---
++
++## Tasks
++
++| Status | ID | Task | Domain | Path(s) | Done When | Notes |
++|--------|-----|------|--------|---------|-----------|-------|
++| [ ] | T001 | Install @github/copilot-sdk as devDependency | — | `package.json` | `npm install --save-dev @github/copilot-sdk` succeeds. SDK available for type resolution at build time. Remains as peerDependency for consumers. | User confirmed SDK access. |
++| [ ] | T002 | Create src/adapter/copilot-types.ts | adapter | `src/adapter/copilot-types.ts` | ICopilotClient, ICopilotSession, CopilotSessionConfig, CopilotResumeSessionConfig, CopilotSessionEventLike, CopilotReasoningEffort — local interfaces mirroring SDK shapes. No SDK import required. | Source: packages/shared/src/interfaces/copilot-sdk.interface.ts. Extract only the types the adapter uses. Drop model listing, status, billing types (not needed for V1). |
++| [ ] | T003 | Create src/adapter/sdk-copilot.ts | adapter | `src/adapter/sdk-copilot.ts` | SdkCopilotAdapter implements IAgentAdapter. Event translation for all SDK event types → AgentEvent. Auto-approve permissions. Duplicate event suppression. Prompt validation. Session create/resume/abort/destroy lifecycle. | Source: packages/shared/src/adapters/sdk-copilot-adapter.ts (~530 LOC). Adaptations: replace @chainglass/shared imports with local types, drop ILogger (use console.log), drop workspaceRoot validation (minih doesn't need it), simplify constructor to just `(client: ICopilotClient)`. |
++| [ ] | T004 | Update adapter barrel export | adapter | `src/adapter/index.ts` | Export `SdkCopilotAdapter` and `ICopilotClient`, `ICopilotSession` types from barrel. | CLI composition root will import these in Phase 4. |
++| [ ] | T005 | Verify build + fft | — | — | `just fft` passes. `npm run build` succeeds. No @chainglass/* imports in src/. All 63 existing tests still pass. | Final gate. Biome lint must pass too. |
++
++---
++
++## Context Brief
++
++**Key findings from plan**:
++- Finding 01: SDK lazy-loaded via dynamic import — the adapter file imports from the SDK at the top level, but the CLI only dynamically imports the adapter in the `run` command (Phase 4)
++- Finding 02: AgentEvent union fully expanded in Phase 1 — adapter translates SDK events to these types
++- Finding 05: Zod dropped — adapter uses plain TS types for SDK interfaces
++
++**Domain dependencies**:
++- `adapter`: AgentEvent union (`src/adapter/events.ts`) — adapter translates TO these types
++- `adapter`: IAgentAdapter (`src/adapter/interface.ts`) — adapter implements this
++- `adapter`: AgentResult, AgentRunOptions (`src/adapter/events.ts`) — adapter consumes/returns these
++
++**Domain constraints**:
++- All Phase 3 code lives in `src/adapter/` — adapter domain only
++- The adapter is the ONLY code that imports `@github/copilot-sdk` types
++- The adapter imports from local `./events.ts`, `./interface.ts`, `./copilot-types.ts` — never from `@chainglass/shared`
++
++**Source adaptation notes**:
++- **Drop ILogger**: Source adapter accepts optional logger. Minih uses `console.log` for debug output (can be refined later).
++- **Drop workspaceRoot validation**: Source validates cwd against workspace root. Minih doesn't need this (agents run in cwd).
++- **Simplify constructor**: Source takes `(client: ICopilotClient, options?: SdkCopilotAdapterOptions)`. Minih simplifies to `(client: ICopilotClient)`.
++- **Keep event translation**: All SDK event types → AgentEvent mapping preserved exactly.
++- **Keep duplicate suppression**: `hasStreamedThinking` / `hasStreamedText` logic preserved.
++- **Keep prompt validation**: MAX_PROMPT_LENGTH, empty check, control char check.
++- **console.log debug lines**: Source has `console.log('[SdkCopilotAdapter]...')` — keep for now, replace with configurable logging later.
++
++**SDK event translation map**:
++```
++SDK Event Type                 → AgentEvent Type
++──────────────────────────────────────────────────
++assistant.message_delta        → text_delta
++assistant.message              → message (suppressed if streamed)
++assistant.usage                → usage
++assistant.reasoning            → thinking (suppressed if streamed)
++assistant.reasoning_delta      → thinking
++session.idle                   → session_idle
++session.error                  → (handled in catch block)
++tool.execution_start           → tool_call
++tool.execution_complete        → tool_result
++pending_messages.modified      → (skip)
++user.message                   → (skip)
++assistant.turn_start           → (skip)
++assistant.turn_end             → (skip)
++session.usage_info             → (skip)
++(unknown)                      → raw
++```
++
++---
++
++## Discoveries & Learnings
++
++_Populated during implementation by plan-6._
++
++| Date | Task | Type | Discovery | Resolution | References |
++|------|------|------|-----------|------------|------------|
+diff --git a/package-lock.json b/package-lock.json
+index d6547b1..b805556 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -16,6 +16,7 @@
+       },
+       "devDependencies": {
+         "@biomejs/biome": "^2.4.10",
++        "@github/copilot-sdk": "^0.2.1",
+         "@types/node": "^22.15.0",
+         "tsx": "^4.19.0",
+         "typescript": "^5.7.3",
+@@ -638,6 +639,141 @@
+         "node": ">=18"
+       }
+     },
++    "node_modules/@github/copilot": {
++      "version": "1.0.17",
++      "resolved": "https://registry.npmjs.org/@github/copilot/-/copilot-1.0.17.tgz",
++      "integrity": "sha512-RTJ+kEKOdidjuOs8ozsoBdz+94g7tFJIEu5kz1P2iwJhsL+iIA5rtn9/jXOF0hAI3CLSXKZoSd66cqHrn4rb1A==",
++      "dev": true,
++      "license": "SEE LICENSE IN LICENSE.md",
++      "bin": {
++        "copilot": "npm-loader.js"
++      },
++      "optionalDependencies": {
++        "@github/copilot-darwin-arm64": "1.0.17",
++        "@github/copilot-darwin-x64": "1.0.17",
++        "@github/copilot-linux-arm64": "1.0.17",
++        "@github/copilot-linux-x64": "1.0.17",
++        "@github/copilot-win32-arm64": "1.0.17",
++        "@github/copilot-win32-x64": "1.0.17"
++      }
++    },
++    "node_modules/@github/copilot-darwin-arm64": {
++      "version": "1.0.17",
++      "resolved": "https://registry.npmjs.org/@github/copilot-darwin-arm64/-/copilot-darwin-arm64-1.0.17.tgz",
++      "integrity": "sha512-LSv66P8611y/UjTESnaHLYqLl9kA9yBYsaocZPQoOsvMgCmktgaBgUWq+KMpLMicaFN0jBAE5F0Ve7dW6N9X3A==",
++      "cpu": [
++        "arm64"
++      ],
++      "dev": true,
++      "license": "SEE LICENSE IN LICENSE.md",
++      "optional": true,
++      "os": [
++        "darwin"
++      ],
++      "bin": {
++        "copilot-darwin-arm64": "copilot"
++      }
++    },
++    "node_modules/@github/copilot-darwin-x64": {
++      "version": "1.0.17",
++      "resolved": "https://registry.npmjs.org/@github/copilot-darwin-x64/-/copilot-darwin-x64-1.0.17.tgz",
++      "integrity": "sha512-yqRS0/8kYTGl4VvfJ/QOtHTeYF+DnAWNUReZgt2U0AEP3zgj4z4hxSH7D2PsO/488L4KsBmmcnJr13HmBGiT/w==",
++      "cpu": [
++        "x64"
++      ],
++      "dev": true,
++      "license": "SEE LICENSE IN LICENSE.md",
++      "optional": true,
++      "os": [
++        "darwin"
++      ],
++      "bin": {
++        "copilot-darwin-x64": "copilot"
++      }
++    },
++    "node_modules/@github/copilot-linux-arm64": {
++      "version": "1.0.17",
++      "resolved": "https://registry.npmjs.org/@github/copilot-linux-arm64/-/copilot-linux-arm64-1.0.17.tgz",
++      "integrity": "sha512-TOK0ma0A24zmQJslkGxUk+KnMFpiqquWEXB5sIv/5Ci45Qi7s0BRWTnqtiJ8Vahwb/wkja6KarHkLA27+ETGUA==",
++      "cpu": [
++        "arm64"
++      ],
++      "dev": true,
++      "license": "SEE LICENSE IN LICENSE.md",
++      "optional": true,
++      "os": [
++        "linux"
++      ],
++      "bin": {
++        "copilot-linux-arm64": "copilot"
++      }
++    },
++    "node_modules/@github/copilot-linux-x64": {
++      "version": "1.0.17",
++      "resolved": "https://registry.npmjs.org/@github/copilot-linux-x64/-/copilot-linux-x64-1.0.17.tgz",
++      "integrity": "sha512-4Yum3uaAuTM/SiNtzchsO/G/144Bi/Z4FEcearW6WsGDvS6cRwSJeudOM0y4aoy4BHcv8+yw7YuXH5BHC3SAiA==",
++      "cpu": [
++        "x64"
++      ],
++      "dev": true,
++      "license": "SEE LICENSE IN LICENSE.md",
++      "optional": true,
++      "os": [
++        "linux"
++      ],
++      "bin": {
++        "copilot-linux-x64": "copilot"
++      }
++    },
++    "node_modules/@github/copilot-sdk": {
++      "version": "0.2.1",
++      "resolved": "https://registry.npmjs.org/@github/copilot-sdk/-/copilot-sdk-0.2.1.tgz",
++      "integrity": "sha512-S1n/4X1viqbSAWcHDZcFyZ/7hgTLAXr3NY7yNmHoX/CL4LTuYIJ6y5w2jrqUnrJNQgtNrMDSFGwFU+H1GeynFw==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "@github/copilot": "^1.0.17",
++        "vscode-jsonrpc": "^8.2.1",
++        "zod": "^4.3.6"
++      },
++      "engines": {
++        "node": ">=20.0.0"
++      }
++    },
++    "node_modules/@github/copilot-win32-arm64": {
++      "version": "1.0.17",
++      "resolved": "https://registry.npmjs.org/@github/copilot-win32-arm64/-/copilot-win32-arm64-1.0.17.tgz",
++      "integrity": "sha512-I1ferbfQ0aS149WyEUw6XS1sFixwTUUm13BPBQ3yMzD8G2SaoxTsdYdlhZpkVfkfh/rUYyvMKKi9VNxoVYOlDA==",
++      "cpu": [
++        "arm64"
++      ],
++      "dev": true,
++      "license": "SEE LICENSE IN LICENSE.md",
++      "optional": true,
++      "os": [
++        "win32"
++      ],
++      "bin": {
++        "copilot-win32-arm64": "copilot.exe"
++      }
++    },
++    "node_modules/@github/copilot-win32-x64": {
++      "version": "1.0.17",
++      "resolved": "https://registry.npmjs.org/@github/copilot-win32-x64/-/copilot-win32-x64-1.0.17.tgz",
++      "integrity": "sha512-kjiOxY9ibS+rPp9XFpPdfdYzluEL3SHN8R5/fnA7RO+kZEJ4FDKWJjAiec3tgVkEHQT3UwNuVa/u3TdfYNF15w==",
++      "cpu": [
++        "x64"
++      ],
++      "dev": true,
++      "license": "SEE LICENSE IN LICENSE.md",
++      "optional": true,
++      "os": [
++        "win32"
++      ],
++      "bin": {
++        "copilot-win32-x64": "copilot.exe"
++      }
++    },
+     "node_modules/@jridgewell/sourcemap-codec": {
+       "version": "1.5.5",
+       "resolved": "https://registry.npmjs.org/@jridgewell/sourcemap-codec/-/sourcemap-codec-1.5.5.tgz",
+@@ -1885,6 +2021,16 @@
+         }
+       }
+     },
++    "node_modules/vscode-jsonrpc": {
++      "version": "8.2.1",
++      "resolved": "https://registry.npmjs.org/vscode-jsonrpc/-/vscode-jsonrpc-8.2.1.tgz",
++      "integrity": "sha512-kdjOSJ2lLIn7r1rtrMbbNCHjyMPfRnowdKjBQ+mGq6NAW5QY2bEZC/khaC5OR8svbbjvLEaIXkOq45e2X9BIbQ==",
++      "dev": true,
++      "license": "MIT",
++      "engines": {
++        "node": ">=14.0.0"
++      }
++    },
+     "node_modules/why-is-node-running": {
+       "version": "2.3.0",
+       "resolved": "https://registry.npmjs.org/why-is-node-running/-/why-is-node-running-2.3.0.tgz",
+@@ -1901,6 +2047,16 @@
+       "engines": {
+         "node": ">=8"
+       }
++    },
++    "node_modules/zod": {
++      "version": "4.3.6",
++      "resolved": "https://registry.npmjs.org/zod/-/zod-4.3.6.tgz",
++      "integrity": "sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg==",
++      "dev": true,
++      "license": "MIT",
++      "funding": {
++        "url": "https://github.com/sponsors/colinhacks"
++      }
+     }
+   }
+ }
+diff --git a/package.json b/package.json
+index fd52243..e94c1f2 100644
+--- a/package.json
++++ b/package.json
+@@ -46,6 +46,7 @@
+   },
+   "devDependencies": {
+     "@biomejs/biome": "^2.4.10",
++    "@github/copilot-sdk": "^0.2.1",
+     "@types/node": "^22.15.0",
+     "tsx": "^4.19.0",
+     "typescript": "^5.7.3",
+diff --git a/src/adapter/copilot-types.ts b/src/adapter/copilot-types.ts
+new file mode 100644
+index 0000000..327c823
+--- /dev/null
++++ b/src/adapter/copilot-types.ts
+@@ -0,0 +1,48 @@
++/**
++ * Local interface types for Copilot SDK integration.
++ *
++ * These mirror the subset of @github/copilot-sdk we actually use.
++ * The adapter depends on these, not the SDK types directly — this
++ * enables testing without SDK runtime and provides layer isolation.
++ *
++ * Kept minimal: only the methods/shapes SdkCopilotAdapter touches.
++ */
++
++export type CopilotReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
++
++/** Permissive event shape — real SDK has 30+ event types. */
++export interface CopilotSessionEventLike {
++  type: string;
++  // biome-ignore lint/suspicious/noExplicitAny: SDK events have varied data shapes
++  data?: any;
++}
++
++export interface CopilotSessionConfig {
++  streaming?: boolean;
++  model?: string;
++  reasoningEffort?: CopilotReasoningEffort;
++  onPermissionRequest?: () => { kind: string };
++}
++
++export interface CopilotResumeSessionConfig {
++  model?: string;
++  reasoningEffort?: CopilotReasoningEffort;
++  onPermissionRequest?: () => { kind: string };
++}
++
++export interface ICopilotSession {
++  readonly sessionId: string;
++  sendAndWait(options: { prompt: string }, timeout?: number): Promise<unknown>;
++  on(handler: (event: CopilotSessionEventLike) => void): () => void;
++  abort(): Promise<void>;
++  destroy(): Promise<void>;
++}
++
++export interface ICopilotClient {
++  createSession(config?: CopilotSessionConfig): Promise<ICopilotSession>;
++  resumeSession(
++    sessionId: string,
++    config?: CopilotResumeSessionConfig,
++  ): Promise<ICopilotSession>;
++  stop(): Promise<unknown>;
++}
+diff --git a/src/adapter/index.ts b/src/adapter/index.ts
+index 25a0af6..e2a5bb0 100644
+--- a/src/adapter/index.ts
++++ b/src/adapter/index.ts
+@@ -1,3 +1,10 @@
++export type {
++  CopilotResumeSessionConfig,
++  CopilotSessionConfig,
++  CopilotSessionEventLike,
++  ICopilotClient,
++  ICopilotSession,
++} from './copilot-types.js';
+ export type {
+   AgentEvent,
+   AgentEventBase,
+@@ -18,6 +25,6 @@ export type {
+   TokenMetrics,
+ } from './events.js';
+ export type { FakeAgentAdapterOptions } from './fake.js';
+-
+ export { FakeAgentAdapter } from './fake.js';
+ export type { IAgentAdapter } from './interface.js';
++export { SdkCopilotAdapter } from './sdk-copilot.js';
+diff --git a/src/adapter/sdk-copilot.ts b/src/adapter/sdk-copilot.ts
+new file mode 100644
+index 0000000..d416bef
+--- /dev/null
++++ b/src/adapter/sdk-copilot.ts
+@@ -0,0 +1,305 @@
++/**
++ * SdkCopilotAdapter — wraps @github/copilot-sdk behind IAgentAdapter.
++ *
++ * This is the ONLY code that touches the Copilot SDK. It translates SDK
++ * events into our AgentEvent union, auto-approves all permissions (yolo),
++ * suppresses duplicate consolidated events, and validates prompts.
++ *
++ * Extracted from: packages/shared/src/adapters/sdk-copilot-adapter.ts
++ * Adapted: dropped ILogger, dropped workspaceRoot, simplified constructor,
++ *          removed console.log debug noise, added session destroy guard.
++ */
++
++import type {
++  CopilotSessionEventLike,
++  ICopilotClient,
++} from './copilot-types.js';
++import type { AgentEvent, AgentResult, AgentRunOptions } from './events.js';
++import type { IAgentAdapter } from './interface.js';
++
++const approveAll = () => ({ kind: 'approved' as const });
++
++const MAX_PROMPT_LENGTH = 100_000;
++
++export class SdkCopilotAdapter implements IAgentAdapter {
++  private readonly _client: ICopilotClient;
++
++  constructor(client: ICopilotClient) {
++    this._client = client;
++  }
++
++  async run(options: AgentRunOptions): Promise<AgentResult> {
++    const { prompt, sessionId, onEvent, model, reasoningEffort } = options;
++
++    const validationError = validatePrompt(prompt);
++    if (validationError) {
++      return {
++        output: `Validation error: ${validationError}`,
++        sessionId: sessionId ?? '',
++        status: 'failed',
++        exitCode: -1,
++        tokens: null,
++      };
++    }
++
++    const session = sessionId
++      ? await this._client.resumeSession(sessionId, {
++          onPermissionRequest: approveAll,
++          ...(model && { model }),
++          ...(reasoningEffort && { reasoningEffort }),
++        })
++      : await this._client.createSession({
++          streaming: !!onEvent,
++          onPermissionRequest: approveAll,
++          ...(model && { model }),
++          ...(reasoningEffort && { reasoningEffort }),
++        });
++
++    let sessionDestroyed = false;
++
++    try {
++      let output = '';
++      let hasStreamedThinking = false;
++      let hasStreamedText = false;
++
++      session.on((event: CopilotSessionEventLike) => {
++        // Suppress duplicate consolidated events.
++        // SDK emits deltas during streaming, then re-emits full consolidated
++        // content after the turn. We skip the duplicates.
++        if (event.type === 'assistant.reasoning_delta') {
++          hasStreamedThinking = true;
++        }
++        if (event.type === 'assistant.message_delta') {
++          hasStreamedText = true;
++        }
++        if (event.type === 'assistant.reasoning' && hasStreamedThinking) {
++          return;
++        }
++        if (event.type === 'assistant.message' && hasStreamedText) {
++          output = event.data?.content ?? '';
++          return;
++        }
++
++        const agentEvent = translateEvent(event);
++        if (agentEvent && onEvent) {
++          onEvent(agentEvent);
++        }
++
++        if (event.type === 'assistant.message') {
++          output = event.data?.content ?? '';
++        }
++      });
++
++      await session.sendAndWait({ prompt: prompt.trim() }, options.timeout);
++
++      return {
++        output,
++        sessionId: session.sessionId,
++        status: 'completed',
++        exitCode: 0,
++        tokens: null,
++      };
++    } catch (error) {
++      const errorMessage =
++        error instanceof Error ? error.message : String(error);
++
++      if (onEvent) {
++        onEvent({
++          type: 'session_error',
++          timestamp: new Date().toISOString(),
++          data: {
++            sessionId: session.sessionId,
++            errorType: 'EXECUTION_ERROR',
++            message: errorMessage,
++          },
++        });
++      }
++
++      return {
++        output: errorMessage,
++        sessionId: session.sessionId,
++        status: 'failed',
++        exitCode: 1,
++        tokens: null,
++      };
++    } finally {
++      if (!sessionDestroyed) {
++        sessionDestroyed = true;
++        await session.destroy();
++      }
++    }
++  }
++
++  async compact(sessionId: string): Promise<AgentResult> {
++    const session = await this._client.resumeSession(sessionId, {
++      onPermissionRequest: approveAll,
++    });
++
++    try {
++      let output = '';
++      session.on((event: CopilotSessionEventLike) => {
++        if (event.type === 'assistant.message') {
++          output = event.data?.content ?? '';
++        }
++      });
++
++      await session.sendAndWait({ prompt: '/compact' });
++
++      return {
++        output,
++        sessionId: session.sessionId,
++        status: 'completed',
++        exitCode: 0,
++        tokens: null,
++      };
++    } catch (error) {
++      const errorMessage =
++        error instanceof Error ? error.message : String(error);
++      return {
++        output: `Compact failed: ${errorMessage}`,
++        sessionId,
++        status: 'failed',
++        exitCode: 1,
++        tokens: null,
++      };
++    }
++    // No destroy — session must stay alive for subsequent turns
++  }
++
++  async terminate(sessionId: string): Promise<AgentResult> {
++    const session = await this._client.resumeSession(sessionId, {
++      onPermissionRequest: approveAll,
++    });
++
++    try {
++      await session.abort();
++    } finally {
++      await session.destroy();
++    }
++
++    return {
++      output: '',
++      sessionId,
++      status: 'killed',
++      exitCode: 137,
++      tokens: null,
++    };
++  }
++}
++
++function validatePrompt(prompt: string): string | null {
++  const trimmed = prompt.trim();
++  if (!trimmed) {
++    return 'Prompt cannot be empty or whitespace-only';
++  }
++  if (trimmed.length > MAX_PROMPT_LENGTH) {
++    return `Prompt exceeds maximum length of ${MAX_PROMPT_LENGTH} characters`;
++  }
++  // Reject control characters except newline, carriage return, and tab
++  // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional security validation
++  if (/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(trimmed)) {
++    return 'Prompt contains invalid control characters';
++  }
++  return null;
++}
++
++function translateEvent(event: CopilotSessionEventLike): AgentEvent | null {
++  const timestamp = new Date().toISOString();
++
++  switch (event.type) {
++    case 'assistant.message_delta':
++      return {
++        type: 'text_delta',
++        timestamp,
++        data: {
++          content: event.data?.deltaContent ?? '',
++          messageId: event.data?.messageId,
++        },
++      };
++
++    case 'assistant.message':
++      return {
++        type: 'message',
++        timestamp,
++        data: {
++          content: event.data?.content ?? '',
++          messageId: event.data?.messageId,
++        },
++      };
++
++    case 'assistant.usage':
++      return {
++        type: 'usage',
++        timestamp,
++        data: {
++          inputTokens: event.data?.inputTokens,
++          outputTokens: event.data?.outputTokens,
++        },
++      };
++
++    case 'session.idle':
++      return {
++        type: 'session_idle',
++        timestamp,
++        data: {},
++      };
++
++    case 'session.error':
++      return null; // Handled in catch block
++
++    case 'tool.execution_start':
++      return {
++        type: 'tool_call',
++        timestamp,
++        data: {
++          toolName: event.data?.toolName ?? 'unknown',
++          input: event.data?.arguments,
++          toolCallId: event.data?.toolCallId ?? '',
++        },
++      };
++
++    case 'tool.execution_complete':
++      return {
++        type: 'tool_result',
++        timestamp,
++        data: {
++          toolCallId: event.data?.toolCallId ?? '',
++          output: event.data?.result?.content ?? '',
++          isError: !event.data?.success,
++        },
++      };
++
++    case 'assistant.reasoning':
++      return {
++        type: 'thinking',
++        timestamp,
++        data: { content: event.data?.content ?? '' },
++      };
++
++    case 'assistant.reasoning_delta':
++      return {
++        type: 'thinking',
++        timestamp,
++        data: { content: event.data?.deltaContent ?? '' },
++      };
++
++    // Lifecycle noise — skip
++    case 'pending_messages.modified':
++    case 'user.message':
++    case 'assistant.turn_start':
++    case 'assistant.turn_end':
++    case 'session.usage_info':
++      return null;
++
++    default:
++      return {
++        type: 'raw',
++        timestamp,
++        data: {
++          provider: 'copilot',
++          originalType: event.type,
++          originalData: event,
++        },
++      };
++  }
++}

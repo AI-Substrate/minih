@@ -45,15 +45,26 @@ export class SdkCopilotAdapter implements IAgentAdapter {
     const session = sessionId
       ? await this._client.resumeSession(sessionId, {
           onPermissionRequest: approveAll,
+          ...(options.cwd && { workingDirectory: options.cwd }),
           ...(model && { model }),
           ...(reasoningEffort && { reasoningEffort }),
         })
       : await this._client.createSession({
           streaming: !!onEvent,
           onPermissionRequest: approveAll,
+          ...(options.cwd && { workingDirectory: options.cwd }),
           ...(model && { model }),
           ...(reasoningEffort && { reasoningEffort }),
         });
+
+    // Emit session_start so the runner can capture sessionId for timeout termination
+    if (onEvent) {
+      onEvent({
+        type: 'session_start',
+        timestamp: new Date().toISOString(),
+        data: { sessionId: session.sessionId },
+      });
+    }
 
     let sessionDestroyed = false;
 
@@ -162,8 +173,10 @@ export class SdkCopilotAdapter implements IAgentAdapter {
         exitCode: 1,
         tokens: null,
       };
+    } finally {
+      // Disconnect but don't destroy — session state preserved for resumption
+      await session.disconnect();
     }
-    // No destroy — session must stay alive for subsequent turns
   }
 
   async terminate(sessionId: string): Promise<AgentResult> {
@@ -264,7 +277,11 @@ function translateEvent(event: CopilotSessionEventLike): AgentEvent | null {
         timestamp,
         data: {
           toolCallId: event.data?.toolCallId ?? '',
-          output: event.data?.result?.content ?? '',
+          output:
+            event.data?.result?.detailedContent ??
+            event.data?.result?.content ??
+            event.data?.error?.message ??
+            '',
           isError: !event.data?.success,
         },
       };

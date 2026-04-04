@@ -14,8 +14,9 @@
 |------|---------------|---------|
 | `src/adapter/events.ts` | contract | AgentEvent union (10 types), AgentResult, AgentRunOptions, TokenMetrics |
 | `src/adapter/interface.ts` | contract | IAgentAdapter — run(), compact(), terminate() |
+| `src/adapter/copilot-types.ts` | contract | Local Copilot SDK facade — ICopilotClient, ICopilotSession, session configs |
 | `src/adapter/fake.ts` | internal | FakeAgentAdapter test double |
-| `src/adapter/sdk-copilot.ts` | internal | SdkCopilotAdapter (Phase 3) |
+| `src/adapter/sdk-copilot.ts` | internal | SdkCopilotAdapter — wraps @github/copilot-sdk |
 | `src/adapter/index.ts` | contract | Barrel export |
 
 ## Contracts
@@ -26,6 +27,8 @@
 | `AgentEvent` | Discriminated union | runner (event handling, NDJSON), cli (display) |
 | `AgentResult` | Type | runner (result processing) |
 | `AgentRunOptions` | Type | runner (adapter invocation) |
+| `SdkCopilotAdapter` | Class | cli (composition root), external programmatic consumers |
+| `ICopilotClient` / `ICopilotSession` | Interface | cli (SDK client wiring), adapter tests/fakes |
 
 ## Concepts
 
@@ -34,6 +37,8 @@
 | Adapter pattern | Runner is adapter-agnostic; accepts IAgentAdapter. Tests inject FakeAgentAdapter, prod uses SdkCopilotAdapter. |
 | Event translation | SDK-specific events mapped to stable AgentEvent union so consumers never see SDK internals. |
 | Auto-approve | All agent permissions auto-approved (yolo). No safety gates. |
+| Local Copilot facade | `copilot-types.ts` defines the subset of SDK types the adapter depends on, so the rest of minih avoids SDK internals. |
+| Duplicate suppression | SDK emits deltas during streaming then re-emits consolidated content; adapter suppresses the duplicates. |
 
 ## History
 

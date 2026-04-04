@@ -21,12 +21,14 @@ export interface CopilotSessionConfig {
   streaming?: boolean;
   model?: string;
   reasoningEffort?: CopilotReasoningEffort;
+  workingDirectory?: string;
   onPermissionRequest?: () => { kind: string };
 }
 
 export interface CopilotResumeSessionConfig {
   model?: string;
   reasoningEffort?: CopilotReasoningEffort;
+  workingDirectory?: string;
   onPermissionRequest?: () => { kind: string };
 }
 
@@ -35,6 +37,7 @@ export interface ICopilotSession {
   sendAndWait(options: { prompt: string }, timeout?: number): Promise<unknown>;
   on(handler: (event: CopilotSessionEventLike) => void): () => void;
   abort(): Promise<void>;
+  disconnect(): Promise<void>;
   destroy(): Promise<void>;
 }
 

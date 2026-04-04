@@ -185,7 +185,7 @@ export async function runAgent(
       prompt: fullPrompt,
       model: config.model,
       reasoningEffort: config.reasoningEffort,
-      cwd: config.cwd,
+      cwd: runDir, // SDK isolated to run folder (Workshop 005)
       onEvent: handleEvent,
       timeout: timeoutMs,
     });

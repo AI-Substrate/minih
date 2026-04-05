@@ -112,9 +112,13 @@ export function registerRunCommand(program: Command): void {
           params[p.slice(0, eq)] = p.slice(eq + 1);
         }
 
+        const DEFAULT_MODEL = 'claude-opus-4.6';
+        const model =
+          opts.model ?? process.env.MINIH_DEFAULT_MODEL ?? DEFAULT_MODEL;
+
         const config: AgentRunConfig = {
           slug,
-          model: opts.model,
+          model,
           reasoningEffort: opts.reasoning as AgentRunConfig['reasoningEffort'],
           timeout: Number.parseInt(opts.timeout ?? '300', 10),
           cwd: process.cwd(),
@@ -124,7 +128,7 @@ export function registerRunCommand(program: Command): void {
         // Display header (stderr, TTY only)
         const isTTY = process.stderr.isTTY;
         if (isTTY) {
-          displayHeader(slug, '(starting...)', opts.model);
+          displayHeader(slug, '(starting...)', model);
           displayPreflight('GH_TOKEN', true);
           displayPreflight('Agent definition', true, definition.dir);
           if (config.params) {

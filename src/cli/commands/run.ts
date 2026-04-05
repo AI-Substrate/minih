@@ -7,6 +7,8 @@
  * Workshop 005: SDK workingDirectory = runDir for session isolation.
  */
 
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import { SdkCopilotAdapter } from '../../adapter/index.js';
@@ -17,6 +19,7 @@ import {
   displayPreflight,
   displaySummary,
   listAgents,
+  parseFrontmatter,
   resolveAgent,
   runAgent,
   validateSlug,
@@ -50,6 +53,7 @@ export function registerRunCommand(program: Command): void {
       },
       [] as string[],
     )
+    .option('--dry-run', 'Preview assembled prompt without executing')
     .action(
       async (
         slug: string,
@@ -58,6 +62,7 @@ export function registerRunCommand(program: Command): void {
           reasoning?: string;
           timeout?: string;
           param?: string[];
+          dryRun?: boolean;
         },
       ) => {
         const agentsDir = program.opts().agentsDir ?? 'agents';
@@ -137,6 +142,86 @@ export function registerRunCommand(program: Command): void {
             }
           }
           process.stderr.write('\n');
+        }
+
+        // Dry-run: preview assembled prompt without executing
+        if (opts.dryRun) {
+          const rawPrompt = fs.readFileSync(definition.promptPath, 'utf-8');
+          const { body: promptBody } = parseFrontmatter(rawPrompt);
+          const instructions = definition.instructionsPath
+            ? fs.readFileSync(definition.instructionsPath, 'utf-8')
+            : null;
+
+          let preambleContent: string | null = null;
+          const preamblePath = path.join(
+            path.resolve(agentsDir),
+            '_shared',
+            'preamble.md',
+          );
+          if (fs.existsSync(preamblePath)) {
+            preambleContent = fs
+              .readFileSync(preamblePath, 'utf-8')
+              .replaceAll('{{REPO_ROOT}}', process.cwd());
+          }
+
+          const parts = [
+            preambleContent && { label: 'PREAMBLE', content: preambleContent },
+            instructions && { label: 'INSTRUCTIONS', content: instructions },
+            {
+              label: 'OUTPUT HINT',
+              content:
+                'Write your final JSON report to: <run-dir>/output/report.json',
+            },
+            config.params && {
+              label: 'INPUT PARAMS',
+              content: Object.entries(config.params)
+                .map(([k, v]) => `${k}: ${v}`)
+                .join('\n'),
+            },
+            { label: 'PROMPT', content: promptBody },
+            {
+              label: 'SYSTEM REQUIREMENTS',
+              content: '(system output format instructions)',
+            },
+          ].filter(Boolean) as Array<{ label: string; content: string }>;
+
+          const totalLength = parts.reduce(
+            (sum, p) => sum + p.content.length,
+            0,
+          );
+
+          process.stderr.write(
+            `\n${chalk.bold('─── Assembled Prompt Preview ───')}\n\n`,
+          );
+          for (const part of parts) {
+            process.stderr.write(
+              `${chalk.cyan(`[${part.label}]`)} ${chalk.dim(`(${part.content.length} chars)`)}\n`,
+            );
+            process.stderr.write(
+              `${chalk.dim(part.content.slice(0, 200))}${part.content.length > 200 ? chalk.dim('...') : ''}\n\n`,
+            );
+          }
+          process.stderr.write(`${chalk.bold('─── Stats ───')}\n`);
+          process.stderr.write(
+            `  Total length: ${totalLength.toLocaleString()} chars\n`,
+          );
+          process.stderr.write(
+            `  Parts: ${parts.map((p) => p.label.toLowerCase()).join(' + ')}\n`,
+          );
+          process.stderr.write(`  Model: ${model}\n`);
+          process.stderr.write(`  Timeout: ${config.timeout}s\n\n`);
+
+          exitWithEnvelope(
+            formatSuccess('run', {
+              slug,
+              dryRun: true,
+              totalLength,
+              parts: parts.map((p) => p.label),
+              model,
+              timeout: config.timeout,
+            }),
+          );
+          return;
         }
 
         // Dynamic SDK import — actionable error if missing (DYK #1)

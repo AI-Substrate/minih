@@ -25,4 +25,5 @@ export type {
 export {
   validateInput,
   validateOutput,
+  validateSystemOutput,
 } from './validator.js';

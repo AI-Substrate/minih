@@ -126,3 +126,72 @@ export function validateOutput(
 
   return { valid: false, errors };
 }
+
+/**
+ * Validate output against the minih system output contract.
+ *
+ * Every agent must produce JSON with at least `summary` and
+ * `retrospective` (workedWell, confusing, magicWand).
+ */
+export function validateSystemOutput(outputPath: string): ValidationResult {
+  if (!fs.existsSync(outputPath)) {
+    return { valid: false, errors: ['Output file not found'] };
+  }
+
+  const outputContent = fs.readFileSync(outputPath, 'utf-8').trim();
+  if (!outputContent) {
+    return { valid: false, errors: ['Output file is empty'] };
+  }
+
+  let outputData: unknown;
+  try {
+    outputData = JSON.parse(outputContent);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { valid: false, errors: [`Output is not valid JSON: ${message}`] };
+  }
+
+  const ajv = new Ajv2020({ allErrors: true });
+
+  const systemSchema = {
+    type: 'object',
+    required: ['summary', 'retrospective'],
+    additionalProperties: true,
+    properties: {
+      summary: { type: 'string', minLength: 20 },
+      retrospective: {
+        type: 'object',
+        required: ['workedWell', 'confusing', 'magicWand'],
+        additionalProperties: true,
+        properties: {
+          workedWell: { type: 'string', minLength: 10 },
+          confusing: { type: 'string', minLength: 10 },
+          magicWand: { type: 'string', minLength: 20 },
+        },
+      },
+    },
+  };
+
+  let validate: ReturnType<typeof ajv.compile>;
+  try {
+    validate = ajv.compile(systemSchema);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      valid: false,
+      errors: [`System schema compilation failed: ${message}`],
+    };
+  }
+
+  const valid = validate(outputData);
+  if (valid) {
+    return { valid: true, errors: [] };
+  }
+
+  const errors = (validate.errors ?? []).map((e) => {
+    const ePath = e.instancePath || '/';
+    return `[system] ${ePath}: ${e.message ?? 'unknown error'}`;
+  });
+
+  return { valid: false, errors };
+}

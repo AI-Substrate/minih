@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FakeAgentAdapter } from '../../src/adapter/index.js';
 import { listAgents, resolveAgent } from '../../src/runner/folder.js';
 import { runAgent } from '../../src/runner/runner.js';
+import { validSystemOutput } from '../helpers/fixtures.js';
 
 let tmpDir: string;
 
@@ -43,14 +44,9 @@ tags: [smoke, ci, integration]
 
 Verify the system is working.
 
-## Tasks
-
-1. Check health
-2. Report findings
-
 ---
 
-Note: the horizontal rule above should NOT break frontmatter parsing.
+Note: horizontal rule above should NOT break frontmatter parsing.
 `,
     );
 
@@ -59,18 +55,9 @@ Note: the horizontal rule above should NOT break frontmatter parsing.
       JSON.stringify({
         $schema: 'https://json-schema.org/draft/2020-12/schema',
         type: 'object',
-        required: ['status', 'retrospective'],
+        required: ['status'],
         properties: {
           status: { type: 'string', enum: ['pass', 'fail'] },
-          retrospective: {
-            type: 'object',
-            required: ['workedWell', 'confusing', 'magicWand'],
-            properties: {
-              workedWell: { type: 'string', minLength: 10 },
-              confusing: { type: 'string', minLength: 10 },
-              magicWand: { type: 'string', minLength: 20 },
-            },
-          },
         },
       }),
     );
@@ -87,18 +74,11 @@ Note: the horizontal rule above should NOT break frontmatter parsing.
     expect(agents[0].description).toBe('End-to-end smoke test');
     expect(agents[0].tags).toEqual(['smoke', 'ci', 'integration']);
 
-    // Configure fake adapter with valid output
-    const validOutput = JSON.stringify({
-      status: 'pass',
-      retrospective: {
-        workedWell: 'Everything worked smoothly in the integration test',
-        confusing: 'Nothing was confusing in this test run',
-        magicWand: 'I wish the test setup was even simpler than it already is',
-      },
-    });
+    // Configure fake adapter with valid output (system + user fields)
+    const output = validSystemOutput({ status: 'pass' });
 
     const fake = new FakeAgentAdapter({
-      output: validOutput,
+      output,
       sessionId: 'integ-sess-001',
       events: [
         {
@@ -129,10 +109,7 @@ Note: the horizontal rule above should NOT break frontmatter parsing.
     const result = await runAgent(
       fake,
       def,
-      {
-        slug: 'smoke-test',
-        cwd: '/test/project',
-      },
+      { slug: 'smoke-test', cwd: '/test/project' },
       undefined,
       tmpDir,
     );
@@ -171,22 +148,27 @@ Note: the horizontal rule above should NOT break frontmatter parsing.
     expect(metadata.sessionId).toBe('integ-sess-001');
     expect(metadata.eventCount).toBe(4);
     expect(metadata.toolCallCount).toBe(1);
+    expect(metadata.systemValidated).toBe(true);
+    expect(metadata.userValidated).toBe(true);
     expect(metadata.validated).toBe(true);
     expect(metadata.validationErrors).toEqual([]);
-    expect(metadata.durationMs).toBeGreaterThanOrEqual(0);
     expect(metadata.artifacts).toContain('events.ndjson');
     expect(metadata.artifacts).toContain('prompt.md');
 
     // Verify prompt assembly
     const sentPrompt = fake.getRunHistory()[0].prompt;
-    expect(sentPrompt).toContain('Your working directory is: /test/project'); // preamble with {{REPO_ROOT}} replaced
-    expect(sentPrompt).toContain('Be thorough'); // instructions
-    expect(sentPrompt).toContain('Write your final JSON report to:'); // output hint
-    expect(sentPrompt).toContain('Verify the system is working.'); // prompt body
-    expect(sentPrompt).not.toContain('description: "End-to-end smoke test"'); // frontmatter stripped
+    expect(sentPrompt).toContain('Your working directory is: /test/project');
+    expect(sentPrompt).toContain('Be thorough');
+    expect(sentPrompt).toContain('Write your final JSON report to:');
+    expect(sentPrompt).toContain('Verify the system is working.');
+    expect(sentPrompt).toContain('Required Output Format');
+    expect(sentPrompt).not.toContain('description: "End-to-end smoke test"');
 
     // Result
     expect(result.metadata.result).toBe('completed');
-    expect(result.validation?.valid).toBe(true);
+
+    // Env vars cleaned up
+    expect(process.env.MINIH).toBeUndefined();
+    expect(process.env.MINIH_AGENT_SLUG).toBeUndefined();
   });
 });

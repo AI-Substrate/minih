@@ -1,0 +1,45 @@
+{
+  "$id": "https://minih.dev/schemas/system-output.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Minih System Output",
+  "description": "Required output contract for every minih agent run. Every agent must produce a summary and retrospective feedback.",
+  "type": "object",
+  "required": ["summary", "retrospective"],
+  "additionalProperties": true,
+  "properties": {
+    "summary": {
+      "type": "string",
+      "minLength": 20,
+      "description": "Single paragraph summarizing what happened during this run."
+    },
+    "retrospective": {
+      "type": "object",
+      "required": ["workedWell", "confusing", "magicWand"],
+      "additionalProperties": true,
+      "properties": {
+        "workedWell": {
+          "type": "string",
+          "minLength": 10,
+          "description": "What about the experience worked well? Be specific."
+        },
+        "confusing": {
+          "type": "string",
+          "minLength": 10,
+          "description": "What was confusing, unclear, or required trial-and-error?"
+        },
+        "magicWand": {
+          "type": "string",
+          "minLength": 20,
+          "description": "If you had a magic wand, what ONE thing would you change about the harness, prompt, or agent config? Be concrete."
+        },
+        "improvementSuggestions": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 10 },
+          "minItems": 1,
+          "maxItems": 5,
+          "description": "1-5 specific, actionable improvements."
+        }
+      }
+    }
+  }
+}

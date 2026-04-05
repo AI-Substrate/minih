@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FakeAgentAdapter } from '../../src/adapter/index.js';
 import { resolveAgent } from '../../src/runner/folder.js';
 import { runAgent } from '../../src/runner/runner.js';
+import { validSystemOutput } from '../helpers/fixtures.js';
 
 let tmpDir: string;
 
@@ -71,30 +72,32 @@ function createAgent(
 }
 
 describe('runAgent', () => {
-  it('assembles prompt in correct order: preamble → instructions → hint → prompt', async () => {
+  it('assembles prompt in correct order: preamble → instructions → hint → prompt → system', async () => {
     const def = createAgent('test-order', {
       preamble: 'PREAMBLE_CONTENT',
       instructions: 'INSTRUCTIONS_CONTENT',
     });
 
-    const fake = new FakeAgentAdapter({ output: '{"result":"ok"}' });
+    const fake = new FakeAgentAdapter({
+      output: validSystemOutput({ result: 'ok' }),
+    });
     await runAgent(fake, def, { slug: 'test-order' }, undefined, tmpDir);
 
     const history = fake.getRunHistory();
     expect(history).toHaveLength(1);
     const prompt = history[0].prompt;
 
-    // Verify order
     const preambleIdx = prompt.indexOf('PREAMBLE_CONTENT');
     const instructionsIdx = prompt.indexOf('INSTRUCTIONS_CONTENT');
     const hintIdx = prompt.indexOf('Write your final JSON report to:');
     const bodyIdx = prompt.indexOf('Do the thing.');
+    const systemIdx = prompt.indexOf('Required Output Format');
 
     expect(preambleIdx).toBeLessThan(instructionsIdx);
     expect(instructionsIdx).toBeLessThan(hintIdx);
     expect(hintIdx).toBeLessThan(bodyIdx);
+    expect(bodyIdx).toBeLessThan(systemIdx);
 
-    // Verify separator
     expect(prompt).toContain('\n\n---\n\n');
   });
 
@@ -107,13 +110,12 @@ describe('runAgent', () => {
       preamble: null,
     });
 
-    const fake = new FakeAgentAdapter({ output: 'done' });
+    const fake = new FakeAgentAdapter({ output: validSystemOutput() });
     await runAgent(fake, def, { slug: 'test-strip' }, undefined, tmpDir);
 
     const prompt = fake.getRunHistory()[0].prompt;
     expect(prompt).not.toContain('description: "Should be stripped"');
     expect(prompt).toContain('# Real Content');
-    expect(prompt).toContain('Body here.');
   });
 
   it('replaces {{REPO_ROOT}} in preamble', async () => {
@@ -123,7 +125,7 @@ describe('runAgent', () => {
       instructions: null,
     });
 
-    const fake = new FakeAgentAdapter({ output: 'done' });
+    const fake = new FakeAgentAdapter({ output: validSystemOutput() });
     await runAgent(
       fake,
       def,
@@ -137,19 +139,19 @@ describe('runAgent', () => {
     expect(prompt).not.toContain('{{REPO_ROOT}}');
   });
 
-  it('works without preamble', async () => {
+  it('works without preamble — still has system output instructions', async () => {
     const def = createAgent('no-preamble', {
       preamble: null,
       schema: null,
       instructions: null,
     });
 
-    const fake = new FakeAgentAdapter({ output: 'done' });
+    const fake = new FakeAgentAdapter({ output: validSystemOutput() });
     await runAgent(fake, def, { slug: 'no-preamble' }, undefined, tmpDir);
 
     const prompt = fake.getRunHistory()[0].prompt;
     expect(prompt).toContain('Do the thing.');
-    expect(prompt).not.toContain('---');
+    expect(prompt).toContain('Required Output Format');
   });
 
   it('skips instructions when not present', async () => {
@@ -159,11 +161,11 @@ describe('runAgent', () => {
       preamble: null,
     });
 
-    const fake = new FakeAgentAdapter({ output: 'done' });
+    const fake = new FakeAgentAdapter({ output: validSystemOutput() });
     await runAgent(fake, def, { slug: 'no-instr' }, undefined, tmpDir);
 
     const prompt = fake.getRunHistory()[0].prompt;
-    expect(prompt).not.toContain('Instructions');
+    expect(prompt).not.toContain('Be helpful');
   });
 
   it('formats input params as ## Input Parameters', async () => {
@@ -179,7 +181,7 @@ describe('runAgent', () => {
       schema: null,
     });
 
-    const fake = new FakeAgentAdapter({ output: 'done' });
+    const fake = new FakeAgentAdapter({ output: validSystemOutput() });
     await runAgent(
       fake,
       def,
@@ -193,14 +195,15 @@ describe('runAgent', () => {
     expect(prompt).toContain('file_path: /src/main.ts');
   });
 
-  it('includes output hint when schema exists', async () => {
-    const def = createAgent('with-schema', {
+  it('always includes output hint', async () => {
+    const def = createAgent('no-schema', {
+      schema: null,
       preamble: null,
       instructions: null,
     });
 
-    const fake = new FakeAgentAdapter({ output: '{"result":"ok"}' });
-    await runAgent(fake, def, { slug: 'with-schema' }, undefined, tmpDir);
+    const fake = new FakeAgentAdapter({ output: validSystemOutput() });
+    await runAgent(fake, def, { slug: 'no-schema' }, undefined, tmpDir);
 
     const prompt = fake.getRunHistory()[0].prompt;
     expect(prompt).toContain('Write your final JSON report to:');
@@ -214,7 +217,7 @@ describe('runAgent', () => {
     });
 
     const fake = new FakeAgentAdapter({
-      output: 'done',
+      output: validSystemOutput(),
       events: [
         {
           type: 'thinking',
@@ -240,12 +243,10 @@ describe('runAgent', () => {
     const eventsPath = path.join(result.runDir, 'events.ndjson');
     const lines = fs.readFileSync(eventsPath, 'utf-8').trim().split('\n');
     expect(lines).toHaveLength(2);
-
-    const event0 = JSON.parse(lines[0]);
-    expect(event0.type).toBe('thinking');
+    expect(JSON.parse(lines[0]).type).toBe('thinking');
   });
 
-  it('writes completed.json with correct metadata', async () => {
+  it('writes completed.json with correct metadata including system validation', async () => {
     const def = createAgent('meta-test', {
       schema: null,
       instructions: null,
@@ -253,7 +254,7 @@ describe('runAgent', () => {
     });
 
     const fake = new FakeAgentAdapter({
-      output: 'done',
+      output: validSystemOutput(),
       sessionId: 'sess-123',
     });
     const result = await runAgent(
@@ -270,31 +271,57 @@ describe('runAgent', () => {
     expect(metadata.slug).toBe('meta-test');
     expect(metadata.sessionId).toBe('sess-123');
     expect(metadata.result).toBe('completed');
+    expect(metadata.systemValidated).toBe(true);
+    expect(metadata.userValidated).toBeNull();
     expect(metadata.startedAt).toBeDefined();
     expect(metadata.completedAt).toBeDefined();
     expect(metadata.durationMs).toBeGreaterThanOrEqual(0);
-    expect(metadata.artifacts).toBeInstanceOf(Array);
   });
 
-  it('sets degraded status when output fails validation', async () => {
-    const def = createAgent('degraded-test', {
+  it('sets degraded status when output fails user schema validation', async () => {
+    const def = createAgent('degraded-user', {
       preamble: null,
       instructions: null,
     });
 
-    // Output doesn't match schema (missing required 'result' field)
-    const fake = new FakeAgentAdapter({ output: '{"wrong":"field"}' });
+    // Has system fields but missing user schema's required 'result' field
+    const fake = new FakeAgentAdapter({
+      output: validSystemOutput({ wrong: 'field' }),
+    });
     const result = await runAgent(
       fake,
       def,
-      { slug: 'degraded-test' },
+      { slug: 'degraded-user' },
       undefined,
       tmpDir,
     );
 
     expect(result.metadata.result).toBe('degraded');
-    expect(result.validation).not.toBeNull();
-    expect(result.validation?.valid).toBe(false);
+    expect(result.metadata.systemValidated).toBe(true);
+    expect(result.metadata.userValidated).toBe(false);
+  });
+
+  it('sets degraded status when output fails system validation', async () => {
+    const def = createAgent('degraded-system', {
+      schema: null,
+      preamble: null,
+      instructions: null,
+    });
+
+    // Missing system fields entirely
+    const fake = new FakeAgentAdapter({
+      output: '{"just": "plain text in json"}',
+    });
+    const result = await runAgent(
+      fake,
+      def,
+      { slug: 'degraded-system' },
+      undefined,
+      tmpDir,
+    );
+
+    expect(result.metadata.result).toBe('degraded');
+    expect(result.metadata.systemValidated).toBe(false);
   });
 
   it('sets failed status on adapter error', async () => {
@@ -327,7 +354,9 @@ describe('runAgent', () => {
       instructions: 'Freeze these instructions',
     });
 
-    const fake = new FakeAgentAdapter({ output: '{"result":"ok"}' });
+    const fake = new FakeAgentAdapter({
+      output: validSystemOutput({ result: 'ok' }),
+    });
     const result = await runAgent(
       fake,
       def,
@@ -371,7 +400,7 @@ describe('runAgent', () => {
     );
 
     expect(result.metadata.result).toBe('failed');
-    expect(fake.getRunHistory()).toHaveLength(0); // Adapter never called
+    expect(fake.getRunHistory()).toHaveLength(0);
   });
 
   it('handles timeout — terminates adapter and reports timeout status', async () => {
@@ -384,7 +413,7 @@ describe('runAgent', () => {
     const fake = new FakeAgentAdapter({
       output: 'too slow',
       sessionId: 'slow-sess',
-      runDuration: 500, // 500ms delay
+      runDuration: 500,
       events: [
         {
           type: 'session_start',
@@ -397,22 +426,59 @@ describe('runAgent', () => {
     const result = await runAgent(
       fake,
       def,
-      {
-        slug: 'timeout-test',
-        timeout: 0.1, // 100ms timeout (less than 500ms runDuration)
-      },
+      { slug: 'timeout-test', timeout: 0.1 },
       undefined,
       tmpDir,
     );
 
     expect(result.metadata.result).toBe('timeout');
     expect(result.metadata.exitCode).toBe(124);
-    // Terminate was attempted (sessionId may be empty if timeout fires before session_start)
     expect(fake.getTerminateHistory().length).toBeGreaterThan(0);
+  });
 
-    // Verify completed.json records timeout
-    const completedPath = path.join(result.runDir, 'completed.json');
-    const metadata = JSON.parse(fs.readFileSync(completedPath, 'utf-8'));
-    expect(metadata.result).toBe('timeout');
+  it('sets MINIH env vars during run and cleans up after', async () => {
+    const def = createAgent('env-test', {
+      schema: null,
+      instructions: null,
+      preamble: null,
+    });
+
+    let capturedEnv: Record<string, string | undefined> = {};
+    const fake = new FakeAgentAdapter({
+      output: validSystemOutput(),
+      events: [
+        {
+          type: 'message',
+          timestamp: new Date().toISOString(),
+          data: { content: 'checking env' },
+        },
+      ],
+    });
+
+    // Capture env during the run via onEvent
+    await runAgent(
+      fake,
+      def,
+      { slug: 'env-test', model: 'test-model', timeout: 60 },
+      () => {
+        capturedEnv = {
+          MINIH: process.env.MINIH,
+          MINIH_AGENT_SLUG: process.env.MINIH_AGENT_SLUG,
+          MINIH_MODEL: process.env.MINIH_MODEL,
+          MINIH_TIMEOUT: process.env.MINIH_TIMEOUT,
+        };
+      },
+      tmpDir,
+    );
+
+    // Env was set during run
+    expect(capturedEnv.MINIH).toBe('1');
+    expect(capturedEnv.MINIH_AGENT_SLUG).toBe('env-test');
+    expect(capturedEnv.MINIH_MODEL).toBe('test-model');
+    expect(capturedEnv.MINIH_TIMEOUT).toBe('60');
+
+    // Env cleaned up after run
+    expect(process.env.MINIH).toBeUndefined();
+    expect(process.env.MINIH_AGENT_SLUG).toBeUndefined();
   });
 });

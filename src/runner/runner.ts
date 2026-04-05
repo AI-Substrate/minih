@@ -24,7 +24,11 @@ import type {
   RunEventStats,
   ValidationResult,
 } from './types.js';
-import { validateInput, validateOutput } from './validator.js';
+import {
+  validateInput,
+  validateOutput,
+  validateSystemOutput,
+} from './validator.js';
 
 /**
  * Resolve the preamble path for an agents directory.
@@ -33,6 +37,47 @@ import { validateInput, validateOutput } from './validator.js';
 function resolvePreamblePath(agentsDir: string): string {
   return path.join(path.resolve(agentsDir), '_shared', 'preamble.md');
 }
+
+/** System output requirements injected into every agent prompt. */
+const SYSTEM_OUTPUT_INSTRUCTIONS = `## Required Output Format
+
+Your output MUST be a valid JSON object written to the path specified above ($MINIH_OUTPUT_PATH).
+At minimum, your JSON must include these fields:
+
+\`\`\`json
+{
+  "summary": "A single paragraph describing what you did and what you found.",
+  "retrospective": {
+    "workedWell": "What about the tools, workflow, or environment was smooth? Be specific.",
+    "confusing": "What was unclear, confusing, or required trial-and-error?",
+    "magicWand": "If you could change ONE thing about this experience to make your job easier, what would it be? Be concrete — name a specific tool, command, flag, or workflow improvement."
+  }
+}
+\`\`\`
+
+Your agent-specific output fields go alongside these system fields in the same JSON object.
+The retrospective.magicWand is the most valuable thing you produce — it directly improves
+this system for every agent that runs after you.
+
+After writing your output, you can validate it by running: minih check`;
+
+/** All MINIH_* env var keys set during a run. */
+const MINIH_ENV_KEYS = [
+  'MINIH',
+  'MINIH_AGENT_SLUG',
+  'MINIH_RUN_ID',
+  'MINIH_RUN_DIR',
+  'MINIH_OUTPUT_PATH',
+  'MINIH_AGENTS_DIR',
+  'MINIH_PROJECT_ROOT',
+  'MINIH_MODEL',
+  'MINIH_TIMEOUT',
+  'MINIH_SCHEMA_PATH',
+  'MINIH_INSTRUCTIONS_PATH',
+  'MINIH_PREAMBLE_PATH',
+  'MINIH_HAS_INPUT_SCHEMA',
+  'MINIH_PARAMS',
+];
 
 /**
  * Execute an agent from its definition.
@@ -108,6 +153,8 @@ export async function runAgent(
           exitCode: 1,
           validated: null,
           validationErrors: [],
+          systemValidated: false,
+          userValidated: null,
           eventCount: 0,
           toolCallCount: 0,
           artifacts: listArtifacts(runDir),
@@ -122,13 +169,40 @@ export async function runAgent(
     }
   }
 
-  // Build full prompt (preamble + instructions + output path hint + params + prompt)
-  const outputHint = definition.schemaPath
-    ? `Write your final JSON report to: ${outputPath}`
-    : null;
-  const fullPrompt = [preamble, instructions, outputHint, paramsHint, prompt]
+  // Build full prompt (preamble + instructions + output hint + params + prompt + system requirements)
+  const outputHint = `Write your final JSON report to: ${outputPath}`;
+  const fullPrompt = [
+    preamble,
+    instructions,
+    outputHint,
+    paramsHint,
+    prompt,
+    SYSTEM_OUTPUT_INSTRUCTIONS,
+  ]
     .filter(Boolean)
     .join('\n\n---\n\n');
+
+  // Set runtime environment for the agent (Workshop 007)
+  const resolvedAgentsDir = agentsDir ? path.resolve(agentsDir) : '';
+  const preamblePath = agentsDir ? resolvePreamblePath(agentsDir) : '';
+  process.env.MINIH = '1';
+  process.env.MINIH_AGENT_SLUG = definition.slug;
+  process.env.MINIH_RUN_ID = runId;
+  process.env.MINIH_RUN_DIR = runDir;
+  process.env.MINIH_OUTPUT_PATH = outputPath;
+  process.env.MINIH_AGENTS_DIR = resolvedAgentsDir;
+  process.env.MINIH_PROJECT_ROOT = config.cwd ?? process.cwd();
+  process.env.MINIH_MODEL = config.model ?? '';
+  process.env.MINIH_TIMEOUT = String(config.timeout ?? 300);
+  process.env.MINIH_SCHEMA_PATH = definition.schemaPath ?? '';
+  process.env.MINIH_INSTRUCTIONS_PATH = definition.instructionsPath ?? '';
+  process.env.MINIH_PREAMBLE_PATH = fs.existsSync(preamblePath)
+    ? preamblePath
+    : '';
+  process.env.MINIH_HAS_INPUT_SCHEMA = definition.inputSchemaPath
+    ? 'true'
+    : 'false';
+  process.env.MINIH_PARAMS = JSON.stringify(config.params ?? {});
 
   // Event tracking
   const stats: RunEventStats = {
@@ -241,17 +315,26 @@ export async function runAgent(
     fs.writeFileSync(stderrPath, stderrLines.join('\n'));
   }
 
-  // Validate output if schema exists
-  let validation: ValidationResult | null = null;
+  // Two-stage validation: system fields first, then user schema
+  const systemValidation = validateSystemOutput(outputPath);
+  let userValidation: ValidationResult | null = null;
   if (definition.schemaPath) {
-    validation = validateOutput(definition.schemaPath, outputPath);
+    userValidation = validateOutput(definition.schemaPath, outputPath);
   }
+
+  // Combined validation result
+  const allErrors = [
+    ...systemValidation.errors,
+    ...(userValidation?.errors ?? []),
+  ];
+  const validated =
+    systemValidation.valid && (userValidation ? userValidation.valid : true);
 
   // Determine final result status
   let resultStatus: CompletedMetadata['result'] =
     agentResult.status === 'completed' ? 'completed' : 'failed';
   if (timedOut) resultStatus = 'timeout';
-  if (agentResult.status === 'completed' && validation && !validation.valid)
+  if (agentResult.status === 'completed' && !validated)
     resultStatus = 'degraded';
 
   const artifacts = listArtifacts(runDir);
@@ -266,8 +349,10 @@ export async function runAgent(
     sessionId: agentResult.sessionId,
     result: resultStatus,
     exitCode: agentResult.exitCode,
-    validated: validation ? validation.valid : null,
-    validationErrors: validation?.errors ?? [],
+    validated,
+    validationErrors: allErrors,
+    systemValidated: systemValidation.valid,
+    userValidated: userValidation ? userValidation.valid : null,
     eventCount: stats.total,
     toolCallCount: stats.toolCalls,
     artifacts,
@@ -278,7 +363,12 @@ export async function runAgent(
     JSON.stringify(metadata, null, 2),
   );
 
-  return { agentResult, metadata, validation, runDir };
+  // Clean up runtime environment (Workshop 007)
+  for (const key of MINIH_ENV_KEYS) {
+    delete process.env[key];
+  }
+
+  return { agentResult, metadata, validation: userValidation, runDir };
 }
 
 function listArtifacts(dir: string, base?: string): string[] {

@@ -50,6 +50,10 @@ export interface CompletedMetadata {
   exitCode: number;
   validated: boolean | null;
   validationErrors: string[];
+  /** Did system output fields (summary + retrospective) pass? */
+  systemValidated: boolean;
+  /** Did user schema pass? null if no output-schema.json */
+  userValidated: boolean | null;
   eventCount: number;
   toolCallCount: number;
   artifacts: string[];

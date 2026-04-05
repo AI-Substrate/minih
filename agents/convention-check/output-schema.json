@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Convention Check Report",
+  "type": "object",
+  "required": ["summary", "overallHealth", "agents", "preamble", "recommendations", "retrospective"],
+  "additionalProperties": true,
+  "properties": {
+    "summary": {
+      "type": "string",
+      "minLength": 20,
+      "description": "Single paragraph summarizing what happened during this run."
+    },
+    "overallHealth": {
+      "type": "string",
+      "enum": ["healthy", "warnings", "errors"],
+      "description": "Overall convention health status."
+    },
+    "agents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["slug", "status", "checks"],
+        "additionalProperties": true,
+        "properties": {
+          "slug": { "type": "string" },
+          "status": { "type": "string", "enum": ["pass", "warning", "fail"] },
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["check", "status"],
+              "additionalProperties": true,
+              "properties": {
+                "check": { "type": "string" },
+                "status": { "type": "string", "enum": ["pass", "warning", "fail", "skip"] },
+                "message": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "preamble": {
+      "type": "object",
+      "required": ["exists"],
+      "additionalProperties": true,
+      "properties": {
+        "exists": { "type": "boolean" },
+        "hasFeedbackSection": { "type": "boolean" }
+      }
+    },
+    "recommendations": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Actionable recommendations for improving convention compliance."
+    },
+    "retrospective": {
+      "$ref": "https://minih.dev/schemas/retrospective.json"
+    }
+  }
+}

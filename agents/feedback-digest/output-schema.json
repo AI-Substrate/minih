@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Feedback Digest",
+  "type": "object",
+  "required": ["summary", "agentsScanned", "themes", "retrospective"],
+  "additionalProperties": true,
+  "properties": {
+    "summary": {
+      "type": "string",
+      "minLength": 20,
+      "description": "Single paragraph summarizing the feedback digest findings."
+    },
+    "agentsScanned": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of agents whose runs were analyzed."
+    },
+    "runsAnalyzed": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Total number of runs analyzed across all agents."
+    },
+    "themes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["theme", "priority", "frequency"],
+        "additionalProperties": true,
+        "properties": {
+          "theme": { "type": "string", "description": "Theme name (e.g., 'CLI usability')" },
+          "description": { "type": "string", "description": "What this theme covers." },
+          "priority": { "type": "string", "enum": ["high", "medium", "low"] },
+          "frequency": { "type": "integer", "minimum": 1, "description": "How many agents/runs mentioned this." },
+          "quotes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "agent": { "type": "string" },
+                "text": { "type": "string" }
+              }
+            },
+            "description": "Supporting quotes from agent feedback."
+          },
+          "suggestedFix": { "type": "string", "description": "Suggested fix or investigation." }
+        }
+      },
+      "description": "Prioritized themes from agent feedback."
+    },
+    "retrospective": {
+      "type": "object",
+      "required": ["workedWell", "confusing", "magicWand"],
+      "additionalProperties": true,
+      "properties": {
+        "workedWell": { "type": "string", "minLength": 10 },
+        "confusing": { "type": "string", "minLength": 10 },
+        "magicWand": { "type": "string", "minLength": 20 },
+        "improvementSuggestions": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 10 }
+        }
+      }
+    }
+  }
+}

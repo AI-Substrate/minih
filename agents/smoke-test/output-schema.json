@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Smoke Test Report",
+  "type": "object",
+  "required": ["summary", "steps", "verdict", "retrospective"],
+  "additionalProperties": true,
+  "properties": {
+    "summary": {
+      "type": "string",
+      "minLength": 20,
+      "description": "Single paragraph summarizing the smoke test results."
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "status"],
+        "additionalProperties": true,
+        "properties": {
+          "name": { "type": "string", "description": "Step name (e.g., 'list-agents')" },
+          "status": { "type": "string", "enum": ["pass", "fail", "skip"] },
+          "detail": { "type": "string", "description": "What happened during this step." },
+          "evidence": { "type": "string", "description": "Command output or observed behavior." }
+        }
+      },
+      "minItems": 1,
+      "description": "Per-step pass/fail results."
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["all-pass", "partial", "fail"],
+      "description": "Overall lifecycle verdict."
+    },
+    "retrospective": {
+      "type": "object",
+      "required": ["workedWell", "confusing", "magicWand"],
+      "additionalProperties": true,
+      "properties": {
+        "workedWell": { "type": "string", "minLength": 10 },
+        "confusing": { "type": "string", "minLength": 10 },
+        "magicWand": { "type": "string", "minLength": 20 },
+        "improvementSuggestions": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 10 }
+        }
+      }
+    }
+  }
+}

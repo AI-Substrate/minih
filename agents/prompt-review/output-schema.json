@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Prompt Review Report",
+  "type": "object",
+  "required": ["summary", "agentFound", "verdict", "retrospective"],
+  "additionalProperties": true,
+  "properties": {
+    "summary": {
+      "type": "string",
+      "minLength": 20,
+      "description": "Single paragraph summarizing the review findings."
+    },
+    "agentFound": {
+      "type": "boolean",
+      "description": "Whether the target agent was found in the agents directory."
+    },
+    "agentSlug": {
+      "type": "string",
+      "description": "The slug of the reviewed agent."
+    },
+    "aspects": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "promptClarity": {
+          "type": "object",
+          "properties": {
+            "score": { "type": "integer", "minimum": 1, "maximum": 5 },
+            "explanation": { "type": "string" }
+          }
+        },
+        "promptCompleteness": {
+          "type": "object",
+          "properties": {
+            "score": { "type": "integer", "minimum": 1, "maximum": 5 },
+            "explanation": { "type": "string" }
+          }
+        },
+        "frontmatter": {
+          "type": "object",
+          "properties": {
+            "score": { "type": "integer", "minimum": 1, "maximum": 5 },
+            "explanation": { "type": "string" }
+          }
+        },
+        "schemaQuality": {
+          "type": "object",
+          "properties": {
+            "score": { "type": "integer", "minimum": 1, "maximum": 5 },
+            "explanation": { "type": "string" }
+          }
+        },
+        "instructionsQuality": {
+          "type": "object",
+          "properties": {
+            "score": { "type": "integer", "minimum": 1, "maximum": 5 },
+            "explanation": { "type": "string" }
+          }
+        }
+      }
+    },
+    "suggestions": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 10 },
+      "description": "Specific suggestions for improving the agent."
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["excellent", "good", "needs-work", "poor"],
+      "description": "Overall quality verdict."
+    },
+    "retrospective": {
+      "type": "object",
+      "required": ["workedWell", "confusing", "magicWand"],
+      "additionalProperties": true,
+      "properties": {
+        "workedWell": { "type": "string", "minLength": 10 },
+        "confusing": { "type": "string", "minLength": 10 },
+        "magicWand": { "type": "string", "minLength": 20 },
+        "improvementSuggestions": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 10 }
+        }
+      }
+    }
+  }
+}

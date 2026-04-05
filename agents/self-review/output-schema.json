@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Self-Review Report",
+  "type": "object",
+  "required": ["summary", "fileFound", "verdict", "retrospective"],
+  "additionalProperties": true,
+  "properties": {
+    "summary": {
+      "type": "string",
+      "minLength": 20,
+      "description": "Single paragraph summarizing the review findings."
+    },
+    "fileFound": {
+      "type": "boolean",
+      "description": "Whether the target file was found."
+    },
+    "filePath": {
+      "type": "string",
+      "description": "The path that was reviewed."
+    },
+    "domain": {
+      "type": "string",
+      "enum": ["adapter", "runner", "cli", "test", "unknown"],
+      "description": "Which minih domain this file belongs to."
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["severity", "title", "description"],
+        "additionalProperties": true,
+        "properties": {
+          "severity": {
+            "type": "string",
+            "enum": ["critical", "warning", "suggestion", "praise"]
+          },
+          "title": { "type": "string", "description": "Short finding title." },
+          "description": { "type": "string", "description": "Detailed explanation." },
+          "line": { "type": "integer", "description": "Approximate line number, if applicable." },
+          "fix": { "type": "string", "description": "Suggested fix, if applicable." }
+        }
+      },
+      "description": "Individual review findings."
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "linesOfCode": { "type": "integer" },
+        "functions": { "type": "integer" },
+        "exports": { "type": "integer" },
+        "imports": { "type": "integer" }
+      }
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["excellent", "good", "needs-work", "poor"],
+      "description": "Overall quality verdict."
+    },
+    "retrospective": {
+      "type": "object",
+      "required": ["workedWell", "confusing", "magicWand"],
+      "additionalProperties": true,
+      "properties": {
+        "workedWell": { "type": "string", "minLength": 10 },
+        "confusing": { "type": "string", "minLength": 10 },
+        "magicWand": { "type": "string", "minLength": 20 },
+        "improvementSuggestions": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 10 }
+        }
+      }
+    }
+  }
+}

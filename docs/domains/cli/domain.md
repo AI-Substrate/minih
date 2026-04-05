@@ -44,3 +44,4 @@
 | Phase | Changes |
 |-------|---------|
 | Phase 1 | Created domain. Placeholder entry point only. |
+| Phase 4 | Full CLI implementation. Commander program with 6 commands (run, list, history, validate, last-run, tail). Output envelope (MinihEnvelope). Composition root with dynamic SDK import. Session isolation (CWD=runDir). chalk + cli-table3 for display. hello-world agent. |

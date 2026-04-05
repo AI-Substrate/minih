@@ -39,7 +39,7 @@ function resolvePreamblePath(agentsDir: string): string {
 }
 
 /** System output requirements injected into every agent prompt. */
-const SYSTEM_OUTPUT_INSTRUCTIONS = `## Required Output Format
+export const SYSTEM_OUTPUT_INSTRUCTIONS = `## Required Output Format
 
 Your output MUST be a valid JSON object written to the path specified above ($MINIH_OUTPUT_PATH).
 At minimum, your JSON must include these fields:

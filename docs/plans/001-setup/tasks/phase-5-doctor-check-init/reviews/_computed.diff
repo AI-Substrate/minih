@@ -1,0 +1,1726 @@
+diff --git a/agents/_shared/preamble.md b/agents/_shared/preamble.md
+new file mode 100644
+index 0000000..c24231d
+--- /dev/null
++++ b/agents/_shared/preamble.md
+@@ -0,0 +1,28 @@
++# Agent Preamble
++
++Your working directory is the run folder. The project root is: {{REPO_ROOT}}
++
++Run `cd {{REPO_ROOT}}` before executing commands against the project.
++
++## Feedback — The Self-Improving Loop
++
++You are not just running a task. You are helping build a better system.
++Every time you run, you have two responsibilities:
++
++1. Complete your task well
++2. Feed back honestly on the experience of doing it
++
++Your output MUST include a `retrospective` with a required `magicWand` field.
++
++**What makes good feedback:**
++
++Bad: "Everything was fine."
++Good: "The input params were validated before execution, which saved me from
++discovering the wrong file_path halfway through a 5-minute run."
++
++**The retrospective fields:**
++
++- **workedWell**: What about the tools, workflow, or environment was smooth?
++- **confusing**: What required trial-and-error? What information was hard to find?
++- **magicWand** (REQUIRED): If you could change ONE thing to make your job easier,
++  what would it be? Be concrete.
+diff --git a/docs/plans/001-setup/tasks/phase-5-doctor-check-init/execution.log.md b/docs/plans/001-setup/tasks/phase-5-doctor-check-init/execution.log.md
+new file mode 100644
+index 0000000..45d628d
+--- /dev/null
++++ b/docs/plans/001-setup/tasks/phase-5-doctor-check-init/execution.log.md
+@@ -0,0 +1,16 @@
++# Execution Log: Phase 5 — Doctor, Check, Init + System Output Enforcement
++
++**Plan**: miniharness-extraction-plan.md
++**Phase**: Phase 5 (including system output enforcement subtask)
++**Started**: 2026-04-05T03:31:00Z
++
++---
++
++## Pre-Phase Harness Validation
++
++- 🔴 UNAVAILABLE — No harness.md exists. Using `just fft` + real agent runs.
++
++---
++
++## Task Log
++
+diff --git a/package.json b/package.json
+index 82103bd..c546157 100644
+--- a/package.json
++++ b/package.json
+@@ -21,10 +21,10 @@
+       "import": "./dist/runner/index.js",
+       "types": "./dist/runner/index.d.ts"
+     },
+-    "./schemas/retrospective.json": "./dist/schemas/retrospective.json"
++    "./schemas/system-output.json": "./dist/schemas/system-output.json"
+   },
+   "scripts": {
+-    "build": "tsc && mkdir -p dist/schemas && cp src/schemas/retrospective.json dist/schemas/retrospective.json",
++    "build": "tsc && mkdir -p dist/schemas && cp src/schemas/system-output.json dist/schemas/system-output.json",
+     "test": "vitest run",
+     "test:watch": "vitest",
+     "clean": "rm -rf dist"
+diff --git a/src/cli/commands/check.ts b/src/cli/commands/check.ts
+new file mode 100644
+index 0000000..8f2e653
+--- /dev/null
++++ b/src/cli/commands/check.ts
+@@ -0,0 +1,150 @@
++/**
++ * minih check — validate a file against an agent's schema.
++ *
++ * Designed to be called mid-run by agents for self-validation.
++ * Detects MINIH_* env vars for zero-arg usage (Workshop 007).
++ */
++
++import chalk from 'chalk';
++import type { Command } from 'commander';
++import {
++  resolveAgent,
++  validateOutput,
++  validateSlug,
++  validateSystemOutput,
++} from '../../runner/index.js';
++import {
++  ErrorCodes,
++  exitWithEnvelope,
++  formatError,
++  formatSuccess,
++} from '../output.js';
++
++export function registerCheckCommand(program: Command): void {
++  program
++    .command('check [slug]')
++    .description('Validate a file against an agent schema')
++    .option('--file <path>', 'File to validate')
++    .option('--input', 'Validate against input-schema.json instead')
++    .action(
++      (
++        slugArg: string | undefined,
++        opts: { file?: string; input?: boolean },
++      ) => {
++        const agentsDir =
++          program.opts().agentsDir ?? process.env.MINIH_AGENTS_DIR ?? 'agents';
++
++        // Resolve slug: explicit arg > env var
++        const slug = slugArg ?? process.env.MINIH_AGENT_SLUG;
++        if (!slug) {
++          exitWithEnvelope(
++            formatError(
++              'check',
++              ErrorCodes.INVALID_ARGS,
++              'Provide an agent slug or run inside a minih agent (MINIH_AGENT_SLUG env var).',
++            ),
++          );
++          return;
++        }
++
++        const slugError = validateSlug(slug);
++        if (slugError) {
++          exitWithEnvelope(
++            formatError('check', ErrorCodes.INVALID_ARGS, slugError),
++          );
++          return;
++        }
++
++        // Resolve file: --file flag > env var
++        const file = opts.file ?? process.env.MINIH_OUTPUT_PATH;
++        if (!file) {
++          exitWithEnvelope(
++            formatError(
++              'check',
++              ErrorCodes.INVALID_ARGS,
++              'Provide --file <path> or run inside a minih agent (MINIH_OUTPUT_PATH env var).',
++            ),
++          );
++          return;
++        }
++
++        const definition = resolveAgent(slug, agentsDir);
++
++        // System validation (always)
++        const systemResult = validateSystemOutput(file);
++
++        // User schema validation (if requested and schema exists)
++        let userResult = null;
++        if (opts.input) {
++          if (!definition?.inputSchemaPath) {
++            exitWithEnvelope(
++              formatError(
++                'check',
++                ErrorCodes.AGENT_VALIDATION_FAILED,
++                `Agent "${slug}" has no input-schema.json.`,
++              ),
++            );
++            return;
++          }
++          userResult = validateOutput(definition.inputSchemaPath, file);
++        } else if (definition?.schemaPath) {
++          userResult = validateOutput(definition.schemaPath, file);
++        }
++
++        const allErrors = [
++          ...systemResult.errors,
++          ...(userResult?.errors ?? []),
++        ];
++        const valid =
++          systemResult.valid && (userResult ? userResult.valid : true);
++
++        if (process.stderr.isTTY) {
++          process.stderr.write(`\n  Checking: ${chalk.dim(file)}\n\n`);
++
++          if (systemResult.valid) {
++            process.stderr.write(
++              `  ${chalk.green('✓')} System validation passed\n`,
++            );
++          } else {
++            process.stderr.write(
++              `  ${chalk.red('✗')} System validation failed:\n`,
++            );
++            for (const err of systemResult.errors.slice(0, 5)) {
++              process.stderr.write(`    ${chalk.red('·')} ${err}\n`);
++            }
++          }
++
++          if (userResult) {
++            if (userResult.valid) {
++              process.stderr.write(
++                `  ${chalk.green('✓')} Schema validation passed\n`,
++              );
++            } else {
++              process.stderr.write(
++                `  ${chalk.red('✗')} Schema validation failed:\n`,
++              );
++              for (const err of userResult.errors.slice(0, 5)) {
++                process.stderr.write(`    ${chalk.red('·')} ${err}\n`);
++              }
++            }
++          }
++          process.stderr.write('\n');
++        }
++
++        exitWithEnvelope(
++          formatSuccess(
++            'check',
++            {
++              slug,
++              file,
++              valid,
++              systemValid: systemResult.valid,
++              userValid: userResult ? userResult.valid : null,
++              errors: allErrors,
++            },
++            valid ? 'ok' : 'degraded',
++          ),
++        );
++      },
++    );
++}
+diff --git a/src/cli/commands/doctor.ts b/src/cli/commands/doctor.ts
+new file mode 100644
+index 0000000..c6d072b
+--- /dev/null
++++ b/src/cli/commands/doctor.ts
+@@ -0,0 +1,250 @@
++/**
++ * minih doctor — validate the entire agents directory.
++ */
++
++import * as fs from 'node:fs';
++import * as path from 'node:path';
++import Ajv2020 from 'ajv/dist/2020.js';
++import chalk from 'chalk';
++import type { Command } from 'commander';
++import { parseFrontmatter } from '../../runner/index.js';
++import {
++  ErrorCodes,
++  exitWithEnvelope,
++  formatError,
++  formatSuccess,
++} from '../output.js';
++
++interface CheckResult {
++  check: string;
++  status: 'pass' | 'warning' | 'fail' | 'skip';
++  message?: string;
++}
++
++export function registerDoctorCommand(program: Command): void {
++  program
++    .command('doctor')
++    .description('Validate all agents and harness structure')
++    .option('--strict', 'Treat warnings as errors')
++    .action((opts: { strict?: boolean }) => {
++      const agentsDir = program.opts().agentsDir ?? 'agents';
++      const resolvedDir = path.resolve(agentsDir);
++
++      if (!fs.existsSync(resolvedDir)) {
++        exitWithEnvelope(
++          formatError(
++            'doctor',
++            ErrorCodes.INVALID_ARGS,
++            `Agents directory not found: ${resolvedDir}`,
++          ),
++        );
++        return;
++      }
++
++      const agentResults: Array<{ slug: string; checks: CheckResult[] }> = [];
++
++      // Scan all directories (including ones listAgents might skip)
++      const entries = fs.readdirSync(resolvedDir, { withFileTypes: true });
++      for (const entry of entries) {
++        if (!entry.isDirectory() || entry.name.startsWith('_')) continue;
++
++        const dir = path.join(resolvedDir, entry.name);
++        const promptPath = path.join(dir, 'prompt.md');
++        const checks: CheckResult[] = [];
++
++        // Check prompt.md exists
++        if (!fs.existsSync(promptPath)) {
++          checks.push({
++            check: 'prompt.md',
++            status: 'fail',
++            message: 'No prompt.md found',
++          });
++          agentResults.push({ slug: entry.name, checks });
++          continue;
++        }
++        checks.push({ check: 'prompt.md', status: 'pass' });
++
++        // Check frontmatter
++        const content = fs.readFileSync(promptPath, 'utf-8');
++        const { description } = parseFrontmatter(content);
++        if (!description.trim()) {
++          checks.push({
++            check: 'frontmatter',
++            status: 'warning',
++            message: 'Missing frontmatter with description',
++          });
++        } else {
++          checks.push({
++            check: 'frontmatter',
++            status: 'pass',
++            message: description,
++          });
++        }
++
++        // Check output-schema.json
++        const schemaPath = path.join(dir, 'output-schema.json');
++        if (fs.existsSync(schemaPath)) {
++          try {
++            const schema = JSON.parse(fs.readFileSync(schemaPath, 'utf-8'));
++            const ajv = new Ajv2020({ allErrors: true });
++            ajv.compile(schema);
++            checks.push({ check: 'output-schema', status: 'pass' });
++
++            // Check for retrospective in schema
++            const hasRetro =
++              schema.required?.includes('retrospective') ||
++              schema.properties?.retrospective;
++            checks.push({
++              check: 'retrospective',
++              status: hasRetro ? 'pass' : 'warning',
++              message: hasRetro
++                ? undefined
++                : 'retrospective not in output schema (system validation still enforces it)',
++            });
++          } catch (err) {
++            const msg = err instanceof Error ? err.message : String(err);
++            checks.push({
++              check: 'output-schema',
++              status: 'fail',
++              message: `Schema error: ${msg}`,
++            });
++          }
++        } else {
++          checks.push({
++            check: 'output-schema',
++            status: 'skip',
++            message: 'No output-schema.json',
++          });
++        }
++
++        // Check input-schema.json
++        const inputPath = path.join(dir, 'input-schema.json');
++        if (fs.existsSync(inputPath)) {
++          try {
++            const schema = JSON.parse(fs.readFileSync(inputPath, 'utf-8'));
++            const ajv = new Ajv2020({ allErrors: true });
++            ajv.compile(schema);
++            checks.push({ check: 'input-schema', status: 'pass' });
++          } catch (err) {
++            const msg = err instanceof Error ? err.message : String(err);
++            checks.push({
++              check: 'input-schema',
++              status: 'fail',
++              message: `Schema error: ${msg}`,
++            });
++          }
++        }
++
++        // Check instructions
++        const instrPath = path.join(dir, 'instructions.md');
++        if (fs.existsSync(instrPath)) {
++          checks.push({ check: 'instructions', status: 'pass' });
++        }
++
++        agentResults.push({ slug: entry.name, checks });
++      }
++
++      // Check preamble
++      const preamblePath = path.join(resolvedDir, '_shared', 'preamble.md');
++      const preamble = {
++        exists: fs.existsSync(preamblePath),
++        path: preamblePath,
++      };
++
++      // Summarize
++      let warnings = 0;
++      let errors = 0;
++      for (const agent of agentResults) {
++        for (const check of agent.checks) {
++          if (check.status === 'warning') warnings++;
++          if (check.status === 'fail') errors++;
++        }
++      }
++      const healthy = agentResults.filter((a) =>
++        a.checks.every((c) => c.status === 'pass' || c.status === 'skip'),
++      ).length;
++
++      // TTY display
++      if (process.stderr.isTTY) {
++        process.stderr.write(
++          `\n  ${chalk.bold('Checking agents directory:')} ${chalk.dim(resolvedDir)}\n\n`,
++        );
++
++        for (const agent of agentResults) {
++          process.stderr.write(`  ${chalk.cyan(agent.slug)}\n`);
++          for (const check of agent.checks) {
++            const icon =
++              check.status === 'pass'
++                ? chalk.green('✓')
++                : check.status === 'warning'
++                  ? chalk.yellow('⚠')
++                  : check.status === 'fail'
++                    ? chalk.red('✗')
++                    : chalk.dim('—');
++            const msg = check.message ? ` ${chalk.dim(check.message)}` : '';
++            process.stderr.write(`    ${icon} ${check.check}${msg}\n`);
++          }
++          process.stderr.write('\n');
++        }
++
++        if (preamble.exists) {
++          process.stderr.write(`  ${chalk.green('✓')} _shared/preamble.md\n\n`);
++        } else {
++          process.stderr.write(
++            `  ${chalk.dim('—')} _shared/preamble.md (not found)\n\n`,
++          );
++        }
++
++        process.stderr.write(`  ${chalk.bold('─── Results ───')}\n`);
++        process.stderr.write(`  Agents:   ${agentResults.length} found\n`);
++        process.stderr.write(`  Healthy:  ${healthy}\n`);
++        if (warnings > 0)
++          process.stderr.write(
++            `  Warnings: ${chalk.yellow(String(warnings))}\n`,
++          );
++        if (errors > 0)
++          process.stderr.write(`  Errors:   ${chalk.red(String(errors))}\n`);
++        process.stderr.write('\n');
++      }
++
++      const hasErrors = errors > 0 || (opts.strict && warnings > 0);
++      const status = hasErrors ? 'error' : warnings > 0 ? 'degraded' : 'ok';
++
++      if (hasErrors) {
++        exitWithEnvelope(
++          formatError(
++            'doctor',
++            ErrorCodes.AGENT_VALIDATION_FAILED,
++            `${errors} errors, ${warnings} warnings found`,
++            {
++              agents: agentResults,
++              preamble,
++              summary: {
++                total: agentResults.length,
++                healthy,
++                warnings,
++                errors,
++              },
++            },
++          ),
++        );
++      } else {
++        exitWithEnvelope(
++          formatSuccess(
++            'doctor',
++            {
++              agents: agentResults,
++              preamble,
++              summary: {
++                total: agentResults.length,
++                healthy,
++                warnings,
++                errors,
++              },
++            },
++            status as 'ok' | 'degraded',
++          ),
++        );
++      }
++    });
++}
+diff --git a/src/cli/commands/init.ts b/src/cli/commands/init.ts
+new file mode 100644
+index 0000000..52c6f9f
+--- /dev/null
++++ b/src/cli/commands/init.ts
+@@ -0,0 +1,239 @@
++/**
++ * minih init <slug> — scaffold a new agent folder with templates.
++ */
++
++import * as fs from 'node:fs';
++import * as path from 'node:path';
++import chalk from 'chalk';
++import type { Command } from 'commander';
++import { validateSlug } from '../../runner/index.js';
++import {
++  ErrorCodes,
++  exitWithEnvelope,
++  formatError,
++  formatSuccess,
++} from '../output.js';
++
++const PROMPT_TEMPLATE = (slug: string) => `---
++description: "TODO: describe what this agent does"
++tags: []
++---
++
++# ${slug}
++
++## Objective
++
++Describe what this agent should accomplish.
++
++## Tasks
++
++### 1. [First Task]
++
++Describe the first step the agent should take.
++
++## Output
++
++Write your structured JSON report to $MINIH_OUTPUT_PATH.
++After writing, validate with: minih check
++`;
++
++const INSTRUCTIONS_TEMPLATE = (slug: string) => `# ${slug}
++
++You are a [describe role]. Your job is to [describe purpose].
++
++## Rules
++
++1. Be thorough and specific
++2. Include evidence for your findings
++`;
++
++const OUTPUT_SCHEMA_TEMPLATE = () =>
++  JSON.stringify(
++    {
++      $schema: 'https://json-schema.org/draft/2020-12/schema',
++      title: 'Agent Report',
++      type: 'object',
++      required: ['result', 'summary', 'retrospective'],
++      additionalProperties: true,
++      properties: {
++        result: {
++          type: 'object',
++          description: 'Your agent-specific output goes here.',
++        },
++        summary: {
++          type: 'string',
++          minLength: 20,
++          description: 'Single paragraph summarizing what happened.',
++        },
++        retrospective: {
++          type: 'object',
++          required: ['workedWell', 'confusing', 'magicWand'],
++          additionalProperties: true,
++          properties: {
++            workedWell: { type: 'string', minLength: 10 },
++            confusing: { type: 'string', minLength: 10 },
++            magicWand: { type: 'string', minLength: 20 },
++          },
++        },
++      },
++    },
++    null,
++    2,
++  );
++
++const INPUT_SCHEMA_TEMPLATE = () =>
++  JSON.stringify(
++    {
++      $schema: 'https://json-schema.org/draft/2020-12/schema',
++      title: 'Agent Input',
++      type: 'object',
++      required: [],
++      properties: {},
++    },
++    null,
++    2,
++  );
++
++const PREAMBLE_TEMPLATE = () => `# Agent Preamble
++
++Your working directory is the run folder. The project root is: {{REPO_ROOT}}
++
++Run \`cd {{REPO_ROOT}}\` before executing commands against the project.
++
++## Feedback — The Self-Improving Loop
++
++You are not just running a task. You are helping build a better system.
++Every time you run, you have two responsibilities:
++
++1. Complete your task well
++2. Feed back honestly on the experience of doing it
++
++Your output MUST include a \`retrospective\` with a required \`magicWand\` field.
++
++**What makes good feedback:**
++
++Bad: "Everything was fine."
++Good: "The input params were validated before execution, which saved me from
++discovering the wrong file_path halfway through a 5-minute run."
++
++**The retrospective fields:**
++
++- **workedWell**: What about the tools, workflow, or environment was smooth?
++- **confusing**: What required trial-and-error? What information was hard to find?
++- **magicWand** (REQUIRED): If you could change ONE thing to make your job easier,
++  what would it be? Be concrete.
++`;
++
++export function registerInitCommand(program: Command): void {
++  program
++    .command('init <slug>')
++    .description('Scaffold a new agent folder')
++    .option('--with-input', 'Also create input-schema.json')
++    .option('--no-output', 'Skip output-schema.json')
++    .option('--no-instructions', 'Skip instructions.md')
++    .action(
++      (
++        slug: string,
++        opts: { withInput?: boolean; output?: boolean; instructions?: boolean },
++      ) => {
++        const agentsDir = program.opts().agentsDir ?? 'agents';
++        const resolvedDir = path.resolve(agentsDir);
++
++        const slugError = validateSlug(slug);
++        if (slugError) {
++          exitWithEnvelope(
++            formatError('init', ErrorCodes.INVALID_ARGS, slugError),
++          );
++          return;
++        }
++
++        const agentDir = path.join(resolvedDir, slug);
++        if (fs.existsSync(agentDir)) {
++          exitWithEnvelope(
++            formatError(
++              'init',
++              ErrorCodes.INIT_ALREADY_EXISTS,
++              `Agent "${slug}" already exists at ${agentDir}`,
++            ),
++          );
++          return;
++        }
++
++        // Create agent directory + files
++        fs.mkdirSync(agentDir, { recursive: true });
++
++        const files: string[] = [];
++
++        // prompt.md (always)
++        fs.writeFileSync(
++          path.join(agentDir, 'prompt.md'),
++          PROMPT_TEMPLATE(slug),
++        );
++        files.push('prompt.md');
++
++        // output-schema.json (default: yes)
++        if (opts.output !== false) {
++          fs.writeFileSync(
++            path.join(agentDir, 'output-schema.json'),
++            OUTPUT_SCHEMA_TEMPLATE(),
++          );
++          files.push('output-schema.json');
++        }
++
++        // instructions.md (default: yes)
++        if (opts.instructions !== false) {
++          fs.writeFileSync(
++            path.join(agentDir, 'instructions.md'),
++            INSTRUCTIONS_TEMPLATE(slug),
++          );
++          files.push('instructions.md');
++        }
++
++        // input-schema.json (opt-in)
++        if (opts.withInput) {
++          fs.writeFileSync(
++            path.join(agentDir, 'input-schema.json'),
++            INPUT_SCHEMA_TEMPLATE(),
++          );
++          files.push('input-schema.json');
++        }
++
++        // Create preamble on first init (if doesn't exist)
++        const preambleDir = path.join(resolvedDir, '_shared');
++        const preamblePath = path.join(preambleDir, 'preamble.md');
++        let preambleCreated = false;
++        if (!fs.existsSync(preamblePath)) {
++          fs.mkdirSync(preambleDir, { recursive: true });
++          fs.writeFileSync(preamblePath, PREAMBLE_TEMPLATE());
++          preambleCreated = true;
++        }
++
++        if (process.stderr.isTTY) {
++          process.stderr.write(
++            `\n  ${chalk.bold('Created agent:')} ${chalk.cyan(slug)}\n`,
++          );
++          process.stderr.write(
++            `  ${chalk.bold('Directory:')} ${chalk.dim(agentDir)}\n\n`,
++          );
++          for (const f of files) {
++            process.stderr.write(`  ${chalk.green('✓')} ${f}\n`);
++          }
++          if (preambleCreated) {
++            process.stderr.write(
++              `  ${chalk.green('✓')} _shared/preamble.md ${chalk.dim('(created)')}\n`,
++            );
++          }
++          process.stderr.write('\n');
++        }
++
++        exitWithEnvelope(
++          formatSuccess('init', {
++            slug,
++            dir: agentDir,
++            files,
++            preambleCreated,
++          }),
++        );
++      },
++    );
++}
+diff --git a/src/cli/commands/run.ts b/src/cli/commands/run.ts
+index 2a0a3d3..59dd2ff 100644
+--- a/src/cli/commands/run.ts
++++ b/src/cli/commands/run.ts
+@@ -7,6 +7,8 @@
+  * Workshop 005: SDK workingDirectory = runDir for session isolation.
+  */
+ 
++import * as fs from 'node:fs';
++import * as path from 'node:path';
+ import chalk from 'chalk';
+ import type { Command } from 'commander';
+ import { SdkCopilotAdapter } from '../../adapter/index.js';
+@@ -17,6 +19,7 @@ import {
+   displayPreflight,
+   displaySummary,
+   listAgents,
++  parseFrontmatter,
+   resolveAgent,
+   runAgent,
+   validateSlug,
+@@ -50,6 +53,7 @@ export function registerRunCommand(program: Command): void {
+       },
+       [] as string[],
+     )
++    .option('--dry-run', 'Preview assembled prompt without executing')
+     .action(
+       async (
+         slug: string,
+@@ -58,6 +62,7 @@ export function registerRunCommand(program: Command): void {
+           reasoning?: string;
+           timeout?: string;
+           param?: string[];
++          dryRun?: boolean;
+         },
+       ) => {
+         const agentsDir = program.opts().agentsDir ?? 'agents';
+@@ -139,6 +144,86 @@ export function registerRunCommand(program: Command): void {
+           process.stderr.write('\n');
+         }
+ 
++        // Dry-run: preview assembled prompt without executing
++        if (opts.dryRun) {
++          const rawPrompt = fs.readFileSync(definition.promptPath, 'utf-8');
++          const { body: promptBody } = parseFrontmatter(rawPrompt);
++          const instructions = definition.instructionsPath
++            ? fs.readFileSync(definition.instructionsPath, 'utf-8')
++            : null;
++
++          let preambleContent: string | null = null;
++          const preamblePath = path.join(
++            path.resolve(agentsDir),
++            '_shared',
++            'preamble.md',
++          );
++          if (fs.existsSync(preamblePath)) {
++            preambleContent = fs
++              .readFileSync(preamblePath, 'utf-8')
++              .replaceAll('{{REPO_ROOT}}', process.cwd());
++          }
++
++          const parts = [
++            preambleContent && { label: 'PREAMBLE', content: preambleContent },
++            instructions && { label: 'INSTRUCTIONS', content: instructions },
++            {
++              label: 'OUTPUT HINT',
++              content:
++                'Write your final JSON report to: <run-dir>/output/report.json',
++            },
++            config.params && {
++              label: 'INPUT PARAMS',
++              content: Object.entries(config.params)
++                .map(([k, v]) => `${k}: ${v}`)
++                .join('\n'),
++            },
++            { label: 'PROMPT', content: promptBody },
++            {
++              label: 'SYSTEM REQUIREMENTS',
++              content: '(system output format instructions)',
++            },
++          ].filter(Boolean) as Array<{ label: string; content: string }>;
++
++          const totalLength = parts.reduce(
++            (sum, p) => sum + p.content.length,
++            0,
++          );
++
++          process.stderr.write(
++            `\n${chalk.bold('─── Assembled Prompt Preview ───')}\n\n`,
++          );
++          for (const part of parts) {
++            process.stderr.write(
++              `${chalk.cyan(`[${part.label}]`)} ${chalk.dim(`(${part.content.length} chars)`)}\n`,
++            );
++            process.stderr.write(
++              `${chalk.dim(part.content.slice(0, 200))}${part.content.length > 200 ? chalk.dim('...') : ''}\n\n`,
++            );
++          }
++          process.stderr.write(`${chalk.bold('─── Stats ───')}\n`);
++          process.stderr.write(
++            `  Total length: ${totalLength.toLocaleString()} chars\n`,
++          );
++          process.stderr.write(
++            `  Parts: ${parts.map((p) => p.label.toLowerCase()).join(' + ')}\n`,
++          );
++          process.stderr.write(`  Model: ${model}\n`);
++          process.stderr.write(`  Timeout: ${config.timeout}s\n\n`);
++
++          exitWithEnvelope(
++            formatSuccess('run', {
++              slug,
++              dryRun: true,
++              totalLength,
++              parts: parts.map((p) => p.label),
++              model,
++              timeout: config.timeout,
++            }),
++          );
++          return;
++        }
++
+         // Dynamic SDK import — actionable error if missing (DYK #1)
+         let CopilotClient: new () => { stop(): Promise<unknown> };
+         try {
+diff --git a/src/cli/index.ts b/src/cli/index.ts
+index 24533e7..ebf5d02 100644
+--- a/src/cli/index.ts
++++ b/src/cli/index.ts
+@@ -12,7 +12,10 @@ import * as fs from 'node:fs';
+ import * as path from 'node:path';
+ import { fileURLToPath } from 'node:url';
+ import { Command } from 'commander';
++import { registerCheckCommand } from './commands/check.js';
++import { registerDoctorCommand } from './commands/doctor.js';
+ import { registerHistoryCommand } from './commands/history.js';
++import { registerInitCommand } from './commands/init.js';
+ import { registerLastRunCommand } from './commands/last-run.js';
+ import { registerListCommand } from './commands/list.js';
+ import { registerRunCommand } from './commands/run.js';
+@@ -52,5 +55,8 @@ registerHistoryCommand(program);
+ registerValidateCommand(program);
+ registerLastRunCommand(program);
+ registerTailCommand(program);
++registerDoctorCommand(program);
++registerCheckCommand(program);
++registerInitCommand(program);
+ 
+ program.parse();
+diff --git a/src/runner/index.ts b/src/runner/index.ts
+index 2883e30..3206b02 100644
+--- a/src/runner/index.ts
++++ b/src/runner/index.ts
+@@ -25,4 +25,5 @@ export type {
+ export {
+   validateInput,
+   validateOutput,
++  validateSystemOutput,
+ } from './validator.js';
+diff --git a/src/runner/runner.ts b/src/runner/runner.ts
+index 405637f..07e7718 100644
+--- a/src/runner/runner.ts
++++ b/src/runner/runner.ts
+@@ -24,7 +24,11 @@ import type {
+   RunEventStats,
+   ValidationResult,
+ } from './types.js';
+-import { validateInput, validateOutput } from './validator.js';
++import {
++  validateInput,
++  validateOutput,
++  validateSystemOutput,
++} from './validator.js';
+ 
+ /**
+  * Resolve the preamble path for an agents directory.
+@@ -34,6 +38,47 @@ function resolvePreamblePath(agentsDir: string): string {
+   return path.join(path.resolve(agentsDir), '_shared', 'preamble.md');
+ }
+ 
++/** System output requirements injected into every agent prompt. */
++const SYSTEM_OUTPUT_INSTRUCTIONS = `## Required Output Format
++
++Your output MUST be a valid JSON object written to the path specified above ($MINIH_OUTPUT_PATH).
++At minimum, your JSON must include these fields:
++
++\`\`\`json
++{
++  "summary": "A single paragraph describing what you did and what you found.",
++  "retrospective": {
++    "workedWell": "What about the tools, workflow, or environment was smooth? Be specific.",
++    "confusing": "What was unclear, confusing, or required trial-and-error?",
++    "magicWand": "If you could change ONE thing about this experience to make your job easier, what would it be? Be concrete — name a specific tool, command, flag, or workflow improvement."
++  }
++}
++\`\`\`
++
++Your agent-specific output fields go alongside these system fields in the same JSON object.
++The retrospective.magicWand is the most valuable thing you produce — it directly improves
++this system for every agent that runs after you.
++
++After writing your output, you can validate it by running: minih check`;
++
++/** All MINIH_* env var keys set during a run. */
++const MINIH_ENV_KEYS = [
++  'MINIH',
++  'MINIH_AGENT_SLUG',
++  'MINIH_RUN_ID',
++  'MINIH_RUN_DIR',
++  'MINIH_OUTPUT_PATH',
++  'MINIH_AGENTS_DIR',
++  'MINIH_PROJECT_ROOT',
++  'MINIH_MODEL',
++  'MINIH_TIMEOUT',
++  'MINIH_SCHEMA_PATH',
++  'MINIH_INSTRUCTIONS_PATH',
++  'MINIH_PREAMBLE_PATH',
++  'MINIH_HAS_INPUT_SCHEMA',
++  'MINIH_PARAMS',
++];
++
+ /**
+  * Execute an agent from its definition.
+  *
+@@ -108,6 +153,8 @@ export async function runAgent(
+           exitCode: 1,
+           validated: null,
+           validationErrors: [],
++          systemValidated: false,
++          userValidated: null,
+           eventCount: 0,
+           toolCallCount: 0,
+           artifacts: listArtifacts(runDir),
+@@ -122,14 +169,41 @@ export async function runAgent(
+     }
+   }
+ 
+-  // Build full prompt (preamble + instructions + output path hint + params + prompt)
+-  const outputHint = definition.schemaPath
+-    ? `Write your final JSON report to: ${outputPath}`
+-    : null;
+-  const fullPrompt = [preamble, instructions, outputHint, paramsHint, prompt]
++  // Build full prompt (preamble + instructions + output hint + params + prompt + system requirements)
++  const outputHint = `Write your final JSON report to: ${outputPath}`;
++  const fullPrompt = [
++    preamble,
++    instructions,
++    outputHint,
++    paramsHint,
++    prompt,
++    SYSTEM_OUTPUT_INSTRUCTIONS,
++  ]
+     .filter(Boolean)
+     .join('\n\n---\n\n');
+ 
++  // Set runtime environment for the agent (Workshop 007)
++  const resolvedAgentsDir = agentsDir ? path.resolve(agentsDir) : '';
++  const preamblePath = agentsDir ? resolvePreamblePath(agentsDir) : '';
++  process.env.MINIH = '1';
++  process.env.MINIH_AGENT_SLUG = definition.slug;
++  process.env.MINIH_RUN_ID = runId;
++  process.env.MINIH_RUN_DIR = runDir;
++  process.env.MINIH_OUTPUT_PATH = outputPath;
++  process.env.MINIH_AGENTS_DIR = resolvedAgentsDir;
++  process.env.MINIH_PROJECT_ROOT = config.cwd ?? process.cwd();
++  process.env.MINIH_MODEL = config.model ?? '';
++  process.env.MINIH_TIMEOUT = String(config.timeout ?? 300);
++  process.env.MINIH_SCHEMA_PATH = definition.schemaPath ?? '';
++  process.env.MINIH_INSTRUCTIONS_PATH = definition.instructionsPath ?? '';
++  process.env.MINIH_PREAMBLE_PATH = fs.existsSync(preamblePath)
++    ? preamblePath
++    : '';
++  process.env.MINIH_HAS_INPUT_SCHEMA = definition.inputSchemaPath
++    ? 'true'
++    : 'false';
++  process.env.MINIH_PARAMS = JSON.stringify(config.params ?? {});
++
+   // Event tracking
+   const stats: RunEventStats = {
+     total: 0,
+@@ -241,17 +315,26 @@ export async function runAgent(
+     fs.writeFileSync(stderrPath, stderrLines.join('\n'));
+   }
+ 
+-  // Validate output if schema exists
+-  let validation: ValidationResult | null = null;
++  // Two-stage validation: system fields first, then user schema
++  const systemValidation = validateSystemOutput(outputPath);
++  let userValidation: ValidationResult | null = null;
+   if (definition.schemaPath) {
+-    validation = validateOutput(definition.schemaPath, outputPath);
++    userValidation = validateOutput(definition.schemaPath, outputPath);
+   }
+ 
++  // Combined validation result
++  const allErrors = [
++    ...systemValidation.errors,
++    ...(userValidation?.errors ?? []),
++  ];
++  const validated =
++    systemValidation.valid && (userValidation ? userValidation.valid : true);
++
+   // Determine final result status
+   let resultStatus: CompletedMetadata['result'] =
+     agentResult.status === 'completed' ? 'completed' : 'failed';
+   if (timedOut) resultStatus = 'timeout';
+-  if (agentResult.status === 'completed' && validation && !validation.valid)
++  if (agentResult.status === 'completed' && !validated)
+     resultStatus = 'degraded';
+ 
+   const artifacts = listArtifacts(runDir);
+@@ -266,8 +349,10 @@ export async function runAgent(
+     sessionId: agentResult.sessionId,
+     result: resultStatus,
+     exitCode: agentResult.exitCode,
+-    validated: validation ? validation.valid : null,
+-    validationErrors: validation?.errors ?? [],
++    validated,
++    validationErrors: allErrors,
++    systemValidated: systemValidation.valid,
++    userValidated: userValidation ? userValidation.valid : null,
+     eventCount: stats.total,
+     toolCallCount: stats.toolCalls,
+     artifacts,
+@@ -278,7 +363,12 @@ export async function runAgent(
+     JSON.stringify(metadata, null, 2),
+   );
+ 
+-  return { agentResult, metadata, validation, runDir };
++  // Clean up runtime environment (Workshop 007)
++  for (const key of MINIH_ENV_KEYS) {
++    delete process.env[key];
++  }
++
++  return { agentResult, metadata, validation: userValidation, runDir };
+ }
+ 
+ function listArtifacts(dir: string, base?: string): string[] {
+diff --git a/src/runner/types.ts b/src/runner/types.ts
+index dcc83df..f8a6f63 100644
+--- a/src/runner/types.ts
++++ b/src/runner/types.ts
+@@ -50,6 +50,10 @@ export interface CompletedMetadata {
+   exitCode: number;
+   validated: boolean | null;
+   validationErrors: string[];
++  /** Did system output fields (summary + retrospective) pass? */
++  systemValidated: boolean;
++  /** Did user schema pass? null if no output-schema.json */
++  userValidated: boolean | null;
+   eventCount: number;
+   toolCallCount: number;
+   artifacts: string[];
+diff --git a/src/runner/validator.ts b/src/runner/validator.ts
+index 7fc46dd..0dbdad8 100644
+--- a/src/runner/validator.ts
++++ b/src/runner/validator.ts
+@@ -126,3 +126,72 @@ export function validateOutput(
+ 
+   return { valid: false, errors };
+ }
++
++/**
++ * Validate output against the minih system output contract.
++ *
++ * Every agent must produce JSON with at least `summary` and
++ * `retrospective` (workedWell, confusing, magicWand).
++ */
++export function validateSystemOutput(outputPath: string): ValidationResult {
++  if (!fs.existsSync(outputPath)) {
++    return { valid: false, errors: ['Output file not found'] };
++  }
++
++  const outputContent = fs.readFileSync(outputPath, 'utf-8').trim();
++  if (!outputContent) {
++    return { valid: false, errors: ['Output file is empty'] };
++  }
++
++  let outputData: unknown;
++  try {
++    outputData = JSON.parse(outputContent);
++  } catch (err) {
++    const message = err instanceof Error ? err.message : String(err);
++    return { valid: false, errors: [`Output is not valid JSON: ${message}`] };
++  }
++
++  const ajv = new Ajv2020({ allErrors: true });
++
++  const systemSchema = {
++    type: 'object',
++    required: ['summary', 'retrospective'],
++    additionalProperties: true,
++    properties: {
++      summary: { type: 'string', minLength: 20 },
++      retrospective: {
++        type: 'object',
++        required: ['workedWell', 'confusing', 'magicWand'],
++        additionalProperties: true,
++        properties: {
++          workedWell: { type: 'string', minLength: 10 },
++          confusing: { type: 'string', minLength: 10 },
++          magicWand: { type: 'string', minLength: 20 },
++        },
++      },
++    },
++  };
++
++  let validate: ReturnType<typeof ajv.compile>;
++  try {
++    validate = ajv.compile(systemSchema);
++  } catch (err) {
++    const message = err instanceof Error ? err.message : String(err);
++    return {
++      valid: false,
++      errors: [`System schema compilation failed: ${message}`],
++    };
++  }
++
++  const valid = validate(outputData);
++  if (valid) {
++    return { valid: true, errors: [] };
++  }
++
++  const errors = (validate.errors ?? []).map((e) => {
++    const ePath = e.instancePath || '/';
++    return `[system] ${ePath}: ${e.message ?? 'unknown error'}`;
++  });
++
++  return { valid: false, errors };
++}
+diff --git a/src/schemas/retrospective.json b/src/schemas/retrospective.json
+deleted file mode 100644
+index 97d4bf7..0000000
+--- a/src/schemas/retrospective.json
++++ /dev/null
+@@ -1,33 +0,0 @@
+-{
+-  "$id": "https://minih.dev/schemas/retrospective.json",
+-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+-  "title": "Agent Retrospective",
+-  "description": "Self-improving feedback from an agent run. The magicWand field is the most important — one concrete wish for a better experience.",
+-  "type": "object",
+-  "required": ["workedWell", "confusing", "magicWand"],
+-  "additionalProperties": true,
+-  "properties": {
+-    "workedWell": {
+-      "type": "string",
+-      "minLength": 10,
+-      "description": "What about the experience worked well? Be specific about WHY."
+-    },
+-    "confusing": {
+-      "type": "string",
+-      "minLength": 10,
+-      "description": "What was confusing, unclear, or required trial-and-error?"
+-    },
+-    "magicWand": {
+-      "type": "string",
+-      "minLength": 20,
+-      "description": "If you had a magic wand, what ONE thing would you change? Name a specific command, flag, format, or workflow improvement."
+-    },
+-    "improvementSuggestions": {
+-      "type": "array",
+-      "items": { "type": "string", "minLength": 10 },
+-      "minItems": 1,
+-      "maxItems": 5,
+-      "description": "1-5 specific, actionable improvements."
+-    }
+-  }
+-}
+diff --git a/src/schemas/system-output.json b/src/schemas/system-output.json
+new file mode 100644
+index 0000000..8936f9d
+--- /dev/null
++++ b/src/schemas/system-output.json
+@@ -0,0 +1,45 @@
++{
++  "$id": "https://minih.dev/schemas/system-output.json",
++  "$schema": "https://json-schema.org/draft/2020-12/schema",
++  "title": "Minih System Output",
++  "description": "Required output contract for every minih agent run. Every agent must produce a summary and retrospective feedback.",
++  "type": "object",
++  "required": ["summary", "retrospective"],
++  "additionalProperties": true,
++  "properties": {
++    "summary": {
++      "type": "string",
++      "minLength": 20,
++      "description": "Single paragraph summarizing what happened during this run."
++    },
++    "retrospective": {
++      "type": "object",
++      "required": ["workedWell", "confusing", "magicWand"],
++      "additionalProperties": true,
++      "properties": {
++        "workedWell": {
++          "type": "string",
++          "minLength": 10,
++          "description": "What about the experience worked well? Be specific."
++        },
++        "confusing": {
++          "type": "string",
++          "minLength": 10,
++          "description": "What was confusing, unclear, or required trial-and-error?"
++        },
++        "magicWand": {
++          "type": "string",
++          "minLength": 20,
++          "description": "If you had a magic wand, what ONE thing would you change about the harness, prompt, or agent config? Be concrete."
++        },
++        "improvementSuggestions": {
++          "type": "array",
++          "items": { "type": "string", "minLength": 10 },
++          "minItems": 1,
++          "maxItems": 5,
++          "description": "1-5 specific, actionable improvements."
++        }
++      }
++    }
++  }
++}
+diff --git a/test/helpers/fixtures.ts b/test/helpers/fixtures.ts
+new file mode 100644
+index 0000000..a734fd6
+--- /dev/null
++++ b/test/helpers/fixtures.ts
+@@ -0,0 +1,18 @@
++/**
++ * Test helper — generates valid system output JSON for FakeAgentAdapter.
++ */
++export function validSystemOutput(
++  overrides: Record<string, unknown> = {},
++): string {
++  return JSON.stringify({
++    summary:
++      'This is a valid test summary paragraph that meets the minimum length requirement.',
++    retrospective: {
++      workedWell: 'The test setup was smooth and efficient.',
++      confusing: 'Nothing was confusing in this test run.',
++      magicWand:
++        'I wish the test framework had built-in snapshot support for JSON output validation.',
++    },
++    ...overrides,
++  });
++}
+diff --git a/test/runner/integration.test.ts b/test/runner/integration.test.ts
+index 8747a1a..5acb113 100644
+--- a/test/runner/integration.test.ts
++++ b/test/runner/integration.test.ts
+@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+ import { FakeAgentAdapter } from '../../src/adapter/index.js';
+ import { listAgents, resolveAgent } from '../../src/runner/folder.js';
+ import { runAgent } from '../../src/runner/runner.js';
++import { validSystemOutput } from '../helpers/fixtures.js';
+ 
+ let tmpDir: string;
+ 
+@@ -43,14 +44,9 @@ tags: [smoke, ci, integration]
+ 
+ Verify the system is working.
+ 
+-## Tasks
+-
+-1. Check health
+-2. Report findings
+-
+ ---
+ 
+-Note: the horizontal rule above should NOT break frontmatter parsing.
++Note: horizontal rule above should NOT break frontmatter parsing.
+ `,
+     );
+ 
+@@ -59,18 +55,9 @@ Note: the horizontal rule above should NOT break frontmatter parsing.
+       JSON.stringify({
+         $schema: 'https://json-schema.org/draft/2020-12/schema',
+         type: 'object',
+-        required: ['status', 'retrospective'],
++        required: ['status'],
+         properties: {
+           status: { type: 'string', enum: ['pass', 'fail'] },
+-          retrospective: {
+-            type: 'object',
+-            required: ['workedWell', 'confusing', 'magicWand'],
+-            properties: {
+-              workedWell: { type: 'string', minLength: 10 },
+-              confusing: { type: 'string', minLength: 10 },
+-              magicWand: { type: 'string', minLength: 20 },
+-            },
+-          },
+         },
+       }),
+     );
+@@ -87,18 +74,11 @@ Note: the horizontal rule above should NOT break frontmatter parsing.
+     expect(agents[0].description).toBe('End-to-end smoke test');
+     expect(agents[0].tags).toEqual(['smoke', 'ci', 'integration']);
+ 
+-    // Configure fake adapter with valid output
+-    const validOutput = JSON.stringify({
+-      status: 'pass',
+-      retrospective: {
+-        workedWell: 'Everything worked smoothly in the integration test',
+-        confusing: 'Nothing was confusing in this test run',
+-        magicWand: 'I wish the test setup was even simpler than it already is',
+-      },
+-    });
++    // Configure fake adapter with valid output (system + user fields)
++    const output = validSystemOutput({ status: 'pass' });
+ 
+     const fake = new FakeAgentAdapter({
+-      output: validOutput,
++      output,
+       sessionId: 'integ-sess-001',
+       events: [
+         {
+@@ -129,10 +109,7 @@ Note: the horizontal rule above should NOT break frontmatter parsing.
+     const result = await runAgent(
+       fake,
+       def,
+-      {
+-        slug: 'smoke-test',
+-        cwd: '/test/project',
+-      },
++      { slug: 'smoke-test', cwd: '/test/project' },
+       undefined,
+       tmpDir,
+     );
+@@ -171,22 +148,27 @@ Note: the horizontal rule above should NOT break frontmatter parsing.
+     expect(metadata.sessionId).toBe('integ-sess-001');
+     expect(metadata.eventCount).toBe(4);
+     expect(metadata.toolCallCount).toBe(1);
++    expect(metadata.systemValidated).toBe(true);
++    expect(metadata.userValidated).toBe(true);
+     expect(metadata.validated).toBe(true);
+     expect(metadata.validationErrors).toEqual([]);
+-    expect(metadata.durationMs).toBeGreaterThanOrEqual(0);
+     expect(metadata.artifacts).toContain('events.ndjson');
+     expect(metadata.artifacts).toContain('prompt.md');
+ 
+     // Verify prompt assembly
+     const sentPrompt = fake.getRunHistory()[0].prompt;
+-    expect(sentPrompt).toContain('Your working directory is: /test/project'); // preamble with {{REPO_ROOT}} replaced
+-    expect(sentPrompt).toContain('Be thorough'); // instructions
+-    expect(sentPrompt).toContain('Write your final JSON report to:'); // output hint
+-    expect(sentPrompt).toContain('Verify the system is working.'); // prompt body
+-    expect(sentPrompt).not.toContain('description: "End-to-end smoke test"'); // frontmatter stripped
++    expect(sentPrompt).toContain('Your working directory is: /test/project');
++    expect(sentPrompt).toContain('Be thorough');
++    expect(sentPrompt).toContain('Write your final JSON report to:');
++    expect(sentPrompt).toContain('Verify the system is working.');
++    expect(sentPrompt).toContain('Required Output Format');
++    expect(sentPrompt).not.toContain('description: "End-to-end smoke test"');
+ 
+     // Result
+     expect(result.metadata.result).toBe('completed');
+-    expect(result.validation?.valid).toBe(true);
++
++    // Env vars cleaned up
++    expect(process.env.MINIH).toBeUndefined();
++    expect(process.env.MINIH_AGENT_SLUG).toBeUndefined();
+   });
+ });
+diff --git a/test/runner/runner.test.ts b/test/runner/runner.test.ts
+index d0f8319..65d7a93 100644
+--- a/test/runner/runner.test.ts
++++ b/test/runner/runner.test.ts
+@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+ import { FakeAgentAdapter } from '../../src/adapter/index.js';
+ import { resolveAgent } from '../../src/runner/folder.js';
+ import { runAgent } from '../../src/runner/runner.js';
++import { validSystemOutput } from '../helpers/fixtures.js';
+ 
+ let tmpDir: string;
+ 
+@@ -71,30 +72,32 @@ function createAgent(
+ }
+ 
+ describe('runAgent', () => {
+-  it('assembles prompt in correct order: preamble → instructions → hint → prompt', async () => {
++  it('assembles prompt in correct order: preamble → instructions → hint → prompt → system', async () => {
+     const def = createAgent('test-order', {
+       preamble: 'PREAMBLE_CONTENT',
+       instructions: 'INSTRUCTIONS_CONTENT',
+     });
+ 
+-    const fake = new FakeAgentAdapter({ output: '{"result":"ok"}' });
++    const fake = new FakeAgentAdapter({
++      output: validSystemOutput({ result: 'ok' }),
++    });
+     await runAgent(fake, def, { slug: 'test-order' }, undefined, tmpDir);
+ 
+     const history = fake.getRunHistory();
+     expect(history).toHaveLength(1);
+     const prompt = history[0].prompt;
+ 
+-    // Verify order
+     const preambleIdx = prompt.indexOf('PREAMBLE_CONTENT');
+     const instructionsIdx = prompt.indexOf('INSTRUCTIONS_CONTENT');
+     const hintIdx = prompt.indexOf('Write your final JSON report to:');
+     const bodyIdx = prompt.indexOf('Do the thing.');
++    const systemIdx = prompt.indexOf('Required Output Format');
+ 
+     expect(preambleIdx).toBeLessThan(instructionsIdx);
+     expect(instructionsIdx).toBeLessThan(hintIdx);
+     expect(hintIdx).toBeLessThan(bodyIdx);
++    expect(bodyIdx).toBeLessThan(systemIdx);
+ 
+-    // Verify separator
+     expect(prompt).toContain('\n\n---\n\n');
+   });
+ 
+@@ -107,13 +110,12 @@ describe('runAgent', () => {
+       preamble: null,
+     });
+ 
+-    const fake = new FakeAgentAdapter({ output: 'done' });
++    const fake = new FakeAgentAdapter({ output: validSystemOutput() });
+     await runAgent(fake, def, { slug: 'test-strip' }, undefined, tmpDir);
+ 
+     const prompt = fake.getRunHistory()[0].prompt;
+     expect(prompt).not.toContain('description: "Should be stripped"');
+     expect(prompt).toContain('# Real Content');
+-    expect(prompt).toContain('Body here.');
+   });
+ 
+   it('replaces {{REPO_ROOT}} in preamble', async () => {
+@@ -123,7 +125,7 @@ describe('runAgent', () => {
+       instructions: null,
+     });
+ 
+-    const fake = new FakeAgentAdapter({ output: 'done' });
++    const fake = new FakeAgentAdapter({ output: validSystemOutput() });
+     await runAgent(
+       fake,
+       def,
+@@ -137,19 +139,19 @@ describe('runAgent', () => {
+     expect(prompt).not.toContain('{{REPO_ROOT}}');
+   });
+ 
+-  it('works without preamble', async () => {
++  it('works without preamble — still has system output instructions', async () => {
+     const def = createAgent('no-preamble', {
+       preamble: null,
+       schema: null,
+       instructions: null,
+     });
+ 
+-    const fake = new FakeAgentAdapter({ output: 'done' });
++    const fake = new FakeAgentAdapter({ output: validSystemOutput() });
+     await runAgent(fake, def, { slug: 'no-preamble' }, undefined, tmpDir);
+ 
+     const prompt = fake.getRunHistory()[0].prompt;
+     expect(prompt).toContain('Do the thing.');
+-    expect(prompt).not.toContain('---');
++    expect(prompt).toContain('Required Output Format');
+   });
+ 
+   it('skips instructions when not present', async () => {
+@@ -159,11 +161,11 @@ describe('runAgent', () => {
+       preamble: null,
+     });
+ 
+-    const fake = new FakeAgentAdapter({ output: 'done' });
++    const fake = new FakeAgentAdapter({ output: validSystemOutput() });
+     await runAgent(fake, def, { slug: 'no-instr' }, undefined, tmpDir);
+ 
+     const prompt = fake.getRunHistory()[0].prompt;
+-    expect(prompt).not.toContain('Instructions');
++    expect(prompt).not.toContain('Be helpful');
+   });
+ 
+   it('formats input params as ## Input Parameters', async () => {
+@@ -179,7 +181,7 @@ describe('runAgent', () => {
+       schema: null,
+     });
+ 
+-    const fake = new FakeAgentAdapter({ output: 'done' });
++    const fake = new FakeAgentAdapter({ output: validSystemOutput() });
+     await runAgent(
+       fake,
+       def,
+@@ -193,14 +195,15 @@ describe('runAgent', () => {
+     expect(prompt).toContain('file_path: /src/main.ts');
+   });
+ 
+-  it('includes output hint when schema exists', async () => {
+-    const def = createAgent('with-schema', {
++  it('always includes output hint', async () => {
++    const def = createAgent('no-schema', {
++      schema: null,
+       preamble: null,
+       instructions: null,
+     });
+ 
+-    const fake = new FakeAgentAdapter({ output: '{"result":"ok"}' });
+-    await runAgent(fake, def, { slug: 'with-schema' }, undefined, tmpDir);
++    const fake = new FakeAgentAdapter({ output: validSystemOutput() });
++    await runAgent(fake, def, { slug: 'no-schema' }, undefined, tmpDir);
+ 
+     const prompt = fake.getRunHistory()[0].prompt;
+     expect(prompt).toContain('Write your final JSON report to:');
+@@ -214,7 +217,7 @@ describe('runAgent', () => {
+     });
+ 
+     const fake = new FakeAgentAdapter({
+-      output: 'done',
++      output: validSystemOutput(),
+       events: [
+         {
+           type: 'thinking',
+@@ -240,12 +243,10 @@ describe('runAgent', () => {
+     const eventsPath = path.join(result.runDir, 'events.ndjson');
+     const lines = fs.readFileSync(eventsPath, 'utf-8').trim().split('\n');
+     expect(lines).toHaveLength(2);
+-
+-    const event0 = JSON.parse(lines[0]);
+-    expect(event0.type).toBe('thinking');
++    expect(JSON.parse(lines[0]).type).toBe('thinking');
+   });
+ 
+-  it('writes completed.json with correct metadata', async () => {
++  it('writes completed.json with correct metadata including system validation', async () => {
+     const def = createAgent('meta-test', {
+       schema: null,
+       instructions: null,
+@@ -253,7 +254,7 @@ describe('runAgent', () => {
+     });
+ 
+     const fake = new FakeAgentAdapter({
+-      output: 'done',
++      output: validSystemOutput(),
+       sessionId: 'sess-123',
+     });
+     const result = await runAgent(
+@@ -270,31 +271,57 @@ describe('runAgent', () => {
+     expect(metadata.slug).toBe('meta-test');
+     expect(metadata.sessionId).toBe('sess-123');
+     expect(metadata.result).toBe('completed');
++    expect(metadata.systemValidated).toBe(true);
++    expect(metadata.userValidated).toBeNull();
+     expect(metadata.startedAt).toBeDefined();
+     expect(metadata.completedAt).toBeDefined();
+     expect(metadata.durationMs).toBeGreaterThanOrEqual(0);
+-    expect(metadata.artifacts).toBeInstanceOf(Array);
+   });
+ 
+-  it('sets degraded status when output fails validation', async () => {
+-    const def = createAgent('degraded-test', {
++  it('sets degraded status when output fails user schema validation', async () => {
++    const def = createAgent('degraded-user', {
+       preamble: null,
+       instructions: null,
+     });
+ 
+-    // Output doesn't match schema (missing required 'result' field)
+-    const fake = new FakeAgentAdapter({ output: '{"wrong":"field"}' });
++    // Has system fields but missing user schema's required 'result' field
++    const fake = new FakeAgentAdapter({
++      output: validSystemOutput({ wrong: 'field' }),
++    });
+     const result = await runAgent(
+       fake,
+       def,
+-      { slug: 'degraded-test' },
++      { slug: 'degraded-user' },
+       undefined,
+       tmpDir,
+     );
+ 
+     expect(result.metadata.result).toBe('degraded');
+-    expect(result.validation).not.toBeNull();
+-    expect(result.validation?.valid).toBe(false);
++    expect(result.metadata.systemValidated).toBe(true);
++    expect(result.metadata.userValidated).toBe(false);
++  });
++
++  it('sets degraded status when output fails system validation', async () => {
++    const def = createAgent('degraded-system', {
++      schema: null,
++      preamble: null,
++      instructions: null,
++    });
++
++    // Missing system fields entirely
++    const fake = new FakeAgentAdapter({
++      output: '{"just": "plain text in json"}',
++    });
++    const result = await runAgent(
++      fake,
++      def,
++      { slug: 'degraded-system' },
++      undefined,
++      tmpDir,
++    );
++
++    expect(result.metadata.result).toBe('degraded');
++    expect(result.metadata.systemValidated).toBe(false);
+   });
+ 
+   it('sets failed status on adapter error', async () => {
+@@ -327,7 +354,9 @@ describe('runAgent', () => {
+       instructions: 'Freeze these instructions',
+     });
+ 
+-    const fake = new FakeAgentAdapter({ output: '{"result":"ok"}' });
++    const fake = new FakeAgentAdapter({
++      output: validSystemOutput({ result: 'ok' }),
++    });
+     const result = await runAgent(
+       fake,
+       def,
+@@ -371,7 +400,7 @@ describe('runAgent', () => {
+     );
+ 
+     expect(result.metadata.result).toBe('failed');
+-    expect(fake.getRunHistory()).toHaveLength(0); // Adapter never called
++    expect(fake.getRunHistory()).toHaveLength(0);
+   });
+ 
+   it('handles timeout — terminates adapter and reports timeout status', async () => {
+@@ -384,7 +413,7 @@ describe('runAgent', () => {
+     const fake = new FakeAgentAdapter({
+       output: 'too slow',
+       sessionId: 'slow-sess',
+-      runDuration: 500, // 500ms delay
++      runDuration: 500,
+       events: [
+         {
+           type: 'session_start',
+@@ -397,22 +426,59 @@ describe('runAgent', () => {
+     const result = await runAgent(
+       fake,
+       def,
+-      {
+-        slug: 'timeout-test',
+-        timeout: 0.1, // 100ms timeout (less than 500ms runDuration)
+-      },
++      { slug: 'timeout-test', timeout: 0.1 },
+       undefined,
+       tmpDir,
+     );
+ 
+     expect(result.metadata.result).toBe('timeout');
+     expect(result.metadata.exitCode).toBe(124);
+-    // Terminate was attempted (sessionId may be empty if timeout fires before session_start)
+     expect(fake.getTerminateHistory().length).toBeGreaterThan(0);
++  });
+ 
+-    // Verify completed.json records timeout
+-    const completedPath = path.join(result.runDir, 'completed.json');
+-    const metadata = JSON.parse(fs.readFileSync(completedPath, 'utf-8'));
+-    expect(metadata.result).toBe('timeout');
++  it('sets MINIH env vars during run and cleans up after', async () => {
++    const def = createAgent('env-test', {
++      schema: null,
++      instructions: null,
++      preamble: null,
++    });
++
++    let capturedEnv: Record<string, string | undefined> = {};
++    const fake = new FakeAgentAdapter({
++      output: validSystemOutput(),
++      events: [
++        {
++          type: 'message',
++          timestamp: new Date().toISOString(),
++          data: { content: 'checking env' },
++        },
++      ],
++    });
++
++    // Capture env during the run via onEvent
++    await runAgent(
++      fake,
++      def,
++      { slug: 'env-test', model: 'test-model', timeout: 60 },
++      () => {
++        capturedEnv = {
++          MINIH: process.env.MINIH,
++          MINIH_AGENT_SLUG: process.env.MINIH_AGENT_SLUG,
++          MINIH_MODEL: process.env.MINIH_MODEL,
++          MINIH_TIMEOUT: process.env.MINIH_TIMEOUT,
++        };
++      },
++      tmpDir,
++    );
++
++    // Env was set during run
++    expect(capturedEnv.MINIH).toBe('1');
++    expect(capturedEnv.MINIH_AGENT_SLUG).toBe('env-test');
++    expect(capturedEnv.MINIH_MODEL).toBe('test-model');
++    expect(capturedEnv.MINIH_TIMEOUT).toBe('60');
++
++    // Env cleaned up after run
++    expect(process.env.MINIH).toBeUndefined();
++    expect(process.env.MINIH_AGENT_SLUG).toBeUndefined();
+   });
+ });

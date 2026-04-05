@@ -4,6 +4,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import Ajv2020 from 'ajv/dist/2020.js';
 import chalk from 'chalk';
 import type { Command } from 'commander';
@@ -86,7 +87,7 @@ export function registerDoctorCommand(program: Command): void {
         if (fs.existsSync(schemaPath)) {
           try {
             const schema = JSON.parse(fs.readFileSync(schemaPath, 'utf-8'));
-            const ajv = new Ajv2020({ allErrors: true });
+            const ajv = createRefAwareAjv();
             ajv.compile(schema);
             checks.push({ check: 'output-schema', status: 'pass' });
 
@@ -122,7 +123,7 @@ export function registerDoctorCommand(program: Command): void {
         if (fs.existsSync(inputPath)) {
           try {
             const schema = JSON.parse(fs.readFileSync(inputPath, 'utf-8'));
-            const ajv = new Ajv2020({ allErrors: true });
+            const ajv = createRefAwareAjv();
             ajv.compile(schema);
             checks.push({ check: 'input-schema', status: 'pass' });
           } catch (err) {
@@ -247,4 +248,26 @@ export function registerDoctorCommand(program: Command): void {
         );
       }
     });
+}
+
+/** Create an AJV instance pre-loaded with minih's published schemas for $ref support. */
+function createRefAwareAjv(): InstanceType<typeof Ajv2020> {
+  const ajv = new Ajv2020({ allErrors: true });
+  const schemasDir = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '..',
+    '..',
+    'schemas',
+  );
+  for (const name of ['retrospective.json', 'system-output.json']) {
+    const p = path.join(schemasDir, name);
+    if (fs.existsSync(p)) {
+      try {
+        ajv.addSchema(JSON.parse(fs.readFileSync(p, 'utf-8')));
+      } catch {
+        // Schema might already be loaded or invalid — skip
+      }
+    }
+  }
+  return ajv;
 }

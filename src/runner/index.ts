@@ -13,7 +13,7 @@ export {
   resolveAgent,
   validateSlug,
 } from './folder.js';
-export { runAgent } from './runner.js';
+export { runAgent, SYSTEM_OUTPUT_INSTRUCTIONS } from './runner.js';
 export type {
   AgentDefinition,
   AgentRunConfig,

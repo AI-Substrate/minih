@@ -69,14 +69,24 @@ export function registerCheckCommand(program: Command): void {
         }
 
         const definition = resolveAgent(slug, agentsDir);
+        if (!definition) {
+          exitWithEnvelope(
+            formatError(
+              'check',
+              ErrorCodes.AGENT_NOT_FOUND,
+              `Agent "${slug}" not found.`,
+            ),
+          );
+          return;
+        }
 
-        // System validation (always)
-        const systemResult = validateSystemOutput(file);
+        // Mode-specific validation
+        let systemResult: ReturnType<typeof validateSystemOutput> | null = null;
+        let userResult: ReturnType<typeof validateOutput> | null = null;
 
-        // User schema validation (if requested and schema exists)
-        let userResult = null;
         if (opts.input) {
-          if (!definition?.inputSchemaPath) {
+          // Input mode: validate against input-schema only (no system check)
+          if (!definition.inputSchemaPath) {
             exitWithEnvelope(
               formatError(
                 'check',
@@ -87,30 +97,37 @@ export function registerCheckCommand(program: Command): void {
             return;
           }
           userResult = validateOutput(definition.inputSchemaPath, file);
-        } else if (definition?.schemaPath) {
-          userResult = validateOutput(definition.schemaPath, file);
+        } else {
+          // Output mode: system validation + user schema
+          systemResult = validateSystemOutput(file);
+          if (definition.schemaPath) {
+            userResult = validateOutput(definition.schemaPath, file);
+          }
         }
 
         const allErrors = [
-          ...systemResult.errors,
+          ...(systemResult?.errors ?? []),
           ...(userResult?.errors ?? []),
         ];
         const valid =
-          systemResult.valid && (userResult ? userResult.valid : true);
+          (systemResult ? systemResult.valid : true) &&
+          (userResult ? userResult.valid : true);
 
         if (process.stderr.isTTY) {
           process.stderr.write(`\n  Checking: ${chalk.dim(file)}\n\n`);
 
-          if (systemResult.valid) {
-            process.stderr.write(
-              `  ${chalk.green('✓')} System validation passed\n`,
-            );
-          } else {
-            process.stderr.write(
-              `  ${chalk.red('✗')} System validation failed:\n`,
-            );
-            for (const err of systemResult.errors.slice(0, 5)) {
-              process.stderr.write(`    ${chalk.red('·')} ${err}\n`);
+          if (systemResult) {
+            if (systemResult.valid) {
+              process.stderr.write(
+                `  ${chalk.green('✓')} System validation passed\n`,
+              );
+            } else {
+              process.stderr.write(
+                `  ${chalk.red('✗')} System validation failed:\n`,
+              );
+              for (const err of systemResult.errors.slice(0, 5)) {
+                process.stderr.write(`    ${chalk.red('·')} ${err}\n`);
+              }
             }
           }
 
@@ -138,7 +155,7 @@ export function registerCheckCommand(program: Command): void {
               slug,
               file,
               valid,
-              systemValid: systemResult.valid,
+              systemValid: systemResult ? systemResult.valid : null,
               userValid: userResult ? userResult.valid : null,
               errors: allErrors,
             },

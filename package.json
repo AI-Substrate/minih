@@ -21,10 +21,11 @@
       "import": "./dist/runner/index.js",
       "types": "./dist/runner/index.d.ts"
     },
+    "./schemas/retrospective.json": "./dist/schemas/retrospective.json",
     "./schemas/system-output.json": "./dist/schemas/system-output.json"
   },
   "scripts": {
-    "build": "tsc && mkdir -p dist/schemas && cp src/schemas/system-output.json dist/schemas/system-output.json",
+    "build": "tsc && mkdir -p dist/schemas && cp src/schemas/system-output.json dist/schemas/system-output.json && cp src/schemas/retrospective.json dist/schemas/retrospective.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "clean": "rm -rf dist"

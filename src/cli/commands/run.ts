@@ -22,6 +22,7 @@ import {
   parseFrontmatter,
   resolveAgent,
   runAgent,
+  SYSTEM_OUTPUT_INSTRUCTIONS,
   validateSlug,
 } from '../../runner/index.js';
 import {
@@ -75,19 +76,7 @@ export function registerRunCommand(program: Command): void {
           );
         }
 
-        // Pre-flight: check GH_TOKEN
-        if (!process.env.GH_TOKEN) {
-          exitWithEnvelope(
-            formatError(
-              'run',
-              ErrorCodes.AGENT_AUTH_MISSING,
-              'GH_TOKEN environment variable is not set. Required for Copilot SDK.',
-              { fix: 'export GH_TOKEN=$(gh auth token)' },
-            ),
-          );
-        }
-
-        // Resolve agent
+        // Resolve agent (needed for both dry-run and real run)
         const definition = resolveAgent(slug, agentsDir);
         if (!definition) {
           const available = listAgents(agentsDir).map((a) => a.slug);
@@ -169,8 +158,7 @@ export function registerRunCommand(program: Command): void {
             instructions && { label: 'INSTRUCTIONS', content: instructions },
             {
               label: 'OUTPUT HINT',
-              content:
-                'Write your final JSON report to: <run-dir>/output/report.json',
+              content: `Write your final JSON report to: <run-dir>/output/report.json`,
             },
             config.params && {
               label: 'INPUT PARAMS',
@@ -181,7 +169,7 @@ export function registerRunCommand(program: Command): void {
             { label: 'PROMPT', content: promptBody },
             {
               label: 'SYSTEM REQUIREMENTS',
-              content: '(system output format instructions)',
+              content: SYSTEM_OUTPUT_INSTRUCTIONS,
             },
           ].filter(Boolean) as Array<{ label: string; content: string }>;
 
@@ -222,6 +210,18 @@ export function registerRunCommand(program: Command): void {
             }),
           );
           return;
+        }
+
+        // Pre-flight: check GH_TOKEN (after dry-run — dry-run doesn't need it)
+        if (!process.env.GH_TOKEN) {
+          exitWithEnvelope(
+            formatError(
+              'run',
+              ErrorCodes.AGENT_AUTH_MISSING,
+              'GH_TOKEN environment variable is not set. Required for Copilot SDK.',
+              { fix: 'export GH_TOKEN=$(gh auth token)' },
+            ),
+          );
         }
 
         // Dynamic SDK import — actionable error if missing (DYK #1)

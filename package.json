@@ -26,6 +26,7 @@
   },
   "scripts": {
     "build": "tsc && mkdir -p dist/schemas && cp src/schemas/system-output.json dist/schemas/system-output.json && cp src/schemas/retrospective.json dist/schemas/retrospective.json",
+    "prepare": "npm run build",
     "test": "vitest run",
     "test:watch": "vitest",
     "clean": "rm -rf dist"

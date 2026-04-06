@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Code Review Report",
+  "type": "object",
+  "required": [
+    "verdict",
+    "findings",
+    "domainCompliance",
+    "coverageMap",
+    "summary",
+    "retrospective"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "verdict": {
+      "type": "string",
+      "enum": ["APPROVE", "APPROVE_WITH_NOTES", "REQUEST_CHANGES"],
+      "description": "Review verdict"
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "severity",
+          "file",
+          "category",
+          "issue",
+          "recommendation"
+        ],
+        "properties": {
+          "id": { "type": "string" },
+          "severity": {
+            "type": "string",
+            "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"]
+          },
+          "file": { "type": "string" },
+          "category": { "type": "string" },
+          "issue": { "type": "string" },
+          "recommendation": { "type": "string" }
+        }
+      }
+    },
+    "domainCompliance": {
+      "type": "object",
+      "properties": {
+        "filePlacement": { "type": "string" },
+        "contractImports": { "type": "string" },
+        "dependencyDirection": { "type": "string" },
+        "domainDocsUpdated": { "type": "string" },
+        "registryCurrent": { "type": "string" },
+        "mapCurrent": { "type": "string" }
+      }
+    },
+    "coverageMap": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "ac": { "type": "string" },
+          "confidence": { "type": "number" },
+          "evidence": { "type": "string" }
+        }
+      }
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 20
+    },
+    "retrospective": {
+      "$ref": "https://minih.dev/schemas/retrospective.json"
+    }
+  }
+}

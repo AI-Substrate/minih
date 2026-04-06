@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "First-Time Experience Report",
+  "type": "object",
+  "required": [
+    "steps",
+    "overallScore",
+    "blockers",
+    "confusionPoints",
+    "suggestions",
+    "summary",
+    "retrospective"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "steps": {
+      "type": "array",
+      "minItems": 5,
+      "items": {
+        "type": "object",
+        "required": ["step", "description", "result", "notes"],
+        "properties": {
+          "step": { "type": "integer" },
+          "description": { "type": "string" },
+          "result": {
+            "type": "string",
+            "enum": ["pass", "fail", "partial", "skipped"]
+          },
+          "notes": { "type": "string" },
+          "commandsRun": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "errorMessages": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "overallScore": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10,
+      "description": "1-10 rating of the first-time experience"
+    },
+    "blockers": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Things that completely stopped progress"
+    },
+    "confusionPoints": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Things that were unclear or required trial-and-error"
+    },
+    "suggestions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Concrete improvements for the first-time experience"
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 20
+    },
+    "retrospective": {
+      "$ref": "https://minih.dev/schemas/retrospective.json"
+    }
+  }
+}

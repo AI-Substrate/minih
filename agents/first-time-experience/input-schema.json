@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "First-Time Experience Input",
+  "type": "object",
+  "required": ["minih_command"],
+  "properties": {
+    "minih_command": {
+      "type": "string",
+      "description": "How minih is invoked (e.g., 'minih' if npm-linked, 'npx minih' if via npx)"
+    }
+  }
+}

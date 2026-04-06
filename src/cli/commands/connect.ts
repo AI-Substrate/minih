@@ -83,15 +83,26 @@ export function registerConnectCommand(program: Command): void {
                 return {
                   runId: e.name,
                   sessionId: meta.sessionId ?? null,
+                  completedAt: meta.completedAt ?? null,
                   result: meta.result ?? 'unknown',
                   durationMs: meta.durationMs ?? null,
                   resumedFromRunId: meta.resumedFromRunId ?? null,
                 };
               } catch {
-                return { runId: e.name, sessionId: null, result: 'unknown' };
+                return {
+                  runId: e.name,
+                  sessionId: null,
+                  completedAt: null,
+                  result: 'unknown',
+                };
               }
             }
-            return { runId: e.name, sessionId: null, result: 'incomplete' };
+            return {
+              runId: e.name,
+              sessionId: null,
+              completedAt: null,
+              result: 'incomplete',
+            };
           });
 
           if (process.stderr.isTTY && runs.length > 0) {
@@ -102,6 +113,7 @@ export function registerConnectCommand(program: Command): void {
             const table = new Table({
               head: [
                 chalk.bold('Run ID'),
+                chalk.bold('Timestamp'),
                 chalk.bold('Session ID'),
                 chalk.bold('Result'),
               ],
@@ -115,8 +127,12 @@ export function registerConnectCommand(program: Command): void {
                   : run.result === 'degraded'
                     ? chalk.yellow
                     : chalk.red;
+              const timestamp = run.completedAt
+                ? new Date(run.completedAt).toLocaleString()
+                : '—';
               table.push([
                 chalk.dim(run.runId),
+                chalk.dim(timestamp),
                 run.sessionId ? chalk.dim(run.sessionId) : chalk.red('—'),
                 resultColor(run.result),
               ]);
@@ -147,7 +163,8 @@ export function registerConnectCommand(program: Command): void {
           return;
         }
 
-        const command = `cd ${session.runDir} && copilot --yolo --resume=${session.sessionId}`;
+        const shellQuote = (v: string) => `'${v.replaceAll("'", "'\\''")}'`;
+        const command = `cd ${shellQuote(session.runDir)} && copilot --yolo --resume=${session.sessionId}`;
 
         if (process.stderr.isTTY) {
           process.stderr.write(`\n  ${chalk.bold(`Connect: ${slug}`)}\n\n`);

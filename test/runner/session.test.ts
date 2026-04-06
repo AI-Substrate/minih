@@ -78,8 +78,8 @@ describe('findRunSession', () => {
 
     const result = findRunSession('test-agent', agentsDir);
     expect(result).not.toBeNull();
-    expect(result!.sessionId).toBe('new-session');
-    expect(result!.runId).toBe('2026-01-02T00-00-00-000Z-bbbb');
+    expect(result?.sessionId).toBe('new-session');
+    expect(result?.runId).toBe('2026-01-02T00-00-00-000Z-bbbb');
   });
 
   it('returns specific run session when runId provided', () => {
@@ -94,7 +94,7 @@ describe('findRunSession', () => {
       '2026-01-01T00-00-00-000Z-aaaa',
     );
     expect(result).not.toBeNull();
-    expect(result!.sessionId).toBe('old-session');
+    expect(result?.sessionId).toBe('old-session');
   });
 
   it('returns null when no runs directory exists', () => {
@@ -130,6 +130,18 @@ describe('findRunSession', () => {
 
     const result = findRunSession('test-agent', agentsDir);
     expect(result).toBeNull();
+  });
+
+  it('skips incomplete latest run and finds older completed session', () => {
+    const agentsDir = setupAgentWithRuns([
+      { runId: '2026-01-01T00-00-00-000Z-aaaa', sessionId: 'good-session' },
+      { runId: '2026-01-02T00-00-00-000Z-bbbb' }, // no completed.json
+    ]);
+
+    const result = findRunSession('test-agent', agentsDir);
+    expect(result).not.toBeNull();
+    expect(result?.sessionId).toBe('good-session');
+    expect(result?.runId).toBe('2026-01-01T00-00-00-000Z-aaaa');
   });
 
   it('returns null when completed.json is corrupt', () => {

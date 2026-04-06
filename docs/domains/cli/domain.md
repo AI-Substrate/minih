@@ -38,7 +38,7 @@
 
 | Concept | Definition |
 |---------|-----------|
-| Composition root | `run.ts` is the only file that creates CopilotClient + SdkCopilotAdapter. Dynamic import. |
+| Composition root | `sdk-runtime.ts` owns shared SDK bootstrap (auth check, dynamic import, CopilotClient, SIGINT). Used by both `run.ts` and `resume.ts`. |
 | stdout = machine | JSON envelope on stdout. Human formatting on stderr. TTY-detected. |
 | Three consumers | Agent inside minih, external coding agents, humans/CI. |
 

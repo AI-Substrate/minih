@@ -34,15 +34,22 @@ import { createSdkRuntime } from './sdk-runtime.js';
 
 export function registerResumeCommand(program: Command): void {
   program
-    .command('resume <slug> <message>')
+    .command('resume <slug> [message]')
     .description('Send a follow-up message to a completed agent session')
+    .addHelpText(
+      'after',
+      '\nExamples:\n' +
+        '  minih resume smoke-test "Check the test output too"\n' +
+        '  minih resume smoke-test --run <runId> "Elaborate on the warning"\n' +
+        '  echo "check tests" | minih resume smoke-test\n',
+    )
     .option('--run <runId>', 'Resume a specific run (default: latest)')
     .option('-t, --timeout <seconds>', 'Timeout in seconds', '300')
     .option('--verbose', 'Show all events with timestamps (verbose mode)')
     .action(
       async (
         slug: string,
-        message: string,
+        messageArg: string | undefined,
         opts: {
           run?: string;
           timeout?: string;
@@ -50,6 +57,25 @@ export function registerResumeCommand(program: Command): void {
         },
       ) => {
         const agentsDir = program.opts().agentsDir ?? 'agents';
+
+        // Resolve message from arg or stdin
+        let message = messageArg ?? '';
+        if (!message && !process.stdin.isTTY) {
+          const chunks: Buffer[] = [];
+          for await (const chunk of process.stdin) {
+            chunks.push(chunk);
+          }
+          message = Buffer.concat(chunks).toString('utf-8').trim();
+        }
+        if (!message.trim()) {
+          exitWithEnvelope(
+            formatError(
+              'resume',
+              ErrorCodes.INVALID_ARGS,
+              'Missing message. Usage: minih resume <slug> "your message"',
+            ),
+          );
+        }
 
         // Validate slug
         const slugError = validateSlug(slug);
@@ -172,6 +198,18 @@ export function registerResumeCommand(program: Command): void {
           }
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
+          const isSessionError =
+            /session.*not found|expired|resume|cannot resume/i.test(msg);
+          if (isSessionError) {
+            exitWithEnvelope(
+              formatError(
+                'resume',
+                ErrorCodes.AGENT_VALIDATION_FAILED,
+                `Session not found — run \`minih run ${slug}\` for a fresh start.`,
+                { originalError: msg },
+              ),
+            );
+          }
           exitWithEnvelope(
             formatError('resume', ErrorCodes.AGENT_EXECUTION_FAILED, msg),
           );

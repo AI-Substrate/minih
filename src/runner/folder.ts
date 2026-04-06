@@ -250,15 +250,28 @@ export function findRunSession(
     if (!fs.existsSync(targetRunDir)) return null;
     targetRunId = runId;
   } else {
-    // Find latest run
+    // Find latest completed run (skip incomplete/corrupt entries)
     const entries = fs
       .readdirSync(runsDir, { withFileTypes: true })
       .filter((e) => e.isDirectory())
       .sort((a, b) => b.name.localeCompare(a.name));
 
-    if (entries.length === 0) return null;
-    targetRunId = entries[0].name;
-    targetRunDir = path.join(runsDir, targetRunId);
+    for (const entry of entries) {
+      const candidateDir = path.join(runsDir, entry.name);
+      const completedPath = path.join(candidateDir, 'completed.json');
+      if (!fs.existsSync(completedPath)) continue;
+      try {
+        const metadata = JSON.parse(fs.readFileSync(completedPath, 'utf-8'));
+        if (metadata.sessionId) {
+          return {
+            sessionId: metadata.sessionId,
+            runId: entry.name,
+            runDir: candidateDir,
+          };
+        }
+      } catch {}
+    }
+    return null;
   }
 
   const completedPath = path.join(targetRunDir, 'completed.json');

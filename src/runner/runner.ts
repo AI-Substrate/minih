@@ -128,9 +128,9 @@ export async function runAgent(
     }
   }
 
-  // Validate and format input parameters
+  // Validate and format input parameters (skip for resume — SDK has prior context)
   let paramsHint: string | null = null;
-  if (definition.inputSchemaPath) {
+  if (!isResume && definition.inputSchemaPath) {
     const params = config.params ?? {};
     const inputValidation = validateInput(definition.inputSchemaPath, params);
     if (!inputValidation.valid) {

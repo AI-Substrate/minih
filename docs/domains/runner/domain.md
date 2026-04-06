@@ -34,6 +34,7 @@
 | `resolveAgent(slug, agentsDir)` | Function | cli (run, validate, history) |
 | `runAgent(adapter, def, config, onEvent?, agentsDir?)` | Function | cli (run command) |
 | `findRunSession(slug, agentsDir, runId?)` | Function | cli (resume, connect — session lookup from completed.json) |
+| `RunSession` | Type | cli (resume, connect — session lookup result) |
 | `validateInput(schemaPath, params)` | Function | cli (check --input), runner (pre-execution) |
 | `validateOutput(schemaPath, outputPath)` | Function | cli (validate, check), runner (post-execution) |
 | `displayEvent(event)` | Function | cli (run --verbose display, tail) |

@@ -1,0 +1,1042 @@
+diff --git a/README.md b/README.md
+index 826918b..13f6d97 100644
+--- a/README.md
++++ b/README.md
+@@ -123,6 +123,7 @@ minih run my-agent
+ minih run my-agent --model claude-sonnet-4 --timeout 600
+ minih run my-agent --param file_path=src/main.ts --param depth=3
+ minih run my-agent --dry-run    # Preview prompt without executing
++minih run my-agent --verbose    # Old-style timestamped event log
+ ```
+ 
+ | Flag | Description |
+@@ -132,6 +133,9 @@ minih run my-agent --dry-run    # Preview prompt without executing
+ | `-t, --timeout <seconds>` | Timeout in seconds (default: 300) |
+ | `-p, --param <key=value>` | Input parameter (repeatable) |
+ | `--dry-run` | Preview assembled prompt without executing |
++| `--verbose` | Show all events with timestamps (default: pretty streaming) |
++
++**Display modes**: By default, `minih run` shows clean streaming output — thinking in gray italic, tool calls formatted with names, intent changes highlighted. Use `--verbose` for the timestamped line-per-event log. Non-TTY environments always use verbose mode.
+ 
+ ### `minih list`
+ 
+diff --git a/docs/domains/cli/domain.md b/docs/domains/cli/domain.md
+index 934c53f..b40d222 100644
+--- a/docs/domains/cli/domain.md
++++ b/docs/domains/cli/domain.md
+@@ -46,3 +46,4 @@
+ | Phase 1 | Created domain. Placeholder entry point only. |
+ | Phase 4 | Full CLI implementation. Commander program with 6 commands (run, list, history, validate, last-run, tail). Output envelope (MinihEnvelope). Composition root with dynamic SDK import. Session isolation (CWD=runDir). chalk + cli-table3 for display. hello-world agent. |
+ | Phase 5 | Added `doctor`, `check`, `init`, and `run --dry-run`. Scaffolded `_shared/preamble.md`. `check` supports zero-arg via MINIH_* env vars. `init` creates output-schema with system fields. `dry-run` works without GH_TOKEN. |
++| 002-pretty-mode | Added `--verbose` flag. Default display switched to PrettyDisplay (pretty.ts). SIGINT handler calls PrettyDisplay.cleanup(). |
+diff --git a/docs/domains/runner/domain.md b/docs/domains/runner/domain.md
+index 3103130..ef21b1e 100644
+--- a/docs/domains/runner/domain.md
++++ b/docs/domains/runner/domain.md
+@@ -15,7 +15,8 @@
+ | `src/runner/types.ts` | contract | AgentDefinition, AgentRunConfig, CompletedMetadata, AgentRunResult |
+ | `src/runner/folder.ts` | internal | Agent discovery, slug validation, run folder creation (Phase 2) |
+ | `src/runner/validator.ts` | internal | AJV 2020-12 schema validation (Phase 2) |
+-| `src/runner/display.ts` | internal | Terminal output formatting (Phase 2) |
++| `src/runner/display.ts` | internal | Verbose terminal output formatting (Phase 2) |
++| `src/runner/pretty.ts` | internal | Pretty streaming display — clean output with delta accumulation (002-pretty-mode) |
+ | `src/runner/runner.ts` | internal | Core orchestration (Phase 2) |
+ | `src/runner/index.ts` | contract | Barrel export |
+ | `src/schemas/retrospective.json` | contract | Reusable retrospective schema fragment (Phase 2) |
+@@ -57,3 +58,4 @@
+ | Phase 1 | Created domain. Type definitions extracted with frontmatter additions. |
+ | Phase 2 | Added folder.ts (discovery + frontmatter), validator.ts (AJV), display.ts (terminal), runner.ts (orchestration), retrospective.json schema. 61 tests. |
+ | Phase 5 | System output enforcement: every run validates summary + retrospective. Two-stage validation (system then user). 14 MINIH_* env vars. Deleted then restored retrospective.json alongside new system-output.json. Exported SYSTEM_OUTPUT_INSTRUCTIONS. |
++| 002-pretty-mode | Added pretty.ts — clean streaming display with delta accumulation, thinking suppression, inline intent. PrettyDisplay exported from barrel. |
+diff --git a/docs/plans/002-pretty-mode/execution.log.md b/docs/plans/002-pretty-mode/execution.log.md
+new file mode 100644
+index 0000000..9d4cbcf
+--- /dev/null
++++ b/docs/plans/002-pretty-mode/execution.log.md
+@@ -0,0 +1,41 @@
++# Execution Log — Pretty Mode
++
++**Plan**: pretty-mode-plan.md
++**Started**: 2026-04-06
++**Status**: Complete
++
++---
++
++## Task Log
++
++### T001: Add isDelta to thinking events ✅
++- Added `isDelta?: boolean` to `AgentThinkingEvent.data` in events.ts
++- Adapter sets `isDelta: true` for `reasoning_delta`, `false` for `reasoning`
++- Backward compatible — existing display.ts ignores the field
++
++### T002: Create PrettyDisplay class ✅
++- `src/runner/pretty.ts` — ~170 LOC
++- Handles: thinking (gray italic streaming, finals suppressed), text_delta (white streaming), message (suppressed when inDeltaStream), tool_call (formatted with name + preview, report_intent captured inline), tool_result (✓/✗), session_error (red), cleanup()
++- Two-layer message suppression: messageId match + inDeltaStream boolean flag
++
++### T003: Wire --verbose flag ✅
++- Added `--verbose` flag to run command
++- Default (TTY): PrettyDisplay, `--verbose` or non-TTY: current displayEvent
++- SIGINT handler calls `pretty.cleanup()` before exit
++- Summary display called after cleanup
++
++### T004: Export from barrel ✅
++- `PrettyDisplay` exported from `src/runner/index.ts`
++
++### T005: Write tests ✅
++- 12 tests in `test/runner/pretty.test.ts`
++- Covers: thinking accumulation, isDelta=false suppression, message suppression (with/without messageId), intent capture, tool lifecycle, cleanup
++
++### T006: Update README ✅
++- Added `--verbose` flag to CLI reference
++- Added display modes documentation paragraph
++
++### T007: Manual verification ✅
++- `minih run hello-world` (pretty default): thinking gray italic ✓, tools formatted ✓, intent inline ✓, no duplication ✓
++- Non-TTY: display suppressed ✓
++- `just fft`: 89 tests pass, 0 errors ✓
+diff --git a/docs/plans/002-pretty-mode/pretty-mode-plan.md b/docs/plans/002-pretty-mode/pretty-mode-plan.md
+new file mode 100644
+index 0000000..05f6669
+--- /dev/null
++++ b/docs/plans/002-pretty-mode/pretty-mode-plan.md
+@@ -0,0 +1,92 @@
++# Pretty Mode Implementation Plan
++
++**Mode**: Simple
++**Plan Version**: 1.1.0
++**Created**: 2026-04-06
++**Spec**: [pretty-mode-spec.md](./pretty-mode-spec.md)
++**Status**: DRAFT
++**DYK Applied**: 2026-04-06 — 5 insights, plan v1.0→v1.1
++
++## Summary
++
++Replace minih's default `minih run` display with clean streaming output — thinking in gray italic, normal text in white, tool calls formatted clearly, and intent changes printed inline. The current verbose line-per-event output becomes opt-in via `--verbose`. No new dependencies — uses chalk (already installed). No ANSI scroll regions or cursor tricks (tmux/ssh compatible).
++
++## Target Domains
++
++| Domain | Status | Relationship | Role |
++|--------|--------|-------------|------|
++| runner | existing | **modify** | New pretty display module, refactor existing display.ts |
++| cli | existing | **modify** | Wire `--verbose` flag, change default display mode |
++| adapter | existing | **modify** | Add `isDelta` field to thinking events (2-line change) |
++
++## Domain Manifest
++
++| File | Domain | Classification | Rationale |
++|------|--------|---------------|-----------|
++| `src/runner/pretty.ts` | runner | internal | NEW — pretty display: event accumulation, streaming text, inline intent |
++| `src/runner/display.ts` | runner | internal | MODIFY — rename exported functions to clarify "verbose" role |
++| `src/runner/index.ts` | runner | contract | MODIFY — export new pretty display handler |
++| `src/cli/commands/run.ts` | cli | internal | MODIFY — add `--verbose` flag, switch default to pretty, SIGINT cleanup |
++| `src/adapter/events.ts` | adapter | contract | MODIFY — add `isDelta?: boolean` to AgentThinkingEvent |
++| `src/adapter/sdk-copilot.ts` | adapter | internal | MODIFY — set `isDelta: true/false` on thinking events |
++| `test/runner/pretty.test.ts` | runner | internal | NEW — delta accumulation, suppression, intent capture tests |
++| `README.md` | — | — | MODIFY — document display modes |
++
++## Harness Strategy
++
++Harness: Not applicable — minih IS the CLI tool. Validation via `npm run build && npx minih run hello-world`.
++
++## Key Findings
++
++| # | Impact | Finding | Action |
++|---|--------|---------|--------|
++| 01 | Critical | Both `reasoning_delta` and `reasoning` SDK events translate to `thinking` with no delta/final marker. | **DYK #5**: Add `isDelta?: boolean` to `AgentThinkingEvent.data`. Adapter sets `true` for reasoning_delta, `false` for reasoning. Pretty mode skips `isDelta: false`. 2-line adapter change. |
++| 02 | High | `text_delta` and `message` events carry optional `messageId` — can suppress message finals, but `messageId` is `string | undefined`. | **DYK #2**: Two-layer suppression: (1) messageId match when available, (2) fallback boolean flag "am I in a delta stream?" — if deltas were accumulating and a `message` arrives, suppress it regardless. |
++| 03 | High | `report_intent` is a regular `tool_call` event with `toolName === 'report_intent'`. Input contains `{intent: "..."}`. | Detect in pretty handler, extract intent string, print inline as styled one-liner. No ANSI pinning. |
++| 04 | High | No existing tests for display.ts. | Add lightweight tests for new pretty.ts logic (accumulation, suppression, intent capture). Don't test visual output. |
++| 05 | High | **DYK #1**: ANSI cursor save/restore breaks with scrolling content. Scroll regions (`\x1b[r`) are fragile in tmux/split panes. | **Drop pinned intent.** Print intent inline as a styled one-liner when it changes. Works everywhere — tmux, ssh, VS Code terminal, dumb terminals. |
++| 06 | Medium | `runAgent` signature is `(adapter, definition, config, onEvent?, agentsDir?)` — no display mode param. Pretty mode is just a different `onEvent` callback. | No API change needed. `run.ts` creates the appropriate handler based on `--verbose` flag. |
++| 07 | Medium | **DYK #3**: In clean streaming, "tool history" is just terminal scroll history. No buffer needed. | Simplify tool display — just format tool_call and tool_result nicely as they scroll by. No re-rendering or history buffer. |
++| 08 | Medium | **DYK #4**: SIGINT handler in run.ts must clean up PrettyDisplay state (flush accumulated text). | Give PrettyDisplay a `cleanup()` method. SIGINT handler calls it before exit. |
++
++## Implementation
++
++**Objective**: Replace default display with clean streaming output; make current verbose mode opt-in.
++**Testing Approach**: Lightweight — test delta accumulation, message suppression, and intent capture logic. Visual formatting verified manually.
++
++### Tasks
++
++| Status | ID | Task | Domain | Path(s) | Done When | Notes |
++|--------|-----|------|--------|---------|-----------|-------|
++| [x] | T001 | Add `isDelta` to thinking events | adapter | `src/adapter/events.ts`, `src/adapter/sdk-copilot.ts` | `AgentThinkingEvent.data` has `isDelta?: boolean`. Adapter sets `true` for `reasoning_delta`, `false` for `reasoning`. Existing display.ts unaffected (field is optional). | DYK #5. 2-line adapter change + 1-line type change. |
++| [x] | T002 | Create PrettyDisplay class | runner | `src/runner/pretty.ts` | Class handles all event types: `thinking` (isDelta=true) → gray italic streaming text, `thinking` (isDelta=false) → suppressed, `text_delta` → white streaming text (accumulates, sets inDeltaStream flag), `message` → suppressed when inDeltaStream or messageId matches, `tool_call` → formatted with name + preview (report_intent captured as intent), `tool_result` → ✓/✗ with output preview, `usage` → silent, `session_error` → prominent red. Has `cleanup()` to flush buffers. | Per findings 01-03, 07, 08. ~150 LOC. |
++| [x] | T003 | Wire --verbose flag in run command | cli | `src/cli/commands/run.ts` | Add `--verbose` flag. Default (no flag + TTY) uses PrettyDisplay. `--verbose` or non-TTY uses current displayEvent. PrettyDisplay.cleanup() called in SIGINT handler. Update displayHeader/displaySummary calls — pretty mode uses its own header. | Per findings 06, 08. Default-flip. |
++| [x] | T004 | Export from barrel | runner | `src/runner/index.ts` | Export `PrettyDisplay` from runner barrel. | Keep import surface clean. |
++| [x] | T005 | Write tests | runner | `test/runner/pretty.test.ts` | Tests: (1) thinking isDelta=true accumulates into buffer, (2) thinking isDelta=false suppressed, (3) message suppressed when messageId matches prior deltas, (4) message suppressed when inDeltaStream flag is set (no messageId), (5) message shown when no prior deltas, (6) report_intent tool_call captured as intent string, (7) cleanup() flushes accumulated text. | Lightweight — test logic, not visual output. |
++| [x] | T006 | Update README | — | `README.md` | Document: pretty is default, `--verbose` for old scrolling output. Add note in CLI reference section. | Small change. |
++| [x] | T007 | Manual verification | — | — | Run `minih run hello-world` (pretty default), `minih run hello-world --verbose` (old behavior). Verify: thinking gray italic, text white, tools formatted, intent inline, no duplication, SIGINT cleans up. | Visual verification — can't automate. |
++
++### Acceptance Criteria
++
++- [ ] AC1: `minih run <slug>` (default) produces clean streaming output — thinking gray italic, text white, tools formatted
++- [ ] AC2: Thinking deltas (`isDelta: true`) accumulate into flowing text, not one line per fragment
++- [ ] AC3: Thinking finals (`isDelta: false`) suppressed — no duplication
++- [ ] AC4: `message` events suppressed when `text_delta` events were streaming (via messageId or inDeltaStream flag)
++- [ ] AC5: Tool calls show `🔧 name  preview`, results show `✓`/`✗` with output preview
++- [ ] AC6: Intent changes (from `report_intent` tool calls) printed inline as styled one-liner
++- [ ] AC7: `--verbose` flag produces current timestamped line-per-event scrolling output
++- [ ] AC8: Non-TTY falls back to verbose behavior automatically
++- [ ] AC9: JSON envelope on stdout unaffected
++- [ ] AC10: events.ndjson records all events regardless of display mode
++- [ ] AC11: SIGINT cleanup flushes PrettyDisplay state
++- [ ] AC12: `just fft` passes (lint, format, build, typecheck, test, audit)
++
++### Risks
++
++| Risk | Likelihood | Impact | Mitigation |
++|------|-----------|--------|------------|
++| `messageId` absent on text_delta — suppression misses | Medium | Medium | Two-layer: messageId + inDeltaStream boolean flag |
++| Default change surprises users | Low | Medium | `--verbose` escape hatch; document in README |
++| Terminal width causes tool preview wrapping | Medium | Low | Truncate to `process.stderr.columns - 10` |
++| SIGINT leaves partial output | Medium | Low | PrettyDisplay.cleanup() in SIGINT handler |
++| `isDelta` adapter change breaks existing consumers | Low | Low | Field is optional (`isDelta?: boolean`), backward compatible |
+diff --git a/docs/plans/002-pretty-mode/pretty-mode-spec.md b/docs/plans/002-pretty-mode/pretty-mode-spec.md
+new file mode 100644
+index 0000000..c3fdb09
+--- /dev/null
++++ b/docs/plans/002-pretty-mode/pretty-mode-spec.md
+@@ -0,0 +1,122 @@
++# Pretty Mode — Human-Friendly Agent Display
++
++**Mode**: Simple
++
++📚 This specification incorporates findings from [research-dossier.md](./research-dossier.md)
++
++## Summary
++
++Add a `--pretty` flag to `minih run` that replaces the scrolling line-per-event terminal output with a compact, in-place updating display. The current output produces 400+ lines of fragmented text for a 30-second agent run — unreadable for humans. Pretty mode accumulates streaming deltas, shows tool call lifecycle with live status updates, and renders a clean final summary.
++
++**WHY**: minih agents are high-frequency dev-loop tools — developers run them hundreds of times. Every run currently requires scrolling through pages of timestamped fragments to understand what happened. A pretty display makes agent execution feel like watching a build tool, not reading a debug log.
++
++## Goals
++
++- Replace fragmented line-per-delta output with clean streaming text — thinking in gray italic, normal text in white, tool calls formatted clearly
++- Accumulate streaming deltas into natural flowing text instead of one line per 5-char chunk
++- Eliminate the delta/final duplication (SDK sends streaming chunks then a consolidated final — currently both are shown)
++- Show tool calls with name, input preview, and output result — formatted readably
++- Pin the agent's current intent (from `report_intent` tool calls) as an in-place updating status line at the bottom of the terminal
++- Normal terminal scrolling — no TUI, no scroll override, can scroll back up
++- Render a clean summary when the agent finishes
++- Degrade gracefully in non-TTY environments (fall back to current verbose behavior)
++
++## Non-Goals
++
++- Full TUI dashboard (panels, scrollable regions, interactive controls)
++- In-place updating status panels or live counters (except the pinned intent line)
++- Changing the JSON envelope output on stdout (display changes only affect stderr)
++- Modifying the NDJSON event recording (all events still written to events.ndjson)
++- Adding pretty mode to other commands (list, doctor, etc.) — they're already clean
++- Scroll position control or alternate screen buffer
++
++## Target Domains
++
++| Domain | Status | Relationship | Role in This Feature |
++|--------|--------|-------------|---------------------|
++| runner | existing | **modify** | Add pretty display module alongside existing display.ts |
++| cli | existing | **modify** | Wire `--pretty` flag in run command, pass display mode through |
++| adapter | existing | **consume** | No changes — AgentEvent types are already sufficient |
++
++No new domains needed. The change is contained within the existing display pipeline.
++
++## Research Context
++
++From the research dossier, the key findings are:
++
++1. **Display pipeline**: `run.ts` → `runAgent(onEvent)` → `handleEvent` → `displayEvent()` → stderr. TTY-gated — non-TTY already skips display.
++2. **Duplication**: SDK emits `reasoning_delta` (chunks) AND `reasoning` (final), both translated to `thinking` events. Same for `message_delta`/`message`. Display shows all of them.
++3. **Event volume**: A 30s hello-world run produces ~400 events, ~100+ thinking deltas, 3-4 tool calls.
++4. **Recommended approach**: `log-update` + chalk for lightweight in-place terminal updates.
++5. **No existing cursor control**: display.ts uses only `process.stderr.write()` with newlines.
++
++## Complexity
++
++- **Score**: CS-2 (small)
++- **Breakdown**: S=1 (display.ts refactor + run.ts flag change), I=0 (no new deps — chalk already available, ANSI cursor for intent pin only), D=0 (no state changes), N=0 (well-specified), F=0 (standard), T=1 (needs tests for delta accumulation)
++- **Total P**: 2 → CS-2
++- **Confidence**: 0.9
++- **Assumptions**: chalk supports italic; ANSI cursor save/restore works for pinned line
++- **Dependencies**: None new — chalk already in package.json
++- **Risks**: See table below
++- **Phases**: Single phase — refactor display, wire flag, test
++
++## Acceptance Criteria
++
++1. Pretty mode is the **default** display when TTY is detected — current verbose scrolling becomes `--verbose` opt-in
++2. Thinking text streams down the page in **gray italic** — accumulates delta chunks into natural flowing text (not one line per 5-char fragment)
++3. Normal assistant text streams in **white** — standard terminal color
++4. When a final consolidated `message`/`thinking` event arrives after deltas for the same content, the final is **suppressed** (no duplication)
++5. Tool calls display clearly: tool name, input preview, and output result when complete — last 3–5 completed tools remain visible in the scroll, plus any currently pending tool
++6. The agent's current **intent** (captured from `report_intent` tool calls) is printed as an inline styled one-liner when it changes — no ANSI pinning (tmux/ssh compatible)
++7. Normal terminal scrolling — no alternate screen buffer, no scroll override, no cursor tricks, user can scroll back up
++8. When the agent finishes, the pinned intent clears and a permanent summary block is printed
++9. In non-TTY environments, pretty mode is skipped and falls back to current verbose behavior
++10. `minih run <slug> --verbose` produces the current timestamped line-per-event scrolling output
++11. The JSON envelope on stdout is unaffected by display mode
++12. All events are still recorded to events.ndjson regardless of display mode
++
++## Risks & Assumptions
++
++| Risk | Likelihood | Impact | Mitigation |
++|------|-----------|--------|------------|
++| Pinned intent line flickers on fast event streams | Medium | Low | Use ANSI save/restore cursor; only redraw on intent change |
++| Delta vs final detection fragile (messageId may be absent) | Medium | Medium | Use messageId when available; fall back to content-length heuristic |
++| Thinking italic not supported in all terminals | Low | Low | Graceful degradation — just shows gray without italic |
++| Terminal width causes awkward line wrapping | Medium | Low | Truncate tool previews to terminal columns - 10 |
++| Breaking change: default display mode changes | Medium | Medium | Document in README; `--verbose` provides escape hatch |
++
++## Open Questions
++
++_All resolved — see Clarifications below._
++
++## Testing Strategy
++
++- **Approach**: Lightweight
++- **Rationale**: Pretty display is mostly visual formatting. The testable logic is delta accumulation and final-event suppression.
++- **Focus Areas**: Delta accumulation into flowing text, final event suppression when deltas already rendered, intent capture from `report_intent` tool calls
++- **Excluded**: Visual layout testing (verify manually by running agents)
++- **Mock Usage**: Targeted — use FakeAgentAdapter to emit controlled event sequences
++
++## Documentation Strategy
++
++- **Location**: README.md update — add note about display modes (`--verbose` for old behavior)
++- **Rationale**: Small feature, one flag change, README already documents CLI reference
++
++## Clarifications
++
++### Session 2026-04-06
++
++**Q1: Workflow Mode** → **Simple** — CS-2, single phase, quick path.
++
++**Q2: Testing Strategy** → **Lightweight** — test delta accumulation + suppression logic, visual formatting verified manually.
++
++**Q3: Default behavior** → **Pretty is the default.** Current verbose scrolling becomes `--verbose` opt-in. This inverts the original spec assumption.
++
++**Q4: Tool call history** → **Show last 3–5 completed tools** + current pending tool. Gives context about what just happened.
++
++**Q5: Thinking content** → **Stream all thinking text down the page** in light gray italic. Not collapsed, not in-place — natural terminal scrolling like a coding agent (Claude Code, Copilot CLI).
++
++**Q6: Display model** → **Clean streaming, not TUI.** Thinking = gray italic, text = white, tool calls = formatted nicely. Normal terminal scrolling, no scroll override, can scroll back up. No in-place panels except the pinned intent line.
++
++**Q7: Intent pinning** → **Yes.** Capture `report_intent` tool call data and pin as a persistent status line at the bottom. Updates in-place when intent changes.
+diff --git a/docs/plans/002-pretty-mode/research-dossier.md b/docs/plans/002-pretty-mode/research-dossier.md
+new file mode 100644
+index 0000000..79dab8e
+--- /dev/null
++++ b/docs/plans/002-pretty-mode/research-dossier.md
+@@ -0,0 +1,187 @@
++# Research Dossier: --pretty mode for `minih run`
++
++**Generated**: 2026-04-06T00:30:00Z
++**Research Query**: "Add --pretty mode for human-friendly in-place terminal output"
++**Plan**: 002-pretty-mode
++
++---
++
++## Executive Summary
++
++### What Exists Now
++The current display pipeline (`display.ts`) writes one line per event to stderr — every thinking delta, every tool call, every result. This produces ~400+ lines of scrolling output for a 30s agent run. Text deltas and thinking chunks arrive as tiny fragments (5-20 chars each), each on its own timestamped line, making the output nearly unreadable for humans.
++
++### The Duplication Problem
++The SDK sends **streaming deltas** (`assistant.message_delta` → `text_delta`, `assistant.reasoning_delta` → `thinking`) as small chunks, then a **final consolidated** event (`assistant.message` → `message`, `assistant.reasoning` → `thinking`). The current display shows ALL of them — you see the same text twice: once fragmented across 20+ lines, then once as the final version.
++
++### What --pretty Would Do
++Replace the scrolling line-per-event output with an in-place updating display that:
++- Accumulates thinking/text deltas into a single updating line
++- Shows current phase (thinking → tool call → result → thinking)
++- Displays a live token counter and elapsed timer
++- Suppresses final consolidated events when deltas already showed the content
++- Renders a clean summary at the end
++
++---
++
++## Current Architecture
++
++### Pipeline
++
++```
++run.ts (CLI command)
++  ├── displayHeader()          → stderr (Unicode box)
++  ├── displayPreflight()       → stderr (✓/✗ checks)
++  ├── runAgent(adapter, def, config, isTTY ? displayEvent : undefined)
++  │     └── adapter.run(onEvent: handleEvent)
++  │           └── handleEvent:
++  │                 ├── append to events.ndjson
++  │                 ├── update stats (toolCallCount, eventCount)
++  │                 └── onEvent?.(event)  →  displayEvent()  → stderr
++  ├── displaySummary()         → stderr (plain text block)
++  └── exitWithEnvelope()       → stdout (JSON)
++```
++
++### Key Files
++
++| File | Role | LOC |
++|------|------|-----|
++| `src/runner/display.ts` | Format events → stderr | 120 |
++| `src/runner/runner.ts` | Orchestration, event handling | ~370 |
++| `src/cli/commands/run.ts` | CLI wiring, TTY detection | ~320 |
++| `src/adapter/events.ts` | Event type definitions | 145 |
++| `src/adapter/sdk-copilot.ts` | SDK → AgentEvent translation | ~250 |
++
++### Event Flow & Duplication
++
++```
++SDK emits:                          minih translates to:        display.ts shows:
++─────────                           ──────────────────          ─────────────────
++assistant.reasoning_delta (chunk)  → thinking (small text)     → 💭 <5 chars>
++assistant.reasoning_delta (chunk)  → thinking (small text)     → 💭 <5 chars>
++assistant.reasoning_delta (chunk)  → thinking (small text)     → 💭 <5 chars>
++assistant.reasoning (FINAL)        → thinking (full text)      → 💭 <80 chars>  ← DUPLICATE
++                                                                
++assistant.message_delta (chunk)    → text_delta (small text)   → <dim text>
++assistant.message_delta (chunk)    → text_delta (small text)   → <dim text>
++assistant.message (FINAL)          → message (full text)       → 📝 (N chars)   ← DUPLICATE
++```
++
++### Current Event Types (9 total)
++
++| Event | Source | Frequency | Pretty Handling |
++|-------|--------|-----------|-----------------|
++| `text_delta` | message chunks | HIGH (~100s) | Accumulate in-place |
++| `message` | final message | LOW (1 per turn) | Suppress if deltas shown |
++| `thinking` | reasoning chunks + final | HIGH (~50s) | Accumulate in-place |
++| `tool_call` | tool invocation | MEDIUM (~5-20) | Show name + status |
++| `tool_result` | tool completion | MEDIUM (~5-20) | Update tool status ✓/✗ |
++| `usage` | token metrics | LOW (~5-10) | Update counter |
++| `session_idle` | session waiting | LOW (1) | Update status |
++| `session_start` | session created | LOW (1) | Skip (already skipped) |
++| `session_error` | errors | RARE | Show prominently |
++
++---
++
++## Recommended Approach
++
++### Option: `log-update` + raw ANSI + chalk
++
++**Why**: Lightest weight, ESM-compatible, pairs with existing chalk, handles streaming events naturally. `log-update` gives you exactly one thing: overwrite the last N lines of output. Perfect for an in-place status panel.
++
++**Alternative considered**: `ink` (React for CLI) — too heavy for a status panel. `ora` — too limited (single line only).
++
++### Pretty Display Layout
++
++```
++╭──────────────────────────────────────────────────╮
++│  Agent: convention-check                        │
++│  Model: claude-opus-4.6                         │
++│  Status: 🔧 Running tool: bash                  │
++╰──────────────────────────────────────────────────╯
++
++  💭 Let me analyze the convention compliance...
++  🔧 bash  npx minih doctor 2>/dev/null        ✓ 
++  🔧 bash  cat agents/hello-world/prompt.md    ⏳
++
++  ⏱ 45s   📊 in=21312 out=207   🔧 3 tools
++```
++
++### Key Design Decisions
++
++1. **Accumulate deltas**: Buffer `text_delta` and `thinking` events, render the accumulated text on a single updating line (truncated to terminal width)
++2. **Suppress finals**: When a `message` or final `thinking` arrives after deltas, don't render it — the deltas already showed the content
++3. **Tool call lifecycle**: Show `🔧 toolName  input_preview  ⏳` on call, update to `✓`/`✗` on result (match by `toolCallId`)
++4. **Live counters**: Update elapsed time and token count on every `usage` event
++5. **Scroll on completion**: After agent finishes, clear the in-place panel and print the final summary (scrolling, permanent)
++
++### Implementation Scope
++
++| Component | Change |
++|-----------|--------|
++| `display.ts` | Add `PrettyDisplay` class with `update()` method, accumulator state |
++| `run.ts` | Add `--pretty` flag, pass display mode to runner |
++| `runner.ts` | Pass display mode through to event handler |
++| `package.json` | Add `log-update` dependency |
++| New: `src/runner/pretty.ts` | Pretty display implementation (~150-200 LOC) |
++
++### Delta Accumulation Logic
++
++```typescript
++// Pseudocode for handling the delta/final duplication
++class PrettyDisplay {
++  private thinkingBuffer = '';
++  private textBuffer = '';
++  private lastDeltaMessageId?: string;
++
++  handleEvent(event: AgentEvent) {
++    switch (event.type) {
++      case 'thinking':
++        // Both deltas and finals come as 'thinking' type
++        // If content is short (<100 chars), it's likely a delta — accumulate
++        // If content matches accumulated buffer, it's the final — suppress
++        if (this.thinkingBuffer.endsWith(event.data.content)) {
++          return; // Final matches accumulated — suppress
++        }
++        this.thinkingBuffer += event.data.content;
++        this.render();
++        break;
++
++      case 'text_delta':
++        this.textBuffer += event.data.content;
++        this.lastDeltaMessageId = event.data.messageId;
++        this.render();
++        break;
++
++      case 'message':
++        // If we've been accumulating deltas for this message, suppress
++        if (event.data.messageId === this.lastDeltaMessageId) {
++          this.textBuffer = ''; // Reset for next turn
++          this.lastDeltaMessageId = undefined;
++          return;
++        }
++        // Otherwise show it
++        break;
++    }
++  }
++}
++```
++
++---
++
++## Prior Learnings
++
++| Source | Learning | Relevance |
++|--------|----------|-----------|
++| Phase 4 execution | `tail` command is NOT an envelope command — direct stderr output | Pretty mode is also stderr-only, same pattern |
++| Phase 5 review | display.ts upgraded from raw ANSI to chalk | Build on chalk, don't regress |
++| DYK #1 (Phase 6) | Thinking deltas are both `reasoning_delta` (chunks) and `reasoning` (final) — both map to `thinking` event type | Core of the duplication problem |
++
++---
++
++## Next Steps
++
++1. `/plan-1b-specify` to create the feature spec
++2. Or just implement directly — this is a contained ~200 LOC change
++
++**STOP**: Research complete. Awaiting user direction.
+diff --git a/src/adapter/events.ts b/src/adapter/events.ts
+index 70dd0e9..b006343 100644
+--- a/src/adapter/events.ts
++++ b/src/adapter/events.ts
+@@ -120,6 +120,7 @@ export interface AgentThinkingEvent extends AgentEventBase {
+   data: {
+     content: string;
+     signature?: string;
++    isDelta?: boolean;
+   };
+ }
+ 
+diff --git a/src/adapter/sdk-copilot.ts b/src/adapter/sdk-copilot.ts
+index 7119970..dbb064a 100644
+--- a/src/adapter/sdk-copilot.ts
++++ b/src/adapter/sdk-copilot.ts
+@@ -290,14 +290,14 @@ function translateEvent(event: CopilotSessionEventLike): AgentEvent | null {
+       return {
+         type: 'thinking',
+         timestamp,
+-        data: { content: event.data?.content ?? '' },
++        data: { content: event.data?.content ?? '', isDelta: false },
+       };
+ 
+     case 'assistant.reasoning_delta':
+       return {
+         type: 'thinking',
+         timestamp,
+-        data: { content: event.data?.deltaContent ?? '' },
++        data: { content: event.data?.deltaContent ?? '', isDelta: true },
+       };
+ 
+     // Lifecycle noise — skip
+diff --git a/src/cli/commands/run.ts b/src/cli/commands/run.ts
+index 5bca2ef..7889b9f 100644
+--- a/src/cli/commands/run.ts
++++ b/src/cli/commands/run.ts
+@@ -19,6 +19,7 @@ import {
+   displayPreflight,
+   displaySummary,
+   listAgents,
++  PrettyDisplay,
+   parseFrontmatter,
+   resolveAgent,
+   runAgent,
+@@ -55,6 +56,7 @@ export function registerRunCommand(program: Command): void {
+       [] as string[],
+     )
+     .option('--dry-run', 'Preview assembled prompt without executing')
++    .option('--verbose', 'Show all events with timestamps (verbose mode)')
+     .action(
+       async (
+         slug: string,
+@@ -64,6 +66,7 @@ export function registerRunCommand(program: Command): void {
+           timeout?: string;
+           param?: string[];
+           dryRun?: boolean;
++          verbose?: boolean;
+         },
+       ) => {
+         const agentsDir = program.opts().agentsDir ?? 'agents';
+@@ -119,8 +122,11 @@ export function registerRunCommand(program: Command): void {
+           params: Object.keys(params).length > 0 ? params : undefined,
+         };
+ 
+-        // Display header (stderr, TTY only)
++        // Display setup: pretty (default) or verbose (--verbose / non-TTY)
+         const isTTY = process.stderr.isTTY;
++        const useVerbose = opts.verbose || !isTTY;
++        const pretty = useVerbose ? null : new PrettyDisplay();
++
+         if (isTTY) {
+           displayHeader(slug, '(starting...)', model);
+           displayPreflight('GH_TOKEN', true);
+@@ -252,20 +258,28 @@ export function registerRunCommand(program: Command): void {
+ 
+         // SIGINT handler for instant Ctrl+C kill
+         const sigintHandler = () => {
++          pretty?.cleanup();
+           process.stderr.write(chalk.dim('\n  Interrupted.\n'));
+           process.exit(130);
+         };
+         process.on('SIGINT', sigintHandler);
+ 
+         try {
++          const onEvent = pretty
++            ? (e: import('../../adapter/events.js').AgentEvent) =>
++                pretty.handleEvent(e)
++            : isTTY
++              ? displayEvent
++              : undefined;
+           const result = await runAgent(
+             adapter,
+             definition,
+             config,
+-            isTTY ? displayEvent : undefined,
++            onEvent,
+             agentsDir,
+           );
+ 
++          pretty?.cleanup();
+           if (isTTY) {
+             displaySummary(result);
+           }
+diff --git a/src/runner/index.ts b/src/runner/index.ts
+index cbf017c..7be848c 100644
+--- a/src/runner/index.ts
++++ b/src/runner/index.ts
+@@ -13,6 +13,7 @@ export {
+   resolveAgent,
+   validateSlug,
+ } from './folder.js';
++export { PrettyDisplay } from './pretty.js';
+ export { runAgent, SYSTEM_OUTPUT_INSTRUCTIONS } from './runner.js';
+ export type {
+   AgentDefinition,
+diff --git a/src/runner/pretty.ts b/src/runner/pretty.ts
+new file mode 100644
+index 0000000..d6805d9
+--- /dev/null
++++ b/src/runner/pretty.ts
+@@ -0,0 +1,182 @@
++/**
++ * Pretty display — clean streaming output for agent execution.
++ *
++ * Thinking text streams in gray italic. Normal text in white.
++ * Tool calls formatted with name + preview. Intent shown inline.
++ * Designed for clean terminal scrolling (no TUI, no cursor tricks).
++ *
++ * Outputs to stderr (stdout reserved for JSON envelope).
++ */
++
++import chalk from 'chalk';
++import type { AgentEvent } from '../adapter/events.js';
++
++export class PrettyDisplay {
++  private inDeltaStream = false;
++  private lastDeltaMessageId: string | undefined;
++  private inThinkingStream = false;
++  private currentIntent: string | undefined;
++  private pendingTools = new Map<string, string>();
++
++  handleEvent(event: AgentEvent): void {
++    switch (event.type) {
++      case 'thinking':
++        this.handleThinking(event);
++        break;
++      case 'text_delta':
++        this.handleTextDelta(event);
++        break;
++      case 'message':
++        this.handleMessage(event);
++        break;
++      case 'tool_call':
++        this.handleToolCall(event);
++        break;
++      case 'tool_result':
++        this.handleToolResult(event);
++        break;
++      case 'session_error':
++        this.endStreams();
++        process.stderr.write(
++          `\n${chalk.red(`  ❌ ${event.data.message ?? 'Session error'}`)}\n`,
++        );
++        break;
++      case 'usage':
++      case 'session_idle':
++      case 'session_start':
++      case 'raw':
++      case 'user_prompt':
++        break;
++    }
++  }
++
++  cleanup(): void {
++    this.endStreams();
++  }
++
++  private handleThinking(
++    event: Extract<AgentEvent, { type: 'thinking' }>,
++  ): void {
++    // Suppress final consolidated thinking events — deltas already streamed
++    if (event.data.isDelta === false) return;
++
++    // End any text delta stream before starting thinking
++    if (this.inDeltaStream) {
++      process.stderr.write('\n');
++      this.inDeltaStream = false;
++    }
++
++    if (!this.inThinkingStream) {
++      this.inThinkingStream = true;
++    }
++
++    // Stream thinking content in gray italic
++    process.stderr.write(chalk.gray.italic(event.data.content));
++  }
++
++  private handleTextDelta(
++    event: Extract<AgentEvent, { type: 'text_delta' }>,
++  ): void {
++    // End thinking stream
++    if (this.inThinkingStream) {
++      process.stderr.write('\n');
++      this.inThinkingStream = false;
++    }
++
++    if (!this.inDeltaStream) {
++      this.inDeltaStream = true;
++    }
++    this.lastDeltaMessageId = event.data.messageId;
++
++    process.stderr.write(event.data.content);
++  }
++
++  private handleMessage(event: Extract<AgentEvent, { type: 'message' }>): void {
++    // Suppress if we've been streaming deltas (content already shown)
++    if (this.inDeltaStream) {
++      process.stderr.write('\n');
++      this.inDeltaStream = false;
++      this.lastDeltaMessageId = undefined;
++      return;
++    }
++    if (
++      this.lastDeltaMessageId &&
++      event.data.messageId === this.lastDeltaMessageId
++    ) {
++      this.lastDeltaMessageId = undefined;
++      return;
++    }
++
++    // No prior deltas — show the message
++    this.endStreams();
++    process.stderr.write(`${event.data.content}\n`);
++  }
++
++  private handleToolCall(
++    event: Extract<AgentEvent, { type: 'tool_call' }>,
++  ): void {
++    this.endStreams();
++
++    // Capture report_intent
++    if (event.data.toolName === 'report_intent') {
++      const input = event.data.input as Record<string, unknown> | undefined;
++      const intent =
++        typeof input?.intent === 'string' ? input.intent : undefined;
++      if (intent && intent !== this.currentIntent) {
++        this.currentIntent = intent;
++        process.stderr.write(`\n  ${chalk.cyan('▸')} ${chalk.bold(intent)}\n`);
++      }
++      return;
++    }
++
++    // Format tool call
++    const input = event.data.input;
++    let preview = '';
++    if (typeof input === 'string') {
++      preview = input;
++    } else if (typeof input === 'object' && input !== null) {
++      const rec = input as Record<string, unknown>;
++      preview = String(
++        rec.command ?? rec.description ?? rec.path ?? rec.query ?? '',
++      );
++    }
++    const cols = process.stderr.columns ?? 80;
++    const truncated = preview.slice(0, cols - 20).split('\n')[0];
++    process.stderr.write(
++      `  ${chalk.magenta('🔧')} ${chalk.magenta(event.data.toolName)}  ${chalk.dim(truncated)}\n`,
++    );
++    this.pendingTools.set(event.data.toolCallId, event.data.toolName);
++  }
++
++  private handleToolResult(
++    event: Extract<AgentEvent, { type: 'tool_result' }>,
++  ): void {
++    const toolName = this.pendingTools.get(event.data.toolCallId);
++    this.pendingTools.delete(event.data.toolCallId);
++
++    if (!toolName) return;
++
++    const icon = event.data.isError ? chalk.red('✗') : chalk.green('✓');
++    const cols = process.stderr.columns ?? 80;
++    const output = event.data.output
++      .slice(0, cols - 20)
++      .split('\n')[0]
++      .trim();
++    if (output) {
++      process.stderr.write(`     ${icon} ${chalk.dim(output)}\n`);
++    } else {
++      process.stderr.write(`     ${icon}\n`);
++    }
++  }
++
++  private endStreams(): void {
++    if (this.inThinkingStream) {
++      process.stderr.write('\n');
++      this.inThinkingStream = false;
++    }
++    if (this.inDeltaStream) {
++      process.stderr.write('\n');
++      this.inDeltaStream = false;
++    }
++  }
++}
+diff --git a/test/runner/pretty.test.ts b/test/runner/pretty.test.ts
+new file mode 100644
+index 0000000..230c5f5
+--- /dev/null
++++ b/test/runner/pretty.test.ts
+@@ -0,0 +1,216 @@
++import { beforeEach, describe, expect, it } from 'vitest';
++import type { AgentEvent } from '../../src/adapter/events.js';
++import { PrettyDisplay } from '../../src/runner/pretty.js';
++
++// Capture stderr writes
++function captureStderr(fn: () => void): string {
++  const writes: string[] = [];
++  const orig = process.stderr.write;
++  process.stderr.write = ((chunk: string) => {
++    writes.push(chunk);
++    return true;
++  }) as typeof process.stderr.write;
++  try {
++    fn();
++  } finally {
++    process.stderr.write = orig;
++  }
++  return writes.join('');
++}
++
++function makeThinking(
++  content: string,
++  isDelta = true,
++): Extract<AgentEvent, { type: 'thinking' }> {
++  return {
++    type: 'thinking',
++    timestamp: new Date().toISOString(),
++    data: { content, isDelta },
++  };
++}
++
++function makeTextDelta(
++  content: string,
++  messageId?: string,
++): Extract<AgentEvent, { type: 'text_delta' }> {
++  return {
++    type: 'text_delta',
++    timestamp: new Date().toISOString(),
++    data: { content, messageId },
++  };
++}
++
++function makeMessage(
++  content: string,
++  messageId?: string,
++): Extract<AgentEvent, { type: 'message' }> {
++  return {
++    type: 'message',
++    timestamp: new Date().toISOString(),
++    data: { content, messageId },
++  };
++}
++
++function makeToolCall(
++  toolName: string,
++  input: unknown,
++  toolCallId: string,
++): Extract<AgentEvent, { type: 'tool_call' }> {
++  return {
++    type: 'tool_call',
++    timestamp: new Date().toISOString(),
++    data: { toolName, input, toolCallId },
++  };
++}
++
++function makeToolResult(
++  toolCallId: string,
++  output: string,
++  isError = false,
++): Extract<AgentEvent, { type: 'tool_result' }> {
++  return {
++    type: 'tool_result',
++    timestamp: new Date().toISOString(),
++    data: { toolCallId, output, isError },
++  };
++}
++
++describe('PrettyDisplay', () => {
++  let display: PrettyDisplay;
++
++  beforeEach(() => {
++    display = new PrettyDisplay();
++  });
++
++  describe('thinking events', () => {
++    it('accumulates isDelta=true thinking events', () => {
++      const output = captureStderr(() => {
++        display.handleEvent(makeThinking('Hello '));
++        display.handleEvent(makeThinking('world'));
++      });
++      expect(output).toContain('Hello ');
++      expect(output).toContain('world');
++    });
++
++    it('suppresses isDelta=false thinking events', () => {
++      const output = captureStderr(() => {
++        display.handleEvent(makeThinking('chunk1 ', true));
++        display.handleEvent(makeThinking('chunk2', true));
++        display.handleEvent(
++          makeThinking('chunk1 chunk2 — full consolidated', false),
++        );
++      });
++      expect(output).toContain('chunk1 ');
++      expect(output).toContain('chunk2');
++      expect(output).not.toContain('full consolidated');
++    });
++  });
++
++  describe('message suppression', () => {
++    it('suppresses message when text_delta stream was active', () => {
++      const output = captureStderr(() => {
++        display.handleEvent(makeTextDelta('Hello ', 'msg-1'));
++        display.handleEvent(makeTextDelta('world', 'msg-1'));
++        display.handleEvent(makeMessage('Hello world', 'msg-1'));
++      });
++      // Should contain the deltas but not duplicate the message
++      expect(output).toContain('Hello ');
++      expect(output).toContain('world');
++      // The full "Hello world" message should NOT appear as a separate block
++      const lines = output.split('\n').filter((l) => l.trim());
++      expect(lines.length).toBeLessThanOrEqual(1);
++    });
++
++    it('suppresses message when inDeltaStream even without messageId', () => {
++      const output = captureStderr(() => {
++        display.handleEvent(makeTextDelta('Hello '));
++        display.handleEvent(makeTextDelta('world'));
++        display.handleEvent(makeMessage('Hello world'));
++      });
++      expect(output).toContain('Hello ');
++      expect(output).toContain('world');
++      const occurrences = (output.match(/Hello/g) || []).length;
++      expect(occurrences).toBe(1);
++    });
++
++    it('shows message when no prior deltas', () => {
++      const output = captureStderr(() => {
++        display.handleEvent(makeMessage('Direct message'));
++      });
++      expect(output).toContain('Direct message');
++    });
++  });
++
++  describe('intent capture', () => {
++    it('captures report_intent tool call as inline intent', () => {
++      const output = captureStderr(() => {
++        display.handleEvent(
++          makeToolCall(
++            'report_intent',
++            { intent: 'Exploring codebase' },
++            'tc-1',
++          ),
++        );
++      });
++      expect(output).toContain('Exploring codebase');
++    });
++
++    it('does not show report_intent as a regular tool call', () => {
++      const output = captureStderr(() => {
++        display.handleEvent(
++          makeToolCall('report_intent', { intent: 'Testing' }, 'tc-1'),
++        );
++      });
++      expect(output).not.toContain('🔧');
++    });
++  });
++
++  describe('tool call lifecycle', () => {
++    it('shows tool call with name and preview', () => {
++      const output = captureStderr(() => {
++        display.handleEvent(
++          makeToolCall('bash', { command: 'ls -la' }, 'tc-2'),
++        );
++      });
++      expect(output).toContain('bash');
++      expect(output).toContain('ls -la');
++    });
++
++    it('shows result with success icon', () => {
++      const output = captureStderr(() => {
++        display.handleEvent(makeToolCall('bash', { command: 'pwd' }, 'tc-3'));
++        display.handleEvent(makeToolResult('tc-3', '/Users/test'));
++      });
++      expect(output).toContain('✓');
++      expect(output).toContain('/Users/test');
++    });
++
++    it('shows result with error icon', () => {
++      const output = captureStderr(() => {
++        display.handleEvent(makeToolCall('bash', { command: 'fail' }, 'tc-4'));
++        display.handleEvent(makeToolResult('tc-4', 'Command failed', true));
++      });
++      expect(output).toContain('✗');
++    });
++  });
++
++  describe('cleanup', () => {
++    it('flushes thinking stream with newline', () => {
++      const output = captureStderr(() => {
++        display.handleEvent(makeThinking('partial'));
++        display.cleanup();
++      });
++      expect(output).toContain('partial');
++      expect(output.endsWith('\n')).toBe(true);
++    });
++
++    it('flushes text delta stream with newline', () => {
++      const output = captureStderr(() => {
++        display.handleEvent(makeTextDelta('partial'));
++        display.cleanup();
++      });
++      expect(output).toContain('partial');
++      expect(output.endsWith('\n')).toBe(true);
++    });
++  });
++});

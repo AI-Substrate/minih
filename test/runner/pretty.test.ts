@@ -104,6 +104,15 @@ describe('PrettyDisplay', () => {
       expect(output).toContain('chunk2');
       expect(output).not.toContain('full consolidated');
     });
+
+    it('shows final-only thinking when no deltas preceded it', () => {
+      const output = captureStderr(() => {
+        display.handleEvent(
+          makeThinking('Final-only reasoning content', false),
+        );
+      });
+      expect(output).toContain('Final-only reasoning content');
+    });
   });
 
   describe('message suppression', () => {
@@ -211,6 +220,20 @@ describe('PrettyDisplay', () => {
       });
       expect(output).toContain('partial');
       expect(output.endsWith('\n')).toBe(true);
+    });
+
+    it('resets sawThinkingDelta so next segment handles final-only correctly', () => {
+      const output = captureStderr(() => {
+        // First segment: deltas then final (suppressed)
+        display.handleEvent(makeThinking('delta chunk', true));
+        display.handleEvent(makeThinking('full text', false));
+        display.cleanup();
+        // Second segment: final-only (should show)
+        display.handleEvent(makeThinking('new final-only', false));
+      });
+      expect(output).toContain('delta chunk');
+      expect(output).not.toContain('full text');
+      expect(output).toContain('new final-only');
     });
   });
 });

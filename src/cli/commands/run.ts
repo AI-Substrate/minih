@@ -268,9 +268,7 @@ export function registerRunCommand(program: Command): void {
           const onEvent = pretty
             ? (e: import('../../adapter/events.js').AgentEvent) =>
                 pretty.handleEvent(e)
-            : isTTY
-              ? displayEvent
-              : undefined;
+            : displayEvent;
           const result = await runAgent(
             adapter,
             definition,

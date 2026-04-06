@@ -15,6 +15,7 @@ export class PrettyDisplay {
   private inDeltaStream = false;
   private lastDeltaMessageId: string | undefined;
   private inThinkingStream = false;
+  private sawThinkingDelta = false;
   private currentIntent: string | undefined;
   private pendingTools = new Map<string, string>();
 
@@ -57,8 +58,17 @@ export class PrettyDisplay {
   private handleThinking(
     event: Extract<AgentEvent, { type: 'thinking' }>,
   ): void {
-    // Suppress final consolidated thinking events — deltas already streamed
-    if (event.data.isDelta === false) return;
+    // Suppress final consolidated thinking when deltas already streamed
+    if (event.data.isDelta === false) {
+      if (this.sawThinkingDelta) return;
+      // Final-only thinking (no prior deltas) — show it
+      this.endStreams();
+      process.stderr.write(chalk.gray.italic(event.data.content));
+      process.stderr.write('\n');
+      return;
+    }
+
+    this.sawThinkingDelta = true;
 
     // End any text delta stream before starting thinking
     if (this.inDeltaStream) {
@@ -173,6 +183,7 @@ export class PrettyDisplay {
     if (this.inThinkingStream) {
       process.stderr.write('\n');
       this.inThinkingStream = false;
+      this.sawThinkingDelta = false;
     }
     if (this.inDeltaStream) {
       process.stderr.write('\n');

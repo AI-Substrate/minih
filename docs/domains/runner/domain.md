@@ -35,9 +35,10 @@
 | `runAgent(adapter, def, config, onEvent?, agentsDir?)` | Function | cli (run command) |
 | `validateInput(schemaPath, params)` | Function | cli (check --input), runner (pre-execution) |
 | `validateOutput(schemaPath, outputPath)` | Function | cli (validate, check), runner (post-execution) |
-| `displayEvent(event)` | Function | cli (run display, tail) |
+| `displayEvent(event)` | Function | cli (run --verbose display, tail) |
 | `displayHeader(slug, runId, model?)` | Function | cli (run display) |
 | `displaySummary(result)` | Function | cli (run display) |
+| `PrettyDisplay` | Class | cli (run command — default display mode) |
 | `parseFrontmatter(content)` | Function | cli (doctor frontmatter checks) |
 | `retrospective.json` | JSON Schema | Agent output schemas (via $ref), cli (doctor checks) |
 

@@ -25,6 +25,7 @@
 |----------|------|-----------|
 | `IAgentAdapter` | Interface | runner (via injection), cli (composition root) |
 | `AgentEvent` | Discriminated union | runner (event handling, NDJSON), cli (display) |
+| `AgentThinkingEvent.data.isDelta` | Field | runner/pretty.ts (delta vs final suppression) |
 | `AgentResult` | Type | runner (result processing) |
 | `AgentRunOptions` | Type | runner (adapter invocation) |
 | `SdkCopilotAdapter` | Class | cli (composition root), external programmatic consumers |
@@ -46,3 +47,4 @@
 |-------|---------|
 | Phase 1 | Created domain. Events, interface, FakeAgentAdapter extracted. |
 | Phase 3 | Added SdkCopilotAdapter (~250 LOC), copilot-types.ts (local SDK interfaces). Event translation, permission auto-approval, prompt validation, duplicate suppression. |
+| 002-pretty-mode | Added `isDelta?: boolean` to `AgentThinkingEvent.data`. Adapter sets `true` for `reasoning_delta`, `false` for `reasoning` — enables pretty display to suppress duplicate thinking finals. |

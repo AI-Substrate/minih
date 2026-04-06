@@ -41,7 +41,11 @@ const program = new Command()
     'Standalone declarative agent runner with self-improving feedback',
   )
   .version(version)
-  .option('--agents-dir <path>', 'Agents directory', 'agents');
+  .option('--agents-dir <path>', 'Agents directory', 'agents')
+  .addHelpText(
+    'after',
+    '\nDocs: https://github.com/AI-Substrate/minih/blob/main/AGENTS_README.md',
+  );
 
 // Resolve --agents-dir to absolute once (DYK #5)
 program.hook('preAction', (thisCommand) => {

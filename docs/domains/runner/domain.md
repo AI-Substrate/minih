@@ -15,7 +15,8 @@
 | `src/runner/types.ts` | contract | AgentDefinition, AgentRunConfig, CompletedMetadata, AgentRunResult |
 | `src/runner/folder.ts` | internal | Agent discovery, slug validation, run folder creation (Phase 2) |
 | `src/runner/validator.ts` | internal | AJV 2020-12 schema validation (Phase 2) |
-| `src/runner/display.ts` | internal | Terminal output formatting (Phase 2) |
+| `src/runner/display.ts` | internal | Verbose terminal output formatting (Phase 2) |
+| `src/runner/pretty.ts` | internal | Pretty streaming display — clean output with delta accumulation (002-pretty-mode) |
 | `src/runner/runner.ts` | internal | Core orchestration (Phase 2) |
 | `src/runner/index.ts` | contract | Barrel export |
 | `src/schemas/retrospective.json` | contract | Reusable retrospective schema fragment (Phase 2) |
@@ -57,3 +58,4 @@
 | Phase 1 | Created domain. Type definitions extracted with frontmatter additions. |
 | Phase 2 | Added folder.ts (discovery + frontmatter), validator.ts (AJV), display.ts (terminal), runner.ts (orchestration), retrospective.json schema. 61 tests. |
 | Phase 5 | System output enforcement: every run validates summary + retrospective. Two-stage validation (system then user). 14 MINIH_* env vars. Deleted then restored retrospective.json alongside new system-output.json. Exported SYSTEM_OUTPUT_INSTRUCTIONS. |
+| 002-pretty-mode | Added pretty.ts — clean streaming display with delta accumulation, thinking suppression, inline intent. PrettyDisplay exported from barrel. |

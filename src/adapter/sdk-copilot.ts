@@ -290,14 +290,14 @@ function translateEvent(event: CopilotSessionEventLike): AgentEvent | null {
       return {
         type: 'thinking',
         timestamp,
-        data: { content: event.data?.content ?? '' },
+        data: { content: event.data?.content ?? '', isDelta: false },
       };
 
     case 'assistant.reasoning_delta':
       return {
         type: 'thinking',
         timestamp,
-        data: { content: event.data?.deltaContent ?? '' },
+        data: { content: event.data?.deltaContent ?? '', isDelta: true },
       };
 
     // Lifecycle noise — skip

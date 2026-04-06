@@ -13,6 +13,7 @@ export {
   resolveAgent,
   validateSlug,
 } from './folder.js';
+export { PrettyDisplay } from './pretty.js';
 export { runAgent, SYSTEM_OUTPUT_INSTRUCTIONS } from './runner.js';
 export type {
   AgentDefinition,

@@ -123,6 +123,7 @@ minih run my-agent
 minih run my-agent --model claude-sonnet-4 --timeout 600
 minih run my-agent --param file_path=src/main.ts --param depth=3
 minih run my-agent --dry-run    # Preview prompt without executing
+minih run my-agent --verbose    # Old-style timestamped event log
 ```
 
 | Flag | Description |
@@ -132,6 +133,9 @@ minih run my-agent --dry-run    # Preview prompt without executing
 | `-t, --timeout <seconds>` | Timeout in seconds (default: 300) |
 | `-p, --param <key=value>` | Input parameter (repeatable) |
 | `--dry-run` | Preview assembled prompt without executing |
+| `--verbose` | Show all events with timestamps (default: pretty streaming) |
+
+**Display modes**: By default, `minih run` shows clean streaming output — thinking in gray italic, tool calls formatted with names, intent changes highlighted. Use `--verbose` for the timestamped line-per-event log. Non-TTY environments always use verbose mode.
 
 ### `minih list`
 

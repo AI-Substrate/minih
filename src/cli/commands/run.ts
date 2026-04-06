@@ -19,6 +19,7 @@ import {
   displayPreflight,
   displaySummary,
   listAgents,
+  PrettyDisplay,
   parseFrontmatter,
   resolveAgent,
   runAgent,
@@ -55,6 +56,7 @@ export function registerRunCommand(program: Command): void {
       [] as string[],
     )
     .option('--dry-run', 'Preview assembled prompt without executing')
+    .option('--verbose', 'Show all events with timestamps (verbose mode)')
     .action(
       async (
         slug: string,
@@ -64,6 +66,7 @@ export function registerRunCommand(program: Command): void {
           timeout?: string;
           param?: string[];
           dryRun?: boolean;
+          verbose?: boolean;
         },
       ) => {
         const agentsDir = program.opts().agentsDir ?? 'agents';
@@ -119,8 +122,11 @@ export function registerRunCommand(program: Command): void {
           params: Object.keys(params).length > 0 ? params : undefined,
         };
 
-        // Display header (stderr, TTY only)
+        // Display setup: pretty (default) or verbose (--verbose / non-TTY)
         const isTTY = process.stderr.isTTY;
+        const useVerbose = opts.verbose || !isTTY;
+        const pretty = useVerbose ? null : new PrettyDisplay();
+
         if (isTTY) {
           displayHeader(slug, '(starting...)', model);
           displayPreflight('GH_TOKEN', true);
@@ -252,20 +258,28 @@ export function registerRunCommand(program: Command): void {
 
         // SIGINT handler for instant Ctrl+C kill
         const sigintHandler = () => {
+          pretty?.cleanup();
           process.stderr.write(chalk.dim('\n  Interrupted.\n'));
           process.exit(130);
         };
         process.on('SIGINT', sigintHandler);
 
         try {
+          const onEvent = pretty
+            ? (e: import('../../adapter/events.js').AgentEvent) =>
+                pretty.handleEvent(e)
+            : isTTY
+              ? displayEvent
+              : undefined;
           const result = await runAgent(
             adapter,
             definition,
             config,
-            isTTY ? displayEvent : undefined,
+            onEvent,
             agentsDir,
           );
 
+          pretty?.cleanup();
           if (isTTY) {
             displaySummary(result);
           }

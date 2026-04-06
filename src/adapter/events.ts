@@ -120,6 +120,7 @@ export interface AgentThinkingEvent extends AgentEventBase {
   data: {
     content: string;
     signature?: string;
+    isDelta?: boolean;
   };
 }
 

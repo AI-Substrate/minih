@@ -59,7 +59,35 @@ Your agent-specific output fields go alongside these system fields in the same J
 The retrospective.magicWand is the most valuable thing you produce — it directly improves
 this system for every agent that runs after you.
 
-After writing your output, you can validate it by running: minih check`;
+## MANDATORY: Validate Before Finishing
+
+After writing your output, you MUST run \`minih check\` and verify it passes.
+If validation fails, read the errors, fix your output, and re-run \`minih check\`.
+Repeat until validation passes or you've exhausted reasonable attempts.
+
+If you cannot make the output valid after 3 attempts, write a valid JSON object
+explaining what went wrong:
+
+\`\`\`json
+{
+  "summary": "Describe what you accomplished and why validation failed.",
+  "validationAttempts": 3,
+  "validationErrors": ["list the errors you could not resolve"],
+  "retrospective": { "workedWell": "...", "confusing": "...", "magicWand": "..." }
+}
+\`\`\`
+
+Do NOT finish without running \`minih check\` at least once.
+
+## Cleanup
+
+Before finishing, clean up any temporary artifacts you created during execution:
+- Git worktrees (\`git worktree remove <path>\`)
+- Temp directories (\`rm -rf /tmp/...\`)
+- Scratch files outside the run folder
+- Background processes you started
+
+The run folder itself is managed by minih — don't delete it.`;
 
 /** All MINIH_* env var keys set during a run. */
 const MINIH_ENV_KEYS = [

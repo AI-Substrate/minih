@@ -19,6 +19,7 @@ import { registerHistoryCommand } from './commands/history.js';
 import { registerInitCommand } from './commands/init.js';
 import { registerLastRunCommand } from './commands/last-run.js';
 import { registerListCommand } from './commands/list.js';
+import { registerQuickstartCommand } from './commands/quickstart.js';
 import { registerResumeCommand } from './commands/resume.js';
 import { registerRunCommand } from './commands/run.js';
 import { registerTailCommand } from './commands/tail.js';
@@ -55,6 +56,7 @@ program.hook('preAction', (thisCommand) => {
   }
 });
 
+registerQuickstartCommand(program);
 registerListCommand(program);
 registerRunCommand(program);
 registerResumeCommand(program);

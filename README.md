@@ -6,7 +6,18 @@ Define AI agents as folders containing `prompt.md` + optional schemas + instruct
 
 ## Quick Start
 
-### 1. Install
+### The Fast Way
+
+```bash
+export GH_TOKEN=$(gh auth token)
+npx github:AI-Substrate/minih quickstart
+```
+
+One command — scaffolds a hello-world agent, runs it, shows the results. Zero to success in 60 seconds.
+
+### The Manual Way
+
+#### 1. Install
 
 ```bash
 npm install minih
@@ -14,7 +25,7 @@ npm install minih
 npm install @github/copilot-sdk
 ```
 
-### 2. Create Your First Agent
+#### 2. Create Your First Agent
 
 ```bash
 npx minih init my-agent
@@ -113,6 +124,16 @@ See [`src/schemas/system-output.json`](src/schemas/system-output.json) for the f
 The `retrospective.magicWand` is the most valuable thing an agent produces — it directly improves the system for every agent that runs after it.
 
 ## CLI Reference
+
+### `minih quickstart`
+
+Create and run your first agent in one command. No flags, no editing.
+
+```bash
+minih quickstart
+```
+
+Scaffolds `agents/hello-world/prompt.md` (if not exists), runs it, and shows next steps. Idempotent — safe to run multiple times.
 
 ### `minih run <slug>`
 

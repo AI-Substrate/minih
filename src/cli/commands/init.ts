@@ -124,6 +124,19 @@ discovering the wrong file_path halfway through a 5-minute run."
   what would it be? Be concrete.
 `;
 
+/**
+ * Ensure _shared/preamble.md exists in the agents directory.
+ * @returns true if preamble was created, false if it already existed
+ */
+export function ensurePreamble(agentsDir: string): boolean {
+  const preambleDir = path.join(agentsDir, '_shared');
+  const preamblePath = path.join(preambleDir, 'preamble.md');
+  if (fs.existsSync(preamblePath)) return false;
+  fs.mkdirSync(preambleDir, { recursive: true });
+  fs.writeFileSync(preamblePath, PREAMBLE_TEMPLATE());
+  return true;
+}
+
 export function registerInitCommand(program: Command): void {
   program
     .command('init <slug>')
@@ -199,14 +212,7 @@ export function registerInitCommand(program: Command): void {
         }
 
         // Create preamble on first init (if doesn't exist)
-        const preambleDir = path.join(resolvedDir, '_shared');
-        const preamblePath = path.join(preambleDir, 'preamble.md');
-        let preambleCreated = false;
-        if (!fs.existsSync(preamblePath)) {
-          fs.mkdirSync(preambleDir, { recursive: true });
-          fs.writeFileSync(preamblePath, PREAMBLE_TEMPLATE());
-          preambleCreated = true;
-        }
+        const preambleCreated = ensurePreamble(resolvedDir);
 
         if (process.stderr.isTTY) {
           process.stderr.write(

@@ -248,3 +248,11 @@ feat: session resume + connect commands
 - Runner: sessionId threading, session lookup, skip system output on resume
 - History: show ↩ indicator for resumed runs
 ```
+
+---
+
+## Fixes
+
+| ID | Created | Summary | Domain(s) | Status | Source |
+|----|---------|---------|-----------|--------|--------|
+| FX001 | 2026-04-06 | `minih quickstart` — zero-to-success in 60s | cli | Proposed | FTE agent magic wand |

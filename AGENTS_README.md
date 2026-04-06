@@ -28,13 +28,14 @@ The `magicWand` is the most valuable thing an agent produces. It directly improv
 ### From GitHub (no npm publish yet)
 
 ```bash
-# One-shot via npx
-npx github:AI-Substrate/minih --help
+# Quickstart — zero to success in 60 seconds
+export GH_TOKEN=$(gh auth token)
+npx github:AI-Substrate/minih quickstart
 
-# Or link locally for faster iteration
+# Or install for repeated use
 git clone https://github.com/AI-Substrate/minih.git
 cd minih && npm install && npm link
-minih --help
+minih quickstart
 ```
 
 ### Prerequisites
@@ -194,6 +195,9 @@ Add `output-schema.json` to validate agent-specific fields:
 ## CLI Quick Reference
 
 ```bash
+# Quickstart
+minih quickstart                 # Scaffold + run hello-world in one command
+
 # Scaffold
 minih init my-agent              # Create agent folder with templates
 minih init my-agent --with-input # Also create input-schema.json

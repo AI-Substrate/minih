@@ -17,6 +17,7 @@
 | `src/cli/commands/run.ts` | internal | Composition root — dynamic SDK import (Phase 4) |
 | `src/cli/commands/resume.ts` | internal | Resume session — follow-up messages (003-resume-prompt) |
 | `src/cli/commands/connect.ts` | internal | Print copilot CLI resume command (003-resume-prompt) |
+| `src/cli/commands/quickstart.ts` | internal | Scaffold + run hello-world in one command (FX001-quickstart) |
 | `src/cli/commands/sdk-runtime.ts` | internal | Shared SDK bootstrap: auth, import, client, SIGINT (003-resume-prompt) |
 | `src/cli/commands/list.ts` | internal | List agents with descriptions (Phase 4) |
 | `src/cli/commands/doctor.ts` | internal | Structural validation (Phase 5) |
@@ -51,3 +52,4 @@
 | Phase 5 | Added `doctor`, `check`, `init`, and `run --dry-run`. Scaffolded `_shared/preamble.md`. `check` supports zero-arg via MINIH_* env vars. `init` creates output-schema with system fields. `dry-run` works without GH_TOKEN. |
 | 002-pretty-mode | Added `--verbose` flag. Default display switched to PrettyDisplay (pretty.ts). SIGINT handler calls PrettyDisplay.cleanup(). |
 | 003-resume-prompt | Added `resume` command (follow-up messages to completed sessions), `connect` command (print copilot CLI resume command). Extracted shared `sdk-runtime.ts` from `run.ts`. Updated `history` with `↩` indicator for resumed runs. |
+| FX001-quickstart | Added `quickstart` command — scaffold + run hello-world in one command. Extracted `ensurePreamble()` from `init.ts`. |

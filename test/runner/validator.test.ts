@@ -131,3 +131,47 @@ describe('validateInput', () => {
     expect(result.errors[0]).toMatch(/not found/i);
   });
 });
+
+describe('fuzzy suggestions', () => {
+  it('suggests near-match for missing required property (substring)', () => {
+    const schema = writeJson('schema.json', {
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      type: 'object',
+      required: ['health'],
+      properties: { health: { type: 'string' } },
+    });
+    const output = writeJson('output.json', { healthStatus: 'ok' });
+
+    const result = validateOutput(schema, output);
+    expect(result.valid).toBe(false);
+    expect(result.errors[0]).toContain("did you mean 'healthStatus'");
+  });
+
+  it('suggests near-match for typo (levenshtein)', () => {
+    const schema = writeJson('schema.json', {
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      type: 'object',
+      required: ['summary'],
+      properties: { summary: { type: 'string' } },
+    });
+    const output = writeJson('output.json', { summray: 'test' });
+
+    const result = validateOutput(schema, output);
+    expect(result.valid).toBe(false);
+    expect(result.errors[0]).toContain("did you mean 'summray'");
+  });
+
+  it('does not suggest when no near match exists', () => {
+    const schema = writeJson('schema.json', {
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      type: 'object',
+      required: ['alpha'],
+      properties: { alpha: { type: 'string' } },
+    });
+    const output = writeJson('output.json', { zebra: 'test' });
+
+    const result = validateOutput(schema, output);
+    expect(result.valid).toBe(false);
+    expect(result.errors[0]).not.toContain('did you mean');
+  });
+});

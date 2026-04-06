@@ -255,4 +255,5 @@ feat: session resume + connect commands
 
 | ID | Created | Summary | Domain(s) | Status | Source |
 |----|---------|---------|-----------|--------|--------|
-| FX001 | 2026-04-06 | `minih quickstart` — zero-to-success in 60s | cli | Proposed | FTE agent magic wand |
+| FX001 | 2026-04-06 | `minih quickstart` — zero-to-success in 60s | cli | Complete | FTE agent magic wand |
+| FX002 | 2026-04-06 | Agent UX fixes — warning, preamble, timer, fuzzy validation | cli, runner | Proposed | Dogfood + external agent feedback |

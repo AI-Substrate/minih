@@ -18,6 +18,10 @@ export class PrettyDisplay {
   private sawThinkingDelta = false;
   private currentIntent: string | undefined;
   private pendingTools = new Map<string, string>();
+  private toolTimers = new Map<
+    string,
+    { timer: ReturnType<typeof setInterval>; line: string; start: number }
+  >();
 
   handleEvent(event: AgentEvent): void {
     switch (event.type) {
@@ -53,6 +57,10 @@ export class PrettyDisplay {
 
   cleanup(): void {
     this.endStreams();
+    for (const entry of this.toolTimers.values()) {
+      clearInterval(entry.timer);
+    }
+    this.toolTimers.clear();
   }
 
   private handleThinking(
@@ -152,10 +160,21 @@ export class PrettyDisplay {
     }
     const cols = process.stderr.columns ?? 80;
     const truncated = preview.slice(0, cols - 20).split('\n')[0];
-    process.stderr.write(
-      `  ${chalk.magenta('🔧')} ${chalk.magenta(event.data.toolName)}  ${chalk.dim(truncated)}\n`,
-    );
+    const toolLine = `  ${chalk.magenta('🔧')} ${chalk.magenta(event.data.toolName)}  ${chalk.dim(truncated)}`;
+    process.stderr.write(`${toolLine}\n`);
     this.pendingTools.set(event.data.toolCallId, event.data.toolName);
+
+    // Start elapsed timer for long-running tools
+    const startTime = Date.now();
+    const timer = setInterval(() => {
+      const elapsed = Math.round((Date.now() - startTime) / 1000);
+      process.stderr.write(`\r${toolLine}  ${chalk.dim(`${elapsed}s...`)}`);
+    }, 5000);
+    this.toolTimers.set(event.data.toolCallId, {
+      timer,
+      line: toolLine,
+      start: startTime,
+    });
   }
 
   private handleToolResult(
@@ -163,6 +182,17 @@ export class PrettyDisplay {
   ): void {
     const toolName = this.pendingTools.get(event.data.toolCallId);
     this.pendingTools.delete(event.data.toolCallId);
+
+    // Clear elapsed timer
+    const timerEntry = this.toolTimers.get(event.data.toolCallId);
+    if (timerEntry) {
+      clearInterval(timerEntry.timer);
+      this.toolTimers.delete(event.data.toolCallId);
+      // Clear the timer line if it was showing elapsed
+      if (Date.now() - timerEntry.start >= 5000) {
+        process.stderr.write(`\r${' '.repeat(process.stderr.columns ?? 80)}\r`);
+      }
+    }
 
     if (!toolName) return;
 

@@ -53,3 +53,4 @@
 | 002-pretty-mode | Added `--verbose` flag. Default display switched to PrettyDisplay (pretty.ts). SIGINT handler calls PrettyDisplay.cleanup(). |
 | 003-resume-prompt | Added `resume` command (follow-up messages to completed sessions), `connect` command (print copilot CLI resume command). Extracted shared `sdk-runtime.ts` from `run.ts`. Updated `history` with `↩` indicator for resumed runs. |
 | FX001-quickstart | Added `quickstart` command — scaffold + run hello-world in one command. Extracted `ensurePreamble()` from `init.ts`. |
+| FX002-agent-ux | Suppressed SQLite ExperimentalWarning via `NODE_NO_WARNINGS`. Added tool elapsed timer to pretty mode. |

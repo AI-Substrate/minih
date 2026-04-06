@@ -62,6 +62,9 @@ export async function createSdkRuntime(
     throw err;
   }
 
+  // Suppress Node.js ExperimentalWarning in SDK subprocess (SQLite warning)
+  process.env.NODE_NO_WARNINGS = '1';
+
   // Create client + adapter
   const client = new CopilotClient();
   // biome-ignore lint/suspicious/noExplicitAny: CopilotClient doesn't implement our ICopilotClient exactly
@@ -77,6 +80,7 @@ export async function createSdkRuntime(
 
   const cleanup = () => {
     process.removeListener('SIGINT', sigintHandler);
+    delete process.env.NODE_NO_WARNINGS;
     client.stop().catch(() => {});
   };
 

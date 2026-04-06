@@ -1,8 +1,6 @@
 # Agent Preamble
 
-Your working directory is the run folder. The project root is: {{REPO_ROOT}}
-
-Run `cd {{REPO_ROOT}}` before executing commands against the project.
+**FIRST**: Run `cd {{REPO_ROOT}}` — your session starts in a run folder, not the project root.
 
 ## Environment Variables
 

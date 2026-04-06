@@ -112,12 +112,17 @@ export function registerRunCommand(program: Command): void {
 
         const DEFAULT_MODEL = 'claude-opus-4.6';
         const model =
-          opts.model ?? process.env.MINIH_DEFAULT_MODEL ?? DEFAULT_MODEL;
+          opts.model ??
+          definition.model ??
+          process.env.MINIH_DEFAULT_MODEL ??
+          DEFAULT_MODEL;
+        const reasoningEffort = (opts.reasoning ??
+          definition.reasoning) as AgentRunConfig['reasoningEffort'];
 
         const config: AgentRunConfig = {
           slug,
           model,
-          reasoningEffort: opts.reasoning as AgentRunConfig['reasoningEffort'],
+          reasoningEffort,
           timeout: Number.parseInt(opts.timeout ?? '300', 10),
           cwd: process.cwd(),
           params: Object.keys(params).length > 0 ? params : undefined,

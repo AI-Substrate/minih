@@ -43,6 +43,8 @@ export function validateSlug(slug: string): string | null {
 export function parseFrontmatter(content: string): {
   description: string;
   tags: string[];
+  model?: string;
+  reasoning?: string;
   body: string;
 } {
   if (!content.startsWith('---\n')) {
@@ -68,13 +70,17 @@ export function parseFrontmatter(content: string): {
   return { ...parsed, body };
 }
 
-/** Minimal YAML parser for frontmatter — handles description and tags only. */
+/** Minimal YAML parser for frontmatter. */
 function parseYamlSimple(yaml: string): {
   description: string;
   tags: string[];
+  model?: string;
+  reasoning?: string;
 } {
   let description = '';
   let tags: string[] = [];
+  let model: string | undefined;
+  let reasoning: string | undefined;
 
   for (const line of yaml.split('\n')) {
     const descMatch = line.match(/^description:\s*"([^"]*)"$/);
@@ -99,9 +105,17 @@ function parseYamlSimple(yaml: string): {
         .map((t) => t.trim())
         .filter(Boolean);
     }
+    const modelMatch = line.match(/^model:\s*(.+)$/);
+    if (modelMatch) {
+      model = modelMatch[1].trim().replace(/^["']|["']$/g, '');
+    }
+    const reasoningMatch = line.match(/^reasoning:\s*(.+)$/);
+    if (reasoningMatch) {
+      reasoning = reasoningMatch[1].trim().replace(/^["']|["']$/g, '');
+    }
   }
 
-  return { description, tags };
+  return { description, tags, model, reasoning };
 }
 
 /**
@@ -133,7 +147,8 @@ export function listAgents(agentsDir: string): AgentDefinition[] {
 
     // Parse frontmatter for description and tags
     const promptContent = fs.readFileSync(promptPath, 'utf-8');
-    const { description, tags } = parseFrontmatter(promptContent);
+    const { description, tags, model, reasoning } =
+      parseFrontmatter(promptContent);
 
     // Require frontmatter with description (per spec clarification)
     if (!description.trim()) continue;
@@ -142,6 +157,8 @@ export function listAgents(agentsDir: string): AgentDefinition[] {
       slug: entry.name,
       description,
       tags,
+      model,
+      reasoning,
       dir,
       promptPath,
       schemaPath: fs.existsSync(schemaPath) ? schemaPath : null,

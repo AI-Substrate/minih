@@ -15,6 +15,10 @@ export interface AgentDefinition {
   description: string;
   /** Tags from prompt.md frontmatter */
   tags: string[];
+  /** Default model from prompt.md frontmatter (overridable via --model) */
+  model?: string;
+  /** Default reasoning effort from prompt.md frontmatter (overridable via --reasoning) */
+  reasoning?: string;
   dir: string;
   promptPath: string;
   schemaPath: string | null;

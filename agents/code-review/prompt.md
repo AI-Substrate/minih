@@ -1,6 +1,8 @@
 ---
 description: Read-only code review with domain compliance, anti-reinvention check, and structured findings.
 tags: [review, quality]
+model: gpt-5.4
+reasoning: xhigh
 ---
 
 # Code Review Agent

@@ -90,7 +90,7 @@ This uses MINIH_* env vars set by the runner to auto-detect agent and output pat
 ### 9. Check History
 
 ```bash
-npx minih history smoke-test --json 2>/dev/null
+npx minih history smoke-test 2>/dev/null
 ```
 
 Record whether any prior runs of smoke-test appear.
@@ -98,7 +98,7 @@ Record whether any prior runs of smoke-test appear.
 ### 10. Last Run Info
 
 ```bash
-npx minih last-run smoke-test --json 2>/dev/null
+npx minih last-run smoke-test 2>/dev/null
 ```
 
 Record whether last-run info is available.

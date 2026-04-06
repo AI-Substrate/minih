@@ -35,9 +35,18 @@
             "enum": ["critical", "warning", "suggestion", "praise"]
           },
           "title": { "type": "string", "description": "Short finding title." },
-          "description": { "type": "string", "description": "Detailed explanation." },
-          "line": { "type": "integer", "description": "Approximate line number, if applicable." },
-          "fix": { "type": "string", "description": "Suggested fix, if applicable." }
+          "description": {
+            "type": "string",
+            "description": "Detailed explanation."
+          },
+          "line": {
+            "type": "integer",
+            "description": "Approximate line number, if applicable."
+          },
+          "fix": {
+            "type": "string",
+            "description": "Suggested fix, if applicable."
+          }
         }
       },
       "description": "Individual review findings."

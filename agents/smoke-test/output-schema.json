@@ -17,10 +17,19 @@
         "required": ["name", "status"],
         "additionalProperties": true,
         "properties": {
-          "name": { "type": "string", "description": "Step name (e.g., 'list-agents')" },
+          "name": {
+            "type": "string",
+            "description": "Step name (e.g., 'list-agents')"
+          },
           "status": { "type": "string", "enum": ["pass", "fail", "skip"] },
-          "detail": { "type": "string", "description": "What happened during this step." },
-          "evidence": { "type": "string", "description": "Command output or observed behavior." }
+          "detail": {
+            "type": "string",
+            "description": "What happened during this step."
+          },
+          "evidence": {
+            "type": "string",
+            "description": "Command output or observed behavior."
+          }
         }
       },
       "minItems": 1,

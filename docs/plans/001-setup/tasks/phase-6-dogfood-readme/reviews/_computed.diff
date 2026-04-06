@@ -1,0 +1,1776 @@
+diff --git a/README.md b/README.md
+new file mode 100644
+index 0000000..3b58853
+--- /dev/null
++++ b/README.md
+@@ -0,0 +1,255 @@
++# minih
++
++Standalone declarative agent runner with self-improving feedback.
++
++Define AI agents as folders containing `prompt.md` + optional schemas + instructions, then run them against `@github/copilot-sdk`. Every agent produces structured retrospective feedback — what worked, what was confusing, and a **magic wand** wish for what should change. This feedback loop makes both the agents and the harness better over time.
++
++## Quick Start
++
++### 1. Install
++
++```bash
++npm install minih
++# minih uses @github/copilot-sdk as a peer dependency
++npm install @github/copilot-sdk
++```
++
++### 2. Create Your First Agent
++
++```bash
++npx minih init my-agent
++```
++
++This creates:
++```
++agents/my-agent/
++├── prompt.md             # Your agent's prompt (with YAML frontmatter)
++├── output-schema.json    # JSON Schema for structured output
++└── instructions.md       # Agent identity and rules
++```
++
++### 3. Edit the Prompt
++
++Open `agents/my-agent/prompt.md` and write what your agent should do:
++
++```markdown
++---
++description: "Analyze code for common security issues"
++tags: [security, review]
++---
++
++# Security Scan
++
++## Objective
++Scan the project for common security issues...
++```
++
++### 4. Run It
++
++```bash
++export GH_TOKEN=your-github-token
++npx minih run my-agent
++```
++
++The agent executes, produces JSON output (with a self-improving retrospective), and stores everything in `agents/my-agent/runs/<timestamp>/`.
++
++### 5. Check the Results
++
++```bash
++npx minih last-run my-agent    # Show latest run path
++npx minih history my-agent     # List all past runs
++npx minih validate my-agent    # Re-validate latest output against current schema
++```
++
++## Agent Folder Structure
++
++```
++agents/
++├── _shared/
++│   └── preamble.md            # Shared preamble prepended to every agent
++├── my-agent/
++│   ├── prompt.md              # Required — agent prompt with YAML frontmatter
++│   ├── output-schema.json     # Optional — JSON Schema 2020-12 for output
++│   ├── input-schema.json      # Optional — JSON Schema for input params
++│   ├── instructions.md        # Optional — agent identity and rules
++│   └── runs/                  # Auto-created — run artifacts (gitignored)
++│       └── 2026-04-05T07-30-00-000Z/
++│           ├── events.ndjson
++│           ├── completed.json
++│           └── output/
++│               └── report.json
++```
++
++### Frontmatter
++
++Every `prompt.md` must have YAML frontmatter with at least a `description`:
++
++```yaml
++---
++description: "What this agent does — shown in `minih list`"
++tags: [optional, categories]
++---
++```
++
++## System Output Contract
++
++Every agent must produce JSON output containing `summary` and `retrospective` fields. These are enforced by the runner regardless of whether you define an output schema. Your agent-specific fields go alongside them.
++
++See [`src/schemas/system-output.json`](src/schemas/system-output.json) for the full contract schema.
++
++**Minimal valid output:**
++
++```json
++{
++  "summary": "Scanned 12 files, found 3 potential issues...",
++  "retrospective": {
++    "workedWell": "File discovery was fast and the project structure was clear.",
++    "confusing": "Wasn't sure if I should scan node_modules or just src/.",
++    "magicWand": "A MINIH_SCAN_PATHS env var listing which directories to scan would save me from guessing."
++  }
++}
++```
++
++The `retrospective.magicWand` is the most valuable thing an agent produces — it directly improves the system for every agent that runs after it.
++
++## CLI Reference
++
++### `minih run <slug>`
++
++Execute an agent.
++
++```bash
++minih run my-agent
++minih run my-agent --model claude-sonnet-4 --timeout 600
++minih run my-agent --param file_path=src/main.ts --param depth=3
++minih run my-agent --dry-run    # Preview prompt without executing
++```
++
++| Flag | Description |
++|------|-------------|
++| `-m, --model <model>` | Model to use (default: `claude-opus-4.6`, override: `MINIH_DEFAULT_MODEL`) |
++| `-r, --reasoning <effort>` | Reasoning effort: low, medium, high, xhigh |
++| `-t, --timeout <seconds>` | Timeout in seconds (default: 300) |
++| `-p, --param <key=value>` | Input parameter (repeatable) |
++| `--dry-run` | Preview assembled prompt without executing |
++
++### `minih list`
++
++List available agents with descriptions and required parameters.
++
++```bash
++minih list          # Human-readable table
++minih list --json   # JSON envelope on stdout
++```
++
++### `minih doctor`
++
++Validate all agents for convention compliance.
++
++```bash
++minih doctor           # Human-readable report
++minih doctor --json    # JSON envelope
++minih doctor --strict  # Treat warnings as errors
++```
++
++### `minih check [slug]`
++
++Validate a file against an agent's output schema.
++
++```bash
++minih check my-agent --file output.json     # Validate specific file
++minih check                                  # Inside a run — auto-detects via MINIH_* env vars
++minih check my-agent --file input.json --input  # Validate against input schema
++```
++
++### `minih init <slug>`
++
++Scaffold a new agent folder with templates.
++
++```bash
++minih init my-agent                # prompt + output-schema + instructions
++minih init my-agent --with-input   # Also create input-schema.json
++minih init my-agent --no-output    # Skip output-schema.json
++```
++
++### `minih history <slug>`
++
++List past runs for an agent with timestamps and status.
++
++### `minih validate <slug>`
++
++Re-validate the most recent run's output against the current schema (useful after updating your schema).
++
++### `minih last-run <slug>`
++
++Print the latest run directory and report path.
++
++### `minih tail <slug>`
++
++Follow a running agent's event stream in real-time.
++
++### Global Options
++
++| Flag | Description |
++|------|-------------|
++| `--agents-dir <path>` | Agents directory (default: `agents`) |
++| `-V, --version` | Show version |
++
++## Environment Variables
++
++The runner sets these during agent execution. Use them in scripts or to call `minih check` inside an agent with zero arguments.
++
++| Variable | Description |
++|----------|-------------|
++| `MINIH` | Always `1` — detect you're inside a minih run |
++| `MINIH_AGENT_SLUG` | Current agent slug |
++| `MINIH_RUN_ID` | Unique run identifier (timestamp) |
++| `MINIH_RUN_DIR` | Absolute path to run artifacts folder |
++| `MINIH_OUTPUT_PATH` | Where to write output JSON |
++| `MINIH_AGENTS_DIR` | Absolute path to agents directory |
++| `MINIH_PROJECT_ROOT` | Absolute path to project root |
++| `MINIH_MODEL` | Model being used |
++| `MINIH_TIMEOUT` | Timeout in seconds |
++| `MINIH_SCHEMA_PATH` | Path to output-schema.json (if exists) |
++| `MINIH_INSTRUCTIONS_PATH` | Path to instructions.md (if exists) |
++| `MINIH_PREAMBLE_PATH` | Path to preamble.md (if exists) |
++| `MINIH_HAS_INPUT_SCHEMA` | `1` if input-schema.json exists |
++| `MINIH_PARAMS` | JSON-encoded input parameters |
++
++**Default model**: `claude-opus-4.6`. Override with `MINIH_DEFAULT_MODEL` env var or `--model` flag.
++
++## Examples
++
++minih uses agents to test and improve itself. These are the best examples of how to write agents:
++
++| Agent | Complexity | What It Demonstrates |
++|-------|-----------|---------------------|
++| [`hello-world`](agents/hello-world/) | Minimal | Just a prompt — the simplest possible agent |
++| [`convention-check`](agents/convention-check/) | Basic | Output schema, instructions, `$ref` to retrospective, CLI invocation |
++| [`prompt-review`](agents/prompt-review/) | Intermediate | Input params (`--param`), cross-agent file reading |
++| [`smoke-test`](agents/smoke-test/) | Advanced | Full CLI lifecycle test (init, doctor, check, dry-run) |
++| [`feedback-digest`](agents/feedback-digest/) | Advanced | Cross-agent aggregation, feedback loop |
++| [`self-review`](agents/self-review/) | Complete | Production-grade code review with complex schema |
++
++Start with `hello-world`, then read through in order. Each agent builds on the concepts introduced by the previous one.
++
++## Output Format
++
++All commands (except `tail`) output a JSON envelope on stdout:
++
++```json
++{
++  "command": "run",
++  "status": "ok",
++  "timestamp": "2026-04-05T07:30:00.000Z",
++  "data": { ... }
++}
++```
++
++Status values: `ok` (success), `degraded` (completed with validation issues), `error` (failure).
++
++Human-readable formatting goes to stderr (when TTY is detected). Pipe stdout for programmatic consumption.
++
++## License
++
++MIT
+diff --git a/agents/_shared/preamble.md b/agents/_shared/preamble.md
+index c24231d..4d9fdc2 100644
+--- a/agents/_shared/preamble.md
++++ b/agents/_shared/preamble.md
+@@ -4,6 +4,20 @@ Your working directory is the run folder. The project root is: {{REPO_ROOT}}
+ 
+ Run `cd {{REPO_ROOT}}` before executing commands against the project.
+ 
++## Environment Variables
++
++The runner sets these env vars before your run starts:
++
++- `MINIH_OUTPUT_PATH` — where to write your JSON output
++- `MINIH_AGENT_SLUG` — your agent slug
++- `MINIH_RUN_DIR` — your run artifacts folder
++- `MINIH_PROJECT_ROOT` — project root path
++- `MINIH_AGENTS_DIR` — agents directory path
++- `MINIH=1` — detect you're inside a minih run
++
++**All minih CLI commands output JSON on stdout and human-readable text on stderr.**
++Use `2>/dev/null` to get clean JSON output.
++
+ ## Feedback — The Self-Improving Loop
+ 
+ You are not just running a task. You are helping build a better system.
+@@ -26,3 +40,10 @@ discovering the wrong file_path halfway through a 5-minute run."
+ - **confusing**: What required trial-and-error? What information was hard to find?
+ - **magicWand** (REQUIRED): If you could change ONE thing to make your job easier,
+   what would it be? Be concrete.
++
++## Evidence — Feedback That Was Acted On
++
++| Agent Said | What Happened |
++|-----------|---------------|
++| hello-world: "Provide a MINIH_OUTPUT_PATH env var already set in the shell session" | Already existed! Added env var list to preamble so agents discover them. |
++| convention-check, smoke-test, feedback-digest: "--json flag for JSON-only output" | Removed non-existent --json flags from prompts. Documented: stdout=JSON, stderr=tables. |
+diff --git a/agents/convention-check/instructions.md b/agents/convention-check/instructions.md
+new file mode 100644
+index 0000000..ce30cdf
+--- /dev/null
++++ b/agents/convention-check/instructions.md
+@@ -0,0 +1,26 @@
++# Convention Check — Agent Instructions
++
++You are a convention auditor for the minih agent harness. Your job is to
++validate that all agents in the repository follow the established folder
++conventions, frontmatter requirements, and schema rules.
++
++## Identity
++
++- You are meticulous and thorough
++- You report facts, not opinions
++- You flag warnings (not just errors) — help authors improve before problems occur
++- You always produce structured JSON output
++
++## Rules
++
++1. Run `minih doctor --json` as your primary data source
++2. Supplement with direct file reads when doctor doesn't cover a check
++3. For each agent, determine an overall status:
++   - **pass** — all checks pass
++   - **warning** — some non-critical issues (missing instructions, no tags)
++   - **fail** — critical issues (no prompt.md, schema compilation error)
++4. Always include actionable recommendations — don't just say "fix it",
++   explain what specifically needs to change
++5. Your retrospective should reflect on the doctor command itself — was
++   the output useful? Was anything missing from doctor that you had to
++   check manually?
+diff --git a/agents/convention-check/output-schema.json b/agents/convention-check/output-schema.json
+new file mode 100644
+index 0000000..ae5fb50
+--- /dev/null
++++ b/agents/convention-check/output-schema.json
+@@ -0,0 +1,61 @@
++{
++  "$schema": "https://json-schema.org/draft/2020-12/schema",
++  "title": "Convention Check Report",
++  "type": "object",
++  "required": ["summary", "overallHealth", "agents", "preamble", "recommendations", "retrospective"],
++  "additionalProperties": true,
++  "properties": {
++    "summary": {
++      "type": "string",
++      "minLength": 20,
++      "description": "Single paragraph summarizing what happened during this run."
++    },
++    "overallHealth": {
++      "type": "string",
++      "enum": ["healthy", "warnings", "errors"],
++      "description": "Overall convention health status."
++    },
++    "agents": {
++      "type": "array",
++      "items": {
++        "type": "object",
++        "required": ["slug", "status", "checks"],
++        "additionalProperties": true,
++        "properties": {
++          "slug": { "type": "string" },
++          "status": { "type": "string", "enum": ["pass", "warning", "fail"] },
++          "checks": {
++            "type": "array",
++            "items": {
++              "type": "object",
++              "required": ["check", "status"],
++              "additionalProperties": true,
++              "properties": {
++                "check": { "type": "string" },
++                "status": { "type": "string", "enum": ["pass", "warning", "fail", "skip"] },
++                "message": { "type": "string" }
++              }
++            }
++          }
++        }
++      }
++    },
++    "preamble": {
++      "type": "object",
++      "required": ["exists"],
++      "additionalProperties": true,
++      "properties": {
++        "exists": { "type": "boolean" },
++        "hasFeedbackSection": { "type": "boolean" }
++      }
++    },
++    "recommendations": {
++      "type": "array",
++      "items": { "type": "string" },
++      "description": "Actionable recommendations for improving convention compliance."
++    },
++    "retrospective": {
++      "$ref": "https://minih.dev/schemas/retrospective.json"
++    }
++  }
++}
+diff --git a/agents/convention-check/prompt.md b/agents/convention-check/prompt.md
+new file mode 100644
+index 0000000..58443a4
+--- /dev/null
++++ b/agents/convention-check/prompt.md
+@@ -0,0 +1,59 @@
++---
++description: "Validate all minih agents follow folder conventions, frontmatter, and schema rules"
++tags: [ci, validation, conventions]
++---
++
++# Convention Check
++
++## Objective
++
++Audit the minih agents directory for convention compliance. Run the doctor
++command and produce a detailed report with findings and recommendations.
++
++## Setup
++
++```bash
++cd {{REPO_ROOT}}
++```
++
++## Tasks
++
++### 1. Run Doctor
++
++```bash
++npx minih doctor 2>/dev/null
++```
++
++Capture the full JSON output (stdout is always JSON, stderr is human-readable).
++Parse the `data.agents` array.
++
++### 2. Analyze Each Agent
++
++For each agent reported by doctor:
++- Is frontmatter present and valid (has description)?
++- Does the output schema compile without errors?
++- Is retrospective included in the output schema?
++- Does the agent have instructions.md?
++- Does the agent have an input schema?
++
++### 3. Check Preamble
++
++Verify `agents/_shared/preamble.md` exists and contains the feedback loop
++section (look for "magicWand" or "retrospective" keywords).
++
++### 4. Cross-Check File Conventions
++
++For each agent directory, verify:
++- prompt.md is the first file read (required)
++- Frontmatter uses YAML format with `---` delimiters
++- Tags array is present in frontmatter
++- output-schema.json uses JSON Schema 2020-12 (`$schema` field)
++
++### 5. Report
++
++Write your findings as JSON to the output hint path. Include:
++- Overall health status
++- Per-agent detailed results
++- Whether the preamble exists and covers feedback
++- Actionable recommendations for agents that need attention
++- Your retrospective on the doctor command UX
+diff --git a/agents/feedback-digest/output-schema.json b/agents/feedback-digest/output-schema.json
+new file mode 100644
+index 0000000..b4b14d6
+--- /dev/null
++++ b/agents/feedback-digest/output-schema.json
+@@ -0,0 +1,65 @@
++{
++  "$schema": "https://json-schema.org/draft/2020-12/schema",
++  "title": "Feedback Digest",
++  "type": "object",
++  "required": ["summary", "agentsScanned", "themes", "retrospective"],
++  "additionalProperties": true,
++  "properties": {
++    "summary": {
++      "type": "string",
++      "minLength": 20,
++      "description": "Single paragraph summarizing the feedback digest findings."
++    },
++    "agentsScanned": {
++      "type": "integer",
++      "minimum": 0,
++      "description": "Number of agents whose runs were analyzed."
++    },
++    "runsAnalyzed": {
++      "type": "integer",
++      "minimum": 0,
++      "description": "Total number of runs analyzed across all agents."
++    },
++    "themes": {
++      "type": "array",
++      "items": {
++        "type": "object",
++        "required": ["theme", "priority", "frequency"],
++        "additionalProperties": true,
++        "properties": {
++          "theme": { "type": "string", "description": "Theme name (e.g., 'CLI usability')" },
++          "description": { "type": "string", "description": "What this theme covers." },
++          "priority": { "type": "string", "enum": ["high", "medium", "low"] },
++          "frequency": { "type": "integer", "minimum": 1, "description": "How many agents/runs mentioned this." },
++          "quotes": {
++            "type": "array",
++            "items": {
++              "type": "object",
++              "properties": {
++                "agent": { "type": "string" },
++                "text": { "type": "string" }
++              }
++            },
++            "description": "Supporting quotes from agent feedback."
++          },
++          "suggestedFix": { "type": "string", "description": "Suggested fix or investigation." }
++        }
++      },
++      "description": "Prioritized themes from agent feedback."
++    },
++    "retrospective": {
++      "type": "object",
++      "required": ["workedWell", "confusing", "magicWand"],
++      "additionalProperties": true,
++      "properties": {
++        "workedWell": { "type": "string", "minLength": 10 },
++        "confusing": { "type": "string", "minLength": 10 },
++        "magicWand": { "type": "string", "minLength": 20 },
++        "improvementSuggestions": {
++          "type": "array",
++          "items": { "type": "string", "minLength": 10 }
++        }
++      }
++    }
++  }
++}
+diff --git a/agents/feedback-digest/prompt.md b/agents/feedback-digest/prompt.md
+new file mode 100644
+index 0000000..32f42b4
+--- /dev/null
++++ b/agents/feedback-digest/prompt.md
+@@ -0,0 +1,77 @@
++---
++description: "Aggregate magic wand feedback from all agents' recent runs into a prioritized improvement digest"
++tags: [feedback, meta, roadmap]
++---
++
++# Feedback Digest
++
++## Objective
++
++Read the magic wand feedback from all minih agents' recent runs and produce
++a prioritized improvement digest. This is how minih improves itself.
++
++## Setup
++
++```bash
++cd {{REPO_ROOT}}
++```
++
++## Tasks
++
++### 1. Discover All Agents
++
++```bash
++npx minih list 2>/dev/null
++```
++
++Get the list of all agent slugs.
++
++### 2. Read Recent Feedback
++
++For each agent slug, find the most recent runs:
++
++```bash
++npx minih history <slug> 2>/dev/null
++```
++
++For each recent run, read the output file:
++```bash
++cat agents/<slug>/runs/<runId>/output/report.json 2>/dev/null
++```
++
++Extract from each output:
++- `.retrospective.magicWand`
++- `.retrospective.confusing`
++- `.retrospective.workedWell`
++- `.retrospective.improvementSuggestions` (if present)
++
++If an agent has no runs or no output, note that and move on.
++
++### 3. Analyze Themes
++
++Group feedback into themes:
++- **CLI usability** — command ergonomics, flag confusion, output format
++- **Convention clarity** — what rules are unclear or hard to follow
++- **Error messages** — unhelpful errors, missing context
++- **Missing features** — things agents wish existed
++- **Documentation gaps** — information that was hard to find
++- **Prompt/schema issues** — problems with the agent authoring experience
++
++### 4. Prioritize
++
++Rank themes by:
++- **Frequency**: how many agents/runs mention it
++- **Impact**: how much it affects the workflow
++- **Feasibility**: how easy it would be to fix
++
++### 5. Produce Digest
++
++Write a prioritized list of improvements with:
++- Theme name and description
++- Supporting quotes from agent feedback
++- Frequency count
++- Suggested fix or investigation
++
++### 6. Report
++
++Write the full digest as JSON to the output hint path.
+diff --git a/agents/hello-world/prompt.md b/agents/hello-world/prompt.md
+index e1df2ad..5502785 100644
+--- a/agents/hello-world/prompt.md
++++ b/agents/hello-world/prompt.md
+@@ -7,9 +7,9 @@ tags: [smoke, minimal]
+ 
+ You are running inside minih. Confirm this by:
+ 
+-1. Run `pwd` and report your working directory
+-2. Run `ls` to see what files are in your current directory
++1. Run `cd {{REPO_ROOT}} && pwd` and report your working directory
++2. Run `ls` to see what files are in the project root
+ 3. Report the current date and time
+ 4. Describe what tools you have available
+ 
+-Write your findings as a brief text summary. No structured output required.
++Include your findings in the `summary` field of your JSON output.
+diff --git a/agents/prompt-review/input-schema.json b/agents/prompt-review/input-schema.json
+new file mode 100644
+index 0000000..2a6fde8
+--- /dev/null
++++ b/agents/prompt-review/input-schema.json
+@@ -0,0 +1,12 @@
++{
++  "$schema": "https://json-schema.org/draft/2020-12/schema",
++  "title": "Prompt Review Input",
++  "type": "object",
++  "required": ["agent_slug"],
++  "properties": {
++    "agent_slug": {
++      "type": "string",
++      "description": "Slug of the agent whose prompt to review (e.g., 'convention-check')."
++    }
++  }
++}
+diff --git a/agents/prompt-review/instructions.md b/agents/prompt-review/instructions.md
+new file mode 100644
+index 0000000..9d47af9
+--- /dev/null
++++ b/agents/prompt-review/instructions.md
+@@ -0,0 +1,33 @@
++# Prompt Review — Agent Instructions
++
++You are a prompt quality reviewer for minih agents. Your job is to assess
++whether an agent's files (prompt, schemas, instructions) are well-crafted
++and follow minih conventions.
++
++## Identity
++
++- You are an experienced prompt engineer
++- You balance strictness with pragmatism — flag issues but acknowledge good work
++- You give specific, actionable feedback (not vague suggestions)
++- You score aspects on a 1-5 scale with clear reasoning
++
++## Scoring Guide
++
++| Score | Meaning |
++|-------|---------|
++| 5 | Excellent — clear, complete, follows all conventions |
++| 4 | Good — minor improvements possible |
++| 3 | Adequate — works but has notable gaps |
++| 2 | Needs work — missing important elements |
++| 1 | Poor — fundamentally unclear or broken |
++
++## Rules
++
++1. Read ALL files in the target agent directory before scoring
++2. Consider the agent's complexity level — a hello-world agent doesn't need
++   instructions.md, but a code review agent does
++3. Check schema compatibility with the minih system output contract
++   (summary + retrospective are required by the runner)
++4. Always explain WHY something scored the way it did
++5. Make suggestions specific: "Add minLength: 20 to summary field" not
++   "Improve the schema"
+diff --git a/agents/prompt-review/output-schema.json b/agents/prompt-review/output-schema.json
+new file mode 100644
+index 0000000..b76a2aa
+--- /dev/null
++++ b/agents/prompt-review/output-schema.json
+@@ -0,0 +1,87 @@
++{
++  "$schema": "https://json-schema.org/draft/2020-12/schema",
++  "title": "Prompt Review Report",
++  "type": "object",
++  "required": ["summary", "agentFound", "verdict", "retrospective"],
++  "additionalProperties": true,
++  "properties": {
++    "summary": {
++      "type": "string",
++      "minLength": 20,
++      "description": "Single paragraph summarizing the review findings."
++    },
++    "agentFound": {
++      "type": "boolean",
++      "description": "Whether the target agent was found in the agents directory."
++    },
++    "agentSlug": {
++      "type": "string",
++      "description": "The slug of the reviewed agent."
++    },
++    "aspects": {
++      "type": "object",
++      "additionalProperties": true,
++      "properties": {
++        "promptClarity": {
++          "type": "object",
++          "properties": {
++            "score": { "type": "integer", "minimum": 1, "maximum": 5 },
++            "explanation": { "type": "string" }
++          }
++        },
++        "promptCompleteness": {
++          "type": "object",
++          "properties": {
++            "score": { "type": "integer", "minimum": 1, "maximum": 5 },
++            "explanation": { "type": "string" }
++          }
++        },
++        "frontmatter": {
++          "type": "object",
++          "properties": {
++            "score": { "type": "integer", "minimum": 1, "maximum": 5 },
++            "explanation": { "type": "string" }
++          }
++        },
++        "schemaQuality": {
++          "type": "object",
++          "properties": {
++            "score": { "type": "integer", "minimum": 1, "maximum": 5 },
++            "explanation": { "type": "string" }
++          }
++        },
++        "instructionsQuality": {
++          "type": "object",
++          "properties": {
++            "score": { "type": "integer", "minimum": 1, "maximum": 5 },
++            "explanation": { "type": "string" }
++          }
++        }
++      }
++    },
++    "suggestions": {
++      "type": "array",
++      "items": { "type": "string", "minLength": 10 },
++      "description": "Specific suggestions for improving the agent."
++    },
++    "verdict": {
++      "type": "string",
++      "enum": ["excellent", "good", "needs-work", "poor"],
++      "description": "Overall quality verdict."
++    },
++    "retrospective": {
++      "type": "object",
++      "required": ["workedWell", "confusing", "magicWand"],
++      "additionalProperties": true,
++      "properties": {
++        "workedWell": { "type": "string", "minLength": 10 },
++        "confusing": { "type": "string", "minLength": 10 },
++        "magicWand": { "type": "string", "minLength": 20 },
++        "improvementSuggestions": {
++          "type": "array",
++          "items": { "type": "string", "minLength": 10 }
++        }
++      }
++    }
++  }
++}
+diff --git a/agents/prompt-review/prompt.md b/agents/prompt-review/prompt.md
+new file mode 100644
+index 0000000..a4c4c62
+--- /dev/null
++++ b/agents/prompt-review/prompt.md
+@@ -0,0 +1,68 @@
++---
++description: "Review another agent's prompt.md for clarity, completeness, and minih conventions"
++tags: [review, quality, prompts]
++---
++
++# Prompt Review
++
++## Objective
++
++Review the agent specified by the `agent_slug` input parameter. Assess its
++prompt.md, instructions.md, and schemas for quality and convention compliance.
++
++## Setup
++
++```bash
++cd {{REPO_ROOT}}
++```
++
++## Tasks
++
++### 1. Locate the Agent
++
++Read the agent's files from the agents directory:
++- `agents/{agent_slug}/prompt.md` — the main prompt
++- `agents/{agent_slug}/instructions.md` — if present
++- `agents/{agent_slug}/output-schema.json` — if present
++- `agents/{agent_slug}/input-schema.json` — if present
++
++If the agent doesn't exist, set `agentFound` to false and report the error
++in your summary. Skip remaining tasks.
++
++### 2. Review Prompt Quality
++
++Assess the prompt.md for:
++- **Clarity**: Is the objective clear? Would an LLM know what to do?
++- **Completeness**: Are tasks specific enough? Are edge cases addressed?
++- **Frontmatter**: Is description accurate and useful for `minih list`?
++- **Output instructions**: Does it reference the output hint and schema?
++- **Setup**: Does it include `cd {{REPO_ROOT}}` if needed?
++- **Retrospective reminder**: Does the prompt reinforce the magic wand feedback?
++
++### 3. Review Schema Quality
++
++If output-schema.json exists:
++- Does it include `summary` (string, minLength 20) as required by system contract?
++- Does it include retrospective with `magicWand` required?
++- Are descriptions present on properties?
++- Does it use appropriate constraints (minLength, enum, etc.)?
++- Is `additionalProperties: true` set (so system fields pass)?
++
++If input-schema.json exists:
++- Are required params clearly described?
++- Would `minih list` show useful param info?
++
++### 4. Review Instructions Quality
++
++If instructions.md exists:
++- Does it define a clear persona/identity?
++- Are rules specific and actionable?
++- Does it complement (not repeat) the prompt?
++
++### 5. Report
++
++Write a structured report as JSON to the output hint path with:
++- Whether the agent was found
++- Per-aspect scores (1-5) with explanations
++- Specific suggestions for improvement
++- Overall verdict
+diff --git a/agents/self-review/input-schema.json b/agents/self-review/input-schema.json
+new file mode 100644
+index 0000000..e3116ae
+--- /dev/null
++++ b/agents/self-review/input-schema.json
+@@ -0,0 +1,12 @@
++{
++  "$schema": "https://json-schema.org/draft/2020-12/schema",
++  "title": "Self-Review Input",
++  "type": "object",
++  "required": ["file_path"],
++  "properties": {
++    "file_path": {
++      "type": "string",
++      "description": "Path to the source file to review, relative to project root (e.g., 'src/runner/runner.ts')."
++    }
++  }
++}
+diff --git a/agents/self-review/instructions.md b/agents/self-review/instructions.md
+new file mode 100644
+index 0000000..17f489b
+--- /dev/null
++++ b/agents/self-review/instructions.md
+@@ -0,0 +1,43 @@
++# Self-Review — Agent Instructions
++
++You are a senior code reviewer for the minih project. Your job is to review
++individual source files for quality, consistency, and adherence to project
++conventions.
++
++## Identity
++
++- You are thorough but pragmatic — focus on issues that matter
++- You acknowledge good code, not just problems
++- You understand the minih architecture (3 domains: adapter → runner → cli)
++- You give specific, actionable feedback with line references
++
++## Project Context
++
++minih is a standalone CLI tool for running declarative AI agents. Key conventions:
++
++- **ESM-only**: All imports use `.js` extensions, `"type": "module"`
++- **TypeScript strict**: No `any` without justification, explicit return types
++- **Biome**: Single quotes, 2-space indent, recommended lint rules
++- **No zod**: Plain TypeScript types + AJV for runtime validation
++- **Domain boundaries**: cli → runner → adapter (never upward)
++- **Fresh AJV per call**: No instance reuse/caching
++- **Dynamic SDK import**: Only `src/cli/commands/run.ts` imports @github/copilot-sdk
++
++## Severity Guide
++
++| Severity | Use When |
++|----------|----------|
++| critical | Bugs, security issues, data loss, crash paths |
++| warning | Tech debt, missing error handling, code smells |
++| suggestion | Style improvements, better naming, refactoring opportunities |
++| praise | Well-crafted code worth highlighting as a pattern |
++
++## Rules
++
++1. Read the FULL file before making any findings
++2. Check import direction against domain rules
++3. Flag any `@chainglass/*` imports (should be zero)
++4. Note any TODO/FIXME/HACK comments
++5. Verify error messages are actionable (not raw stack traces)
++6. Check that exported functions have JSDoc or clear naming
++7. Include at least one "praise" finding if the code has any merit
+diff --git a/agents/self-review/output-schema.json b/agents/self-review/output-schema.json
+new file mode 100644
+index 0000000..9c17b23
+--- /dev/null
++++ b/agents/self-review/output-schema.json
+@@ -0,0 +1,75 @@
++{
++  "$schema": "https://json-schema.org/draft/2020-12/schema",
++  "title": "Self-Review Report",
++  "type": "object",
++  "required": ["summary", "fileFound", "verdict", "retrospective"],
++  "additionalProperties": true,
++  "properties": {
++    "summary": {
++      "type": "string",
++      "minLength": 20,
++      "description": "Single paragraph summarizing the review findings."
++    },
++    "fileFound": {
++      "type": "boolean",
++      "description": "Whether the target file was found."
++    },
++    "filePath": {
++      "type": "string",
++      "description": "The path that was reviewed."
++    },
++    "domain": {
++      "type": "string",
++      "enum": ["adapter", "runner", "cli", "test", "unknown"],
++      "description": "Which minih domain this file belongs to."
++    },
++    "findings": {
++      "type": "array",
++      "items": {
++        "type": "object",
++        "required": ["severity", "title", "description"],
++        "additionalProperties": true,
++        "properties": {
++          "severity": {
++            "type": "string",
++            "enum": ["critical", "warning", "suggestion", "praise"]
++          },
++          "title": { "type": "string", "description": "Short finding title." },
++          "description": { "type": "string", "description": "Detailed explanation." },
++          "line": { "type": "integer", "description": "Approximate line number, if applicable." },
++          "fix": { "type": "string", "description": "Suggested fix, if applicable." }
++        }
++      },
++      "description": "Individual review findings."
++    },
++    "metrics": {
++      "type": "object",
++      "additionalProperties": true,
++      "properties": {
++        "linesOfCode": { "type": "integer" },
++        "functions": { "type": "integer" },
++        "exports": { "type": "integer" },
++        "imports": { "type": "integer" }
++      }
++    },
++    "verdict": {
++      "type": "string",
++      "enum": ["excellent", "good", "needs-work", "poor"],
++      "description": "Overall quality verdict."
++    },
++    "retrospective": {
++      "type": "object",
++      "required": ["workedWell", "confusing", "magicWand"],
++      "additionalProperties": true,
++      "properties": {
++        "workedWell": { "type": "string", "minLength": 10 },
++        "confusing": { "type": "string", "minLength": 10 },
++        "magicWand": { "type": "string", "minLength": 20 },
++        "improvementSuggestions": {
++          "type": "array",
++          "items": { "type": "string", "minLength": 10 }
++        }
++      }
++    }
++  }
++}
+diff --git a/agents/self-review/prompt.md b/agents/self-review/prompt.md
+new file mode 100644
+index 0000000..c23fadb
+--- /dev/null
++++ b/agents/self-review/prompt.md
+@@ -0,0 +1,80 @@
++---
++description: "Review a source file for code quality, patterns, and minih conventions"
++tags: [review, quality, code]
++---
++
++# Self-Review
++
++## Objective
++
++Review the source file specified by the `file_path` input parameter for
++code quality, consistency, and adherence to minih's coding conventions.
++
++## Setup
++
++```bash
++cd {{REPO_ROOT}}
++```
++
++## Tasks
++
++### 1. Read the File
++
++Read the file at the specified `file_path`. If the file doesn't exist,
++set `fileFound` to false and report the error. Skip remaining tasks.
++
++### 2. Understand Context
++
++Determine which domain the file belongs to:
++- `src/adapter/` → adapter domain (SDK wrapper, event translation)
++- `src/runner/` → runner domain (orchestration, validation, discovery)
++- `src/cli/` → cli domain (commands, output envelope)
++- `test/` → test code (should mirror src/ structure)
++
++Read the domain's documentation if it exists:
++```bash
++cat docs/domains/adapter/domain.md 2>/dev/null
++cat docs/domains/runner/domain.md 2>/dev/null
++cat docs/domains/cli/domain.md 2>/dev/null
++```
++
++### 3. Review Code Quality
++
++Assess the file for:
++
++**Structure & Organization**
++- Is the file well-organized with clear sections?
++- Are functions/classes appropriately sized?
++- Is there unnecessary complexity?
++
++**Type Safety**
++- Are TypeScript types used effectively?
++- Any `any` types that should be specific?
++- Are return types explicit where helpful?
++
++**Error Handling**
++- Are errors caught and handled appropriately?
++- Are error messages actionable?
++- Any unhandled edge cases?
++
++**Import Hygiene**
++- Does the file only import from allowed domains?
++  (cli → runner → adapter, never upward)
++- Are imports from barrel files (index.ts) when crossing domains?
++
++**Conventions**
++- ESM imports with `.js` extension?
++- Single quotes (Biome convention)?
++- Meaningful variable names?
++
++### 4. Identify Issues
++
++Categorize findings as:
++- **critical** — bugs, security issues, missing error handling
++- **warning** — code smells, potential issues, tech debt
++- **suggestion** — style improvements, better patterns
++- **praise** — well-done aspects worth highlighting
++
++### 5. Report
++
++Write a structured report as JSON to the output hint path.
+diff --git a/agents/smoke-test/output-schema.json b/agents/smoke-test/output-schema.json
+new file mode 100644
+index 0000000..44ff158
+--- /dev/null
++++ b/agents/smoke-test/output-schema.json
+@@ -0,0 +1,49 @@
++{
++  "$schema": "https://json-schema.org/draft/2020-12/schema",
++  "title": "Smoke Test Report",
++  "type": "object",
++  "required": ["summary", "steps", "verdict", "retrospective"],
++  "additionalProperties": true,
++  "properties": {
++    "summary": {
++      "type": "string",
++      "minLength": 20,
++      "description": "Single paragraph summarizing the smoke test results."
++    },
++    "steps": {
++      "type": "array",
++      "items": {
++        "type": "object",
++        "required": ["name", "status"],
++        "additionalProperties": true,
++        "properties": {
++          "name": { "type": "string", "description": "Step name (e.g., 'list-agents')" },
++          "status": { "type": "string", "enum": ["pass", "fail", "skip"] },
++          "detail": { "type": "string", "description": "What happened during this step." },
++          "evidence": { "type": "string", "description": "Command output or observed behavior." }
++        }
++      },
++      "minItems": 1,
++      "description": "Per-step pass/fail results."
++    },
++    "verdict": {
++      "type": "string",
++      "enum": ["all-pass", "partial", "fail"],
++      "description": "Overall lifecycle verdict."
++    },
++    "retrospective": {
++      "type": "object",
++      "required": ["workedWell", "confusing", "magicWand"],
++      "additionalProperties": true,
++      "properties": {
++        "workedWell": { "type": "string", "minLength": 10 },
++        "confusing": { "type": "string", "minLength": 10 },
++        "magicWand": { "type": "string", "minLength": 20 },
++        "improvementSuggestions": {
++          "type": "array",
++          "items": { "type": "string", "minLength": 10 }
++        }
++      }
++    }
++  }
++}
+diff --git a/agents/smoke-test/prompt.md b/agents/smoke-test/prompt.md
+new file mode 100644
+index 0000000..a61da88
+--- /dev/null
++++ b/agents/smoke-test/prompt.md
+@@ -0,0 +1,118 @@
++---
++description: "End-to-end smoke test of all minih CLI commands and the full agent lifecycle"
++tags: [smoke, ci, integration, e2e]
++---
++
++# Minih Smoke Test
++
++## Objective
++
++Exercise every minih CLI command to verify the full agent lifecycle works.
++Create a temporary agent, validate it, preview it, check history, and report.
++
++**Important**: Do NOT run `minih run` inside this agent — that would create
++a nested SDK session. Use `--dry-run` to preview prompt assembly instead.
++
++## Setup
++
++```bash
++cd {{REPO_ROOT}}
++```
++
++## Tasks
++
++### 1. List Agents
++
++```bash
++npx minih list 2>/dev/null
++```
++
++Capture the JSON output from stdout (all minih commands output JSON on stdout
++and human-readable tables on stderr). Record the count and slugs.
++Verify this agent (smoke-test) appears in the list.
++
++### 2. Doctor Check
++
++```bash
++npx minih doctor 2>/dev/null
++```
++
++Verify the harness is healthy. Record any warnings or errors.
++
++### 3. Create Temporary Agent
++
++```bash
++npx minih init smoke-temp --with-input 2>/dev/null
++```
++
++Verify the folder was created with prompt.md, output-schema.json, input-schema.json.
++
++### 4. Verify List Updated
++
++```bash
++npx minih list 2>/dev/null
++```
++
++Verify `smoke-temp` now appears in the list.
++
++### 5. Inspect Scaffolded Files
++
++Read the generated files and verify:
++- prompt.md has frontmatter with description
++- output-schema.json has retrospective required
++- input-schema.json exists and is valid JSON Schema
++- Templates are valid
++
++### 6. Doctor the Temp Agent
++
++```bash
++npx minih doctor 2>/dev/null
++```
++
++Verify `smoke-temp` passes all doctor checks.
++
++### 7. Dry-Run the Temp Agent
++
++```bash
++npx minih run smoke-temp --dry-run 2>/dev/null
++```
++
++### 8. Check Self-Validation
++
++Validate your own output using the `minih check` command:
++
++```bash
++npx minih check 2>/dev/null
++```
++
++This uses MINIH_* env vars set by the runner to auto-detect agent and output path.
++
++### 9. Check History
++
++```bash
++npx minih history smoke-test --json 2>/dev/null
++```
++
++Record whether any prior runs of smoke-test appear.
++
++### 10. Last Run Info
++
++```bash
++npx minih last-run smoke-test --json 2>/dev/null
++```
++
++Record whether last-run info is available.
++
++### 11. Cleanup
++
++Remove the temporary agent folder:
++```bash
++rm -rf agents/smoke-temp
++```
++
++Verify it's gone by listing agents again.
++
++### 12. Report
++
++Compile all results into the structured output. Include pass/fail for each step
++and the overall lifecycle verdict.
+diff --git a/docs/plans/001-setup/tasks/phase-6-dogfood-readme/execution.log.md b/docs/plans/001-setup/tasks/phase-6-dogfood-readme/execution.log.md
+new file mode 100644
+index 0000000..b654cfa
+--- /dev/null
++++ b/docs/plans/001-setup/tasks/phase-6-dogfood-readme/execution.log.md
+@@ -0,0 +1,66 @@
++# Execution Log — Phase 6: Dogfood + README
++
++**Phase**: Phase 6: Dogfood + README
++**Started**: 2026-04-05
++**Status**: In Progress
++
++---
++
++## Pre-Phase Notes
++
++**DYK decisions applied**:
++1. smoke-test: no nested `minih run`, use `--dry-run` + SDK-free commands instead
++2. hello-world: overhaul prompt to produce valid system output JSON
++3. T007: explicit execution order — feedback-digest runs last
++4. convention-check: uses `$ref` for retrospective (others inline)
++5. README: references schema as authoritative, doesn't duplicate contract
++
++**Baseline**: 77 tests pass, build clean, `minih doctor` reports hello-world healthy.
++
++**No harness.md** — minih IS the CLI tool. Validation via `npm run build && npx minih doctor`.
++
++---
++
++## Task Log
++
++### T001: convention-check agent ✅
++- Created 3 files: prompt.md, output-schema.json (with `$ref` to retrospective.json), instructions.md
++- `minih doctor` reports healthy, `$ref` resolves correctly via `createRefAwareAjv()`
++- **Discovery**: $ref uses `https://minih.dev/schemas/retrospective.json` URI matching the schema's `$id`
++
++### T002: prompt-review agent ✅
++- Created 4 files: prompt.md, input-schema.json (requires `agent_slug`), output-schema.json, instructions.md
++- `minih doctor` reports healthy, input-schema compiles
++
++### T003: smoke-test agent ✅
++- Created 2 files: prompt.md, output-schema.json
++- **DYK decision applied**: no nested `minih run`, uses `--dry-run` + SDK-free commands instead
++- 12-step lifecycle: list → doctor → init → list → inspect → doctor → dry-run → check → history → last-run → cleanup → report
++
++### T004: feedback-digest agent ✅
++- Created 2 files: prompt.md, output-schema.json
++- Aggregates magic wand feedback across all agents' recent runs
++
++### T005: self-review agent ✅
++- Created 4 files: prompt.md, input-schema.json (requires `file_path`), output-schema.json, instructions.md
++- Most complex schema: findings array with severity/title/description/line/fix, metrics, verdict
++
++### T006: README.md ✅
++- Covers: install, quick-start (4-step), agent folder structure, system output contract, CLI reference (all 9 commands), env vars, examples table, output format
++- References `src/schemas/system-output.json` as authoritative (doesn't duplicate full contract)
++
++### T007: Run feedback loop ✅
++- Ran all 6 agents in order: hello-world → convention-check → prompt-review → smoke-test → self-review → feedback-digest
++- Results: 5 completed, 1 timeout/degraded (self-review — schema validation issues with findings format)
++- **Top magic wand**: 3/5 agents asked for `--json` flag (convention-check, smoke-test, feedback-digest)
++  - Root cause: prompts referenced non-existent `--json` flag; CLI already outputs JSON on stdout + tables on stderr
++  - Fix: removed `--json` from prompts, documented stdout/stderr convention in preamble
++- **Second magic wand**: hello-world asked for `MINIH_OUTPUT_PATH` env var (already exists!)
++  - Fix: added env var list to preamble so agents discover them
++- Other wishes: `minih schema validate` command, machine-readable domain boundaries, better error help
++
++### T008: Update preamble evidence table ✅
++- Added Environment Variables section to preamble (6 key env vars)
++- Added "stdout=JSON, stderr=tables" documentation
++- Added Evidence table with 2 real entries from the feedback loop
++- **Feedback loop proven**: agent feedback → identified issues → fixes applied → preamble updated
+diff --git a/docs/plans/001-setup/tasks/phase-6-dogfood-readme/tasks.fltplan.md b/docs/plans/001-setup/tasks/phase-6-dogfood-readme/tasks.fltplan.md
+new file mode 100644
+index 0000000..1fa6b7d
+--- /dev/null
++++ b/docs/plans/001-setup/tasks/phase-6-dogfood-readme/tasks.fltplan.md
+@@ -0,0 +1,156 @@
++# Flight Plan: Phase 6 — Dogfood + README
++
++**Plan**: [miniharness-extraction-plan.md](../../miniharness-extraction-plan.md)
++**Phase**: Phase 6: Dogfood + README
++**Generated**: 2026-04-05
++**Status**: Landed
++
++---
++
++## Departure → Destination
++
++**Where we are**: minih is fully functional — all 9 CLI commands work, system output enforcement is proven, hello-world agent runs end-to-end. The infrastructure is complete but only one minimal agent (hello-world) exists and there's no README.
++
++**Where we're going**: A developer can clone the repo, read README.md, browse 6 progressively-complex example agents, run any of them with `npx minih run <slug>`, and see the self-improving feedback loop in action. The magic wand cycle has completed at least once with real evidence.
++
++---
++
++## Domain Context
++
++### Domains We're Changing
++
++| Domain | What Changes | Key Files |
++|--------|-------------|-----------|
++| — (agents) | 5 new dogfood agents created | `agents/{convention-check,prompt-review,smoke-test,feedback-digest,self-review}/` |
++| — (root) | README.md created, preamble updated | `README.md`, `agents/_shared/preamble.md` |
++
++### Domains We Depend On (no changes)
++
++| Domain | What We Consume | Contract |
++|--------|----------------|----------|
++| runner | System output contract + SYSTEM_OUTPUT_INSTRUCTIONS | `src/schemas/system-output.json` |
++| runner | Agent discovery + validation | `listAgents()`, `validateSlug()`, `resolveAgent()` |
++| cli | All 9 commands (run, list, doctor, check, init, validate, history, last-run, tail) | Commander program |
++| adapter | SDK adapter for agent execution | `SdkCopilotAdapter` via dynamic import |
++
++---
++
++## Flight Status
++
++<!-- Updated by /plan-6-v2: pending → active → done. Use blocked for problems/input needed. -->
++
++```mermaid
++stateDiagram-v2
++    classDef pending fill:#9E9E9E,stroke:#757575,color:#fff
++    classDef active fill:#FFC107,stroke:#FFA000,color:#000
++    classDef done fill:#4CAF50,stroke:#388E3C,color:#fff
++    classDef blocked fill:#F44336,stroke:#D32F2F,color:#fff
++
++    state "1: convention-check" as S1
++    state "2: prompt-review" as S2
++    state "3: smoke-test" as S3
++    state "4: feedback-digest" as S4
++    state "5: self-review" as S5
++    state "6: README" as S6
++    state "7: Feedback loop" as S7
++    state "8: Preamble evidence" as S8
++
++    [*] --> S1
++    S1 --> S2
++    S2 --> S3
++    S3 --> S4
++    S4 --> S5
++    S5 --> S6
++    S6 --> S7
++    S7 --> S8
++    S8 --> [*]
++
++    class S1,S2,S3,S4,S5,S6,S7,S8 done
++```
++
++**Legend**: grey = pending | yellow = active | red = blocked/needs input | green = done
++
++---
++
++## Stages
++
++<!-- Updated by /plan-6-v2 during implementation: [ ] → [~] → [x] -->
++
++- [x] **Stage 1: Create convention-check agent** — ✅ 3 files, $ref pattern works, doctor healthy
++- [x] **Stage 2: Create prompt-review agent** — ✅ 4 files (input-schema + output-schema + instructions + prompt)
++- [x] **Stage 3: Create smoke-test agent** — ✅ 2 files, no nested `minih run` per DYK #1
++- [x] **Stage 4: Create feedback-digest agent** — ✅ 2 files, cross-agent aggregation
++- [x] **Stage 5: Create self-review agent** — ✅ 4 files, most complete agent
++- [x] **Stage 6: Write README.md** — ✅ install, quick-start, CLI reference, env vars, examples table
++- [x] **Stage 7: Run feedback loop** — ✅ all 6 agents ran, 5 completed + 1 timeout/degraded, --json feedback acted on
++- [x] **Stage 8: Update preamble evidence** — ✅ env vars documented, evidence table with 2 real entries
++
++---
++
++## Architecture: Before & After
++
++```mermaid
++flowchart LR
++    classDef existing fill:#E8F5E9,stroke:#4CAF50,color:#000
++    classDef changed fill:#FFF3E0,stroke:#FF9800,color:#000
++    classDef new fill:#E3F2FD,stroke:#2196F3,color:#000
++
++    subgraph Before["Before Phase 6"]
++        B1["agents/hello-world/"]:::existing
++        B2["agents/_shared/preamble.md"]:::existing
++        B3["src/ (complete)"]:::existing
++        B4["No README"]:::existing
++    end
++
++    subgraph After["After Phase 6"]
++        A1["agents/hello-world/"]:::existing
++        A2["agents/convention-check/"]:::new
++        A3["agents/prompt-review/"]:::new
++        A4["agents/smoke-test/"]:::new
++        A5["agents/feedback-digest/"]:::new
++        A6["agents/self-review/"]:::new
++        A7["agents/_shared/preamble.md"]:::changed
++        A8["README.md"]:::new
++        A9["src/ (unchanged)"]:::existing
++    end
++```
++
++**Legend**: existing (green, unchanged) | changed (orange, modified) | new (blue, created)
++
++---
++
++## Acceptance Criteria
++
++- [ ] All 6 dogfood agents run successfully (completed or degraded)
++- [ ] `minih doctor` reports all agents healthy
++- [ ] README.md covers install, quick-start, CLI reference
++- [ ] npm package excludes dogfood agents (verified by `files` allowlist)
++- [ ] At least one magic wand wish has been acted on
++- [ ] Preamble evidence table has real entries
++
++## Goals & Non-Goals
++
++**Goals**:
++- All 6 agents as progressive teaching examples
++- README as primary documentation
++- One completed feedback cycle proving self-improvement
++- Agents demonstrate every minih feature
++
++**Non-Goals**:
++- Publishing to npm
++- Multiple feedback cycles
++- Production-grade prompt tuning
++- New CLI features
++
++---
++
++## Checklist
++
++- [x] T001: Create convention-check agent ✅
++- [x] T002: Create prompt-review agent ✅
++- [x] T003: Create smoke-test agent ✅
++- [x] T004: Create feedback-digest agent ✅
++- [x] T005: Create self-review agent ✅
++- [x] T006: Write README.md ✅
++- [x] T007: Run feedback loop ✅
++- [x] T008: Update preamble evidence table ✅
+diff --git a/docs/plans/001-setup/tasks/phase-6-dogfood-readme/tasks.md b/docs/plans/001-setup/tasks/phase-6-dogfood-readme/tasks.md
+new file mode 100644
+index 0000000..5ad42bb
+--- /dev/null
++++ b/docs/plans/001-setup/tasks/phase-6-dogfood-readme/tasks.md
+@@ -0,0 +1,267 @@
++# Phase 6: Dogfood + README — Tasks Dossier
++
++**Plan**: [miniharness-extraction-plan.md](../../miniharness-extraction-plan.md)
++**Phase**: Phase 6: Dogfood + README
++**Created**: 2026-04-05
++**Status**: Proposed
++
++---
++
++## Executive Briefing
++
++**Purpose**: Create the dogfood agents that validate minih and teach users how to write agents. Write the README. Run the full feedback loop at least once, proving the self-improving cycle works end-to-end.
++
++**What We're Building**: 5 new dogfood agents (convention-check, prompt-review, smoke-test, feedback-digest, self-review) alongside the existing hello-world. A comprehensive README.md. Package configuration to exclude dogfood agents from npm. At least one completed feedback cycle (run → read magic wands → act on feedback → run again).
++
++**Goals**:
++- ✅ All 6 agents run successfully and produce valid system output
++- ✅ README covers install, quick-start, CLI reference, agent examples
++- ✅ npm package excludes dogfood agents (via `files` allowlist)
++- ✅ At least one magic wand wish acted on (proves feedback loop)
++- ✅ Preamble evidence table has real entries
++
++**Non-Goals**:
++- ❌ Publishing to npm (not this phase)
++- ❌ Running all agents multiple cycles (one complete cycle is enough for V1)
++- ❌ Production-grade prompt tuning (iterative improvement happens post-V1)
++- ❌ Adding new CLI features (unless a magic wand finding is trivial to fix)
++
++---
++
++## Prior Phase Context
++
++### Phase 1: Project Scaffold + Types
++- **Deliverables**: package.json, tsconfig.json, vitest.config.ts, all type definitions (AgentEvent union, IAgentAdapter, FakeAgentAdapter, AgentDefinition)
++- **Dependencies Exported**: AgentEvent, IAgentAdapter, AgentResult, AgentRunOptions, AgentDefinition (with description/tags)
++- **Patterns**: ESM + `.js` imports, plain TS types (no zod), downward imports cli→runner→adapter
++
++### Phase 2: Runner Core
++- **Deliverables**: folder.ts, validator.ts, display.ts, runner.ts, retrospective.json, 61 TDD tests
++- **Dependencies Exported**: listAgents, resolveAgent, validateSlug, createRunFolder, parseFrontmatter, validateInput, validateOutput, runAgent
++- **Patterns**: AJV fresh per call, frontmatter stripped before prompt assembly, configurable preamble path
++
++### Phase 3: SDK Adapter
++- **Deliverables**: copilot-types.ts (~50 LOC), sdk-copilot.ts (~250 LOC), barrel exports
++- **Dependencies Exported**: SdkCopilotAdapter, ICopilotClient, ICopilotSession
++- **Patterns**: Only adapter touches SDK, local TS facades instead of SDK types
++
++### Phase 4: CLI + First Run
++- **Deliverables**: Output envelope, 6 commands (run/list/history/validate/last-run/tail), commander entrypoint, hello-world agent
++- **Dependencies Exported**: MinihEnvelope, formatSuccess, formatError, printEnvelope, exitWithEnvelope
++- **Patterns**: Stdout JSON envelope, stderr human output, dynamic SDK import only in `run`, global `--agents-dir` resolution
++
++### Phase 5: Doctor, Check, Init + System Output
++- **Deliverables**: system-output.json, validateSystemOutput(), doctor/check/init commands, --dry-run, 14 MINIH_* env vars, two-stage validation
++- **Dependencies Exported**: SYSTEM_OUTPUT_INSTRUCTIONS, MINH_ENV_KEYS, validateSystemOutput, system output contract
++- **Gotchas**: check --input must NOT apply system validation; doctor needs ref-aware AJV; dry-run must work without GH_TOKEN
++- **Patterns**: System contract always enforced; two-stage validation (system first, then user schema); MINIH=1 detection flag
++
++---
++
++## Pre-Implementation Check
++
++| File | Exists? | Domain Check | Notes |
++|------|---------|-------------|-------|
++| `agents/hello-world/prompt.md` | ✅ Yes | — | Already exists from Phase 4. No changes needed. |
++| `agents/convention-check/prompt.md` | ❌ Create | — | New agent folder + prompt + output-schema + instructions |
++| `agents/convention-check/output-schema.json` | ❌ Create | — | Workshop 004 has full schema design |
++| `agents/convention-check/instructions.md` | ❌ Create | — | Agent identity/rules |
++| `agents/prompt-review/prompt.md` | ❌ Create | — | New agent with input-schema |
++| `agents/prompt-review/input-schema.json` | ❌ Create | — | Requires agent_slug param |
++| `agents/prompt-review/output-schema.json` | ❌ Create | — | Review findings + retrospective |
++| `agents/prompt-review/instructions.md` | ❌ Create | — | Reviewer persona |
++| `agents/smoke-test/prompt.md` | ❌ Create | — | Full lifecycle test |
++| `agents/smoke-test/output-schema.json` | ❌ Create | — | Per-step pass/fail + retrospective |
++| `agents/feedback-digest/prompt.md` | ❌ Create | — | Cross-agent aggregation |
++| `agents/feedback-digest/output-schema.json` | ❌ Create | — | Prioritized improvement list + retrospective |
++| `agents/self-review/prompt.md` | ❌ Create | — | Code review agent |
++| `agents/self-review/input-schema.json` | ❌ Create | — | Requires file_path param |
++| `agents/self-review/output-schema.json` | ❌ Create | — | Findings/verdict + retrospective |
++| `agents/self-review/instructions.md` | ❌ Create | — | Reviewer persona + rules |
++| `README.md` | ❌ Create | — | Package documentation |
++| `package.json` | ✅ Modify | — | `files` already excludes agents (allowlist: `dist`, `LICENSE`). No changes needed. |
++
++**Package exclusion note**: `package.json` uses `"files": ["dist", "LICENSE"]` which is an allowlist — only `dist/` and `LICENSE` are included in the npm package. Dogfood agents in `agents/` are automatically excluded. No `.npmignore` needed.
++
++---
++
++## Architecture Map
++
++```mermaid
++flowchart TD
++    classDef pending fill:#9E9E9E,stroke:#757575,color:#fff
++    classDef inprogress fill:#FFC107,stroke:#FFA000,color:#000
++    classDef completed fill:#4CAF50,stroke:#388E3C,color:#fff
++
++    subgraph Phase["Phase 6: Dogfood + README"]
++        T001["T001: convention-check agent"]:::completed
++        T002["T002: prompt-review agent"]:::completed
++        T003["T003: smoke-test agent"]:::completed
++        T004["T004: feedback-digest agent"]:::completed
++        T005["T005: self-review agent"]:::completed
++        T006["T006: README.md"]:::completed
++        T007["T007: Run feedback loop"]:::completed
++        T008["T008: Update preamble evidence"]:::completed
++    end
++
++    subgraph Agents["agents/"]
++        HW["hello-world/"]:::completed
++        CC["convention-check/"]:::pending
++        PR["prompt-review/"]:::pending
++        ST["smoke-test/"]:::pending
++        FD["feedback-digest/"]:::pending
++        SR["self-review/"]:::pending
++    end
++
++    subgraph Root["Root"]
++        README["README.md"]:::pending
++    end
++
++    T001 -.-> CC
++    T002 -.-> PR
++    T003 -.-> ST
++    T004 -.-> FD
++    T005 -.-> SR
++    T006 -.-> README
++    T001 --> T007
++    T002 --> T007
++    T003 --> T007
++    T004 --> T007
++    T005 --> T007
++    T007 --> T008
++```
++
++---
++
++## Tasks
++
++| Status | ID | Task | Domain | Path(s) | Done When | Notes |
++|--------|-----|------|--------|---------|-----------|-------|
++| [x] | T001 | Create convention-check agent | — | `agents/convention-check/{prompt.md,output-schema.json,instructions.md}` | Agent folder exists with prompt, output schema (incl. retrospective), and instructions. `minih doctor` reports it healthy. | Workshop 004 — exercises `minih doctor` from inside. Consumer 1 pattern. |
++| [x] | T002 | Create prompt-review agent | — | `agents/prompt-review/{prompt.md,input-schema.json,output-schema.json,instructions.md}` | Agent folder exists with all 4 files. `minih doctor` reports it healthy. Input schema requires `agent_slug` param. | Workshop 004 — exercises input validation + `--param` flow + cross-agent file reads. |
++| [x] | T003 | Create smoke-test agent | — | `agents/smoke-test/{prompt.md,output-schema.json}` | Agent folder exists. `minih doctor` reports it healthy. Prompt exercises full CLI lifecycle (list→doctor→init→run→check→history→validate→last-run→cleanup). | Workshop 004 — most complex task flow. Exercises init + check mid-run. |
++| [x] | T004 | Create feedback-digest agent | — | `agents/feedback-digest/{prompt.md,output-schema.json}` | Agent folder exists. `minih doctor` reports it healthy. Prompt reads magic wand feedback from all agents' recent runs. | Workshop 004 — closes the feedback loop. Cross-agent data aggregation. |
++| [x] | T005 | Create self-review agent | — | `agents/self-review/{prompt.md,input-schema.json,output-schema.json,instructions.md}` | Agent folder exists with all 4 files. `minih doctor` reports it healthy. Input schema requires `file_path` param. | Workshop 004 — production-grade code review agent. Most complex schema. |
++| [x] | T006 | Write README.md | — | `README.md` | README covers: install, quick-start (create agent → run), CLI reference (all 9 commands), dogfood agents table with links, system output contract, env vars reference. | Per clarification Q4 — README only, no separate docs site. Link to dogfood agents as examples. |
++| [x] | T007 | Run feedback loop | — | `agents/*/runs/` | All 6 dogfood agents run successfully (completed or degraded). At least one magic wand wish is identified and acted on. | Requires GH_TOKEN. May need prompt iteration if agents fail. The key validation that the self-improving loop works. |
++| [x] | T008 | Update preamble evidence table | — | `agents/_shared/preamble.md` | Preamble has an evidence table section with at least one real entry showing feedback that was acted on. | Closes the loop — proves the system is self-improving. |
++
++---
++
++## Context Brief
++
++### Key findings from plan
++
++- **Finding 01**: SDK is lazy-loaded only in `run.ts` → dogfood agents that invoke `minih list`, `minih doctor`, `minih check` etc. do NOT need SDK. Only `minih run` inside smoke-test triggers it.
++- **Finding 04**: Frontmatter is required with `description` field → all dogfood agent prompts must have valid frontmatter.
++- **Finding 05**: No zod — output schemas use raw JSON Schema → dogfood agents' output-schema.json files use JSON Schema 2020-12 directly.
++
++### Domain dependencies
++
++- **runner**: `SYSTEM_OUTPUT_INSTRUCTIONS` (injected into every prompt) — dogfood agents' output schemas must be compatible with system output contract (summary + retrospective required).
++- **runner**: `listAgents()`, `resolveAgent()` — agents that call `minih list` / `minih doctor` consume these indirectly.
++- **cli**: All 9 commands available — dogfood agents exercise them from inside runs via bash.
++
++### Domain constraints
++
++- Dogfood agents are NOT domain code — they're user-space agent definitions (just files in `agents/`). No TypeScript, no imports, no domain placement rules.
++- Package exclusion handled by `"files"` allowlist in package.json — agents/ already excluded.
++
++### Reusable from prior phases
++
++- **Workshop 004**: Full agent designs (prompts, schemas, instructions) for all 6 agents — use as starting templates, adapt for current codebase reality.
++- **System output contract**: `src/schemas/system-output.json` — all output schemas must be compatible (summary + retrospective required alongside agent-specific fields).
++- **Retrospective schema**: `src/schemas/retrospective.json` — agents can `$ref` this for the retrospective portion if desired.
++- **hello-world**: Already working agent as reference for folder structure.
++- **`minih init`**: Can scaffold new agents with `minih init <slug>` — but workshop designs are more detailed than scaffolded templates.
++
++### Workshop 004 agent reference
++
++| Agent | Complexity | Key Features | Files Needed |
++|-------|-----------|-------------|-------------|
++| hello-world | Minimal | Just prompt.md, no schema | Already exists |
++| convention-check | Basic | Output schema, instructions, CLI invocation from inside | 3 files |
++| prompt-review | Intermediate | Input schema (agent_slug), cross-agent reads, --param | 4 files |
++| smoke-test | Advanced | Full CLI lifecycle, init→run→check→history | 2 files |
++| feedback-digest | Advanced | Cross-agent aggregation, no input params | 2 files |
++| self-review | Complete | Input schema (file_path), complex output, detailed instructions | 4 files |
++
++### System output contract (all agents must produce)
++
++```json
++{
++  "summary": "min 20 chars — what happened",
++  "retrospective": {
++    "workedWell": "min 10 chars",
++    "confusing": "min 10 chars",
++    "magicWand": "min 20 chars — MOST IMPORTANT"
++  }
++}
++```
++
++### Mermaid flow diagram
++
++```mermaid
++flowchart LR
++    A[Create agent files] --> B[minih doctor validates]
++    B --> C[minih run executes agent]
++    C --> D[Agent produces output JSON]
++    D --> E[Two-stage validation]
++    E --> F{Valid?}
++    F -->|Yes| G[completed]
++    F -->|No| H[degraded]
++    G --> I[Read magic wand]
++    H --> I
++    I --> J[Act on feedback]
++    J --> K[Update preamble evidence]
++```
++
++### Mermaid sequence diagram
++
++```mermaid
++sequenceDiagram
++    participant Dev as Developer
++    participant CLI as minih CLI
++    participant Runner as Runner
++    participant Agent as Agent (SDK)
++
++    Dev->>CLI: minih run convention-check
++    CLI->>Runner: runAgent(definition)
++    Runner->>Agent: assembled prompt + system instructions
++    Agent->>Agent: runs minih doctor --json (bash)
++    Agent->>Agent: analyzes results
++    Agent->>Agent: writes output JSON with retrospective
++    Runner->>Runner: validate system output ✅
++    Runner->>Runner: validate user schema ✅
++    Runner-->>CLI: completed + artifacts
++    CLI-->>Dev: envelope JSON
++
++    Dev->>Dev: reads magic wand feedback
++    Dev->>Dev: acts on feedback
++    Dev->>Dev: updates preamble evidence table
++```
++
++---
++
++## Discoveries & Learnings
++
++| Date | Task | Type | Discovery | Resolution | References |
++|------|------|------|-----------|------------|------------|
++| 2026-04-05 | T001 | Insight | `$ref` URI must match schema `$id` exactly — `https://minih.dev/schemas/retrospective.json` | Works via `createRefAwareAjv()` in doctor.ts | doctor.ts:254-273 |
++| 2026-04-05 | T007 | Gotcha | 3/5 agents asked for `--json` flag that doesn't exist. CLI outputs JSON on stdout, tables on stderr — agents didn't know. | Removed `--json` from prompts, documented stdout/stderr convention | All agent prompts |
++| 2026-04-05 | T007 | Gotcha | hello-world asked for `MINIH_OUTPUT_PATH` env var that already exists. Agents couldn't discover env vars. | Added env var list to preamble | `agents/_shared/preamble.md` |
++| 2026-04-05 | T007 | Insight | self-review timed out at 180s reviewing runner.ts (350 LOC). Complex agents with subagent delegation need longer timeouts. | Consider 300s default or per-agent timeout config | self-review runs |
++| 2026-04-05 | T007 | Decision | Feedback-digest must run LAST — needs other agents' run data | Execution order: hello-world → convention-check → prompt-review → smoke-test → self-review → feedback-digest | DYK #3 |
++
++---
++
++## Directory Layout
++
++```
++docs/plans/001-setup/
++  ├── miniharness-extraction-plan.md
++  └── tasks/phase-6-dogfood-readme/
++      ├── tasks.md
++      ├── tasks.fltplan.md
++      └── execution.log.md   # created by plan-6
++```

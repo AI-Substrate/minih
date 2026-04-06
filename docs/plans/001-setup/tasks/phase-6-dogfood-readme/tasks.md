@@ -3,7 +3,7 @@
 **Plan**: [miniharness-extraction-plan.md](../../miniharness-extraction-plan.md)
 **Phase**: Phase 6: Dogfood + README
 **Created**: 2026-04-05
-**Status**: Proposed
+**Status**: Landed
 
 ---
 

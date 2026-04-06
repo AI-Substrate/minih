@@ -27,10 +27,20 @@
         "required": ["theme", "priority", "frequency"],
         "additionalProperties": true,
         "properties": {
-          "theme": { "type": "string", "description": "Theme name (e.g., 'CLI usability')" },
-          "description": { "type": "string", "description": "What this theme covers." },
+          "theme": {
+            "type": "string",
+            "description": "Theme name (e.g., 'CLI usability')"
+          },
+          "description": {
+            "type": "string",
+            "description": "What this theme covers."
+          },
           "priority": { "type": "string", "enum": ["high", "medium", "low"] },
-          "frequency": { "type": "integer", "minimum": 1, "description": "How many agents/runs mentioned this." },
+          "frequency": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "How many agents/runs mentioned this."
+          },
           "quotes": {
             "type": "array",
             "items": {
@@ -42,7 +52,10 @@
             },
             "description": "Supporting quotes from agent feedback."
           },
-          "suggestedFix": { "type": "string", "description": "Suggested fix or investigation." }
+          "suggestedFix": {
+            "type": "string",
+            "description": "Suggested fix or investigation."
+          }
         }
       },
       "description": "Prioritized themes from agent feedback."

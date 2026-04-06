@@ -138,8 +138,7 @@ minih run my-agent --dry-run    # Preview prompt without executing
 List available agents with descriptions and required parameters.
 
 ```bash
-minih list          # Human-readable table
-minih list --json   # JSON envelope on stdout
+minih list          # JSON envelope on stdout, table on stderr
 ```
 
 ### `minih doctor`
@@ -147,8 +146,7 @@ minih list --json   # JSON envelope on stdout
 Validate all agents for convention compliance.
 
 ```bash
-minih doctor           # Human-readable report
-minih doctor --json    # JSON envelope
+minih doctor           # JSON on stdout, human report on stderr
 minih doctor --strict  # Treat warnings as errors
 ```
 
@@ -213,7 +211,7 @@ The runner sets these during agent execution. Use them in scripts or to call `mi
 | `MINIH_SCHEMA_PATH` | Path to output-schema.json (if exists) |
 | `MINIH_INSTRUCTIONS_PATH` | Path to instructions.md (if exists) |
 | `MINIH_PREAMBLE_PATH` | Path to preamble.md (if exists) |
-| `MINIH_HAS_INPUT_SCHEMA` | `1` if input-schema.json exists |
+| `MINIH_HAS_INPUT_SCHEMA` | `true` if input-schema.json exists, else `false` |
 | `MINIH_PARAMS` | JSON-encoded input parameters |
 
 **Default model**: `claude-opus-4.6`. Override with `MINIH_DEFAULT_MODEL` env var or `--model` flag.

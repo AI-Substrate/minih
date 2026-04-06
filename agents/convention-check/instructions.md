@@ -13,7 +13,7 @@ conventions, frontmatter requirements, and schema rules.
 
 ## Rules
 
-1. Run `minih doctor --json` as your primary data source
+1. Run `npx minih doctor 2>/dev/null` as your primary data source (JSON on stdout)
 2. Supplement with direct file reads when doctor doesn't cover a check
 3. For each agent, determine an overall status:
    - **pass** — all checks pass

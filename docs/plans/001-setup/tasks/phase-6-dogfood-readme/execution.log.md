@@ -2,7 +2,7 @@
 
 **Phase**: Phase 6: Dogfood + README
 **Started**: 2026-04-05
-**Status**: In Progress
+**Status**: Complete
 
 ---
 
@@ -54,7 +54,7 @@
 - Results: 5 completed, 1 timeout/degraded (self-review — schema validation issues with findings format)
 - **Top magic wand**: 3/5 agents asked for `--json` flag (convention-check, smoke-test, feedback-digest)
   - Root cause: prompts referenced non-existent `--json` flag; CLI already outputs JSON on stdout + tables on stderr
-  - Fix: removed `--json` from prompts, documented stdout/stderr convention in preamble
+  - Fix: partially removed `--json` references in initial commit; remaining occurrences corrected in review fix pass
 - **Second magic wand**: hello-world asked for `MINIH_OUTPUT_PATH` env var (already exists!)
   - Fix: added env var list to preamble so agents discover them
 - Other wishes: `minih schema validate` command, machine-readable domain boundaries, better error help

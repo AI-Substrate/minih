@@ -96,6 +96,7 @@ export async function runAgent(
   agentsDir?: string,
 ): Promise<AgentRunResult> {
   const startedAt = new Date();
+  const isResume = !!config.sessionId;
 
   // Create run folder with frozen copies
   const { runDir, runId } = createRunFolder(definition);
@@ -106,9 +107,9 @@ export async function runAgent(
   const outputPath = path.join(runDir, 'output', 'report.json');
   const stderrPath = path.join(runDir, 'stderr.log');
 
-  // Read prompt and strip frontmatter
+  // Read prompt and strip frontmatter (or use override for resume)
   const rawPrompt = fs.readFileSync(definition.promptPath, 'utf-8');
-  const { body: prompt } = parseFrontmatter(rawPrompt);
+  const prompt = config.promptOverride ?? parseFrontmatter(rawPrompt).body;
 
   // Read instructions (optional)
   const instructions = definition.instructionsPath
@@ -169,18 +170,26 @@ export async function runAgent(
     }
   }
 
-  // Build full prompt (preamble + instructions + output hint + params + prompt + system requirements)
-  const outputHint = `Write your final JSON report to: ${outputPath}`;
-  const fullPrompt = [
-    preamble,
-    instructions,
-    outputHint,
-    paramsHint,
-    prompt,
-    SYSTEM_OUTPUT_INSTRUCTIONS,
-  ]
-    .filter(Boolean)
-    .join('\n\n---\n\n');
+  // Build prompt: full assembly for fresh runs, just the message for resume
+  let finalPrompt: string;
+
+  if (isResume) {
+    // Resume: send only the follow-up message — SDK has full conversation history
+    finalPrompt = prompt;
+  } else {
+    // Fresh run: full prompt assembly (preamble + instructions + output hint + params + prompt + system requirements)
+    const outputHint = `Write your final JSON report to: ${outputPath}`;
+    finalPrompt = [
+      preamble,
+      instructions,
+      outputHint,
+      paramsHint,
+      prompt,
+      SYSTEM_OUTPUT_INSTRUCTIONS,
+    ]
+      .filter(Boolean)
+      .join('\n\n---\n\n');
+  }
 
   // Set runtime environment for the agent (Workshop 007)
   const resolvedAgentsDir = agentsDir ? path.resolve(agentsDir) : '';
@@ -256,7 +265,8 @@ export async function runAgent(
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
   try {
     const runPromise = adapter.run({
-      prompt: fullPrompt,
+      prompt: finalPrompt,
+      sessionId: config.sessionId,
       model: config.model,
       reasoningEffort: config.reasoningEffort,
       cwd: runDir, // SDK isolated to run folder (Workshop 005)
@@ -316,7 +326,10 @@ export async function runAgent(
   }
 
   // Two-stage validation: system fields first, then user schema
-  const systemValidation = validateSystemOutput(outputPath);
+  // Skip system validation for resumed runs — no summary/retrospective required
+  const systemValidation = isResume
+    ? { valid: true, errors: [] }
+    : validateSystemOutput(outputPath);
   let userValidation: ValidationResult | null = null;
   if (definition.schemaPath) {
     userValidation = validateOutput(definition.schemaPath, outputPath);
@@ -356,6 +369,9 @@ export async function runAgent(
     eventCount: stats.total,
     toolCallCount: stats.toolCalls,
     artifacts,
+    ...(config.resumedFromRunId && {
+      resumedFromRunId: config.resumedFromRunId,
+    }),
   };
 
   fs.writeFileSync(

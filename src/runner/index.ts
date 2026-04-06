@@ -5,9 +5,10 @@ export {
   displaySummary,
   formatEvent,
 } from './display.js';
-
+export type { RunSession } from './folder.js';
 export {
   createRunFolder,
+  findRunSession,
   listAgents,
   parseFrontmatter,
   resolveAgent,

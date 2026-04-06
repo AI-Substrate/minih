@@ -48,3 +48,4 @@
 | Phase 1 | Created domain. Events, interface, FakeAgentAdapter extracted. |
 | Phase 3 | Added SdkCopilotAdapter (~250 LOC), copilot-types.ts (local SDK interfaces). Event translation, permission auto-approval, prompt validation, duplicate suppression. |
 | 002-pretty-mode | Added `isDelta?: boolean` to `AgentThinkingEvent.data`. Adapter sets `true` for `reasoning_delta`, `false` for `reasoning` — enables pretty display to suppress duplicate thinking finals. |
+| 003-resume-prompt | Switched `run()` from `session.destroy()` to `session.disconnect()` — sessions preserved for resumption. |

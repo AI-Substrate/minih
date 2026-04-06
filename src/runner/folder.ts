@@ -216,3 +216,63 @@ export function createRunFolder(agentDef: AgentDefinition): {
 
   return { runDir, runId };
 }
+
+/** Session lookup result from a prior run. */
+export interface RunSession {
+  sessionId: string;
+  runId: string;
+  runDir: string;
+}
+
+/**
+ * Find the session ID from a prior run for session resume.
+ *
+ * @param slug - Agent slug
+ * @param agentsDir - Agents directory
+ * @param runId - Specific run ID (optional — uses latest if omitted)
+ * @returns RunSession or null if not found
+ */
+export function findRunSession(
+  slug: string,
+  agentsDir: string,
+  runId?: string,
+): RunSession | null {
+  const agentDir = path.join(path.resolve(agentsDir), slug);
+  const runsDir = path.join(agentDir, 'runs');
+
+  if (!fs.existsSync(runsDir)) return null;
+
+  let targetRunId: string;
+  let targetRunDir: string;
+
+  if (runId) {
+    targetRunDir = path.join(runsDir, runId);
+    if (!fs.existsSync(targetRunDir)) return null;
+    targetRunId = runId;
+  } else {
+    // Find latest run
+    const entries = fs
+      .readdirSync(runsDir, { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .sort((a, b) => b.name.localeCompare(a.name));
+
+    if (entries.length === 0) return null;
+    targetRunId = entries[0].name;
+    targetRunDir = path.join(runsDir, targetRunId);
+  }
+
+  const completedPath = path.join(targetRunDir, 'completed.json');
+  if (!fs.existsSync(completedPath)) return null;
+
+  try {
+    const metadata = JSON.parse(fs.readFileSync(completedPath, 'utf-8'));
+    if (!metadata.sessionId) return null;
+    return {
+      sessionId: metadata.sessionId,
+      runId: targetRunId,
+      runDir: targetRunDir,
+    };
+  } catch {
+    return null;
+  }
+}

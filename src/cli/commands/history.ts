@@ -95,8 +95,9 @@ export function registerHistoryCommand(program: Command): void {
               : run.validated === false
                 ? chalk.red('✗')
                 : chalk.dim('—');
+          const resumeIndicator = run.resumedFromRunId ? chalk.cyan(' ↩') : '';
           table.push([
-            chalk.dim(run.runId),
+            chalk.dim(run.runId) + resumeIndicator,
             resultColor(run.result),
             duration,
             validated,

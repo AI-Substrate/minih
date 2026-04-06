@@ -13,11 +13,13 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 import { registerCheckCommand } from './commands/check.js';
+import { registerConnectCommand } from './commands/connect.js';
 import { registerDoctorCommand } from './commands/doctor.js';
 import { registerHistoryCommand } from './commands/history.js';
 import { registerInitCommand } from './commands/init.js';
 import { registerLastRunCommand } from './commands/last-run.js';
 import { registerListCommand } from './commands/list.js';
+import { registerResumeCommand } from './commands/resume.js';
 import { registerRunCommand } from './commands/run.js';
 import { registerTailCommand } from './commands/tail.js';
 import { registerValidateCommand } from './commands/validate.js';
@@ -51,6 +53,8 @@ program.hook('preAction', (thisCommand) => {
 
 registerListCommand(program);
 registerRunCommand(program);
+registerResumeCommand(program);
+registerConnectCommand(program);
 registerHistoryCommand(program);
 registerValidateCommand(program);
 registerLastRunCommand(program);

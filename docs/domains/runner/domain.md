@@ -33,6 +33,7 @@
 | `listAgents(agentsDir)` | Function | cli (list, doctor) |
 | `resolveAgent(slug, agentsDir)` | Function | cli (run, validate, history) |
 | `runAgent(adapter, def, config, onEvent?, agentsDir?)` | Function | cli (run command) |
+| `findRunSession(slug, agentsDir, runId?)` | Function | cli (resume, connect — session lookup from completed.json) |
 | `validateInput(schemaPath, params)` | Function | cli (check --input), runner (pre-execution) |
 | `validateOutput(schemaPath, outputPath)` | Function | cli (validate, check), runner (post-execution) |
 | `displayEvent(event)` | Function | cli (run --verbose display, tail) |
@@ -51,6 +52,7 @@
 | Degraded vs Failed | Invalid output = "degraded" (agent worked, schema didn't match), not hard failure. |
 | Prompt assembly | preamble → instructions → output hint → params → prompt, joined by `\n\n---\n\n`. Frontmatter stripped. |
 | Magic wand | Every agent output MUST include retrospective with magicWand feedback. |
+| Session resume | Resume sends follow-up message directly — skips prompt assembly and system output validation. SDK conversation history provides context. |
 
 ## History
 
@@ -60,3 +62,4 @@
 | Phase 2 | Added folder.ts (discovery + frontmatter), validator.ts (AJV), display.ts (terminal), runner.ts (orchestration), retrospective.json schema. 61 tests. |
 | Phase 5 | System output enforcement: every run validates summary + retrospective. Two-stage validation (system then user). 14 MINIH_* env vars. Deleted then restored retrospective.json alongside new system-output.json. Exported SYSTEM_OUTPUT_INSTRUCTIONS. |
 | 002-pretty-mode | Added pretty.ts — clean streaming display with delta accumulation, thinking suppression, inline intent. PrettyDisplay exported from barrel. |
+| 003-resume-prompt | Added `sessionId`, `resumedFromRunId`, `promptOverride` to `AgentRunConfig`. Added `resumedFromRunId` to `CompletedMetadata`. Added `findRunSession()` helper. Resume path in `runAgent()` skips system validation and sends follow-up message directly. |

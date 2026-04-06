@@ -176,7 +176,39 @@ minih init my-agent --no-output    # Skip output-schema.json
 
 ### `minih history <slug>`
 
-List past runs for an agent with timestamps and status.
+List past runs for an agent with timestamps and status. Resumed runs show a `↩` indicator.
+
+### `minih resume <slug> <message>`
+
+Send a follow-up message to a completed agent session. The session retains full conversation history — the agent remembers what it did in the original run.
+
+```bash
+minih resume smoke-test "You didn't validate the test output — check that too"
+minih resume code-review --run 2026-04-06T10-04-29-715Z-e94a "Elaborate on the security concern"
+```
+
+| Flag | Description |
+|------|-------------|
+| `--run <runId>` | Resume a specific run (default: latest) |
+| `-t, --timeout <seconds>` | Timeout in seconds (default: 300) |
+| `--verbose` | Show all events with timestamps |
+
+System output validation (summary + retrospective) is not enforced on resume — it's a quick follow-up, not a full agent report.
+
+### `minih connect <slug>`
+
+Print a ready-to-paste command to drop into the Copilot CLI with an agent's session history.
+
+```bash
+minih connect smoke-test              # Print command for latest run
+minih connect smoke-test --run <id>   # Specific run
+minih connect smoke-test --list       # Show all runs with session IDs
+```
+
+| Flag | Description |
+|------|-------------|
+| `--run <runId>` | Connect to a specific run (default: latest) |
+| `--list` | List all runs with their session IDs |
 
 ### `minih validate <slug>`
 

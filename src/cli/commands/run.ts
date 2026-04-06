@@ -1,17 +1,17 @@
 /**
  * minih run — composition root. Dynamic SDK import.
  *
- * Only CLI command that touches @github/copilot-sdk.
+ * Only CLI command that touches @github/copilot-sdk (alongside resume).
  * DYK #1: try/catch on dynamic import → actionable error if SDK missing.
  * DYK #1 (session): client.stop() in finally, SIGINT for instant Ctrl+C kill.
  * Workshop 005: SDK workingDirectory = runDir for session isolation.
+ * DYK #2 (003): SDK wiring extracted to sdk-runtime.ts, shared with resume.ts.
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import chalk from 'chalk';
 import type { Command } from 'commander';
-import { SdkCopilotAdapter } from '../../adapter/index.js';
 import type { AgentRunConfig } from '../../runner/index.js';
 import {
   displayEvent,
@@ -32,6 +32,7 @@ import {
   formatError,
   formatSuccess,
 } from '../output.js';
+import { createSdkRuntime } from './sdk-runtime.js';
 
 export function registerRunCommand(program: Command): void {
   program
@@ -218,51 +219,7 @@ export function registerRunCommand(program: Command): void {
           return;
         }
 
-        // Pre-flight: check GH_TOKEN (after dry-run — dry-run doesn't need it)
-        if (!process.env.GH_TOKEN) {
-          exitWithEnvelope(
-            formatError(
-              'run',
-              ErrorCodes.AGENT_AUTH_MISSING,
-              'GH_TOKEN environment variable is not set. Required for Copilot SDK.',
-              { fix: 'export GH_TOKEN=$(gh auth token)' },
-            ),
-          );
-        }
-
-        // Dynamic SDK import — actionable error if missing (DYK #1)
-        let CopilotClient: new () => { stop(): Promise<unknown> };
-        try {
-          const sdk = await import('@github/copilot-sdk');
-          CopilotClient = sdk.CopilotClient;
-        } catch (err: unknown) {
-          const code =
-            (err as NodeJS.ErrnoException).code === 'ERR_MODULE_NOT_FOUND' ||
-            (err as NodeJS.ErrnoException).code === 'MODULE_NOT_FOUND';
-          if (code) {
-            exitWithEnvelope(
-              formatError(
-                'run',
-                ErrorCodes.AGENT_SDK_MISSING,
-                'Install @github/copilot-sdk in your project first: npm install @github/copilot-sdk',
-              ),
-            );
-          }
-          throw err;
-        }
-
-        // Create client + adapter — composition root
-        const client = new CopilotClient();
-        // biome-ignore lint/suspicious/noExplicitAny: CopilotClient doesn't implement our ICopilotClient exactly
-        const adapter = new SdkCopilotAdapter(client as any);
-
-        // SIGINT handler for instant Ctrl+C kill
-        const sigintHandler = () => {
-          pretty?.cleanup();
-          process.stderr.write(chalk.dim('\n  Interrupted.\n'));
-          process.exit(130);
-        };
-        process.on('SIGINT', sigintHandler);
+        const runtime = await createSdkRuntime('run', () => pretty?.cleanup());
 
         try {
           const onEvent = pretty
@@ -270,7 +227,7 @@ export function registerRunCommand(program: Command): void {
                 pretty.handleEvent(e)
             : displayEvent;
           const result = await runAgent(
-            adapter,
+            runtime.adapter,
             definition,
             config,
             onEvent,
@@ -326,8 +283,7 @@ export function registerRunCommand(program: Command): void {
             formatError('run', ErrorCodes.AGENT_EXECUTION_FAILED, msg),
           );
         } finally {
-          process.removeListener('SIGINT', sigintHandler);
-          await client.stop();
+          runtime.cleanup();
         }
       },
     );

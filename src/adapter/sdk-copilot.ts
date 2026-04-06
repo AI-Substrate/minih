@@ -136,7 +136,8 @@ export class SdkCopilotAdapter implements IAgentAdapter {
     } finally {
       if (!sessionDestroyed) {
         sessionDestroyed = true;
-        await session.destroy();
+        // Disconnect but don't destroy — session state preserved for resumption
+        await session.disconnect();
       }
     }
   }

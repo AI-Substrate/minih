@@ -30,6 +30,12 @@ export interface AgentRunConfig {
   timeout?: number;
   cwd?: string;
   params?: Record<string, string>;
+  /** Session ID to resume — if set, uses resumeSession() instead of createSession() */
+  sessionId?: string;
+  /** Run ID of the original run being resumed */
+  resumedFromRunId?: string;
+  /** Override the prompt text (used by resume — sends follow-up message instead of prompt.md) */
+  promptOverride?: string;
 }
 
 /** Validation result from JSON Schema check. */
@@ -57,6 +63,8 @@ export interface CompletedMetadata {
   eventCount: number;
   toolCallCount: number;
   artifacts: string[];
+  /** Run ID of the original run, if this is a resumed session */
+  resumedFromRunId?: string;
 }
 
 /** Result returned from the runner to the CLI command. */

@@ -46,7 +46,7 @@ export function registerRunCommand(program: Command): void {
       '-r, --reasoning <effort>',
       'Reasoning effort (low, medium, high, xhigh)',
     )
-    .option('-t, --timeout <seconds>', 'Timeout in seconds', '300')
+    .option('-t, --timeout <seconds>', 'Timeout in seconds (default: agent frontmatter or 900)')
     .option(
       '-p, --param <key=value>',
       'Input parameter (repeatable)',
@@ -119,11 +119,14 @@ export function registerRunCommand(program: Command): void {
         const reasoningEffort = (opts.reasoning ??
           definition.reasoning) as AgentRunConfig['reasoningEffort'];
 
+        const DEFAULT_TIMEOUT = 900; // 15 minutes
         const config: AgentRunConfig = {
           slug,
           model,
           reasoningEffort,
-          timeout: Number.parseInt(opts.timeout ?? '300', 10),
+          timeout: opts.timeout
+            ? Number.parseInt(opts.timeout, 10)
+            : (definition.timeout ?? DEFAULT_TIMEOUT),
           cwd: process.cwd(),
           params: Object.keys(params).length > 0 ? params : undefined,
         };

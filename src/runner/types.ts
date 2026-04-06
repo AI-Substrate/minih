@@ -19,6 +19,8 @@ export interface AgentDefinition {
   model?: string;
   /** Default reasoning effort from prompt.md frontmatter (overridable via --reasoning) */
   reasoning?: string;
+  /** Default timeout in seconds from prompt.md frontmatter (overridable via --timeout) */
+  timeout?: number;
   dir: string;
   promptPath: string;
   schemaPath: string | null;

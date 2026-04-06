@@ -45,6 +45,7 @@ export function parseFrontmatter(content: string): {
   tags: string[];
   model?: string;
   reasoning?: string;
+  timeout?: number;
   body: string;
 } {
   if (!content.startsWith('---\n')) {
@@ -76,11 +77,13 @@ function parseYamlSimple(yaml: string): {
   tags: string[];
   model?: string;
   reasoning?: string;
+  timeout?: number;
 } {
   let description = '';
   let tags: string[] = [];
   let model: string | undefined;
   let reasoning: string | undefined;
+  let timeout: number | undefined;
 
   for (const line of yaml.split('\n')) {
     const descMatch = line.match(/^description:\s*"([^"]*)"$/);
@@ -113,9 +116,13 @@ function parseYamlSimple(yaml: string): {
     if (reasoningMatch) {
       reasoning = reasoningMatch[1].trim().replace(/^["']|["']$/g, '');
     }
+    const timeoutMatch = line.match(/^timeout:\s*(\d+)$/);
+    if (timeoutMatch) {
+      timeout = Number.parseInt(timeoutMatch[1], 10);
+    }
   }
 
-  return { description, tags, model, reasoning };
+  return { description, tags, model, reasoning, timeout };
 }
 
 /**
@@ -147,7 +154,7 @@ export function listAgents(agentsDir: string): AgentDefinition[] {
 
     // Parse frontmatter for description and tags
     const promptContent = fs.readFileSync(promptPath, 'utf-8');
-    const { description, tags, model, reasoning } =
+    const { description, tags, model, reasoning, timeout } =
       parseFrontmatter(promptContent);
 
     // Require frontmatter with description (per spec clarification)
@@ -159,6 +166,7 @@ export function listAgents(agentsDir: string): AgentDefinition[] {
       tags,
       model,
       reasoning,
+      timeout,
       dir,
       promptPath,
       schemaPath: fs.existsSync(schemaPath) ? schemaPath : null,

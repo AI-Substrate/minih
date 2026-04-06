@@ -3,6 +3,7 @@ description: Read-only code review with domain compliance, anti-reinvention chec
 tags: [review, quality]
 model: gpt-5.4
 reasoning: xhigh
+timeout: 1200
 ---
 
 # Code Review Agent

@@ -1,12 +1,20 @@
 # Contributing to minih
 
-Thanks for your interest in improving minih! Whether you're filing a bug, suggesting a feature, or submitting code — you're helping make the self-improving agent loop better for everyone.
+Thanks for your interest in improving minih! Contributions come in many forms — bug reports, magic wand feedback from agent runs, feature ideas, prompt improvements, new dogfood agents, or code changes. Every contribution makes the self-improving loop better for everyone.
 
 ---
 
-## Filing Issues
+## Ways to Contribute
 
-### Bug Reports
+### 🪄 Magic Wand Feedback
+
+The most valuable contributions often start as a `magicWand` in an agent's retrospective. If you're running minih agents and they report friction with minih itself (not your project), that feedback is gold. You can:
+
+1. **Just let it accumulate** — run `minih run feedback-digest` periodically to surface patterns across runs
+2. **Promote to an issue** — if a magic wand describes a concrete, high-impact improvement, file it as a feature request so it gets tracked and discussed
+3. **Fix it yourself** — if you know how, submit a PR that references the magic wand that inspired it
+
+### 🐛 Bug Reports
 
 Found something broken? File it with the **Bug Report** template:
 
@@ -20,7 +28,7 @@ Good bug reports include:
 - **Expected vs actual behavior**: What should happen vs what did happen
 - **Agent context**: If the bug happened during an agent run, include the slug and any relevant output
 
-### Feature Requests
+### 💡 Feature Requests & Ideas
 
 Have an idea? File it with the **Feature Request** template:
 
@@ -28,7 +36,25 @@ Have an idea? File it with the **Feature Request** template:
 gh issue create --repo AI-Substrate/minih --template feature_request.md
 ```
 
-The best feature requests come from **magic wand feedback** — real friction from actual agent runs. If your agent's `magicWand` field describes something that would benefit all minih users, that's a great candidate for an issue.
+Great sources of feature ideas:
+- **Magic wand patterns** — the same wish showing up across multiple agent runs
+- **Workflow friction** — something that's possible but takes too many steps
+- **Missing observability** — "I couldn't tell what the agent was doing because..."
+- **Integration needs** — CI, other tools, different models, custom adapters
+
+### 📝 Documentation & Prompt Improvements
+
+The preamble, agent prompts, and docs are all first-class artifacts. If you:
+- Found unclear instructions that confused an agent → improve the preamble
+- Wrote a prompt pattern that works well → share it as an example agent
+- Noticed docs that are wrong or stale → submit a fix
+
+### 🤖 New Dogfood Agents
+
+minih dogfoods itself. New agents that test or validate minih are always welcome. Browse [agents/](https://github.com/AI-Substrate/minih/tree/main/agents) for examples. Good candidates:
+- Agents that exercise untested CLI commands or edge cases
+- Agents that validate conventions across the codebase
+- Agents that aggregate or analyze run history
 
 ### Agent-Filed Issues
 

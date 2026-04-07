@@ -38,10 +38,15 @@ function extractTurns(eventsPath: string, limit: number): TurnEntry[] {
       const type: string = event.type;
       if (type === 'tool_call') {
         const name = event.data?.toolName ?? 'unknown';
-        const input = typeof event.data?.input === 'string'
-          ? event.data.input.slice(0, 80)
-          : JSON.stringify(event.data?.input ?? '').slice(0, 80);
-        turns.push({ type, timestamp: event.timestamp, summary: `${name}: ${input}` });
+        const input =
+          typeof event.data?.input === 'string'
+            ? event.data.input.slice(0, 80)
+            : JSON.stringify(event.data?.input ?? '').slice(0, 80);
+        turns.push({
+          type,
+          timestamp: event.timestamp,
+          summary: `${name}: ${input}`,
+        });
       } else if (type === 'message') {
         const msg = (event.data?.content ?? '').slice(0, 100);
         turns.push({ type, timestamp: event.timestamp, summary: msg });
@@ -70,7 +75,9 @@ function countEvents(eventsPath: string): { total: number; toolCalls: number } {
   for (const line of lines) {
     try {
       if (JSON.parse(line).type === 'tool_call') toolCalls++;
-    } catch { /* skip */ }
+    } catch {
+      /* skip */
+    }
   }
   return { total: lines.length, toolCalls };
 }
@@ -80,10 +87,16 @@ export function registerStatusCommand(program: Command): void {
     .command('status <slug>')
     .description('Check if an agent run is active, stale, or completed')
     .option('--run <runId>', 'Specific run ID (default: latest)')
-    .option('-n, --turns <count>', 'Number of recent turns to show', String(DEFAULT_TURNS))
+    .option(
+      '-n, --turns <count>',
+      'Number of recent turns to show',
+      String(DEFAULT_TURNS),
+    )
     .action((slug: string, opts: { run?: string; turns?: string }) => {
       const agentsDir = program.opts().agentsDir ?? 'agents';
-      const turnLimit = Number.parseInt(opts.turns ?? String(DEFAULT_TURNS), 10) || DEFAULT_TURNS;
+      const turnLimit =
+        Number.parseInt(opts.turns ?? String(DEFAULT_TURNS), 10) ||
+        DEFAULT_TURNS;
 
       const slugError = validateSlug(slug);
       if (slugError) {
@@ -95,7 +108,11 @@ export function registerStatusCommand(program: Command): void {
       const definition = resolveAgent(slug, agentsDir);
       if (!definition) {
         exitWithEnvelope(
-          formatError('status', ErrorCodes.AGENT_NOT_FOUND, `Agent "${slug}" not found.`),
+          formatError(
+            'status',
+            ErrorCodes.AGENT_NOT_FOUND,
+            `Agent "${slug}" not found.`,
+          ),
         );
         return;
       }
@@ -103,7 +120,11 @@ export function registerStatusCommand(program: Command): void {
       const runsDir = path.join(definition.dir, 'runs');
       if (!fs.existsSync(runsDir)) {
         exitWithEnvelope(
-          formatError('status', ErrorCodes.AGENT_VALIDATION_FAILED, 'No runs found.'),
+          formatError(
+            'status',
+            ErrorCodes.AGENT_VALIDATION_FAILED,
+            'No runs found.',
+          ),
         );
         return;
       }
@@ -115,7 +136,11 @@ export function registerStatusCommand(program: Command): void {
 
       if (entries.length === 0) {
         exitWithEnvelope(
-          formatError('status', ErrorCodes.AGENT_VALIDATION_FAILED, 'No runs found.'),
+          formatError(
+            'status',
+            ErrorCodes.AGENT_VALIDATION_FAILED,
+            'No runs found.',
+          ),
         );
         return;
       }
@@ -137,8 +162,10 @@ export function registerStatusCommand(program: Command): void {
           result = meta.result;
           durationMs = meta.durationMs;
           sessionId = meta.sessionId;
-          verdict = meta.result === 'completed' || meta.result === 'degraded'
-            ? 'completed' : 'failed';
+          verdict =
+            meta.result === 'completed' || meta.result === 'degraded'
+              ? 'completed'
+              : 'failed';
         } catch {
           verdict = 'unknown';
         }
@@ -157,45 +184,66 @@ export function registerStatusCommand(program: Command): void {
         elapsedMs = Date.now() - dirStat.birthtimeMs;
       }
 
-      const { total: eventCount, toolCalls: toolCallCount } = countEvents(eventsPath);
+      const { total: eventCount, toolCalls: toolCallCount } =
+        countEvents(eventsPath);
       const turns = extractTurns(eventsPath, turnLimit);
 
       // TTY display
       if (process.stderr.isTTY) {
         const verdictColor =
-          verdict === 'active' ? chalk.green
-          : verdict === 'stale' ? chalk.yellow
-          : verdict === 'completed' ? chalk.green
-          : verdict === 'failed' ? chalk.red
-          : chalk.dim;
+          verdict === 'active'
+            ? chalk.green
+            : verdict === 'stale'
+              ? chalk.yellow
+              : verdict === 'completed'
+                ? chalk.green
+                : verdict === 'failed'
+                  ? chalk.red
+                  : chalk.dim;
 
         const icon =
-          verdict === 'active' ? '●'
-          : verdict === 'stale' ? '◌'
-          : verdict === 'completed' ? '✓'
-          : verdict === 'failed' ? '✗'
-          : '?';
+          verdict === 'active'
+            ? '●'
+            : verdict === 'stale'
+              ? '◌'
+              : verdict === 'completed'
+                ? '✓'
+                : verdict === 'failed'
+                  ? '✗'
+                  : '?';
 
-        process.stderr.write(`\n  ${chalk.bold(`Status: ${slug}`)}  ${verdictColor(`${icon} ${verdict}`)}\n\n`);
+        process.stderr.write(
+          `\n  ${chalk.bold(`Status: ${slug}`)}  ${verdictColor(`${icon} ${verdict}`)}\n\n`,
+        );
         process.stderr.write(`  Run:      ${chalk.dim(runId)}\n`);
         if (result) process.stderr.write(`  Result:   ${result}\n`);
-        if (sessionId) process.stderr.write(`  Session:  ${chalk.dim(sessionId)}\n`);
+        if (sessionId)
+          process.stderr.write(`  Session:  ${chalk.dim(sessionId)}\n`);
 
         const elapsed = durationMs ?? elapsedMs;
         if (elapsed) {
           process.stderr.write(`  Elapsed:  ${(elapsed / 1000).toFixed(1)}s\n`);
         }
-        process.stderr.write(`  Events:   ${eventCount} (${toolCallCount} tool calls)\n`);
+        process.stderr.write(
+          `  Events:   ${eventCount} (${toolCallCount} tool calls)\n`,
+        );
 
         if (turns.length > 0) {
-          process.stderr.write(`\n  ${chalk.bold(`Last ${turns.length} turns:`)}\n`);
+          process.stderr.write(
+            `\n  ${chalk.bold(`Last ${turns.length} turns:`)}\n`,
+          );
           for (const turn of turns) {
             const icon =
-              turn.type === 'tool_call' ? chalk.blue('🔧')
-              : turn.type === 'tool_result' ? chalk.dim('  ↳')
-              : turn.type === 'tool_error' ? chalk.red('  ✗')
-              : chalk.cyan('💬');
-            const ts = turn.timestamp ? chalk.dim(turn.timestamp.slice(11, 19)) : '';
+              turn.type === 'tool_call'
+                ? chalk.blue('🔧')
+                : turn.type === 'tool_result'
+                  ? chalk.dim('  ↳')
+                  : turn.type === 'tool_error'
+                    ? chalk.red('  ✗')
+                    : chalk.cyan('💬');
+            const ts = turn.timestamp
+              ? chalk.dim(turn.timestamp.slice(11, 19))
+              : '';
             process.stderr.write(`  ${ts} ${icon} ${turn.summary}\n`);
           }
         }

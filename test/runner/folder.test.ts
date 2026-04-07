@@ -121,7 +121,8 @@ More text after horizontal rule.`;
   });
 
   it('handles Windows CRLF line endings', () => {
-    const content = '---\r\ndescription: "CRLF agent"\r\ntags: [windows, crlf]\r\n---\r\n\r\n# Body';
+    const content =
+      '---\r\ndescription: "CRLF agent"\r\ntags: [windows, crlf]\r\n---\r\n\r\n# Body';
     const result = parseFrontmatter(content);
     expect(result.description).toBe('CRLF agent');
     expect(result.tags).toEqual(['windows', 'crlf']);

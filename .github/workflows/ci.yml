@@ -30,11 +30,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Lint (biome check)
+      - name: Lint & format (biome check)
         run: npx biome check .
-
-      - name: Format check (biome)
-        run: npx biome format . --check
 
       - name: Build (tsc + copy schemas)
         run: npm run build

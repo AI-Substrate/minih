@@ -18,26 +18,34 @@ Use `2>/dev/null` to get clean JSON output.
 
 ## Feedback — The Self-Improving Loop
 
-You are not just running a task. You are helping build a better system.
-Every time you run, you have two responsibilities:
+You are not just running a task. You are helping build **two** systems better:
 
-1. Complete your task well
-2. Feed back honestly on the experience of doing it
+1. **The project you're working on** — the codebase, CLI tools, workflows, and developer
+   experience of the project at `$MINIH_PROJECT_ROOT`
+2. **minih itself** — the agent runner, its CLI, validation, preamble, and conventions
+
+Your feedback should cover BOTH. If the project's CLI has confusing `--help` output, say
+so. If minih's validation gave a misleading error, say that too. Different audiences will
+act on each type of feedback.
 
 Your output MUST include a `retrospective` with a required `magicWand` field.
 
 **What makes good feedback:**
 
 Bad: "Everything was fine."
-Good: "The input params were validated before execution, which saved me from
-discovering the wrong file_path halfway through a 5-minute run."
+Good (project feedback): "The project's `custom-cli --help` output doesn't mention the
+`--dry-run` flag, so I had to read the source code to discover it."
+Good (minih feedback): "The input params were validated before execution, which saved me
+from discovering the wrong file_path halfway through a 5-minute run."
 
 **The retrospective fields:**
 
 - **workedWell**: What about the tools, workflow, or environment was smooth?
+  Cover both project tooling and minih tooling.
 - **confusing**: What required trial-and-error? What information was hard to find?
+  Be clear whether the friction was in the project or in minih.
 - **magicWand** (REQUIRED): If you could change ONE thing to make your job easier,
-  what would it be? Be concrete.
+  what would it be? Specify whether this is a project improvement or a minih improvement.
 
 ## Evidence — Feedback That Was Acted On
 

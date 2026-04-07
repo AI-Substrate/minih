@@ -50,7 +50,7 @@ At minimum, your JSON must include these fields:
   "retrospective": {
     "workedWell": "What about the tools, workflow, or environment was smooth? Be specific.",
     "confusing": "What was unclear, confusing, or required trial-and-error?",
-    "magicWand": "If you could change ONE thing about this experience to make your job easier, what would it be? Be concrete — name a specific tool, command, flag, or workflow improvement."
+    "magicWand": "If you could change ONE thing about this experience to make your job easier, what would it be? Be concrete — name a specific tool, command, flag, or workflow improvement. Specify whether this is a PROJECT improvement (the codebase/tools you tested) or a MINIH improvement (the agent runner itself)."
   }
 }
 \`\`\`

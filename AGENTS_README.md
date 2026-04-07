@@ -25,6 +25,16 @@ Every agent output MUST include a `retrospective` with three fields:
 - **confusing**: What required trial-and-error? What information was hard to find?
 - **magicWand**: If you could change ONE thing to make your job easier, what would it be?
 
+### Two Layers of Feedback
+
+Agents improve **two systems** simultaneously:
+
+1. **The project** — the codebase, CLI tools, workflows, and developer experience your agent is testing or reviewing. If the project's `custom-cli --help` output is confusing, or a build step is flaky, or the docs are missing a critical flag — that's project feedback.
+
+2. **minih itself** — the agent runner, validation, prompt assembly, and conventions. If minih's error messages were misleading, or you wish `minih status` showed more detail — that's minih feedback.
+
+Both types are valuable. Different audiences will act on each. The `magicWand` should specify which layer it targets so improvements reach the right people.
+
 ### Why the Magic Wand Works
 
 **It captures friction at the moment of friction.** Humans adapt — when a command is awkward, a human learns the workaround and stops noticing. Agents don't adapt. Every time something fails or is clumsy, the agent reports it. The same friction, surfaced fresh every run, until you fix it.

@@ -48,6 +48,7 @@ export function parseFrontmatter(content: string): {
   timeout?: number;
   body: string;
 } {
+  content = content.replace(/\r\n/g, '\n');
   if (!content.startsWith('---\n')) {
     return { description: '', tags: [], body: content };
   }

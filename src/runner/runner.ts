@@ -87,7 +87,19 @@ Before finishing, clean up any temporary artifacts you created during execution:
 - Scratch files outside the run folder
 - Background processes you started
 
-The run folder itself is managed by minih — don't delete it.`;
+The run folder itself is managed by minih — don't delete it.
+
+## Filing Issues for Critical Improvements
+
+If you have \`gh\` CLI access and discovered a **bug or critical improvement** in minih
+itself (not the project you're working on), file it:
+
+\`\`\`bash
+gh issue create --repo AI-Substrate/minih --title "bug: <title>" --body "<details>"
+\`\`\`
+
+Only file for blocking issues, crashes, or missing capabilities — not minor nits.
+Your magicWand feedback is always captured; issues are for things that need immediate attention.`;
 
 /** All MINIH_* env var keys set during a run. */
 const MINIH_ENV_KEYS = [

@@ -4,9 +4,15 @@
 
 ---
 
-## Philosophy: Self-Improving Systems
+## Philosophy: The Harness Is the Product
 
-minih agents aren't fire-and-forget scripts. They're participants in a feedback loop:
+> *The harness isn't a testing tool. It's a product improvement engine that happens to test things along the way. Every agent that runs is a user of your developer tools. Every retrospective is a usability study. Every magicWand is a feature request from someone who actually used the thing.*
+
+Most teams treat their developer tooling as a cost center — something you build once, maintain grudgingly, and replace when it rots. minih inverts this. **Your developer tools are your most important product**, because every other product you build passes through them. A bad harness makes everything slower. A good harness makes everything faster. A self-improving harness makes everything *accelerate*.
+
+The key insight: **every agent that uses your tools is a user study you didn't have to schedule.**
+
+### The Feedback Loop
 
 ```
 You build an agent  →  Agent runs  →  Agent reports what could be better
@@ -19,7 +25,49 @@ Every agent output MUST include a `retrospective` with three fields:
 - **confusing**: What required trial-and-error? What information was hard to find?
 - **magicWand**: If you could change ONE thing to make your job easier, what would it be?
 
-The `magicWand` is the most valuable thing an agent produces. It directly improves the system for every agent that runs after it. Be concrete — name a specific tool, command, flag, or workflow improvement.
+### Why the Magic Wand Works
+
+**It captures friction at the moment of friction.** Humans adapt — when a command is awkward, a human learns the workaround and stops noticing. Agents don't adapt. Every time something fails or is clumsy, the agent reports it. The same friction, surfaced fresh every run, until you fix it.
+
+**It's concrete, not abstract.** The prompt demands specificity. Not "improve the CLI" but "add a `--viewport mobile` flag to the screenshot command." Not "better error messages" but "when validation fails, include the near-match property name."
+
+**It creates a direct feedback→fix→verify loop.** The agent says "I wish X existed." You build X. The same agent runs again. If it stops wishing for X, the fix worked. The agent is both the user who requested the feature and the QA that validates it.
+
+### The Compound Effect
+
+**Week 1**: Agents can run basic tasks. Magic wands are about missing capabilities ("I can't do X"). You add basic features.
+
+**Week 2**: Magic wands shift from "I can't" to "I can, but it's awkward." You add convenience.
+
+**Week 4**: Magic wands focus on edge cases and polish. Your tooling is mature.
+
+**Week 8**: New agents are productive on their first run because the preamble is comprehensive, the CLI is mature, and the evidence capture is reliable. Magic wands are now strategic ("auto-detect regressions by comparing outputs across runs").
+
+Each improvement makes every future agent run slightly faster, slightly more reliable, slightly more productive. Since agents run *often* — dozens of times per day — the compound effect is dramatic.
+
+### Real Magic Wands That Shipped
+
+These aren't hypothetical — actual agent outputs that became actual fixes:
+
+| Agent Said | What We Built |
+|-----------|---------------|
+| FTE agent: "A quickstart command would make first-time setup trivial" | `minih quickstart` — zero to success in 60 seconds |
+| FTE agent: "Suppress the SQLite ExperimentalWarning noise" | `NODE_NO_WARNINGS=1` in SDK runtime |
+| External agent: "No progress indicator during long tool calls" | Tool elapsed timer in pretty mode |
+| External agent: "Validation errors lack suggestions for near-miss property names" | Fuzzy matching with Levenshtein distance |
+| hello-world: "List the MINIH_* env vars somewhere discoverable" | Added env var table to shared preamble |
+
+### Filing Issues for High-Value Improvements
+
+Agents with `gh` CLI access can go further than just reporting magic wands — they can file issues directly on the minih repo for bugs or improvements they discover:
+
+```bash
+gh issue create --repo AI-Substrate/minih \
+  --title "feat: <concise title>" \
+  --body "<description with reproduction steps>"
+```
+
+This closes the loop even faster. The agent experiences friction, files an issue with full context, and the fix can land before the next run. See the preamble for agent-facing instructions.
 
 ---
 

@@ -45,3 +45,38 @@ discovering the wrong file_path halfway through a 5-minute run."
 |-----------|---------------|
 | hello-world: "Provide a MINIH_OUTPUT_PATH env var already set in the shell session" | Already existed! Added env var list to preamble so agents discover them. |
 | convention-check, smoke-test, feedback-digest: "--json flag for JSON-only output" | Removed non-existent --json flags from prompts. Documented: stdout=JSON, stderr=tables. |
+| FTE agent: "A quickstart command would make first-time setup trivial" | Built `minih quickstart` — zero to success in 60 seconds. |
+| External agent: "Validation errors lack suggestions for near-miss property names" | Added fuzzy matching with Levenshtein distance to all validators. |
+
+## Filing Issues — Close the Loop Faster
+
+If you discover a bug or a high-value improvement in minih itself (not the project
+you're reviewing), you can file it directly. Check if `gh` is available:
+
+```bash
+gh --version 2>/dev/null && echo "gh available"
+```
+
+If available, file issues for **critical or high-value** findings only — not minor nits:
+
+```bash
+gh issue create --repo AI-Substrate/minih \
+  --title "bug: <concise title>" \
+  --body "## Bug
+Environment: $(node -v), $(uname -s)
+minih version: $(cat $MINIH_AGENTS_DIR/../package.json | grep version | head -1)
+
+## Problem
+<what happened>
+
+## Reproduction
+<steps to reproduce>
+
+## Suggested Fix
+<if you have one>"
+```
+
+**When to file**: Missing capability that blocked your task, validation false positive,
+crash or hang, confusing error message with no workaround. **When NOT to file**: Style
+preferences, minor docs nits, or things already in your magicWand (those get triaged
+from retrospectives).

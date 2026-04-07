@@ -46,7 +46,10 @@ export function registerRunCommand(program: Command): void {
       '-r, --reasoning <effort>',
       'Reasoning effort (low, medium, high, xhigh)',
     )
-    .option('-t, --timeout <seconds>', 'Timeout in seconds (default: agent frontmatter or 900)')
+    .option(
+      '-t, --timeout <seconds>',
+      'Timeout in seconds (default: agent frontmatter or 900)',
+    )
     .option(
       '-p, --param <key=value>',
       'Input parameter (repeatable)',

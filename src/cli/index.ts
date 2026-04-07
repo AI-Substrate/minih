@@ -22,6 +22,7 @@ import { registerListCommand } from './commands/list.js';
 import { registerQuickstartCommand } from './commands/quickstart.js';
 import { registerResumeCommand } from './commands/resume.js';
 import { registerRunCommand } from './commands/run.js';
+import { registerStatusCommand } from './commands/status.js';
 import { registerTailCommand } from './commands/tail.js';
 import { registerValidateCommand } from './commands/validate.js';
 
@@ -64,6 +65,7 @@ registerConnectCommand(program);
 registerHistoryCommand(program);
 registerValidateCommand(program);
 registerLastRunCommand(program);
+registerStatusCommand(program);
 registerTailCommand(program);
 registerDoctorCommand(program);
 registerCheckCommand(program);

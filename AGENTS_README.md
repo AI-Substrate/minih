@@ -73,35 +73,132 @@ This closes the loop even faster. The agent experiences friction, files an issue
 
 ## Install & Get Started
 
-### From GitHub (no npm publish yet)
+### Option 1: Quickstart (zero to success in 60 seconds)
 
 ```bash
-# Quickstart — zero to success in 60 seconds
 export GH_TOKEN=$(gh auth token)
 npx github:AI-Substrate/minih quickstart
+```
 
-# Or install for repeated use
+This scaffolds a `hello-world` agent and runs it immediately. You'll see pretty streaming output, a structured JSON report, and your first magic wand feedback.
+
+### Option 2: Clone and link (for development)
+
+```bash
 git clone https://github.com/AI-Substrate/minih.git
-cd minih && npm install && npm link
+cd minih
+npm install
+npm link
+
+# Now 'minih' is available globally
 minih quickstart
+```
+
+### Option 3: Add to an existing project
+
+```bash
+cd your-project
+npm install github:AI-Substrate/minih
+npx minih quickstart
 ```
 
 ### Prerequisites
 
-- **Node.js ≥ 20.19.0**
-- **GH_TOKEN**: `export GH_TOKEN=$(gh auth token)` — required for running agents
-- **@github/copilot-sdk**: installed as a peer dependency in your project
+| Requirement | How to get it |
+|-------------|--------------|
+| **Node.js ≥ 20.19.0** | [nodejs.org](https://nodejs.org) or `nvm install 20` |
+| **GH_TOKEN** | `export GH_TOKEN=$(gh auth token)` |
+| **@github/copilot-sdk** | `npm install @github/copilot-sdk` (peer dependency) |
+
+---
+
+## Your First Agent: Step by Step
+
+### 1. Scaffold the agent
+
+```bash
+minih init my-scanner
+```
+
+This creates:
+```
+agents/my-scanner/
+├── prompt.md           # Your agent's mission
+└── output-schema.json  # What your agent must produce
+```
+
+### 2. Write the prompt
+
+Edit `agents/my-scanner/prompt.md`:
+
+```markdown
+---
+description: Scan TypeScript files for TODO/FIXME comments
+tags: [scan, quality]
+---
+
+# TODO Scanner
+
+Scan all TypeScript files under `src/` for TODO and FIXME comments.
+
+## Steps
+
+1. Run `cd $MINIH_PROJECT_ROOT` to get to the project root
+2. Use `grep -rn 'TODO\|FIXME' src/ --include='*.ts'` to find all occurrences
+3. For each hit, record the file path, line number, and the comment text
+4. Categorize by priority: FIXME = high, TODO = medium
+
+Write your JSON report to $MINIH_OUTPUT_PATH.
+```
+
+### 3. Check it's valid
+
+```bash
+minih doctor
+```
+
+You should see your agent listed as `✓ healthy`.
+
+### 4. Preview the assembled prompt
+
+```bash
+minih inspect my-scanner
+```
+
+This shows exactly what the LLM will see — preamble + instructions + your prompt + system requirements, with section markers and char counts.
+
+### 5. Run it
+
+```bash
+export GH_TOKEN=$(gh auth token)
+minih run my-scanner
+```
+
+You'll see pretty streaming output with tool calls, timing, and a final summary.
+
+### 6. Review the output
+
+```bash
+# See the run summary
+minih last-run my-scanner
+
+# Validate the output
+minih validate my-scanner
+
+# Read the actual report
+cat $(minih last-run my-scanner 2>/dev/null | jq -r '.data.reportPath')
+```
 
 ---
 
 ## Agent = Folder
 
-An agent is a folder with at least `prompt.md`:
+An agent is a folder under your agents directory with at least `prompt.md`:
 
 ```
 agents/
 ├── _shared/
-│   └── preamble.md              # Shared context injected into every agent
+│   └── preamble.md              # Shared context injected into EVERY agent
 ├── my-agent/
 │   ├── prompt.md                # The prompt (REQUIRED — with YAML frontmatter)
 │   ├── output-schema.json       # JSON Schema for structured output (optional)
@@ -110,20 +207,25 @@ agents/
 │   └── runs/                    # Auto-created — run artifacts (gitignored)
 │       └── 2026-04-06T.../
 │           ├── prompt.md        # Frozen copy of prompt at run time
-│           ├── events.ndjson    # Full event stream
-│           ├── completed.json   # Run metadata (sessionId, duration, status)
+│           ├── events.ndjson    # Full event stream (every tool call, message, etc.)
+│           ├── completed.json   # Run metadata (sessionId, duration, result, validation)
 │           └── output/
 │               └── report.json  # Agent's structured output
 ```
 
-### prompt.md
+Browse the [agents/](https://github.com/AI-Substrate/minih/tree/main/agents) folder in this repo for real examples.
 
-Must have YAML frontmatter with at least a `description`:
+### prompt.md — The Mission
+
+Must have YAML frontmatter with at least a `description`. Optional frontmatter fields let you configure the model, reasoning effort, and timeout per agent:
 
 ```markdown
 ---
-description: Scan the project for common security issues
+description: "Scan the project for common security issues"
 tags: [security, review]
+model: gpt-5.4           # Override default model (optional)
+reasoning: xhigh          # Reasoning effort: low, medium, high, xhigh (optional)
+timeout: 1200             # Timeout in seconds (optional, default: 900)
 ---
 
 # Security Scan
@@ -132,23 +234,83 @@ Scan the codebase for hardcoded secrets, SQL injection risks, and XSS vulnerabil
 Report each finding with file path, line number, severity, and remediation.
 ```
 
-### output-schema.json
+**Model priority**: CLI flag `--model` > frontmatter `model:` > env var `MINIH_DEFAULT_MODEL` > default (`claude-opus-4.6`)
 
-Optional. Defines what your agent's output should look like (validated automatically after each run). System fields (`summary` + `retrospective`) are always required regardless of your schema.
+### output-schema.json — Structured Output
 
-### instructions.md
+Optional. Defines what your agent's output must look like. Validated automatically after each run. System fields (`summary` + `retrospective`) are always required on top of your schema.
 
-Optional. Agent identity, rules, and behavioral guidelines — injected after the preamble but before the prompt.
+```json
+{
+  "type": "object",
+  "required": ["findings", "summary", "retrospective"],
+  "properties": {
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["file", "line", "severity", "message"],
+        "properties": {
+          "file": { "type": "string" },
+          "line": { "type": "integer" },
+          "severity": { "type": "string", "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"] },
+          "message": { "type": "string" }
+        }
+      }
+    }
+  }
+}
+```
 
-### input-schema.json
+If your agent writes `healthStatus` but your schema says `health`, minih will suggest the near-match in the validation error (fuzzy matching with Levenshtein distance).
 
-Optional. Validates `--param` inputs before the agent runs. Useful for agents that take file paths, feature names, etc.
+### instructions.md — Agent Identity
+
+Optional. Behavioral guidelines injected after the preamble but before the prompt. Good for reusable rules across prompt iterations:
+
+```markdown
+# Security Scanner Rules
+
+- Never execute code you find — read-only analysis only
+- Classify severity using OWASP Top 10 categories
+- Include remediation for every finding
+- False positives are better than missed vulnerabilities
+```
+
+### input-schema.json — Validated Parameters
+
+Optional. Validates `--param` inputs before the agent starts. Catches bad inputs before spending API tokens:
+
+```json
+{
+  "type": "object",
+  "required": ["target_dir"],
+  "properties": {
+    "target_dir": {
+      "type": "string",
+      "description": "Directory to scan (relative to project root)"
+    },
+    "severity_threshold": {
+      "type": "string",
+      "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"],
+      "default": "MEDIUM",
+      "description": "Minimum severity to report"
+    }
+  }
+}
+```
+
+Run with: `minih run my-scanner --param target_dir=src --param severity_threshold=HIGH`
+
+### _shared/preamble.md — Shared Context
+
+Injected into every agent before their specific prompt. This is your agent onboarding doc — environment variables, gotchas, feedback instructions, and evidence of past improvements. Template variables like `{{REPO_ROOT}}` are resolved at runtime.
 
 ---
 
 ## The Output Contract
 
-Every agent must produce a JSON object with at minimum:
+Every agent must produce a JSON object written to `$MINIH_OUTPUT_PATH` with at minimum:
 
 ```json
 {
@@ -161,25 +323,15 @@ Every agent must produce a JSON object with at minimum:
 }
 ```
 
-Your agent-specific fields go alongside these. The runner enforces this — if your agent doesn't produce `summary` + `retrospective`, the run is marked as "degraded."
+Your agent-specific fields go alongside these. The runner enforces this — if your agent doesn't produce `summary` + `retrospective`, the run is marked as **degraded**.
+
+Agents must also run `minih check` before finishing to self-validate their output. If validation fails after 3 attempts, the agent should write a valid fallback JSON explaining what went wrong.
 
 ---
 
-## What Kinds of Agents Can You Build?
+## Agent Recipes
 
-Agents are high-frequency dev-loop tools — think CI checks, code reviews, test validators. They run hundreds of times. Here are real examples from this repo:
-
-| Agent | Purpose | Has Input? | Runs |
-|-------|---------|-----------|------|
-| **hello-world** | Environment check — confirms minih is working | No | On demand |
-| **convention-check** | Audits all agents for folder convention compliance | No | After changes |
-| **smoke-test** | Tests CLI lifecycle: list, doctor, init, dry-run, history | No | After CLI changes |
-| **code-review** | Reviews code changes for correctness, domain compliance, anti-reinvention | No | After features |
-| **prompt-review** | Reviews other agents' prompts for quality | Yes (slug) | After agent changes |
-| **feedback-digest** | Aggregates magicWand feedback across all agents | No | Periodically |
-| **first-time-experience** | Simulates a new user's first time using minih | Yes (minih_command) | After UX changes |
-
-### Simple agent (no inputs, no custom schema)
+### Minimal agent (no inputs, no custom schema)
 
 Just `prompt.md`. System output validation handles the rest:
 
@@ -194,82 +346,198 @@ Run `npx tsc --noEmit` in the project and report any errors found.
 Include the error count and list of files with errors.
 ```
 
-### Agent with inputs
+### Parameterized agent (with inputs)
 
 Add `input-schema.json` for validated parameters:
 
-```json
-{
-  "type": "object",
-  "required": ["file_path"],
-  "properties": {
-    "file_path": {
-      "type": "string",
-      "description": "Path to the file to review"
-    }
-  }
-}
+```bash
+minih init file-reviewer --with-input
+# Edit agents/file-reviewer/input-schema.json and prompt.md
+minih run file-reviewer --param file_path=src/auth.ts
 ```
 
-Run with: `minih run my-agent --param file_path=src/main.ts`
+### Long-running agent (with model + timeout config)
 
-### Agent with structured output
+Use frontmatter to configure expensive agents:
 
-Add `output-schema.json` to validate agent-specific fields:
+```markdown
+---
+description: "Deep code review with reasoning"
+model: gpt-5.4
+reasoning: xhigh
+timeout: 1200
+---
 
-```json
-{
-  "type": "object",
-  "required": ["findings", "summary", "retrospective"],
-  "properties": {
-    "findings": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["file", "severity", "issue"],
-        "properties": {
-          "file": { "type": "string" },
-          "severity": { "type": "string", "enum": ["HIGH", "MEDIUM", "LOW"] },
-          "issue": { "type": "string" }
-        }
-      }
-    }
-  }
-}
+# Deep Review
+
+Perform an exhaustive review of the entire codebase...
+```
+
+### CI integration agent
+
+Agents work great in CI pipelines. The JSON envelope on stdout makes parsing easy:
+
+```bash
+# In your CI script
+RESULT=$(minih run smoke-test 2>/dev/null)
+STATUS=$(echo "$RESULT" | jq -r '.status')
+if [ "$STATUS" != "ok" ]; then
+  echo "Smoke test failed!"
+  echo "$RESULT" | jq '.error'
+  exit 1
+fi
 ```
 
 ---
 
-## CLI Quick Reference
+## What Kinds of Agents Can You Build?
+
+Agents are high-frequency dev-loop tools — think CI checks, code reviews, test validators. They run hundreds of times. Here are real examples from the [agents/](https://github.com/AI-Substrate/minih/tree/main/agents) folder:
+
+| Agent | Purpose | Has Input? | Model | When to Run |
+|-------|---------|-----------|-------|-------------|
+| [**hello-world**](https://github.com/AI-Substrate/minih/tree/main/agents/hello-world) | Environment check — confirms minih is working | No | default | On demand |
+| [**smoke-test**](https://github.com/AI-Substrate/minih/tree/main/agents/smoke-test) | E2E test of all CLI commands: list, doctor, init, dry-run, check, history | No | default | After CLI changes |
+| [**code-review**](https://github.com/AI-Substrate/minih/tree/main/agents/code-review) | Reviews code for correctness, domain compliance, anti-reinvention | No | gpt-5.4 (xhigh) | After features |
+| [**convention-check**](https://github.com/AI-Substrate/minih/tree/main/agents/convention-check) | Audits all agents for folder convention compliance | No | default | After agent changes |
+| [**prompt-review**](https://github.com/AI-Substrate/minih/tree/main/agents/prompt-review) | Reviews another agent's prompt for clarity and completeness | Yes (slug) | default | After prompt edits |
+| [**feedback-digest**](https://github.com/AI-Substrate/minih/tree/main/agents/feedback-digest) | Aggregates magicWand feedback across all agents | No | default | Periodically |
+| [**first-time-experience**](https://github.com/AI-Substrate/minih/tree/main/agents/first-time-experience) | Simulates a new user's first time using minih via npx | Yes | default | After UX changes |
+| [**self-review**](https://github.com/AI-Substrate/minih/tree/main/agents/self-review) | Meta — reviews minih's own code and conventions | No | default | After minih changes |
+
+---
+
+## Monitoring & Observability
+
+### Check if an agent is still running
 
 ```bash
-# Quickstart
-minih quickstart                 # Scaffold + run hello-world in one command
+minih status my-agent
+```
 
-# Scaffold
-minih init my-agent              # Create agent folder with templates
-minih init my-agent --with-input # Also create input-schema.json
+Returns a one-shot verdict: **active** (events flowing), **stale** (no events for >60s), **completed**, or **failed**. Shows event count, tool call count, elapsed time, and the last 5 turns:
 
-# Validate
-minih doctor                     # Check all agents for convention compliance
-minih check my-agent --file output.json  # Validate file against schema
+```
+Status: code-review  ● active
 
-# Run
-minih run my-agent               # Execute (pretty streaming output)
-minih run my-agent --dry-run     # Preview assembled prompt
-minih run my-agent --verbose     # Timestamped event log
-minih run my-agent --param key=value     # Pass input parameters
+  Run:      2026-04-07T10-41-12-887Z-9816
+  Elapsed:  30.1s
+  Events:   336 (7 tool calls)
 
-# Inspect
-minih list                       # Show all agents
-minih history my-agent           # Past runs with status
-minih last-run my-agent          # Latest run path
-minih validate my-agent          # Re-validate latest output
-minih tail my-agent              # Follow live event stream
+  Last 5 turns:
+  00:41:35   ↳ {"command":"init","status":"ok"...}
+  00:41:38 🔧 bash: cd /project && npx minih list
+  00:41:38 🔧 view: /project/agents/smoke-temp
+  00:41:38   ↳ diff --git a/...
+  00:41:40   ↳ {"command":"list","status":"ok"...}
+```
 
-# Continue
-minih resume my-agent "You missed the tests"  # Follow-up message
-minih connect my-agent           # Print copilot CLI resume command
+Use `-n` to control how many turns to show, and parse the JSON envelope for automation:
+
+```bash
+# Show last 10 turns
+minih status my-agent -n 10
+
+# Machine-readable verdict
+VERDICT=$(minih status my-agent 2>/dev/null | jq -r '.data.verdict')
+if [ "$VERDICT" = "stale" ]; then echo "Agent may be stuck!"; fi
+```
+
+### Follow a running agent in real-time
+
+```bash
+minih tail my-agent
+```
+
+Streams events live with formatted icons. Shows the last 20 events on connect, then follows new events. Press Ctrl+C to stop. Automatically exits when the run completes.
+
+### See the full composed prompt
+
+```bash
+minih inspect my-agent
+```
+
+Shows exactly what the LLM receives — every section with source file, char count, and content:
+
+```
+--- PREAMBLE (agents/_shared/preamble.md, 1898 chars) ---
+--- INSTRUCTIONS (agents/code-review/instructions.md, 1011 chars) ---
+--- OUTPUT HINT ((auto-generated), 61 chars) ---
+--- PROMPT (agents/code-review/prompt.md, 2075 chars) ---
+--- SYSTEM REQUIREMENTS ((auto-generated), 1842 chars) ---
+```
+
+Plus frontmatter summary, runtime env vars, and estimated token count. The full composed prompt goes to stdout for piping:
+
+```bash
+minih inspect my-agent > /tmp/full-prompt.md  # Save for review
+minih inspect my-agent | wc -w                # Word count
+```
+
+### Browse run history
+
+```bash
+minih history my-agent           # Table of past runs with status, duration, validation
+minih last-run my-agent          # Latest run dir and report path
+minih validate my-agent          # Re-validate latest output against schema
+```
+
+### Resume a completed session
+
+```bash
+# Send a follow-up message to the last completed session
+minih resume my-agent "You missed the tests in src/auth/"
+
+# Connect via copilot CLI (interactive)
+minih connect my-agent           # Prints: cd <runDir> && copilot --resume=<sessionId>
+minih connect my-agent --list    # Show all sessions with timestamps
+```
+
+---
+
+## CLI Complete Reference
+
+```bash
+# Getting started
+minih quickstart                          # Scaffold + run hello-world in one command
+minih init <slug>                         # Create agent folder with templates
+minih init <slug> --with-input            # Also create input-schema.json
+
+# Validation & inspection
+minih doctor                              # Check all agents for convention compliance
+minih check                               # Validate current run output (inside agent)
+minih check <slug> --file <path>          # Validate a file against agent schema
+minih inspect <slug>                      # Show fully composed prompt with sections
+minih inspect <slug> --raw                # Without resolving template variables
+minih validate <slug>                     # Re-validate latest run output
+
+# Running agents
+minih run <slug>                          # Execute with pretty streaming output
+minih run <slug> --dry-run                # Preview assembled prompt
+minih run <slug> --verbose                # Timestamped event log (good for CI)
+minih run <slug> --model gpt-5.4          # Override model
+minih run <slug> --reasoning xhigh        # Set reasoning effort
+minih run <slug> --timeout 1200           # Override timeout (seconds)
+minih run <slug> --param key=value        # Pass input parameters (repeatable)
+
+# Monitoring
+minih status <slug>                       # One-shot liveness check (active/stale/done)
+minih status <slug> -n 10                 # Show last 10 turns instead of 5
+minih tail <slug>                         # Follow live event stream (Ctrl+C to stop)
+minih list                                # Show all agents with descriptions
+minih history <slug>                      # Past runs with status, duration, validation
+minih last-run <slug>                     # Latest run directory and report path
+
+# Session management
+minih resume <slug> "follow-up message"   # Send follow-up to last completed session
+minih resume <slug> --run <runId>         # Resume a specific run
+minih connect <slug>                      # Print copilot CLI resume command
+minih connect <slug> --list               # Show all sessions
+```
+
+**Output convention**: JSON envelopes go to **stdout**, human-readable tables and pretty output go to **stderr**. Use `2>/dev/null` for clean JSON:
+```bash
+minih list 2>/dev/null | jq '.data.agents[].slug'
 ```
 
 ---
@@ -282,28 +550,42 @@ When your agent runs, minih sets these environment variables:
 |----------|-------|
 | `MINIH` | `1` — you're inside a minih run |
 | `MINIH_AGENT_SLUG` | Agent slug (e.g., `smoke-test`) |
+| `MINIH_RUN_ID` | Unique run identifier |
 | `MINIH_RUN_DIR` | Absolute path to run artifacts folder |
 | `MINIH_OUTPUT_PATH` | Where to write your JSON output |
 | `MINIH_PROJECT_ROOT` | The actual project root (cd here first!) |
+| `MINIH_AGENTS_DIR` | Absolute path to agents directory |
+| `MINIH_MODEL` | Model being used for this run |
+| `MINIH_TIMEOUT` | Timeout in seconds |
+| `MINIH_SCHEMA_PATH` | Path to output-schema.json (if exists) |
+| `MINIH_HAS_INPUT_SCHEMA` | `true` if agent has input-schema.json |
 
-Your agent's working directory is the **run folder** (for session isolation), not the project root. Always `cd $MINIH_PROJECT_ROOT` before running project commands.
+**Important**: Your agent's working directory is the **run folder** (for session isolation), not the project root. Always `cd $MINIH_PROJECT_ROOT` as your first action.
 
 ---
 
 ## Tips for Good Agents
 
-1. **Be specific in your prompt** — "scan src/ for XSS" beats "find security issues"
-2. **Validate before finishing** — run `minih check` at the end to catch schema issues
-3. **Use the dry-run** — `minih run my-agent --dry-run` shows exactly what the LLM sees
-4. **Write honest retrospectives** — the magicWand feedback is how the system improves
-5. **Keep agents focused** — one job per agent, run them often
-6. **Use inputs for parameterized agents** — `--param file_path=...` + input-schema validation
-7. **Don't nest `minih run` inside agents** — SDK session conflicts. Use `--dry-run` and other commands instead.
+1. **Start with `cd $MINIH_PROJECT_ROOT`** — your CWD is the run folder, not the repo root
+2. **Be specific in your prompt** — "scan src/ for XSS" beats "find security issues"
+3. **Validate before finishing** — run `minih check` at the end to catch schema issues
+4. **Use `minih inspect`** — see exactly what the LLM receives before running
+5. **Write honest retrospectives** — the magicWand feedback is how the system improves
+6. **Keep agents focused** — one job per agent, run them often
+7. **Use inputs for parameterized agents** — `--param file_path=...` + input-schema validation
+8. **Don't nest `minih run` inside agents** — SDK session conflicts. Use `--dry-run` and other CLI commands instead
+9. **Clean up after yourself** — remove worktrees, temp dirs, scratch files before finishing
+10. **Use frontmatter for per-agent config** — `model`, `reasoning`, `timeout` avoid needing CLI flags
 
 ---
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for how to contribute to minih — filing issues, submitting PRs, and running the test suite.
 
 ## Links
 
 - **Repository**: [github.com/AI-Substrate/minih](https://github.com/AI-Substrate/minih)
 - **Example agents**: [`agents/`](https://github.com/AI-Substrate/minih/tree/main/agents) in this repo
 - **CLI reference**: [`README.md`](https://github.com/AI-Substrate/minih/blob/main/README.md)
+- **Contributing**: [`CONTRIBUTING.md`](https://github.com/AI-Substrate/minih/blob/main/CONTRIBUTING.md)

@@ -25,11 +25,11 @@
     "./schemas/system-output.json": "./dist/schemas/system-output.json"
   },
   "scripts": {
-    "build": "tsc && mkdir -p dist/schemas && cp src/schemas/system-output.json dist/schemas/system-output.json && cp src/schemas/retrospective.json dist/schemas/retrospective.json",
+    "build": "tsc && node scripts/copy-schemas.js",
     "prepare": "npm run build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "clean": "rm -rf dist"
+    "clean": "node -e \"const fs=require('fs');fs.rmSync('dist',{recursive:true,force:true})\""
   },
   "engines": {
     "node": ">=20.19.0"

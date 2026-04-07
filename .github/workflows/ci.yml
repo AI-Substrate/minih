@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  push:
+    branches: [main, ci-setup]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  quality-gate:
+    name: Lint → Build → Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [20, 22]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint (biome check)
+        run: npx biome check .
+
+      - name: Format check (biome)
+        run: npx biome format . --check
+
+      - name: Build (tsc + copy schemas)
+        run: npm run build
+
+      - name: Typecheck (tsc --noEmit)
+        run: npx tsc --noEmit
+
+      - name: Test (vitest)
+        run: npm test
+
+      - name: Audit (high severity)
+        run: npm audit --audit-level=high || true
+
+      - name: Verify dist artifacts
+        run: |
+          test -f dist/cli/index.js || (echo "Missing dist/cli/index.js" && exit 1)
+          test -f dist/schemas/system-output.json || (echo "Missing schemas" && exit 1)
+          test -f dist/schemas/retrospective.json || (echo "Missing schemas" && exit 1)
+          echo "✓ All dist artifacts present"
+
+  doctor:
+    name: Agent Doctor
+    runs-on: ubuntu-latest
+    needs: quality-gate
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Doctor (validate all agents)
+        run: node dist/cli/index.js doctor 2>/dev/null | jq .
+
+      - name: List agents
+        run: node dist/cli/index.js list 2>/dev/null | jq .
+
+      - name: Inspect hello-world prompt
+        run: node dist/cli/index.js inspect hello-world 2>/dev/null | head -20
+
+  pack-check:
+    name: Package Check
+    runs-on: ubuntu-latest
+    needs: quality-gate
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Dry-run pack
+        run: npm pack --dry-run 2>&1
+
+      - name: Check bin entry
+        run: |
+          node -e "
+            const pkg = require('./package.json');
+            if (!pkg.bin?.minih) { console.error('Missing bin.minih'); process.exit(1); }
+            console.log('✓ bin.minih =', pkg.bin.minih);
+          "

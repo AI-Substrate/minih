@@ -57,9 +57,9 @@ No source code changes. Pure infrastructure (workflows, docs, config).
 | [x] | T002 | Update CI triggers — add `v*` tags (keep branch trigger for now) | infra | `/Users/jordanknight/substrate/minih/.github/workflows/ci.yml` | CI triggers include `v*` tags. Branch trigger kept until T007 | AC5 |
 | [ ] | T002b | Clean stale branch triggers (last commit before PR merge) | infra | `/Users/jordanknight/substrate/minih/.github/workflows/ci.yml` | Triggers cleaned to `main` + `v*` tags + PRs only. No `ci-setup` or `004-ci-versioning` | AC6 |
 | [ ] | T003 | Verify CI passes on branch | infra | — | Push T001+T002 changes, confirm GitHub Actions run green on `004-ci-versioning` branch | Manual gate |
-| [ ] | T004 | Update README install docs with version pinning | docs | `/Users/jordanknight/substrate/minih/README.md` | Install section shows both HEAD (`npx github:AI-Substrate/minih`) and pinned (`npm install github:AI-Substrate/minih#vX.Y.Z`) options. Uses `#ref` syntax, NOT `@version` | AC9 |
-| [ ] | T005 | Update AGENTS_README install docs with version pinning | docs | `/Users/jordanknight/substrate/minih/AGENTS_README.md` | Install section shows both HEAD and pinned options using `#ref` syntax | AC7 |
-| [ ] | T006 | Update CONTRIBUTING with release process | docs | `/Users/jordanknight/substrate/minih/CONTRIBUTING.md` | New "Releasing" section explains: push conventional commits → release-please opens PR → merge PR → tag + GitHub Release created | AC8 |
+| [x] | T004 | Update README install docs with version pinning | docs | `/Users/jordanknight/substrate/minih/README.md` | Install section shows both HEAD (`npx github:AI-Substrate/minih`) and pinned (`npm install github:AI-Substrate/minih#vX.Y.Z`) options. Uses `#ref` syntax, NOT `@version` | AC9 |
+| [x] | T005 | Update AGENTS_README install docs with version pinning | docs | `/Users/jordanknight/substrate/minih/AGENTS_README.md` | Install section shows both HEAD and pinned options using `#ref` syntax | AC7 |
+| [x] | T006 | Update CONTRIBUTING with release process | docs | `/Users/jordanknight/substrate/minih/CONTRIBUTING.md` | New "Releasing" section explains: push conventional commits → release-please opens PR → merge PR → tag + GitHub Release created | AC8 |
 | [ ] | T007 | PR to main and verify release-please activates | infra | — | PR merged, release-please opens first Release PR on main | AC2, AC10 |
 
 ### Acceptance Criteria

@@ -143,6 +143,34 @@ When contributing new features, consider:
 
 ---
 
+## Releasing
+
+minih uses [release-please](https://github.com/googleapis/release-please) for automated releases. No manual version bumps or changelog edits needed.
+
+### How It Works
+
+1. **Push conventional commits** to `main` (you're already doing this)
+2. **release-please opens a Release PR** automatically — it bumps `package.json` version and updates `CHANGELOG.md` based on your commits
+3. **Merge the Release PR** → git tag (`v0.2.0`) + GitHub Release created automatically
+
+### Commit → Version Mapping
+
+| Prefix | Bump | Example |
+|--------|------|---------|
+| `fix:` | patch (0.1.0 → 0.1.1) | `fix: CRLF frontmatter parsing` |
+| `feat:` | minor (0.1.0 → 0.2.0) | `feat: minih status command` |
+| `feat!:` | major (0.1.0 → 1.0.0) | `feat!: new output format` |
+| `docs:`, `ci:`, `chore:` | no bump | `docs: update README` |
+
+### Important
+
+- **Don't rename release-please PRs** — it uses the commit prefix to avoid infinite loops
+- **Don't manually edit `CHANGELOG.md`** — release-please owns it
+- **Don't manually bump `package.json` version** — release-please handles this
+- Users install specific releases via: `npm install github:AI-Substrate/minih#v0.2.0`
+
+---
+
 ## Architecture Notes
 
 - **Session isolation**: Agent CWD is the run folder, not the project root. This prevents SDK session artifacts from polluting the user's project.

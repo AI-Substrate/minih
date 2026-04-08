@@ -92,6 +92,8 @@ npx github:AI-Substrate/minih quickstart
 
 This scaffolds a `hello-world` agent and runs it immediately. You'll see pretty streaming output, a structured JSON report, and your first magic wand feedback.
 
+> **Pin a specific version**: `npx github:AI-Substrate/minih#v0.x.y quickstart`
+
 ### Option 2: Clone and link (for development)
 
 ```bash
@@ -108,7 +110,13 @@ minih quickstart
 
 ```bash
 cd your-project
+
+# Latest (HEAD)
 npm install github:AI-Substrate/minih
+
+# Or pin a release
+npm install github:AI-Substrate/minih#v0.x.y
+
 npx minih quickstart
 ```
 

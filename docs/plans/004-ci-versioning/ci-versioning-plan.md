@@ -4,7 +4,7 @@
 **Plan Version**: 1.0.0
 **Created**: 2026-04-08
 **Spec**: [ci-versioning-spec.md](./ci-versioning-spec.md)
-**Status**: DRAFT
+**Status**: READY FOR MERGE
 
 ## Summary
 

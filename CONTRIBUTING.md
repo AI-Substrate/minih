@@ -167,7 +167,7 @@ minih uses [release-please](https://github.com/googleapis/release-please) for au
 - **Don't rename release-please PRs** — it uses the commit prefix to avoid infinite loops
 - **Don't manually edit `CHANGELOG.md`** — release-please owns it
 - **Don't manually bump `package.json` version** — release-please handles this
-- Users install specific releases via: `npm install github:AI-Substrate/minih#v0.2.0`
+- Users install specific releases via: `npm install github:AI-Substrate/minih#v0.x.y`
 
 ---
 

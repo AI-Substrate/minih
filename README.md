@@ -15,7 +15,7 @@ npx github:AI-Substrate/minih quickstart
 
 One command — scaffolds a hello-world agent, runs it, shows the results. Zero to success in 60 seconds.
 
-> **Pin a specific version**: `npx github:AI-Substrate/minih#v0.2.0 quickstart`
+> **Pin a specific version**: `npx github:AI-Substrate/minih#v0.x.y quickstart`
 
 ### The Manual Way
 
@@ -26,7 +26,7 @@ One command — scaffolds a hello-world agent, runs it, shows the results. Zero 
 npm install github:AI-Substrate/minih
 
 # Or pin a release
-npm install github:AI-Substrate/minih#v0.2.0
+npm install github:AI-Substrate/minih#v0.x.y
 
 # minih uses @github/copilot-sdk as a peer dependency
 npm install @github/copilot-sdk

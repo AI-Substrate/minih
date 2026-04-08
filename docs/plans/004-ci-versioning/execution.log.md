@@ -24,3 +24,46 @@ Added `tags: ['v*']` to push triggers in `ci.yml`. Kept `004-ci-versioning` bran
 **Evidence**: File updated, committed.
 
 ---
+
+## T003: Verify CI passes on branch
+
+**Verified**: 2026-04-08T10:08:00Z
+
+All 3 CI runs on `004-ci-versioning` branch passed:
+- `ci: add release-please workflow + v* tag triggers` → ✅ success
+- `docs: version pinning...` → ✅ success
+- PR #3 checks → ✅ success
+
+---
+
+## T004: Update README install docs
+
+**Completed**: 2026-04-08T10:05:00Z
+
+Added pinned version examples using `#ref` syntax (DYK #1).
+
+---
+
+## T005: Update AGENTS_README install docs
+
+**Completed**: 2026-04-08T10:05:00Z
+
+Added pinned version examples to all 3 install options.
+
+---
+
+## T006: Update CONTRIBUTING with release process
+
+**Completed**: 2026-04-08T10:05:00Z
+
+Added "Releasing" section with release-please workflow, commit→version mapping table, and important notes (don't rename PRs, don't edit CHANGELOG manually).
+
+---
+
+## T002b: Clean stale branch triggers
+
+**Completed**: 2026-04-08T10:08:00Z
+
+Removed `004-ci-versioning` from ci.yml triggers. Now triggers on `main` + `v*` tags + PRs to main only.
+
+---

@@ -82,8 +82,34 @@ No new domains. This feature is pure infrastructure — GitHub Actions workflows
 
 ## Open Questions
 
-- Should we set an explicit `initial-version` in release-please config to control the first release number? (e.g., start at `0.2.0` since many features shipped since `0.1.0`)
+None — all resolved in Clarifications session below.
+
+## Testing Strategy
+
+- **Approach**: Manual only
+- **Rationale**: Pure infrastructure — YAML workflows and docs. Verify by pushing to branch and checking GitHub Actions results.
+- **Focus**: Confirm workflows trigger, pass, and produce expected artifacts (tags, releases, changelog)
+- **Mock Usage**: N/A
+
+## Documentation Strategy
+
+- **Location**: Hybrid — README.md + AGENTS_README.md + CONTRIBUTING.md
+- **Rationale**: Install docs need version pinning in both READMEs; release process goes in CONTRIBUTING
 
 ## Workshop Opportunities
 
 None identified — release-please is well-documented and the implementation is straightforward workflow + docs changes.
+
+## Clarifications
+
+### Session 2026-04-08
+
+**Q1: Workflow Mode** → Simple (confirmed — CS-2, infrastructure only)
+
+**Q2: Testing Strategy** → Manual only — verify workflows trigger and pass on branch, check GitHub Actions results. No unit tests for YAML files.
+
+**Q3: Documentation Strategy** → Hybrid — README.md + AGENTS_README.md + CONTRIBUTING.md. Install docs get version pinning, CONTRIBUTING gets release process.
+
+**Q4: First Release Version** → Let release-please figure it out from commits (will likely produce 0.2.0 given the volume of `feat:` commits since 0.1.0). No explicit `initial-version` override.
+
+**Q5: CI Trigger Cleanup** → Yes — after merge, clean branch triggers to just `main` + `v*` tags + PRs to main. Remove stale `ci-setup` and temporary `004-ci-versioning`.

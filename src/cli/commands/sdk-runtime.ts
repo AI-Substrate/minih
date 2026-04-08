@@ -41,7 +41,7 @@ export async function createSdkRuntime(
     );
   }
 
-  // Dynamic SDK import — actionable error if missing
+  // Dynamic SDK import — try minih's node_modules first, then the user's project
   let CopilotClient: new () => { stop(): Promise<unknown> };
   try {
     const sdk = await import('@github/copilot-sdk');
@@ -51,15 +51,27 @@ export async function createSdkRuntime(
       (err as NodeJS.ErrnoException).code === 'ERR_MODULE_NOT_FOUND' ||
       (err as NodeJS.ErrnoException).code === 'MODULE_NOT_FOUND';
     if (code) {
-      exitWithEnvelope(
-        formatError(
-          commandName,
-          ErrorCodes.AGENT_SDK_MISSING,
-          'Install @github/copilot-sdk in your project first: npm install @github/copilot-sdk',
-        ),
-      );
+      // When running via npx, minih is in a separate cache dir and can't see
+      // the project's node_modules. Try resolving from the project root.
+      try {
+        const projectRoot = process.cwd();
+        const { createRequire } = await import('node:module');
+        const require = createRequire(projectRoot + '/');
+        const sdkPath = require.resolve('@github/copilot-sdk');
+        const sdk = await import(sdkPath);
+        CopilotClient = sdk.CopilotClient;
+      } catch {
+        exitWithEnvelope(
+          formatError(
+            commandName,
+            ErrorCodes.AGENT_SDK_MISSING,
+            'Install @github/copilot-sdk in your project first: npm install @github/copilot-sdk',
+          ),
+        );
+      }
+    } else {
+      throw err;
     }
-    throw err;
   }
 
   // Suppress Node.js ExperimentalWarning in SDK subprocess (SQLite warning)

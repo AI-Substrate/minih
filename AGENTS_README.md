@@ -427,13 +427,31 @@ Agents are high-frequency dev-loop tools — think CI checks, code reviews, test
 
 ## Monitoring & Observability
 
-### Check if an agent is still running
+Long-running agents (code reviews, deep scans) can take 10–20 minutes. Don't launch and forget — check in periodically to make sure the agent is making progress and hasn't stalled.
+
+### The monitoring workflow
+
+```bash
+# 1. Launch the agent in the background
+minih run code-review &
+
+# 2. Check in every few minutes
+minih status code-review          # Quick: active? stale? how many tool calls?
+minih status code-review -n 10    # More detail: last 10 turns
+
+# 3. Or follow live
+minih tail code-review            # Stream events in real-time (Ctrl+C to detach)
+```
+
+The key habit: **run `minih status` every couple of minutes** during long runs. It shows the last 5 turns so you can see exactly what the agent is doing right now — which files it's reading, which commands it's running, whether it's stuck in a loop.
+
+### One-shot liveness check
 
 ```bash
 minih status my-agent
 ```
 
-Returns a one-shot verdict: **active** (events flowing), **stale** (no events for >60s), **completed**, or **failed**. Shows event count, tool call count, elapsed time, and the last 5 turns:
+Returns a verdict: **active** (events flowing), **stale** (no events for >60s), **completed**, or **failed**. Shows event count, tool call count, elapsed time, and the last few turns:
 
 ```
 Status: code-review  ● active
@@ -459,6 +477,20 @@ minih status my-agent -n 10
 # Machine-readable verdict
 VERDICT=$(minih status my-agent 2>/dev/null | jq -r '.data.verdict')
 if [ "$VERDICT" = "stale" ]; then echo "Agent may be stuck!"; fi
+```
+
+### Automated polling (for orchestrating agents)
+
+If you're building an agent that launches other agents, poll `minih status` to keep tabs:
+
+```bash
+# Poll every 2 minutes until done
+while true; do
+  VERDICT=$(minih status my-agent 2>/dev/null | jq -r '.data.verdict')
+  if [ "$VERDICT" = "completed" ] || [ "$VERDICT" = "failed" ]; then break; fi
+  echo "$(date +%H:%M) — $VERDICT ($(minih status my-agent 2>/dev/null | jq -r '.data.toolCallCount') tool calls)"
+  sleep 120
+done
 ```
 
 ### Follow a running agent in real-time

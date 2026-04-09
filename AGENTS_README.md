@@ -416,7 +416,7 @@ Agents are high-frequency dev-loop tools — think CI checks, code reviews, test
 |-------|---------|-----------|-------|-------------|
 | [**hello-world**](https://github.com/AI-Substrate/minih/tree/main/agents/hello-world) | Environment check — confirms minih is working | No | default | On demand |
 | [**smoke-test**](https://github.com/AI-Substrate/minih/tree/main/agents/smoke-test) | E2E test of all CLI commands: list, doctor, init, dry-run, check, history | No | default | After CLI changes |
-| [**code-review**](https://github.com/AI-Substrate/minih/tree/main/agents/code-review) | Reviews code for correctness, domain compliance, anti-reinvention | No | gpt-5.4 (xhigh) | After features |
+| [**code-review**](https://github.com/AI-Substrate/minih/tree/main/agents/code-review) | Reviews code for correctness, domain compliance, anti-reinvention | Yes (context) | gpt-5.4 (xhigh) | After features |
 | [**convention-check**](https://github.com/AI-Substrate/minih/tree/main/agents/convention-check) | Audits all agents for folder convention compliance | No | default | After agent changes |
 | [**prompt-review**](https://github.com/AI-Substrate/minih/tree/main/agents/prompt-review) | Reviews another agent's prompt for clarity and completeness | Yes (slug) | default | After prompt edits |
 | [**feedback-digest**](https://github.com/AI-Substrate/minih/tree/main/agents/feedback-digest) | Aggregates magicWand feedback across all agents | No | default | Periodically |
@@ -585,15 +585,16 @@ When your agent runs, minih sets these environment variables:
 ## Tips for Good Agents
 
 1. **Start with `cd $MINIH_PROJECT_ROOT`** — your CWD is the run folder, not the repo root
-2. **Be specific in your prompt** — "scan src/ for XSS" beats "find security issues"
-3. **Validate before finishing** — run `minih check` at the end to catch schema issues
-4. **Use `minih inspect`** — see exactly what the LLM receives before running
-5. **Write honest retrospectives** — the magicWand feedback is how the system improves
-6. **Keep agents focused** — one job per agent, run them often
-7. **Use inputs for parameterized agents** — `--param file_path=...` + input-schema validation
-8. **Don't nest `minih run` inside agents** — SDK session conflicts. Use `--dry-run` and other CLI commands instead
-9. **Clean up after yourself** — remove worktrees, temp dirs, scratch files before finishing
-10. **Use frontmatter for per-agent config** — `model`, `reasoning`, `timeout` avoid needing CLI flags
+2. **Make agents reusable, not hardcoded** — an agent should be a tool you run many times, not a script for one specific task. Use input parameters to tell it what to do, and make it discover context on its own when no inputs are given. A code-review agent should accept a commit range or tasks file, not have one hardcoded. A scanner should accept a target directory, not assume `src/`.
+3. **Be specific in your prompt** — "scan src/ for XSS" beats "find security issues"
+4. **Validate before finishing** — run `minih check` at the end to catch schema issues
+5. **Use `minih inspect`** — see exactly what the LLM receives before running
+6. **Write honest retrospectives** — the magicWand feedback is how the system improves
+7. **Keep agents focused** — one job per agent, run them often
+8. **Use inputs for parameterized agents** — `--param file_path=...` + input-schema validation
+9. **Don't nest `minih run` inside agents** — SDK session conflicts. Use `--dry-run` and other CLI commands instead
+10. **Clean up after yourself** — remove worktrees, temp dirs, scratch files before finishing
+11. **Use frontmatter for per-agent config** — `model`, `reasoning`, `timeout` avoid needing CLI flags
 
 ---
 

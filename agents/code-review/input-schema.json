@@ -1,0 +1,9 @@
+{
+  "type": "object",
+  "properties": {
+    "context": {
+      "type": "string",
+      "description": "Review brief — what to review. Can be a commit range (HEAD~3..HEAD), file paths, a tasks file path, or a plain text description of what changed. If omitted, the agent discovers the latest changes automatically."
+    }
+  }
+}

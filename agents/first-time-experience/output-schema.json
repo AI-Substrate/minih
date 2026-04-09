@@ -64,7 +64,14 @@
       "minLength": 20
     },
     "retrospective": {
-      "$ref": "https://minih.dev/schemas/retrospective.json"
+      "type": "object",
+      "required": ["workedWell", "confusing", "magicWand"],
+      "additionalProperties": true,
+      "properties": {
+        "workedWell": { "type": "string", "minLength": 10 },
+        "confusing": { "type": "string", "minLength": 10 },
+        "magicWand": { "type": "string", "minLength": 20 }
+      }
     }
   }
 }

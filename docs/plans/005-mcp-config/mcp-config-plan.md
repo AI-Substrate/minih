@@ -70,10 +70,10 @@ No new domains. No contract-breaking changes. IAgentAdapter interface unchanged.
 | [ ] | T001 | Extend adapter types with MCP fields | adapter | `src/adapter/copilot-types.ts`, `src/adapter/events.ts` | `CopilotSessionConfig`, `CopilotResumeSessionConfig`, and `AgentRunOptions` all have optional `configDir` and `mcpServers` fields | AC7, AC8 |
 | [ ] | T002 | Extend runner types + add MCP config loader | runner | `src/runner/types.ts` | `AgentRunConfig` has optional `configDir` and `mcpConfigPath` fields. Helper to load/parse MCP config file if `--mcp-config` provided | Per finding 03 |
 | [ ] | T003 | Forward MCP fields in SdkCopilotAdapter | adapter | `src/adapter/sdk-copilot.ts` | `configDir` and `mcpServers` are spread into both `createSession()` and `resumeSession()` calls | Per finding 01. AC1, AC3 |
-| [ ] | T004 | Thread MCP fields through runAgent() | runner | `src/runner/runner.ts` | `runAgent()` passes `configDir` and `mcpServers` from config to `adapter.run()`. `configDir` defaults to `config.cwd` (project root) when not explicitly set | Per finding 02. AC1, AC5 |
-| [ ] | T005 | Add --mcp-config to CLI commands | cli | `src/cli/commands/run.ts`, `resume.ts`, `quickstart.ts` | All 3 commands accept `--mcp-config <path>`, load file, set mcpServers on AgentRunConfig. Auto-set configDir to project root | AC2, AC3, AC4, AC9 |
+| [ ] | T004 | Thread MCP fields through runAgent() | runner | `src/runner/runner.ts` | `runAgent()` passes `configDir` or `mcpServers` (mutually exclusive) from config to `adapter.run()`. Always set `configDir` to project root unless `--mcp-config` overrides with explicit `mcpServers` | Per finding 02, DYK #1. AC1, AC5 |
+| [ ] | T005 | Add --mcp-config to CLI commands | cli | `src/cli/commands/run.ts`, `resume.ts`, `quickstart.ts` | All 3 commands accept `--mcp-config <path>`. Fail fast if file missing/invalid. Extract `.mcpServers` from file. When explicit file: set mcpServers only (no configDir). When no file: set configDir to project root. | Per finding 03, DYK #1, #3. AC2, AC3, AC4, AC9 |
 | [ ] | T006 | Show MCP config in inspect command | cli | `src/cli/commands/inspect.ts` | `minih inspect <slug>` shows MCP config source (auto-discovery / explicit file / none) in environment section | AC6 |
-| [ ] | T007 | Create MCP test stub server | test infra | `scripts/mcp-test-server.js` | Stub responds to initialize, tools/list (echo tool), tools/call. Runs as stdio MCP server | Per workshop 001 |
+| [ ] | T007 | Create MCP test stub server (first-class) | test infra | `scripts/mcp-test-server.js` | Content-Length framed JSON-RPC. Two tools: `echo` (returns message) + `add` (returns sum). --help flag. Zero deps. Reusable MCP test infra. | Per workshop 001, DYK #4 |
 | [ ] | T008 | Create unit tests for MCP threading | test | `test/runner/mcp.test.ts`, `test/fixtures/mcp-config.json` | Tests verify: configDir passes through, mcpServers passes through, no-config works, --mcp-config loads file | AC10 |
 | [ ] | T009 | Create mcp-smoke-test dogfood agent | dogfood | `agents/mcp-smoke-test/prompt.md`, `output-schema.json` | Agent validates MCP tools are visible, calls echo tool, reports pass/fail | Per workshop 001 |
 | [ ] | T010 | Create project .mcp.json + update docs | docs | `.mcp.json`, `README.md`, `AGENTS_README.md` | .mcp.json points to test stub. Both READMEs show --mcp-config in CLI reference. AGENTS_README has MCP section | AC9 |
@@ -101,3 +101,15 @@ No new domains. No contract-breaking changes. IAgentAdapter interface unchanged.
 | --mcp-config file must be wrapper format `{mcpServers:{...}}` | Certain | Wrong parse if treated as bare server map | T005: Parse file and extract `.mcpServers` property only |
 | MCP server `cwd` inherits SDK process cwd, not workingDirectory | Medium | Stub runs in wrong directory | T007: Set explicit `cwd` in .mcp.json fixture pointing to project root |
 | configDir from run folder misses .mcp.json | Low | Tools not discovered | T004 defaults configDir to project root (config.cwd) |
+| --mcp-config + auto-discovery double-loads servers | Medium | Duplicate/conflicting MCP servers | DYK #1: Mutually exclusive — explicit file sets mcpServers only, no file sets configDir only |
+| Invalid --mcp-config path fails deep in SDK | Medium | Confusing error, wasted time | DYK #3: Fail fast — validate file exists + has mcpServers before SDK init |
+
+### DYK Findings (2026-04-10)
+
+| # | Insight | Action |
+|---|---------|--------|
+| 1 | `--mcp-config` and auto-discovery conflict if both sent | Mutually exclusive: explicit → mcpServers only, auto → configDir only |
+| 2 | Always passing configDir adds scan for all projects | Always pass — SDK handles gracefully, simplicity wins |
+| 3 | Bad `--mcp-config` path fails deep in SDK | Fail fast: validate file + mcpServers property before SDK init |
+| 4 | Test stub is reusable MCP infra, deserves first-class treatment | Two tools (echo + add), --help flag, Content-Length framed |
+| 5 | Agents need MCP availability env var? | Dropped — SDK provides tools list directly to agents |

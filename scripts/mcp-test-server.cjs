@@ -100,57 +100,57 @@ function handleRequest(req) {
   }
 }
 
-// Content-Length framed JSON-RPC reader/writer (LSP-style)
+// Newline-delimited JSON-RPC (SDK sends raw JSON, one message per chunk)
 function sendResponse(id, result) {
   if (result === null || id === undefined) return;
   const body = JSON.stringify({ jsonrpc: '2.0', id, result });
-  const header = `Content-Length: ${Buffer.byteLength(body)}\r\n\r\n`;
-  process.stdout.write(header + body);
+  process.stdout.write(body + '\n');
 }
 
 function sendError(id, code, message) {
   const body = JSON.stringify({ jsonrpc: '2.0', id, error: { code, message } });
-  const header = `Content-Length: ${Buffer.byteLength(body)}\r\n\r\n`;
-  process.stdout.write(header + body);
+  process.stdout.write(body + '\n');
 }
 
-let buffer = Buffer.alloc(0);
-let contentLength = -1;
+let buffer = '';
 
+process.stdin.setEncoding('utf-8');
 process.stdin.on('data', (chunk) => {
-  buffer = Buffer.concat([buffer, chunk]);
+  buffer += chunk;
 
-  while (true) {
-    if (contentLength === -1) {
-      // Look for Content-Length header
-      const headerEnd = buffer.indexOf('\r\n\r\n');
-      if (headerEnd === -1) break;
-
-      const header = buffer.slice(0, headerEnd).toString('utf-8');
-      const match = header.match(/Content-Length:\s*(\d+)/i);
-      if (!match) {
-        // Skip malformed header
-        buffer = buffer.slice(headerEnd + 4);
-        continue;
+  // Process complete JSON messages (may arrive as partial chunks)
+  let startIdx = 0;
+  for (let i = 0; i < buffer.length; i++) {
+    if (buffer[i] === '\n' || i === buffer.length - 1) {
+      const line = buffer.slice(startIdx, i === buffer.length - 1 ? i + 1 : i).trim();
+      startIdx = i + 1;
+      if (!line) continue;
+      try {
+        const req = JSON.parse(line);
+        const result = handleRequest(req);
+        if (result !== null) {
+          sendResponse(req.id, result);
+        }
+      } catch {
+        // Partial message — try as accumulated buffer
       }
-      contentLength = parseInt(match[1], 10);
-      buffer = buffer.slice(headerEnd + 4);
     }
+  }
+  if (startIdx > 0) {
+    buffer = buffer.slice(startIdx);
+  }
 
-    if (buffer.length < contentLength) break;
-
-    const body = buffer.slice(0, contentLength).toString('utf-8');
-    buffer = buffer.slice(contentLength);
-    contentLength = -1;
-
+  // Also try parsing the entire buffer as a single message (SDK may send without newline)
+  if (buffer.trim()) {
     try {
-      const req = JSON.parse(body);
+      const req = JSON.parse(buffer.trim());
+      buffer = '';
       const result = handleRequest(req);
       if (result !== null) {
         sendResponse(req.id, result);
       }
     } catch {
-      // Skip malformed JSON
+      // Incomplete — wait for more data
     }
   }
 });

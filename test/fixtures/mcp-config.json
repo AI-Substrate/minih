@@ -2,7 +2,7 @@
   "mcpServers": {
     "test-echo": {
       "command": "node",
-      "args": ["scripts/mcp-test-server.js"],
+      "args": ["scripts/mcp-test-server.cjs"],
       "tools": ["*"]
     }
   }

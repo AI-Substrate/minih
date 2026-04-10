@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.2](https://github.com/AI-Substrate/minih/compare/minih-v0.1.1...minih-v0.1.2) (2026-04-10)
+
+
+### Features
+
+* make agents reusable — parameterized code-review + design guidance ([66d377b](https://github.com/AI-Substrate/minih/commit/66d377b6bf056bfbd68b8189c41e6971e5f33897))
+
+
+### Bug Fixes
+
+* inline retrospective schema — remove unresolvable $ref ([#4](https://github.com/AI-Substrate/minih/issues/4)) ([170d38a](https://github.com/AI-Substrate/minih/commit/170d38af903c74de309ae1d44433fe668278710a))
+
 ## [0.1.1](https://github.com/AI-Substrate/minih/compare/minih-v0.1.0...minih-v0.1.1) (2026-04-08)
 
 

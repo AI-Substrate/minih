@@ -312,6 +312,11 @@ export async function runAgent(
       cwd: runDir, // SDK isolated to run folder (Workshop 005)
       onEvent: handleEvent,
       timeout: timeoutMs,
+      // MCP config: mutually exclusive (DYK #1)
+      // Explicit mcpServers (from --mcp-config) takes precedence over configDir auto-discovery
+      ...(config.mcpServers
+        ? { mcpServers: config.mcpServers }
+        : { configDir: config.configDir ?? config.cwd }),
     });
     const timeoutPromise = new Promise<never>((_, reject) => {
       timeoutHandle = setTimeout(() => {

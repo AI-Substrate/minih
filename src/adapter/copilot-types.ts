@@ -22,6 +22,8 @@ export interface CopilotSessionConfig {
   model?: string;
   reasoningEffort?: CopilotReasoningEffort;
   workingDirectory?: string;
+  configDir?: string;
+  mcpServers?: Record<string, unknown>;
   onPermissionRequest?: () => { kind: string };
 }
 
@@ -29,6 +31,8 @@ export interface CopilotResumeSessionConfig {
   model?: string;
   reasoningEffort?: CopilotReasoningEffort;
   workingDirectory?: string;
+  configDir?: string;
+  mcpServers?: Record<string, unknown>;
   onPermissionRequest?: () => { kind: string };
 }
 

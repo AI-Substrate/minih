@@ -1,0 +1,38 @@
+{
+  "type": "object",
+  "required": ["mcpAvailable", "toolsFound", "echoTestPassed", "summary", "retrospective"],
+  "additionalProperties": true,
+  "properties": {
+    "mcpAvailable": {
+      "type": "boolean",
+      "description": "Whether MCP config was found and servers loaded"
+    },
+    "toolsFound": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "MCP tool names discovered in the session"
+    },
+    "echoTestPassed": {
+      "type": "boolean",
+      "description": "Whether echo tool returned the expected message"
+    },
+    "addTestPassed": {
+      "type": "boolean",
+      "description": "Whether add tool returned the expected sum"
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 20
+    },
+    "retrospective": {
+      "type": "object",
+      "required": ["workedWell", "confusing", "magicWand"],
+      "additionalProperties": true,
+      "properties": {
+        "workedWell": { "type": "string", "minLength": 10 },
+        "confusing": { "type": "string", "minLength": 10 },
+        "magicWand": { "type": "string", "minLength": 20 }
+      }
+    }
+  }
+}

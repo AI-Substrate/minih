@@ -42,6 +42,8 @@ export interface AgentRunOptions {
   model?: string;
   reasoningEffort?: ReasoningEffort;
   timeout?: number;
+  configDir?: string;
+  mcpServers?: Record<string, unknown>;
 }
 
 // ============================================

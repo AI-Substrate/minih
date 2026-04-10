@@ -143,7 +143,7 @@ export function registerQuickstartCommand(program: Command): void {
         const result = await runAgent(
           runtime.adapter,
           definition,
-          { slug, timeout: 120, cwd: process.cwd() },
+          { slug, timeout: 120, cwd: process.cwd(), configDir: process.cwd() },
           onEvent,
           agentsDir,
         );

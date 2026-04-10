@@ -174,6 +174,13 @@ export function registerInspectCommand(program: Command): void {
           MINIH_HAS_INPUT_SCHEMA: definition.inputSchemaPath ? 'true' : 'false',
         };
 
+        // MCP config discovery
+        const mcpJsonPath = path.join(repoRoot, '.mcp.json');
+        const hasMcpConfig = fs.existsSync(mcpJsonPath);
+        const mcpConfigSource = hasMcpConfig
+          ? `auto-discovery (${mcpJsonPath})`
+          : 'none';
+
         // TTY display with section markers
         if (process.stderr.isTTY) {
           process.stderr.write(
@@ -210,6 +217,7 @@ export function registerInspectCommand(program: Command): void {
           for (const [key, val] of Object.entries(envVars)) {
             process.stderr.write(`  ${chalk.dim(key)}=${val}\n`);
           }
+          process.stderr.write(`  ${chalk.dim('MCP config')}=${mcpConfigSource}\n`);
 
           process.stderr.write(`\n${chalk.bold('─── Stats ───')}\n`);
           process.stderr.write(`  Sections:     ${sections.length}\n`);
@@ -236,6 +244,7 @@ export function registerInspectCommand(program: Command): void {
             estimatedTokens: Math.round(composed.length / 4),
             frontmatter: { description, tags, model, reasoning, timeout },
             envVars,
+            mcpConfig: mcpConfigSource,
           }),
         );
       },

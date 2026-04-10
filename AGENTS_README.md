@@ -422,6 +422,7 @@ Agents are high-frequency dev-loop tools — think CI checks, code reviews, test
 | [**feedback-digest**](https://github.com/AI-Substrate/minih/tree/main/agents/feedback-digest) | Aggregates magicWand feedback across all agents | No | default | Periodically |
 | [**first-time-experience**](https://github.com/AI-Substrate/minih/tree/main/agents/first-time-experience) | Simulates a new user's first time using minih via npx | Yes | default | After UX changes |
 | [**self-review**](https://github.com/AI-Substrate/minih/tree/main/agents/self-review) | Meta — reviews minih's own code and conventions | No | default | After minih changes |
+| [**mcp-smoke-test**](https://github.com/AI-Substrate/minih/tree/main/agents/mcp-smoke-test) | Validates MCP tools are available and callable in agent sessions | No | default | After MCP changes |
 
 ---
 
@@ -569,6 +570,7 @@ minih run <slug> --model gpt-5.4          # Override model
 minih run <slug> --reasoning xhigh        # Set reasoning effort
 minih run <slug> --timeout 1200           # Override timeout (seconds)
 minih run <slug> --param key=value        # Pass input parameters (repeatable)
+minih run <slug> --mcp-config config.json # Load MCP servers from file
 
 # Monitoring
 minih status <slug>                       # One-shot liveness check (active/stale/done)

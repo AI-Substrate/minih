@@ -160,6 +160,7 @@ minih run my-agent --verbose    # Old-style timestamped event log
 | `-r, --reasoning <effort>` | Reasoning effort: low, medium, high, xhigh |
 | `-t, --timeout <seconds>` | Timeout in seconds (default: 300) |
 | `-p, --param <key=value>` | Input parameter (repeatable) |
+| `--mcp-config <path>` | Load MCP servers from a JSON config file |
 | `--dry-run` | Preview assembled prompt without executing |
 | `--verbose` | Show all events with timestamps (default: pretty streaming) |
 

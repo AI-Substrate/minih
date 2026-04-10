@@ -152,8 +152,7 @@ export function registerRunCommand(program: Command): void {
             : (definition.timeout ?? DEFAULT_TIMEOUT),
           cwd: process.cwd(),
           params: Object.keys(params).length > 0 ? params : undefined,
-          // MCP: explicit mcpServers OR configDir for auto-discovery (never both)
-          ...(mcpServers ? { mcpServers } : { configDir: process.cwd() }),
+          ...(mcpServers && { mcpServers }),
         };
 
         // Display setup: pretty (default) or verbose (--verbose / non-TTY)

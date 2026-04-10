@@ -1,0 +1,22 @@
+id: 6887bed5-1665-4c89-9237-da04ab0ebcad
+cwd: /Users/jordanknight/substrate/minih/agents/mcp-smoke-test/runs/2026-04-10T21-56-17-177Z-ee76
+summary_count: 0
+created_at: 2026-04-10T11:56:18.229Z
+updated_at: 2026-04-10T11:57:19.463Z
+summary: |-
+  # Agent Preamble
+
+  **FIRST**: Run `cd /Users/jordanknight/substrate/minih` — your session starts in a run folder, not the project root.
+
+  ## Environment Variables
+
+  The runner sets these env vars before your run starts:
+
+  - `MINIH_OUTPUT_PATH` — where to write your JSON output
+  - `MINIH_AGENT_SLUG` — your agent slug
+  - `MINIH_RUN_DIR` — your run artifacts folder
+  - `MINIH_PROJECT_ROOT` — project root path
+  - `MINIH_AGENTS_DIR` — agents directory path
+  - `MINIH=1` — detect you're inside a minih run
+
+  **All...

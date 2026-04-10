@@ -154,7 +154,7 @@ export function registerResumeCommand(program: Command): void {
           sessionId: session.sessionId,
           resumedFromRunId: session.runId,
           promptOverride: message,
-          ...(mcpServers ? { mcpServers } : { configDir: process.cwd() }),
+          ...(mcpServers && { mcpServers }),
         };
 
         const runtime = await createSdkRuntime('resume', () =>

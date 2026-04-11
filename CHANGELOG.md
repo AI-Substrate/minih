@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.3](https://github.com/AI-Substrate/minih/compare/minih-v0.1.2...minih-v0.1.3) (2026-04-11)
+
+
+### Features
+
+* MCP config support — auto-discovery + --mcp-config flag ([#9](https://github.com/AI-Substrate/minih/issues/9)) ([c64cde7](https://github.com/AI-Substrate/minih/commit/c64cde7e29a66742c8260f128eeda72c91047a5b))
+
+
+### Bug Fixes
+
+* biome lint errors + merge main (v0.1.2) ([fbe9c49](https://github.com/AI-Substrate/minih/commit/fbe9c499992b429c6b8393551d8b5f289a70af5c))
+
 ## [0.1.2](https://github.com/AI-Substrate/minih/compare/minih-v0.1.1...minih-v0.1.2) (2026-04-10)
 
 

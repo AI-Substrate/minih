@@ -113,7 +113,10 @@ export class SdkCopilotAdapter implements IAgentAdapter {
         }
       });
 
-      await session.sendAndWait({ prompt: prompt.trim() }, options.timeout);
+      await session.sendAndWait(
+        { prompt: prompt.trim() },
+        options.timeout ? options.timeout * 1000 : undefined,
+      );
 
       return {
         output,

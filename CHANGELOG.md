@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.4](https://github.com/AI-Substrate/minih/compare/minih-v0.1.3...minih-v0.1.4) (2026-04-11)
+
+
+### Bug Fixes
+
+* biome format — break long sendAndWait line ([7b7fef5](https://github.com/AI-Substrate/minih/commit/7b7fef5cb704aaaec199441f5799a7edb375c896))
+* convert timeout from seconds to milliseconds for SDK ([#12](https://github.com/AI-Substrate/minih/issues/12)) ([04de166](https://github.com/AI-Substrate/minih/commit/04de1661d696a3a9bf2d508d8cead17a799ab8aa))
+* convert timeout from seconds to milliseconds for SDK ([#12](https://github.com/AI-Substrate/minih/issues/12)) ([156f547](https://github.com/AI-Substrate/minih/commit/156f5470136ac185eb129920efdc3e88a4db8f9c))
+
 ## [0.1.3](https://github.com/AI-Substrate/minih/compare/minih-v0.1.2...minih-v0.1.3) (2026-04-11)
 
 

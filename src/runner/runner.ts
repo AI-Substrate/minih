@@ -304,6 +304,37 @@ export async function runAgent(
 
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
   try {
+    // MCP config resolution:
+    // - Explicit mcpServers (from --mcp-config): use directly
+    // - Auto-discovery: check for .mcp.json at project root, load it ourselves
+    //   (SDK discovers from workingDirectory which is the run folder, not project root)
+    // - Always pass configDir for user-level config (~/.copilot/mcp-config)
+    let mcpServers = config.mcpServers;
+    if (!mcpServers) {
+      const projectRoot = config.cwd ?? process.cwd();
+      const mcpJsonPath = path.join(projectRoot, '.mcp.json');
+      if (fs.existsSync(mcpJsonPath)) {
+        try {
+          const parsed = JSON.parse(fs.readFileSync(mcpJsonPath, 'utf-8'));
+          if (parsed.mcpServers && typeof parsed.mcpServers === 'object') {
+            mcpServers = parsed.mcpServers as Record<string, unknown>;
+          }
+        } catch {
+          // Skip invalid .mcp.json — don't block the run
+        }
+      }
+      // Set cwd on local MCP servers so they resolve relative paths from project root
+      if (mcpServers) {
+        const projectRoot = config.cwd ?? process.cwd();
+        for (const server of Object.values(mcpServers)) {
+          const s = server as Record<string, unknown>;
+          if (!s.cwd && (!s.type || s.type === 'local' || s.type === 'stdio')) {
+            s.cwd = projectRoot;
+          }
+        }
+      }
+    }
+
     const runPromise = adapter.run({
       prompt: finalPrompt,
       sessionId: config.sessionId,
@@ -312,6 +343,8 @@ export async function runAgent(
       cwd: runDir, // SDK isolated to run folder (Workshop 005)
       onEvent: handleEvent,
       timeout: timeoutMs,
+      configDir: config.configDir ?? config.cwd,
+      ...(mcpServers && { mcpServers }),
     });
     const timeoutPromise = new Promise<never>((_, reject) => {
       timeoutHandle = setTimeout(() => {

@@ -10,6 +10,7 @@ export {
   createRunFolder,
   findRunSession,
   listAgents,
+  loadMcpConfig,
   parseFrontmatter,
   resolveAgent,
   validateSlug,

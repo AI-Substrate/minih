@@ -19,6 +19,7 @@ import {
   displaySummary,
   findRunSession,
   listAgents,
+  loadMcpConfig,
   PrettyDisplay,
   resolveAgent,
   runAgent,
@@ -46,6 +47,7 @@ export function registerResumeCommand(program: Command): void {
     .option('--run <runId>', 'Resume a specific run (default: latest)')
     .option('-t, --timeout <seconds>', 'Timeout in seconds', '300')
     .option('--verbose', 'Show all events with timestamps (verbose mode)')
+    .option('--mcp-config <path>', 'MCP config file with mcpServers (JSON)')
     .action(
       async (
         slug: string,
@@ -54,6 +56,7 @@ export function registerResumeCommand(program: Command): void {
           run?: string;
           timeout?: string;
           verbose?: boolean;
+          mcpConfig?: string;
         },
       ) => {
         const agentsDir = program.opts().agentsDir ?? 'agents';
@@ -127,6 +130,23 @@ export function registerResumeCommand(program: Command): void {
           process.stderr.write('\n');
         }
 
+        // MCP config
+        let mcpServers: Record<string, unknown> | undefined;
+        if (opts.mcpConfig) {
+          try {
+            const path = await import('node:path');
+            mcpServers = loadMcpConfig(path.resolve(opts.mcpConfig));
+          } catch (err) {
+            exitWithEnvelope(
+              formatError(
+                'resume',
+                ErrorCodes.INVALID_ARGS,
+                err instanceof Error ? err.message : String(err),
+              ),
+            );
+          }
+        }
+
         const config: AgentRunConfig = {
           slug,
           timeout: Number.parseInt(opts.timeout ?? '300', 10),
@@ -134,6 +154,7 @@ export function registerResumeCommand(program: Command): void {
           sessionId: session.sessionId,
           resumedFromRunId: session.runId,
           promptOverride: message,
+          ...(mcpServers && { mcpServers }),
         };
 
         const runtime = await createSdkRuntime('resume', () =>

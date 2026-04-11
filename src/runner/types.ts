@@ -42,6 +42,10 @@ export interface AgentRunConfig {
   resumedFromRunId?: string;
   /** Override the prompt text (used by resume — sends follow-up message instead of prompt.md) */
   promptOverride?: string;
+  /** Config directory for MCP auto-discovery (typically project root) */
+  configDir?: string;
+  /** Explicit MCP servers loaded from --mcp-config file */
+  mcpServers?: Record<string, unknown>;
 }
 
 /** Validation result from JSON Schema check. */

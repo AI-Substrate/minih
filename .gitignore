@@ -144,3 +144,5 @@ vite.config.ts.timestamp-*
 # Agent run artifacts
 agents/*/runs/
 .fs2/
+session-state/
+session-store.db

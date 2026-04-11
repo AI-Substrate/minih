@@ -19,6 +19,7 @@ import {
   displayPreflight,
   displaySummary,
   listAgents,
+  loadMcpConfig,
   PrettyDisplay,
   parseFrontmatter,
   resolveAgent,
@@ -61,6 +62,7 @@ export function registerRunCommand(program: Command): void {
     )
     .option('--dry-run', 'Preview assembled prompt without executing')
     .option('--verbose', 'Show all events with timestamps (verbose mode)')
+    .option('--mcp-config <path>', 'MCP config file with mcpServers (JSON)')
     .action(
       async (
         slug: string,
@@ -71,6 +73,7 @@ export function registerRunCommand(program: Command): void {
           param?: string[];
           dryRun?: boolean;
           verbose?: boolean;
+          mcpConfig?: string;
         },
       ) => {
         const agentsDir = program.opts().agentsDir ?? 'agents';
@@ -123,6 +126,23 @@ export function registerRunCommand(program: Command): void {
           definition.reasoning) as AgentRunConfig['reasoningEffort'];
 
         const DEFAULT_TIMEOUT = 900; // 15 minutes
+
+        // MCP config: --mcp-config file (explicit) or auto-discovery via configDir (DYK #1: mutually exclusive)
+        let mcpServers: Record<string, unknown> | undefined;
+        if (opts.mcpConfig) {
+          try {
+            mcpServers = loadMcpConfig(path.resolve(opts.mcpConfig));
+          } catch (err) {
+            exitWithEnvelope(
+              formatError(
+                'run',
+                ErrorCodes.INVALID_ARGS,
+                err instanceof Error ? err.message : String(err),
+              ),
+            );
+          }
+        }
+
         const config: AgentRunConfig = {
           slug,
           model,
@@ -132,6 +152,7 @@ export function registerRunCommand(program: Command): void {
             : (definition.timeout ?? DEFAULT_TIMEOUT),
           cwd: process.cwd(),
           params: Object.keys(params).length > 0 ? params : undefined,
+          ...(mcpServers && { mcpServers }),
         };
 
         // Display setup: pretty (default) or verbose (--verbose / non-TTY)

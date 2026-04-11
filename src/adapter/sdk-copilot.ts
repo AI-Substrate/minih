@@ -29,7 +29,15 @@ export class SdkCopilotAdapter implements IAgentAdapter {
   }
 
   async run(options: AgentRunOptions): Promise<AgentResult> {
-    const { prompt, sessionId, onEvent, model, reasoningEffort } = options;
+    const {
+      prompt,
+      sessionId,
+      onEvent,
+      model,
+      reasoningEffort,
+      configDir,
+      mcpServers,
+    } = options;
 
     const validationError = validatePrompt(prompt);
     if (validationError) {
@@ -48,6 +56,8 @@ export class SdkCopilotAdapter implements IAgentAdapter {
           ...(options.cwd && { workingDirectory: options.cwd }),
           ...(model && { model }),
           ...(reasoningEffort && { reasoningEffort }),
+          ...(configDir && { configDir }),
+          ...(mcpServers && { mcpServers }),
         })
       : await this._client.createSession({
           streaming: !!onEvent,
@@ -55,6 +65,8 @@ export class SdkCopilotAdapter implements IAgentAdapter {
           ...(options.cwd && { workingDirectory: options.cwd }),
           ...(model && { model }),
           ...(reasoningEffort && { reasoningEffort }),
+          ...(configDir && { configDir }),
+          ...(mcpServers && { mcpServers }),
         });
 
     // Emit session_start so the runner can capture sessionId for timeout termination

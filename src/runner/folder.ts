@@ -315,3 +315,30 @@ export function findRunSession(
     return null;
   }
 }
+
+/**
+ * Load MCP config from a JSON file.
+ * Expected format: { "mcpServers": { ... } }
+ * Fails fast with actionable error if file missing or invalid.
+ */
+export function loadMcpConfig(filePath: string): Record<string, unknown> {
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`MCP config file not found: ${filePath}`);
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+  } catch {
+    throw new Error(`MCP config file is not valid JSON: ${filePath}`);
+  }
+
+  const obj = parsed as Record<string, unknown>;
+  if (!obj.mcpServers || typeof obj.mcpServers !== 'object') {
+    throw new Error(
+      `MCP config file must have a "mcpServers" property: ${filePath}`,
+    );
+  }
+
+  return obj.mcpServers as Record<string, unknown>;
+}

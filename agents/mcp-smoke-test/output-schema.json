@@ -1,6 +1,12 @@
 {
   "type": "object",
-  "required": ["mcpAvailable", "toolsFound", "echoTestPassed", "summary", "retrospective"],
+  "required": [
+    "mcpAvailable",
+    "toolsFound",
+    "echoTestPassed",
+    "summary",
+    "retrospective"
+  ],
   "additionalProperties": true,
   "properties": {
     "mcpAvailable": {

@@ -122,7 +122,9 @@ process.stdin.on('data', (chunk) => {
   let startIdx = 0;
   for (let i = 0; i < buffer.length; i++) {
     if (buffer[i] === '\n' || i === buffer.length - 1) {
-      const line = buffer.slice(startIdx, i === buffer.length - 1 ? i + 1 : i).trim();
+      const line = buffer
+        .slice(startIdx, i === buffer.length - 1 ? i + 1 : i)
+        .trim();
       startIdx = i + 1;
       if (!line) continue;
       try {

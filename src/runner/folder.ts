@@ -321,9 +321,7 @@ export function findRunSession(
  * Expected format: { "mcpServers": { ... } }
  * Fails fast with actionable error if file missing or invalid.
  */
-export function loadMcpConfig(
-  filePath: string,
-): Record<string, unknown> {
+export function loadMcpConfig(filePath: string): Record<string, unknown> {
   if (!fs.existsSync(filePath)) {
     throw new Error(`MCP config file not found: ${filePath}`);
   }

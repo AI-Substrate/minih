@@ -7,10 +7,17 @@ import { loadMcpConfig } from '../../src/runner/index.js';
 
 describe('loadMcpConfig', () => {
   it('loads mcpServers from a valid config file', () => {
-    const fixturePath = path.join(__dirname, '..', 'fixtures', 'mcp-config.json');
+    const fixturePath = path.join(
+      __dirname,
+      '..',
+      'fixtures',
+      'mcp-config.json',
+    );
     const servers = loadMcpConfig(fixturePath);
     expect(servers).toHaveProperty('test-echo');
-    expect((servers['test-echo'] as Record<string, unknown>).command).toBe('node');
+    expect((servers['test-echo'] as Record<string, unknown>).command).toBe(
+      'node',
+    );
   });
 
   it('throws on missing file', () => {

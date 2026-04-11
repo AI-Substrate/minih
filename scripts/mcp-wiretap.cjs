@@ -16,17 +16,28 @@ if (args.length === 0) {
   process.exit(1);
 }
 
-fs.writeFileSync(logFile, `=== MCP Wiretap started: ${new Date().toISOString()} ===\nCommand: ${args.join(' ')}\n\n`);
+fs.writeFileSync(
+  logFile,
+  `=== MCP Wiretap started: ${new Date().toISOString()} ===\nCommand: ${args.join(' ')}\n\n`,
+);
 
-const child = spawn(args[0], args.slice(1), { stdio: ['pipe', 'pipe', 'pipe'] });
+const child = spawn(args[0], args.slice(1), {
+  stdio: ['pipe', 'pipe', 'pipe'],
+});
 
 process.stdin.on('data', (chunk) => {
-  fs.appendFileSync(logFile, `>>> SDK→Server (${chunk.length} bytes):\n${chunk.toString()}\n---\n`);
+  fs.appendFileSync(
+    logFile,
+    `>>> SDK→Server (${chunk.length} bytes):\n${chunk.toString()}\n---\n`,
+  );
   child.stdin.write(chunk);
 });
 
 child.stdout.on('data', (chunk) => {
-  fs.appendFileSync(logFile, `<<< Server→SDK (${chunk.length} bytes):\n${chunk.toString()}\n---\n`);
+  fs.appendFileSync(
+    logFile,
+    `<<< Server→SDK (${chunk.length} bytes):\n${chunk.toString()}\n---\n`,
+  );
   process.stdout.write(chunk);
 });
 

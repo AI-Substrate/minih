@@ -29,7 +29,15 @@ export class SdkCopilotAdapter implements IAgentAdapter {
   }
 
   async run(options: AgentRunOptions): Promise<AgentResult> {
-    const { prompt, sessionId, onEvent, model, reasoningEffort, configDir, mcpServers } = options;
+    const {
+      prompt,
+      sessionId,
+      onEvent,
+      model,
+      reasoningEffort,
+      configDir,
+      mcpServers,
+    } = options;
 
     const validationError = validatePrompt(prompt);
     if (validationError) {

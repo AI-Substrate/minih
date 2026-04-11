@@ -217,7 +217,9 @@ export function registerInspectCommand(program: Command): void {
           for (const [key, val] of Object.entries(envVars)) {
             process.stderr.write(`  ${chalk.dim(key)}=${val}\n`);
           }
-          process.stderr.write(`  ${chalk.dim('MCP config')}=${mcpConfigSource}\n`);
+          process.stderr.write(
+            `  ${chalk.dim('MCP config')}=${mcpConfigSource}\n`,
+          );
 
           process.stderr.write(`\n${chalk.bold('─── Stats ───')}\n`);
           process.stderr.write(`  Sections:     ${sections.length}\n`);

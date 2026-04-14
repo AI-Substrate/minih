@@ -7,8 +7,13 @@ import * as path from 'node:path';
 import chalk from 'chalk';
 import Table from 'cli-table3';
 import type { Command } from 'commander';
-import { listAgents } from '../../runner/index.js';
-import { exitWithEnvelope, formatSuccess } from '../output.js';
+import { listAgents, resolveAgent, validateSlug } from '../../runner/index.js';
+import {
+  ErrorCodes,
+  exitWithEnvelope,
+  formatError,
+  formatSuccess,
+} from '../output.js';
 
 interface DifficultyEntry {
   id: string;
@@ -27,8 +32,28 @@ export function registerDifficultiesCommand(program: Command): void {
     .option('--agent <slug>', 'Filter to a specific agent')
     .action((opts: { agent?: string }) => {
       const agentsDir = program.opts().agentsDir ?? 'agents';
-      const agents = listAgents(agentsDir);
 
+      // Validate --agent flag if provided
+      if (opts.agent) {
+        const slugError = validateSlug(opts.agent);
+        if (slugError) {
+          exitWithEnvelope(
+            formatError('difficulties', ErrorCodes.INVALID_ARGS, slugError),
+          );
+        }
+        if (!resolveAgent(opts.agent, agentsDir)) {
+          exitWithEnvelope(
+            formatError(
+              'difficulties',
+              ErrorCodes.AGENT_NOT_FOUND,
+              `Agent "${opts.agent}" not found.`,
+            ),
+          );
+          return;
+        }
+      }
+
+      const agents = listAgents(agentsDir);
       const filteredAgents = opts.agent
         ? agents.filter((a) => a.slug === opts.agent)
         : agents;

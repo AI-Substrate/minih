@@ -558,6 +558,8 @@ export function computeVelocity(
         fs.readFileSync(completedPath, 'utf-8'),
       );
       if (meta.result !== 'completed') continue;
+      // Skip resumed runs — they don't represent independent work
+      if (meta.resumedFromRunId) continue;
 
       if (!previousCompleted) {
         previousCompleted = meta;
@@ -589,7 +591,9 @@ export function computeVelocity(
 
   const prevDuration = previousCompleted.durationMs;
   const changePercent =
-    ((currentDurationMs - prevDuration) / prevDuration) * 100;
+    prevDuration > 0
+      ? ((currentDurationMs - prevDuration) / prevDuration) * 100
+      : null;
 
   const runNumber = previousCompleted.velocity
     ? previousCompleted.velocity.runNumber + 1
@@ -600,14 +604,20 @@ export function computeVelocity(
     : prevDuration;
 
   const overallChangePercent =
-    ((currentDurationMs - firstDuration) / firstDuration) * 100;
+    firstDuration > 0
+      ? ((currentDurationMs - firstDuration) / firstDuration) * 100
+      : null;
 
   return {
     previousDurationMs: prevDuration,
-    changePercent: Math.round(changePercent * 10) / 10,
+    changePercent:
+      changePercent !== null ? Math.round(changePercent * 10) / 10 : null,
     runNumber,
     firstDurationMs: firstDuration,
-    overallChangePercent: Math.round(overallChangePercent * 10) / 10,
+    overallChangePercent:
+      overallChangePercent !== null
+        ? Math.round(overallChangePercent * 10) / 10
+        : null,
   };
 }
 
@@ -637,7 +647,14 @@ function parseReportJson(outputPath: string): ParsedReport | null {
           ? retro.magicWandTarget
           : null,
       difficulties:
-        retro && Array.isArray(retro.difficulties) ? retro.difficulties : null,
+        retro && Array.isArray(retro.difficulties)
+          ? retro.difficulties.filter(
+              (d: unknown) =>
+                typeof d === 'object' &&
+                d !== null &&
+                typeof (d as Record<string, unknown>).description === 'string',
+            )
+          : null,
     };
   } catch {
     return null;

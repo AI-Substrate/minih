@@ -54,6 +54,33 @@ export interface ValidationResult {
   errors: string[];
 }
 
+/** Velocity data computed at run end — tracks compounding improvement per agent. */
+export interface VelocityData {
+  /** Duration of the previous completed run (null if first run) */
+  previousDurationMs: number | null;
+  /** % change vs previous run (negative = faster) */
+  changePercent: number | null;
+  /** Which completed run this is (1-indexed) */
+  runNumber: number;
+  /** Duration of the first ever completed run */
+  firstDurationMs: number | null;
+  /** % change from first to current (the big number) */
+  overallChangePercent: number | null;
+}
+
+/** Parsed report fields extracted from agent output for envelope surfacing. */
+export interface ParsedReport {
+  summary: string | null;
+  magicWand: string | null;
+  magicWandTarget: string | null;
+  difficulties: Array<{
+    category: string;
+    description: string;
+    workaround: string | null;
+    severity: string;
+  }> | null;
+}
+
 /** Metadata written to completed.json after each run. */
 export interface CompletedMetadata {
   slug: string;
@@ -75,6 +102,8 @@ export interface CompletedMetadata {
   artifacts: string[];
   /** Run ID of the original run, if this is a resumed session */
   resumedFromRunId?: string;
+  /** Velocity data — compounding improvement tracking */
+  velocity?: VelocityData;
 }
 
 /** Result returned from the runner to the CLI command. */
@@ -83,6 +112,8 @@ export interface AgentRunResult {
   metadata: CompletedMetadata;
   validation: ValidationResult | null;
   runDir: string;
+  /** Parsed fields from report.json for envelope surfacing */
+  parsedReport: ParsedReport | null;
 }
 
 /** Events collected during a run, for counting and analysis. */

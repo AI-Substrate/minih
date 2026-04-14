@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 import { registerCheckCommand } from './commands/check.js';
 import { registerConnectCommand } from './commands/connect.js';
+import { registerDifficultiesCommand } from './commands/difficulties.js';
 import { registerDoctorCommand } from './commands/doctor.js';
 import { registerHistoryCommand } from './commands/history.js';
 import { registerInitCommand } from './commands/init.js';
@@ -70,6 +71,7 @@ registerLastRunCommand(program);
 registerStatusCommand(program);
 registerTailCommand(program);
 registerDoctorCommand(program);
+registerDifficultiesCommand(program);
 registerCheckCommand(program);
 registerInitCommand(program);
 

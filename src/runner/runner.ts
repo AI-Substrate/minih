@@ -21,8 +21,10 @@ import type {
   AgentRunConfig,
   AgentRunResult,
   CompletedMetadata,
+  ParsedReport,
   RunEventStats,
   ValidationResult,
+  VelocityData,
 } from './types.js';
 import {
   validateInput,
@@ -50,10 +52,37 @@ At minimum, your JSON must include these fields:
   "retrospective": {
     "workedWell": "What about the tools, workflow, or environment was smooth? Be specific.",
     "confusing": "What was unclear, confusing, or required trial-and-error?",
-    "magicWand": "If you could change ONE thing about this experience to make your job easier, what would it be? Be concrete — name a specific tool, command, flag, or workflow improvement. Specify whether this is a PROJECT improvement (the codebase/tools you tested) or a MINIH improvement (the agent runner itself)."
+    "magicWand": "If you could change ONE thing about this experience to make your job easier, what would it be? Be concrete — name a specific tool, command, flag, or workflow improvement.",
+    "magicWandTarget": "project or minih — which system does your magic wand target? 'project' = the codebase/tools you tested. 'minih' = the agent runner itself.",
+    "difficulties": [
+      {
+        "category": "config",
+        "description": "GH_TOKEN not set, no actionable error — just a cryptic 401",
+        "workaround": "Guessed from SDK source that GH_TOKEN was needed",
+        "severity": "blocking"
+      }
+    ]
   }
 }
 \`\`\`
+
+### Magic Wand Target
+
+Your magicWand should specify which layer it targets:
+- **"project"** — the codebase, CLI tools, or developer experience you're testing/reviewing
+- **"minih"** — the agent runner, validation, prompt assembly, or conventions
+
+### Reporting Difficulties
+
+If you hit friction during this run — something that slowed you down, confused you, or
+required a workaround — report it in retrospective.difficulties. Each difficulty needs:
+- **category**: what kind of friction (suggested: build, config, data, test, debug, knowledge — or your own)
+- **description**: what happened, specifically
+- **workaround**: what you did to get past it (or null if you couldn't)
+- **severity**: blocking (couldn't proceed), degrading (worked around it), or annoying (minor friction)
+
+These reports feed the difficulty ledger. What you report today gets fixed for tomorrow.
+Every difficulty you report is a gift to the next agent.
 
 Your agent-specific output fields go alongside these system fields in the same JSON object.
 The retrospective.magicWand is the most valuable thing you produce — it directly improves
@@ -202,6 +231,7 @@ export async function runAgent(
         },
         validation: null,
         runDir,
+        parsedReport: null,
       };
     }
     if (Object.keys(params).length > 0) {
@@ -425,6 +455,12 @@ export async function runAgent(
 
   const artifacts = listArtifacts(runDir);
 
+  // Compute velocity (skip for resumed runs — they share the original run's history)
+  let velocity: VelocityData | undefined;
+  if (!isResume && resultStatus === 'completed') {
+    velocity = computeVelocity(durationMs, definition.dir, runId);
+  }
+
   // Write completed.json
   const metadata: CompletedMetadata = {
     slug: definition.slug,
@@ -445,6 +481,7 @@ export async function runAgent(
     ...(config.resumedFromRunId && {
       resumedFromRunId: config.resumedFromRunId,
     }),
+    ...(velocity && { velocity }),
   };
 
   fs.writeFileSync(
@@ -452,12 +489,21 @@ export async function runAgent(
     JSON.stringify(metadata, null, 2),
   );
 
+  // Parse report.json for envelope surfacing
+  const parsedReport = parseReportJson(outputPath);
+
   // Clean up runtime environment (Workshop 007)
   for (const key of MINIH_ENV_KEYS) {
     delete process.env[key];
   }
 
-  return { agentResult, metadata, validation: userValidation, runDir };
+  return {
+    agentResult,
+    metadata,
+    validation: userValidation,
+    runDir,
+    parsedReport,
+  };
 }
 
 function listArtifacts(dir: string, base?: string): string[] {
@@ -472,4 +518,128 @@ function listArtifacts(dir: string, base?: string): string[] {
     }
   }
   return files;
+}
+
+/**
+ * Compute velocity data by comparing this run against previous completed runs.
+ * Chains from prior velocity blocks when available (O(1)).
+ * Falls back to scanning run history for legacy runs without velocity data.
+ */
+export function computeVelocity(
+  currentDurationMs: number,
+  agentDir: string,
+  currentRunId: string,
+): VelocityData {
+  const runsDir = path.join(agentDir, 'runs');
+  if (!fs.existsSync(runsDir)) {
+    return {
+      previousDurationMs: null,
+      changePercent: null,
+      runNumber: 1,
+      firstDurationMs: currentDurationMs,
+      overallChangePercent: null,
+    };
+  }
+
+  // Scan run folders in reverse chronological order (newest first)
+  const entries = fs
+    .readdirSync(runsDir, { withFileTypes: true })
+    .filter((e) => e.isDirectory() && e.name !== currentRunId)
+    .sort((a, b) => b.name.localeCompare(a.name));
+
+  let previousCompleted: CompletedMetadata | null = null;
+  let firstCompleted: CompletedMetadata | null = null;
+
+  for (const entry of entries) {
+    const completedPath = path.join(runsDir, entry.name, 'completed.json');
+    try {
+      if (!fs.existsSync(completedPath)) continue;
+      const meta: CompletedMetadata = JSON.parse(
+        fs.readFileSync(completedPath, 'utf-8'),
+      );
+      if (meta.result !== 'completed') continue;
+
+      if (!previousCompleted) {
+        previousCompleted = meta;
+        // If prior run has velocity, chain from it
+        if (meta.velocity) {
+          firstCompleted = {
+            durationMs: meta.velocity.firstDurationMs ?? meta.durationMs,
+          } as CompletedMetadata;
+          break;
+        }
+      }
+
+      // Legacy run without velocity — keep scanning for first
+      firstCompleted = meta;
+    } catch {
+      // Skip corrupted completed.json
+    }
+  }
+
+  if (!previousCompleted) {
+    return {
+      previousDurationMs: null,
+      changePercent: null,
+      runNumber: 1,
+      firstDurationMs: currentDurationMs,
+      overallChangePercent: null,
+    };
+  }
+
+  const prevDuration = previousCompleted.durationMs;
+  const changePercent =
+    ((currentDurationMs - prevDuration) / prevDuration) * 100;
+
+  const runNumber = previousCompleted.velocity
+    ? previousCompleted.velocity.runNumber + 1
+    : 2; // At minimum this is the 2nd completed run
+
+  const firstDuration = firstCompleted
+    ? (firstCompleted.velocity?.firstDurationMs ?? firstCompleted.durationMs)
+    : prevDuration;
+
+  const overallChangePercent =
+    ((currentDurationMs - firstDuration) / firstDuration) * 100;
+
+  return {
+    previousDurationMs: prevDuration,
+    changePercent: Math.round(changePercent * 10) / 10,
+    runNumber,
+    firstDurationMs: firstDuration,
+    overallChangePercent: Math.round(overallChangePercent * 10) / 10,
+  };
+}
+
+/**
+ * Safely parse report.json and extract key retrospective fields.
+ * Returns null on any failure — never throws.
+ */
+function parseReportJson(outputPath: string): ParsedReport | null {
+  try {
+    if (!fs.existsSync(outputPath)) return null;
+    const content = fs.readFileSync(outputPath, 'utf-8').trim();
+    if (!content) return null;
+    const parsed = JSON.parse(content);
+    if (typeof parsed !== 'object' || parsed === null) return null;
+
+    const retro =
+      typeof parsed.retrospective === 'object' && parsed.retrospective !== null
+        ? parsed.retrospective
+        : null;
+
+    return {
+      summary: typeof parsed.summary === 'string' ? parsed.summary : null,
+      magicWand:
+        retro && typeof retro.magicWand === 'string' ? retro.magicWand : null,
+      magicWandTarget:
+        retro && typeof retro.magicWandTarget === 'string'
+          ? retro.magicWandTarget
+          : null,
+      difficulties:
+        retro && Array.isArray(retro.difficulties) ? retro.difficulties : null,
+    };
+  } catch {
+    return null;
+  }
 }

@@ -304,6 +304,15 @@ export function registerRunCommand(program: Command): void {
                   validationErrors: result.metadata.validationErrors,
                   eventCount: result.metadata.eventCount,
                   toolCallCount: result.metadata.toolCallCount,
+                  ...(result.metadata.velocity && {
+                    velocity: result.metadata.velocity,
+                  }),
+                  ...(result.parsedReport && {
+                    summary: result.parsedReport.summary,
+                    magicWand: result.parsedReport.magicWand,
+                    magicWandTarget: result.parsedReport.magicWandTarget,
+                    difficulties: result.parsedReport.difficulties,
+                  }),
                 },
                 status as 'ok' | 'degraded',
               ),

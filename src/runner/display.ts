@@ -84,7 +84,7 @@ export function displayEvent(event: AgentEvent): void {
 }
 
 export function displaySummary(result: AgentRunResult): void {
-  const { metadata, validation, runDir } = result;
+  const { metadata, validation, runDir, parsedReport } = result;
   const statusColor =
     metadata.result === 'completed'
       ? chalk.green
@@ -113,6 +113,37 @@ export function displaySummary(result: AgentRunResult): void {
         process.stderr.write(`    ${chalk.red('·')} ${err}\n`);
       }
     }
+  }
+
+  if (metadata.velocity) {
+    const v = metadata.velocity;
+    const arrow =
+      v.changePercent === null
+        ? chalk.dim('—')
+        : v.changePercent < -5
+          ? chalk.green(`▼ ${Math.abs(v.changePercent)}%`)
+          : v.changePercent > 5
+            ? chalk.red(`▲ ${v.changePercent}%`)
+            : chalk.dim('—');
+    process.stderr.write(`  Velocity:   run #${v.runNumber} ${arrow}\n`);
+  }
+
+  if (parsedReport?.magicWand) {
+    process.stderr.write(
+      `  ${chalk.magenta('🪄 Magic wand')}: ${parsedReport.magicWand.slice(0, 120)}${parsedReport.magicWand.length > 120 ? '...' : ''}\n`,
+    );
+  }
+
+  if (parsedReport?.difficulties && parsedReport.difficulties.length > 0) {
+    const count = parsedReport.difficulties.length;
+    const blocking = parsedReport.difficulties.filter(
+      (d) => d.severity === 'blocking',
+    ).length;
+    const label =
+      blocking > 0
+        ? chalk.red(`${count} (${blocking} blocking)`)
+        : chalk.yellow(`${count}`);
+    process.stderr.write(`  Difficulties: ${label}\n`);
   }
 
   process.stderr.write(`  Run dir:    ${chalk.dim(runDir)}\n`);

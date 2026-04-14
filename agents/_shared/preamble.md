@@ -30,6 +30,8 @@ act on each type of feedback.
 
 Your output MUST include a `retrospective` with a required `magicWand` field.
 
+> **Every task must send a gift to its future self.** Your retrospective IS that gift.
+
 **What makes good feedback:**
 
 Bad: "Everything was fine."
@@ -46,6 +48,29 @@ from discovering the wrong file_path halfway through a 5-minute run."
   Be clear whether the friction was in the project or in minih.
 - **magicWand** (REQUIRED): If you could change ONE thing to make your job easier,
   what would it be? Specify whether this is a project improvement or a minih improvement.
+- **magicWandTarget**: Set to `"project"` or `"minih"` to indicate which system your wand targets.
+- **difficulties** (optional): If you hit friction, report it as structured entries:
+  each with `category`, `description`, `workaround` (or null), and `severity`
+  (blocking/degrading/annoying). Common categories: build, config, data, test, debug,
+  knowledge — but use whatever fits your situation.
+
+## Reporting Difficulties
+
+If something slows you down, report it in `retrospective.difficulties`.
+
+> **Every difficulty you report is a gift to the next agent.** The difficulty ledger
+> tracks friction across all runs. What you report today gets mitigated tomorrow.
+
+## Known Difficulties
+
+| ID | Category | What Hurts | Status |
+|----|----------|-----------|--------|
+| MH-001 | config | copilot-sdk peer dep not auto-resolved via npx — must install manually | ✅ mitigated (createRequire fallback) |
+| MH-002 | config | MCP server cwd defaults to run folder, not project root | ✅ mitigated (runner injects project root) |
+| MH-003 | config | CRLF line endings break frontmatter parsing on Windows | ✅ mitigated (normalize in parseFrontmatter) |
+
+**If you hit a difficulty NOT listed here**, add it to your `retrospective.difficulties`.
+**If a "mitigated" difficulty still affects you**, report that — the mitigation may be incomplete.
 
 ## Evidence — Feedback That Was Acted On
 

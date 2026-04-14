@@ -43,6 +43,9 @@
 | `PrettyDisplay` | Class | cli (run command — default display mode) |
 | `parseFrontmatter(content)` | Function | cli (doctor frontmatter checks) |
 | `retrospective.json` | JSON Schema | Agent output schemas (via $ref), cli (doctor checks) |
+| `VelocityData` | Type | cli (history trend display) |
+| `ParsedReport` | Type | cli (run envelope surfacing) |
+| `computeVelocity(durationMs, agentDir, runId)` | Function | runner (post-run velocity computation) |
 
 ## Concepts
 
@@ -53,6 +56,9 @@
 | Degraded vs Failed | Invalid output = "degraded" (agent worked, schema didn't match), not hard failure. |
 | Prompt assembly | preamble → instructions → output hint → params → prompt, joined by `\n\n---\n\n`. Frontmatter stripped. |
 | Magic wand | Every agent output MUST include retrospective with magicWand feedback. |
+| Velocity tracking | Per-agent velocity data computed at run end, stored in completed.json. Chains from prior runs for O(1) computation. |
+| Difficulty ledger | Agents report structured friction in `retrospective.difficulties`. Pipeline: agents report → `minih difficulties` aggregates → human curates preamble. |
+| Parsed report surfacing | Runner parses report.json after run to extract summary/magicWand/difficulties for CLI envelope. |
 | Session resume | Resume sends follow-up message directly — skips prompt assembly and system output validation. SDK conversation history provides context. |
 
 ## History
@@ -65,3 +71,4 @@
 | 002-pretty-mode | Added pretty.ts — clean streaming display with delta accumulation, thinking suppression, inline intent. PrettyDisplay exported from barrel. |
 | FX002-agent-ux | Added tool elapsed timer to pretty mode. Added fuzzy property name suggestions to validator error messages (substring + Levenshtein matching). |
 | 003-resume-prompt | Added `sessionId`, `resumedFromRunId`, `promptOverride` to `AgentRunConfig`. Added `resumedFromRunId` to `CompletedMetadata`. Added `findRunSession()` helper. Resume path in `runAgent()` skips system validation and sends follow-up message directly. |
+| 006-compounding-value | Added `VelocityData`, `ParsedReport` types. `computeVelocity()` computes per-agent velocity at run end. Report.json parsed after run for envelope surfacing. `magicWandTarget` + `difficulties` added to retro/system-output schemas. SYSTEM_OUTPUT_INSTRUCTIONS updated with difficulty reporting guidance. |

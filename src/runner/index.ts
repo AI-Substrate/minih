@@ -16,14 +16,20 @@ export {
   validateSlug,
 } from './folder.js';
 export { PrettyDisplay } from './pretty.js';
-export { runAgent, SYSTEM_OUTPUT_INSTRUCTIONS } from './runner.js';
+export {
+  computeVelocity,
+  runAgent,
+  SYSTEM_OUTPUT_INSTRUCTIONS,
+} from './runner.js';
 export type {
   AgentDefinition,
   AgentRunConfig,
   AgentRunResult,
   CompletedMetadata,
+  ParsedReport,
   RunEventStats,
   ValidationResult,
+  VelocityData,
 } from './types.js';
 export {
   validateInput,

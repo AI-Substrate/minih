@@ -30,27 +30,49 @@
           "recommendation"
         ],
         "properties": {
-          "id": { "type": "string" },
+          "id": {
+            "type": "string"
+          },
           "severity": {
             "type": "string",
             "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"]
           },
-          "file": { "type": "string" },
-          "category": { "type": "string" },
-          "issue": { "type": "string" },
-          "recommendation": { "type": "string" }
+          "file": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "issue": {
+            "type": "string"
+          },
+          "recommendation": {
+            "type": "string"
+          }
         }
       }
     },
     "domainCompliance": {
       "type": "object",
       "properties": {
-        "filePlacement": { "type": "string" },
-        "contractImports": { "type": "string" },
-        "dependencyDirection": { "type": "string" },
-        "domainDocsUpdated": { "type": "string" },
-        "registryCurrent": { "type": "string" },
-        "mapCurrent": { "type": "string" }
+        "filePlacement": {
+          "type": "string"
+        },
+        "contractImports": {
+          "type": "string"
+        },
+        "dependencyDirection": {
+          "type": "string"
+        },
+        "domainDocsUpdated": {
+          "type": "string"
+        },
+        "registryCurrent": {
+          "type": "string"
+        },
+        "mapCurrent": {
+          "type": "string"
+        }
       }
     },
     "coverageMap": {
@@ -58,9 +80,15 @@
       "items": {
         "type": "object",
         "properties": {
-          "ac": { "type": "string" },
-          "confidence": { "type": "number" },
-          "evidence": { "type": "string" }
+          "ac": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "number"
+          },
+          "evidence": {
+            "type": "string"
+          }
         }
       }
     },
@@ -73,9 +101,53 @@
       "required": ["workedWell", "confusing", "magicWand"],
       "additionalProperties": true,
       "properties": {
-        "workedWell": { "type": "string", "minLength": 10 },
-        "confusing": { "type": "string", "minLength": 10 },
-        "magicWand": { "type": "string", "minLength": 20 }
+        "workedWell": {
+          "type": "string",
+          "minLength": 10
+        },
+        "confusing": {
+          "type": "string",
+          "minLength": 10
+        },
+        "magicWand": {
+          "type": "string",
+          "minLength": 20
+        },
+        "magicWandTarget": {
+          "type": "string",
+          "enum": ["project", "minih"],
+          "description": "Which system does the magic wand target — the project being tested or minih itself?"
+        },
+        "difficulties": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["category", "description", "severity"],
+            "additionalProperties": false,
+            "properties": {
+              "category": {
+                "type": "string",
+                "minLength": 2,
+                "description": "Friction category (e.g., build, config, data, test, debug, knowledge)."
+              },
+              "description": {
+                "type": "string",
+                "minLength": 10,
+                "description": "What happened — be specific."
+              },
+              "workaround": {
+                "type": ["string", "null"],
+                "description": "What you did to get past it, or null."
+              },
+              "severity": {
+                "type": "string",
+                "enum": ["blocking", "degrading", "annoying"],
+                "description": "How badly this affected you."
+              }
+            }
+          },
+          "description": "Structured friction reports for the difficulty ledger."
+        }
       }
     }
   }

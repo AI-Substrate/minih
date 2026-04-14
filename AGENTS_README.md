@@ -10,6 +10,12 @@
 
 Most teams treat their developer tooling as a cost center — something you build once, maintain grudgingly, and replace when it rots. minih inverts this. **Your developer tools are your most important product**, because every other product you build passes through them. A bad harness makes everything slower. A good harness makes everything faster. A self-improving harness makes everything *accelerate*.
 
+### The Core Principle
+
+> **Every task must send a gift to its future self.**
+
+If you hit a problem, don't just solve it — encode the solution. The agent that runs tomorrow should never hit the same problem you hit today. This is the core mechanism behind the velocity curve — 16 hours → 15 minutes across 5 iterations on the same codebase.
+
 The key insight: **every agent that uses your tools is a user study you didn't have to schedule.**
 
 ### The Feedback Loop
@@ -54,6 +60,27 @@ Both types are valuable. Different audiences will act on each. The `magicWand` s
 **Week 8**: New agents are productive on their first run because the preamble is comprehensive, the CLI is mature, and the evidence capture is reliable. Magic wands are now strategic ("auto-detect regressions by comparing outputs across runs").
 
 Each improvement makes every future agent run slightly faster, slightly more reliable, slightly more productive. Since agents run *often* — dozens of times per day — the compound effect is dramatic.
+
+We call this progression **The Maturity Curve** — a named concept you can use to assess where your harness is. If you're still getting "I can't do X" wands after many runs, the basics are missing. If you're getting edge case wands, you're mature. If you're getting strategic wands, you've arrived.
+
+### Encode, Don't Document
+
+The harness doesn't *tell you* how to test things. It *tests things*. There's a difference.
+
+A wiki page that says "to validate audit provenance, create an invoice and check the database" is documentation. It rots. A command that creates an invoice, checks the database, and reports pass/fail is *encoded knowledge*. It runs forever.
+
+When your agents discover how something works — encode it. Make it a command, a recipe, a pre-flight check. Make it so the next agent (or human) never has to rediscover it.
+
+### The Difficulty Ledger
+
+Friction compounds — in the wrong direction. Every unresolved difficulty costs the next agent hours. The difficulty ledger tracks what's hard and what's been fixed.
+
+**The pipeline (A→B→C):**
+1. **A — Agents report**: difficulties in `retrospective.difficulties` (structured: category, description, workaround, severity)
+2. **B — You review**: `minih difficulties` aggregates across all agent runs into a single view
+3. **C — You curate**: Fix the worst ones and add them to the preamble's Known Difficulties table
+
+Future agents read the preamble, see what's known, and confirm mitigations work. The categories are suggested, not enforced — agents use `build`, `config`, `data`, `test`, `debug`, `knowledge`, or whatever fits.
 
 ### Real Magic Wands That Shipped
 
@@ -577,8 +604,10 @@ minih status <slug>                       # One-shot liveness check (active/stal
 minih status <slug> -n 10                 # Show last 10 turns instead of 5
 minih tail <slug>                         # Follow live event stream (Ctrl+C to stop)
 minih list                                # Show all agents with descriptions
-minih history <slug>                      # Past runs with status, duration, validation
+minih history <slug>                      # Past runs with status, duration, velocity trend
 minih last-run <slug>                     # Latest run directory and report path
+minih difficulties                        # Aggregate difficulty reports across all agents
+minih difficulties --agent <slug>         # Filter to a specific agent
 
 # Session management
 minih resume <slug> "follow-up message"   # Send follow-up to last completed session

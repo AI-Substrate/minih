@@ -73,12 +73,14 @@ When your agents discover how something works — encode it. Make it a command, 
 
 ### The Difficulty Ledger
 
-Friction compounds — in the wrong direction. Every unresolved difficulty costs the next agent hours. The difficulty ledger tracks what's hard and what's been fixed.
+Friction compounds — in the wrong direction. Every unresolved difficulty costs the next agent hours. The difficulty ledger is a project-level artifact that tracks what's hard and what's been fixed.
 
-**The pipeline (A→B→C):**
-1. **A — Agents report**: difficulties in `retrospective.difficulties` (structured: category, description, workaround, severity)
-2. **B — You review**: `minih difficulties` aggregates across all agent runs into a single view
-3. **C — You curate**: Fix the worst ones and add them to the preamble's Known Difficulties table
+**Who maintains it**: The calling agent or human — not minih itself. minih agents are reporters; the harness owner maintains the ledger. The ledger should capture friction from ALL sources — minih agent runs AND the calling agent's own experience.
+
+**The pipeline:**
+1. **minih agents report**: difficulties in `retrospective.difficulties` (self-numbered MH-001, MH-002 per run)
+2. **You (or your calling agent) review**: `minih difficulties` shows all reported friction across agent runs
+3. **You maintain the ledger**: combine agent reports with your own friction, track mitigations, curate the preamble's Known Difficulties table
 
 Future agents read the preamble, see what's known, and confirm mitigations work. The categories are suggested, not enforced — agents use `build`, `config`, `data`, `test`, `debug`, `knowledge`, or whatever fits.
 

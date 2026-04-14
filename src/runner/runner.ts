@@ -56,6 +56,7 @@ At minimum, your JSON must include these fields:
     "magicWandTarget": "project or minih — which system does your magic wand target? 'project' = the codebase/tools you tested. 'minih' = the agent runner itself.",
     "difficulties": [
       {
+        "id": "MH-001",
         "category": "config",
         "description": "GH_TOKEN not set, no actionable error — just a cryptic 401",
         "workaround": "Guessed from SDK source that GH_TOKEN was needed",
@@ -75,14 +76,16 @@ Your magicWand should specify which layer it targets:
 ### Reporting Difficulties
 
 If you hit friction during this run — something that slowed you down, confused you, or
-required a workaround — report it in retrospective.difficulties. Each difficulty needs:
+required a workaround — report it in retrospective.difficulties. Number each difficulty
+yourself (MH-001, MH-002, etc.) within your run. Each difficulty needs:
+- **id**: your self-assigned ID for this run (e.g., "MH-001")
 - **category**: what kind of friction (suggested: build, config, data, test, debug, knowledge — or your own)
 - **description**: what happened, specifically
 - **workaround**: what you did to get past it (or null if you couldn't)
 - **severity**: blocking (couldn't proceed), degrading (worked around it), or annoying (minor friction)
 
-These reports feed the difficulty ledger. What you report today gets fixed for tomorrow.
-Every difficulty you report is a gift to the next agent.
+These reports feed the project's difficulty ledger. The calling agent or human maintains
+the ledger — combining difficulties from minih agent runs with their own friction.
 
 Your agent-specific output fields go alongside these system fields in the same JSON object.
 The retrospective.magicWand is the most valuable thing you produce — it directly improves

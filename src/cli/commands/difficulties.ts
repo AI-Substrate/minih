@@ -59,7 +59,6 @@ export function registerDifficultiesCommand(program: Command): void {
         : agents;
 
       const entries: DifficultyEntry[] = [];
-      let idCounter = 1;
 
       for (const agent of filteredAgents) {
         const runsDir = path.join(agent.dir, 'runs');
@@ -107,7 +106,10 @@ export function registerDifficultiesCommand(program: Command): void {
               )
                 continue;
               entries.push({
-                id: `MH-${String(idCounter++).padStart(3, '0')}`,
+                id:
+                  typeof d.id === 'string'
+                    ? d.id
+                    : `${agent.slug}-${entries.length + 1}`,
                 category: String(d.category ?? 'unknown'),
                 description: d.description,
                 workaround: d.workaround ?? null,
@@ -133,7 +135,7 @@ export function registerDifficultiesCommand(program: Command): void {
           );
         } else {
           process.stderr.write(
-            `\n  ${chalk.bold('Difficulty Ledger')} (${entries.length} entries)\n\n`,
+            `\n  ${chalk.bold('Difficulty Reports')} (${entries.length} entries across agent runs)\n\n`,
           );
 
           const table = new Table({

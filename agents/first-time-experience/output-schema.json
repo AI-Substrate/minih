@@ -108,6 +108,10 @@
             "required": ["category", "description", "severity"],
             "additionalProperties": false,
             "properties": {
+              "id": {
+                "type": "string",
+                "description": "Self-assigned ID (e.g., MH-001)."
+              },
               "category": {
                 "type": "string",
                 "minLength": 2,

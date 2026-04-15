@@ -32,12 +32,51 @@
           "minLength": 20,
           "description": "If you had a magic wand, what ONE thing would you change about the harness, prompt, or agent config? Be concrete."
         },
+        "magicWandTarget": {
+          "type": "string",
+          "enum": ["project", "minih"],
+          "description": "Which system does the magic wand target — the project being tested or minih itself?"
+        },
         "improvementSuggestions": {
           "type": "array",
           "items": { "type": "string", "minLength": 10 },
           "minItems": 1,
           "maxItems": 5,
           "description": "1-5 specific, actionable improvements."
+        },
+        "difficulties": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["category", "description", "severity"],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Self-assigned ID for this difficulty within your run (e.g., MH-001)."
+              },
+              "category": {
+                "type": "string",
+                "minLength": 2,
+                "description": "Friction category (suggested: build, config, data, test, debug, knowledge — or your own)."
+              },
+              "description": {
+                "type": "string",
+                "minLength": 10,
+                "description": "What happened — be specific."
+              },
+              "workaround": {
+                "type": ["string", "null"],
+                "description": "What you did to get past it, or null if you couldn't."
+              },
+              "severity": {
+                "type": "string",
+                "enum": ["blocking", "degrading", "annoying"],
+                "description": "blocking = couldn't proceed, degrading = worked around it, annoying = minor friction."
+              }
+            }
+          },
+          "description": "Structured friction reports. Each difficulty feeds the difficulty ledger."
         }
       }
     }

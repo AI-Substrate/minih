@@ -27,6 +27,7 @@
 | `src/cli/commands/validate.ts` | internal | Re-validate latest output (Phase 4) |
 | `src/cli/commands/last-run.ts` | internal | Latest run info (Phase 4) |
 | `src/cli/commands/tail.ts` | internal | Follow event stream (Phase 4) |
+| `src/cli/commands/difficulties.ts` | internal | Aggregate difficulty reports across all agents (006-compounding-value) |
 
 ## Contracts
 
@@ -54,3 +55,4 @@
 | 003-resume-prompt | Added `resume` command (follow-up messages to completed sessions), `connect` command (print copilot CLI resume command). Extracted shared `sdk-runtime.ts` from `run.ts`. Updated `history` with `↩` indicator for resumed runs. |
 | FX001-quickstart | Added `quickstart` command — scaffold + run hello-world in one command. Extracted `ensurePreamble()` from `init.ts`. |
 | FX002-agent-ux | Suppressed SQLite ExperimentalWarning via `NODE_NO_WARNINGS`. Added tool elapsed timer to pretty mode. |
+| 006-compounding-value | Added `difficulties` command (aggregates difficulty reports across all agents). Added velocity trend column + summary line to `history`. Run envelope now includes summary/magicWand/magicWandTarget/difficulties from parsed report.json. |

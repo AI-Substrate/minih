@@ -1,0 +1,3443 @@
+diff --git a/AGENTS_README.md b/AGENTS_README.md
+index 9abce4d..8795c71 100644
+--- a/AGENTS_README.md
++++ b/AGENTS_README.md
+@@ -10,6 +10,12 @@
+ 
+ Most teams treat their developer tooling as a cost center — something you build once, maintain grudgingly, and replace when it rots. minih inverts this. **Your developer tools are your most important product**, because every other product you build passes through them. A bad harness makes everything slower. A good harness makes everything faster. A self-improving harness makes everything *accelerate*.
+ 
++### The Core Principle
++
++> **Every task must send a gift to its future self.**
++
++If you hit a problem, don't just solve it — encode the solution. The agent that runs tomorrow should never hit the same problem you hit today. This is the core mechanism behind the velocity curve — 16 hours → 15 minutes across 5 iterations on the same codebase.
++
+ The key insight: **every agent that uses your tools is a user study you didn't have to schedule.**
+ 
+ ### The Feedback Loop
+@@ -55,6 +61,27 @@ Both types are valuable. Different audiences will act on each. The `magicWand` s
+ 
+ Each improvement makes every future agent run slightly faster, slightly more reliable, slightly more productive. Since agents run *often* — dozens of times per day — the compound effect is dramatic.
+ 
++We call this progression **The Maturity Curve** — a named concept you can use to assess where your harness is. If you're still getting "I can't do X" wands after many runs, the basics are missing. If you're getting edge case wands, you're mature. If you're getting strategic wands, you've arrived.
++
++### Encode, Don't Document
++
++The harness doesn't *tell you* how to test things. It *tests things*. There's a difference.
++
++A wiki page that says "to validate audit provenance, create an invoice and check the database" is documentation. It rots. A command that creates an invoice, checks the database, and reports pass/fail is *encoded knowledge*. It runs forever.
++
++When your agents discover how something works — encode it. Make it a command, a recipe, a pre-flight check. Make it so the next agent (or human) never has to rediscover it.
++
++### The Difficulty Ledger
++
++Friction compounds — in the wrong direction. Every unresolved difficulty costs the next agent hours. The difficulty ledger tracks what's hard and what's been fixed.
++
++**The pipeline (A→B→C):**
++1. **A — Agents report**: difficulties in `retrospective.difficulties` (structured: category, description, workaround, severity)
++2. **B — You review**: `minih difficulties` aggregates across all agent runs into a single view
++3. **C — You curate**: Fix the worst ones and add them to the preamble's Known Difficulties table
++
++Future agents read the preamble, see what's known, and confirm mitigations work. The categories are suggested, not enforced — agents use `build`, `config`, `data`, `test`, `debug`, `knowledge`, or whatever fits.
++
+ ### Real Magic Wands That Shipped
+ 
+ These aren't hypothetical — actual agent outputs that became actual fixes:
+@@ -577,8 +604,10 @@ minih status <slug>                       # One-shot liveness check (active/stal
+ minih status <slug> -n 10                 # Show last 10 turns instead of 5
+ minih tail <slug>                         # Follow live event stream (Ctrl+C to stop)
+ minih list                                # Show all agents with descriptions
+-minih history <slug>                      # Past runs with status, duration, validation
++minih history <slug>                      # Past runs with status, duration, velocity trend
+ minih last-run <slug>                     # Latest run directory and report path
++minih difficulties                        # Aggregate difficulty reports across all agents
++minih difficulties --agent <slug>         # Filter to a specific agent
+ 
+ # Session management
+ minih resume <slug> "follow-up message"   # Send follow-up to last completed session
+diff --git a/agents/_shared/preamble.md b/agents/_shared/preamble.md
+index 584c8ae..f7930a8 100644
+--- a/agents/_shared/preamble.md
++++ b/agents/_shared/preamble.md
+@@ -30,6 +30,8 @@ act on each type of feedback.
+ 
+ Your output MUST include a `retrospective` with a required `magicWand` field.
+ 
++> **Every task must send a gift to its future self.** Your retrospective IS that gift.
++
+ **What makes good feedback:**
+ 
+ Bad: "Everything was fine."
+@@ -46,6 +48,29 @@ from discovering the wrong file_path halfway through a 5-minute run."
+   Be clear whether the friction was in the project or in minih.
+ - **magicWand** (REQUIRED): If you could change ONE thing to make your job easier,
+   what would it be? Specify whether this is a project improvement or a minih improvement.
++- **magicWandTarget**: Set to `"project"` or `"minih"` to indicate which system your wand targets.
++- **difficulties** (optional): If you hit friction, report it as structured entries:
++  each with `category`, `description`, `workaround` (or null), and `severity`
++  (blocking/degrading/annoying). Common categories: build, config, data, test, debug,
++  knowledge — but use whatever fits your situation.
++
++## Reporting Difficulties
++
++If something slows you down, report it in `retrospective.difficulties`.
++
++> **Every difficulty you report is a gift to the next agent.** The difficulty ledger
++> tracks friction across all runs. What you report today gets mitigated tomorrow.
++
++## Known Difficulties
++
++| ID | Category | What Hurts | Status |
++|----|----------|-----------|--------|
++| MH-001 | config | copilot-sdk peer dep not auto-resolved via npx — must install manually | ✅ mitigated (createRequire fallback) |
++| MH-002 | config | MCP server cwd defaults to run folder, not project root | ✅ mitigated (runner injects project root) |
++| MH-003 | config | CRLF line endings break frontmatter parsing on Windows | ✅ mitigated (normalize in parseFrontmatter) |
++
++**If you hit a difficulty NOT listed here**, add it to your `retrospective.difficulties`.
++**If a "mitigated" difficulty still affects you**, report that — the mitigation may be incomplete.
+ 
+ ## Evidence — Feedback That Was Acted On
+ 
+diff --git a/agents/code-review/output-schema.json b/agents/code-review/output-schema.json
+index eca125c..bf2839c 100644
+--- a/agents/code-review/output-schema.json
++++ b/agents/code-review/output-schema.json
+@@ -30,27 +30,49 @@
+           "recommendation"
+         ],
+         "properties": {
+-          "id": { "type": "string" },
++          "id": {
++            "type": "string"
++          },
+           "severity": {
+             "type": "string",
+             "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"]
+           },
+-          "file": { "type": "string" },
+-          "category": { "type": "string" },
+-          "issue": { "type": "string" },
+-          "recommendation": { "type": "string" }
++          "file": {
++            "type": "string"
++          },
++          "category": {
++            "type": "string"
++          },
++          "issue": {
++            "type": "string"
++          },
++          "recommendation": {
++            "type": "string"
++          }
+         }
+       }
+     },
+     "domainCompliance": {
+       "type": "object",
+       "properties": {
+-        "filePlacement": { "type": "string" },
+-        "contractImports": { "type": "string" },
+-        "dependencyDirection": { "type": "string" },
+-        "domainDocsUpdated": { "type": "string" },
+-        "registryCurrent": { "type": "string" },
+-        "mapCurrent": { "type": "string" }
++        "filePlacement": {
++          "type": "string"
++        },
++        "contractImports": {
++          "type": "string"
++        },
++        "dependencyDirection": {
++          "type": "string"
++        },
++        "domainDocsUpdated": {
++          "type": "string"
++        },
++        "registryCurrent": {
++          "type": "string"
++        },
++        "mapCurrent": {
++          "type": "string"
++        }
+       }
+     },
+     "coverageMap": {
+@@ -58,9 +80,15 @@
+       "items": {
+         "type": "object",
+         "properties": {
+-          "ac": { "type": "string" },
+-          "confidence": { "type": "number" },
+-          "evidence": { "type": "string" }
++          "ac": {
++            "type": "string"
++          },
++          "confidence": {
++            "type": "number"
++          },
++          "evidence": {
++            "type": "string"
++          }
+         }
+       }
+     },
+@@ -73,9 +101,53 @@
+       "required": ["workedWell", "confusing", "magicWand"],
+       "additionalProperties": true,
+       "properties": {
+-        "workedWell": { "type": "string", "minLength": 10 },
+-        "confusing": { "type": "string", "minLength": 10 },
+-        "magicWand": { "type": "string", "minLength": 20 }
++        "workedWell": {
++          "type": "string",
++          "minLength": 10
++        },
++        "confusing": {
++          "type": "string",
++          "minLength": 10
++        },
++        "magicWand": {
++          "type": "string",
++          "minLength": 20
++        },
++        "magicWandTarget": {
++          "type": "string",
++          "enum": ["project", "minih"],
++          "description": "Which system does the magic wand target — the project being tested or minih itself?"
++        },
++        "difficulties": {
++          "type": "array",
++          "items": {
++            "type": "object",
++            "required": ["category", "description", "severity"],
++            "additionalProperties": false,
++            "properties": {
++              "category": {
++                "type": "string",
++                "minLength": 2,
++                "description": "Friction category (e.g., build, config, data, test, debug, knowledge)."
++              },
++              "description": {
++                "type": "string",
++                "minLength": 10,
++                "description": "What happened — be specific."
++              },
++              "workaround": {
++                "type": ["string", "null"],
++                "description": "What you did to get past it, or null."
++              },
++              "severity": {
++                "type": "string",
++                "enum": ["blocking", "degrading", "annoying"],
++                "description": "How badly this affected you."
++              }
++            }
++          },
++          "description": "Structured friction reports for the difficulty ledger."
++        }
+       }
+     }
+   }
+diff --git a/agents/convention-check/output-schema.json b/agents/convention-check/output-schema.json
+index 6285114..7ab1d74 100644
+--- a/agents/convention-check/output-schema.json
++++ b/agents/convention-check/output-schema.json
+@@ -29,8 +29,13 @@
+         "required": ["slug", "status", "checks"],
+         "additionalProperties": true,
+         "properties": {
+-          "slug": { "type": "string" },
+-          "status": { "type": "string", "enum": ["pass", "warning", "fail"] },
++          "slug": {
++            "type": "string"
++          },
++          "status": {
++            "type": "string",
++            "enum": ["pass", "warning", "fail"]
++          },
+           "checks": {
+             "type": "array",
+             "items": {
+@@ -38,12 +43,16 @@
+               "required": ["check", "status"],
+               "additionalProperties": true,
+               "properties": {
+-                "check": { "type": "string" },
++                "check": {
++                  "type": "string"
++                },
+                 "status": {
+                   "type": "string",
+                   "enum": ["pass", "warning", "fail", "skip"]
+                 },
+-                "message": { "type": "string" }
++                "message": {
++                  "type": "string"
++                }
+               }
+             }
+           }
+@@ -55,13 +64,19 @@
+       "required": ["exists"],
+       "additionalProperties": true,
+       "properties": {
+-        "exists": { "type": "boolean" },
+-        "hasFeedbackSection": { "type": "boolean" }
++        "exists": {
++          "type": "boolean"
++        },
++        "hasFeedbackSection": {
++          "type": "boolean"
++        }
+       }
+     },
+     "recommendations": {
+       "type": "array",
+-      "items": { "type": "string" },
++      "items": {
++        "type": "string"
++      },
+       "description": "Actionable recommendations for improving convention compliance."
+     },
+     "retrospective": {
+@@ -69,9 +84,53 @@
+       "required": ["workedWell", "confusing", "magicWand"],
+       "additionalProperties": true,
+       "properties": {
+-        "workedWell": { "type": "string", "minLength": 10 },
+-        "confusing": { "type": "string", "minLength": 10 },
+-        "magicWand": { "type": "string", "minLength": 20 }
++        "workedWell": {
++          "type": "string",
++          "minLength": 10
++        },
++        "confusing": {
++          "type": "string",
++          "minLength": 10
++        },
++        "magicWand": {
++          "type": "string",
++          "minLength": 20
++        },
++        "magicWandTarget": {
++          "type": "string",
++          "enum": ["project", "minih"],
++          "description": "Which system does the magic wand target — the project being tested or minih itself?"
++        },
++        "difficulties": {
++          "type": "array",
++          "items": {
++            "type": "object",
++            "required": ["category", "description", "severity"],
++            "additionalProperties": false,
++            "properties": {
++              "category": {
++                "type": "string",
++                "minLength": 2,
++                "description": "Friction category (e.g., build, config, data, test, debug, knowledge)."
++              },
++              "description": {
++                "type": "string",
++                "minLength": 10,
++                "description": "What happened — be specific."
++              },
++              "workaround": {
++                "type": ["string", "null"],
++                "description": "What you did to get past it, or null."
++              },
++              "severity": {
++                "type": "string",
++                "enum": ["blocking", "degrading", "annoying"],
++                "description": "How badly this affected you."
++              }
++            }
++          },
++          "description": "Structured friction reports for the difficulty ledger."
++        }
+       }
+     }
+   }
+diff --git a/agents/feedback-digest/output-schema.json b/agents/feedback-digest/output-schema.json
+index 1325f96..e6b913a 100644
+--- a/agents/feedback-digest/output-schema.json
++++ b/agents/feedback-digest/output-schema.json
+@@ -35,7 +35,10 @@
+             "type": "string",
+             "description": "What this theme covers."
+           },
+-          "priority": { "type": "string", "enum": ["high", "medium", "low"] },
++          "priority": {
++            "type": "string",
++            "enum": ["high", "medium", "low"]
++          },
+           "frequency": {
+             "type": "integer",
+             "minimum": 1,
+@@ -46,8 +49,12 @@
+             "items": {
+               "type": "object",
+               "properties": {
+-                "agent": { "type": "string" },
+-                "text": { "type": "string" }
++                "agent": {
++                  "type": "string"
++                },
++                "text": {
++                  "type": "string"
++                }
+               }
+             },
+             "description": "Supporting quotes from agent feedback."
+@@ -65,12 +72,59 @@
+       "required": ["workedWell", "confusing", "magicWand"],
+       "additionalProperties": true,
+       "properties": {
+-        "workedWell": { "type": "string", "minLength": 10 },
+-        "confusing": { "type": "string", "minLength": 10 },
+-        "magicWand": { "type": "string", "minLength": 20 },
++        "workedWell": {
++          "type": "string",
++          "minLength": 10
++        },
++        "confusing": {
++          "type": "string",
++          "minLength": 10
++        },
++        "magicWand": {
++          "type": "string",
++          "minLength": 20
++        },
+         "improvementSuggestions": {
+           "type": "array",
+-          "items": { "type": "string", "minLength": 10 }
++          "items": {
++            "type": "string",
++            "minLength": 10
++          }
++        },
++        "magicWandTarget": {
++          "type": "string",
++          "enum": ["project", "minih"],
++          "description": "Which system does the magic wand target — the project being tested or minih itself?"
++        },
++        "difficulties": {
++          "type": "array",
++          "items": {
++            "type": "object",
++            "required": ["category", "description", "severity"],
++            "additionalProperties": false,
++            "properties": {
++              "category": {
++                "type": "string",
++                "minLength": 2,
++                "description": "Friction category (e.g., build, config, data, test, debug, knowledge)."
++              },
++              "description": {
++                "type": "string",
++                "minLength": 10,
++                "description": "What happened — be specific."
++              },
++              "workaround": {
++                "type": ["string", "null"],
++                "description": "What you did to get past it, or null."
++              },
++              "severity": {
++                "type": "string",
++                "enum": ["blocking", "degrading", "annoying"],
++                "description": "How badly this affected you."
++              }
++            }
++          },
++          "description": "Structured friction reports for the difficulty ledger."
+         }
+       }
+     }
+diff --git a/agents/first-time-experience/output-schema.json b/agents/first-time-experience/output-schema.json
+index 8f1f190..a91a1e9 100644
+--- a/agents/first-time-experience/output-schema.json
++++ b/agents/first-time-experience/output-schema.json
+@@ -20,20 +20,30 @@
+         "type": "object",
+         "required": ["step", "description", "result", "notes"],
+         "properties": {
+-          "step": { "type": "integer" },
+-          "description": { "type": "string" },
++          "step": {
++            "type": "integer"
++          },
++          "description": {
++            "type": "string"
++          },
+           "result": {
+             "type": "string",
+             "enum": ["pass", "fail", "partial", "skipped"]
+           },
+-          "notes": { "type": "string" },
++          "notes": {
++            "type": "string"
++          },
+           "commandsRun": {
+             "type": "array",
+-            "items": { "type": "string" }
++            "items": {
++              "type": "string"
++            }
+           },
+           "errorMessages": {
+             "type": "array",
+-            "items": { "type": "string" }
++            "items": {
++              "type": "string"
++            }
+           }
+         }
+       }
+@@ -46,17 +56,23 @@
+     },
+     "blockers": {
+       "type": "array",
+-      "items": { "type": "string" },
++      "items": {
++        "type": "string"
++      },
+       "description": "Things that completely stopped progress"
+     },
+     "confusionPoints": {
+       "type": "array",
+-      "items": { "type": "string" },
++      "items": {
++        "type": "string"
++      },
+       "description": "Things that were unclear or required trial-and-error"
+     },
+     "suggestions": {
+       "type": "array",
+-      "items": { "type": "string" },
++      "items": {
++        "type": "string"
++      },
+       "description": "Concrete improvements for the first-time experience"
+     },
+     "summary": {
+@@ -68,9 +84,53 @@
+       "required": ["workedWell", "confusing", "magicWand"],
+       "additionalProperties": true,
+       "properties": {
+-        "workedWell": { "type": "string", "minLength": 10 },
+-        "confusing": { "type": "string", "minLength": 10 },
+-        "magicWand": { "type": "string", "minLength": 20 }
++        "workedWell": {
++          "type": "string",
++          "minLength": 10
++        },
++        "confusing": {
++          "type": "string",
++          "minLength": 10
++        },
++        "magicWand": {
++          "type": "string",
++          "minLength": 20
++        },
++        "magicWandTarget": {
++          "type": "string",
++          "enum": ["project", "minih"],
++          "description": "Which system does the magic wand target — the project being tested or minih itself?"
++        },
++        "difficulties": {
++          "type": "array",
++          "items": {
++            "type": "object",
++            "required": ["category", "description", "severity"],
++            "additionalProperties": false,
++            "properties": {
++              "category": {
++                "type": "string",
++                "minLength": 2,
++                "description": "Friction category (e.g., build, config, data, test, debug, knowledge)."
++              },
++              "description": {
++                "type": "string",
++                "minLength": 10,
++                "description": "What happened — be specific."
++              },
++              "workaround": {
++                "type": ["string", "null"],
++                "description": "What you did to get past it, or null."
++              },
++              "severity": {
++                "type": "string",
++                "enum": ["blocking", "degrading", "annoying"],
++                "description": "How badly this affected you."
++              }
++            }
++          },
++          "description": "Structured friction reports for the difficulty ledger."
++        }
+       }
+     }
+   }
+diff --git a/agents/mcp-smoke-test/output-schema.json b/agents/mcp-smoke-test/output-schema.json
+index 823fb79..c9ddeef 100644
+--- a/agents/mcp-smoke-test/output-schema.json
++++ b/agents/mcp-smoke-test/output-schema.json
+@@ -15,7 +15,9 @@
+     },
+     "toolsFound": {
+       "type": "array",
+-      "items": { "type": "string" },
++      "items": {
++        "type": "string"
++      },
+       "description": "MCP tool names discovered in the session"
+     },
+     "echoTestPassed": {
+@@ -35,9 +37,53 @@
+       "required": ["workedWell", "confusing", "magicWand"],
+       "additionalProperties": true,
+       "properties": {
+-        "workedWell": { "type": "string", "minLength": 10 },
+-        "confusing": { "type": "string", "minLength": 10 },
+-        "magicWand": { "type": "string", "minLength": 20 }
++        "workedWell": {
++          "type": "string",
++          "minLength": 10
++        },
++        "confusing": {
++          "type": "string",
++          "minLength": 10
++        },
++        "magicWand": {
++          "type": "string",
++          "minLength": 20
++        },
++        "magicWandTarget": {
++          "type": "string",
++          "enum": ["project", "minih"],
++          "description": "Which system does the magic wand target — the project being tested or minih itself?"
++        },
++        "difficulties": {
++          "type": "array",
++          "items": {
++            "type": "object",
++            "required": ["category", "description", "severity"],
++            "additionalProperties": false,
++            "properties": {
++              "category": {
++                "type": "string",
++                "minLength": 2,
++                "description": "Friction category (e.g., build, config, data, test, debug, knowledge)."
++              },
++              "description": {
++                "type": "string",
++                "minLength": 10,
++                "description": "What happened — be specific."
++              },
++              "workaround": {
++                "type": ["string", "null"],
++                "description": "What you did to get past it, or null."
++              },
++              "severity": {
++                "type": "string",
++                "enum": ["blocking", "degrading", "annoying"],
++                "description": "How badly this affected you."
++              }
++            }
++          },
++          "description": "Structured friction reports for the difficulty ledger."
++        }
+       }
+     }
+   }
+diff --git a/agents/prompt-review/output-schema.json b/agents/prompt-review/output-schema.json
+index b76a2aa..883faf3 100644
+--- a/agents/prompt-review/output-schema.json
++++ b/agents/prompt-review/output-schema.json
+@@ -25,43 +25,76 @@
+         "promptClarity": {
+           "type": "object",
+           "properties": {
+-            "score": { "type": "integer", "minimum": 1, "maximum": 5 },
+-            "explanation": { "type": "string" }
++            "score": {
++              "type": "integer",
++              "minimum": 1,
++              "maximum": 5
++            },
++            "explanation": {
++              "type": "string"
++            }
+           }
+         },
+         "promptCompleteness": {
+           "type": "object",
+           "properties": {
+-            "score": { "type": "integer", "minimum": 1, "maximum": 5 },
+-            "explanation": { "type": "string" }
++            "score": {
++              "type": "integer",
++              "minimum": 1,
++              "maximum": 5
++            },
++            "explanation": {
++              "type": "string"
++            }
+           }
+         },
+         "frontmatter": {
+           "type": "object",
+           "properties": {
+-            "score": { "type": "integer", "minimum": 1, "maximum": 5 },
+-            "explanation": { "type": "string" }
++            "score": {
++              "type": "integer",
++              "minimum": 1,
++              "maximum": 5
++            },
++            "explanation": {
++              "type": "string"
++            }
+           }
+         },
+         "schemaQuality": {
+           "type": "object",
+           "properties": {
+-            "score": { "type": "integer", "minimum": 1, "maximum": 5 },
+-            "explanation": { "type": "string" }
++            "score": {
++              "type": "integer",
++              "minimum": 1,
++              "maximum": 5
++            },
++            "explanation": {
++              "type": "string"
++            }
+           }
+         },
+         "instructionsQuality": {
+           "type": "object",
+           "properties": {
+-            "score": { "type": "integer", "minimum": 1, "maximum": 5 },
+-            "explanation": { "type": "string" }
++            "score": {
++              "type": "integer",
++              "minimum": 1,
++              "maximum": 5
++            },
++            "explanation": {
++              "type": "string"
++            }
+           }
+         }
+       }
+     },
+     "suggestions": {
+       "type": "array",
+-      "items": { "type": "string", "minLength": 10 },
++      "items": {
++        "type": "string",
++        "minLength": 10
++      },
+       "description": "Specific suggestions for improving the agent."
+     },
+     "verdict": {
+@@ -74,12 +107,59 @@
+       "required": ["workedWell", "confusing", "magicWand"],
+       "additionalProperties": true,
+       "properties": {
+-        "workedWell": { "type": "string", "minLength": 10 },
+-        "confusing": { "type": "string", "minLength": 10 },
+-        "magicWand": { "type": "string", "minLength": 20 },
++        "workedWell": {
++          "type": "string",
++          "minLength": 10
++        },
++        "confusing": {
++          "type": "string",
++          "minLength": 10
++        },
++        "magicWand": {
++          "type": "string",
++          "minLength": 20
++        },
+         "improvementSuggestions": {
+           "type": "array",
+-          "items": { "type": "string", "minLength": 10 }
++          "items": {
++            "type": "string",
++            "minLength": 10
++          }
++        },
++        "magicWandTarget": {
++          "type": "string",
++          "enum": ["project", "minih"],
++          "description": "Which system does the magic wand target — the project being tested or minih itself?"
++        },
++        "difficulties": {
++          "type": "array",
++          "items": {
++            "type": "object",
++            "required": ["category", "description", "severity"],
++            "additionalProperties": false,
++            "properties": {
++              "category": {
++                "type": "string",
++                "minLength": 2,
++                "description": "Friction category (e.g., build, config, data, test, debug, knowledge)."
++              },
++              "description": {
++                "type": "string",
++                "minLength": 10,
++                "description": "What happened — be specific."
++              },
++              "workaround": {
++                "type": ["string", "null"],
++                "description": "What you did to get past it, or null."
++              },
++              "severity": {
++                "type": "string",
++                "enum": ["blocking", "degrading", "annoying"],
++                "description": "How badly this affected you."
++              }
++            }
++          },
++          "description": "Structured friction reports for the difficulty ledger."
+         }
+       }
+     }
+diff --git a/agents/self-review/output-schema.json b/agents/self-review/output-schema.json
+index 9a98523..0529a99 100644
+--- a/agents/self-review/output-schema.json
++++ b/agents/self-review/output-schema.json
+@@ -34,7 +34,10 @@
+             "type": "string",
+             "enum": ["critical", "warning", "suggestion", "praise"]
+           },
+-          "title": { "type": "string", "description": "Short finding title." },
++          "title": {
++            "type": "string",
++            "description": "Short finding title."
++          },
+           "description": {
+             "type": "string",
+             "description": "Detailed explanation."
+@@ -55,10 +58,18 @@
+       "type": "object",
+       "additionalProperties": true,
+       "properties": {
+-        "linesOfCode": { "type": "integer" },
+-        "functions": { "type": "integer" },
+-        "exports": { "type": "integer" },
+-        "imports": { "type": "integer" }
++        "linesOfCode": {
++          "type": "integer"
++        },
++        "functions": {
++          "type": "integer"
++        },
++        "exports": {
++          "type": "integer"
++        },
++        "imports": {
++          "type": "integer"
++        }
+       }
+     },
+     "verdict": {
+@@ -71,12 +82,59 @@
+       "required": ["workedWell", "confusing", "magicWand"],
+       "additionalProperties": true,
+       "properties": {
+-        "workedWell": { "type": "string", "minLength": 10 },
+-        "confusing": { "type": "string", "minLength": 10 },
+-        "magicWand": { "type": "string", "minLength": 20 },
++        "workedWell": {
++          "type": "string",
++          "minLength": 10
++        },
++        "confusing": {
++          "type": "string",
++          "minLength": 10
++        },
++        "magicWand": {
++          "type": "string",
++          "minLength": 20
++        },
+         "improvementSuggestions": {
+           "type": "array",
+-          "items": { "type": "string", "minLength": 10 }
++          "items": {
++            "type": "string",
++            "minLength": 10
++          }
++        },
++        "magicWandTarget": {
++          "type": "string",
++          "enum": ["project", "minih"],
++          "description": "Which system does the magic wand target — the project being tested or minih itself?"
++        },
++        "difficulties": {
++          "type": "array",
++          "items": {
++            "type": "object",
++            "required": ["category", "description", "severity"],
++            "additionalProperties": false,
++            "properties": {
++              "category": {
++                "type": "string",
++                "minLength": 2,
++                "description": "Friction category (e.g., build, config, data, test, debug, knowledge)."
++              },
++              "description": {
++                "type": "string",
++                "minLength": 10,
++                "description": "What happened — be specific."
++              },
++              "workaround": {
++                "type": ["string", "null"],
++                "description": "What you did to get past it, or null."
++              },
++              "severity": {
++                "type": "string",
++                "enum": ["blocking", "degrading", "annoying"],
++                "description": "How badly this affected you."
++              }
++            }
++          },
++          "description": "Structured friction reports for the difficulty ledger."
+         }
+       }
+     }
+diff --git a/agents/smoke-test/output-schema.json b/agents/smoke-test/output-schema.json
+index 4e1e70b..f2b93f4 100644
+--- a/agents/smoke-test/output-schema.json
++++ b/agents/smoke-test/output-schema.json
+@@ -21,7 +21,10 @@
+             "type": "string",
+             "description": "Step name (e.g., 'list-agents')"
+           },
+-          "status": { "type": "string", "enum": ["pass", "fail", "skip"] },
++          "status": {
++            "type": "string",
++            "enum": ["pass", "fail", "skip"]
++          },
+           "detail": {
+             "type": "string",
+             "description": "What happened during this step."
+@@ -45,12 +48,59 @@
+       "required": ["workedWell", "confusing", "magicWand"],
+       "additionalProperties": true,
+       "properties": {
+-        "workedWell": { "type": "string", "minLength": 10 },
+-        "confusing": { "type": "string", "minLength": 10 },
+-        "magicWand": { "type": "string", "minLength": 20 },
++        "workedWell": {
++          "type": "string",
++          "minLength": 10
++        },
++        "confusing": {
++          "type": "string",
++          "minLength": 10
++        },
++        "magicWand": {
++          "type": "string",
++          "minLength": 20
++        },
+         "improvementSuggestions": {
+           "type": "array",
+-          "items": { "type": "string", "minLength": 10 }
++          "items": {
++            "type": "string",
++            "minLength": 10
++          }
++        },
++        "magicWandTarget": {
++          "type": "string",
++          "enum": ["project", "minih"],
++          "description": "Which system does the magic wand target — the project being tested or minih itself?"
++        },
++        "difficulties": {
++          "type": "array",
++          "items": {
++            "type": "object",
++            "required": ["category", "description", "severity"],
++            "additionalProperties": false,
++            "properties": {
++              "category": {
++                "type": "string",
++                "minLength": 2,
++                "description": "Friction category (e.g., build, config, data, test, debug, knowledge)."
++              },
++              "description": {
++                "type": "string",
++                "minLength": 10,
++                "description": "What happened — be specific."
++              },
++              "workaround": {
++                "type": ["string", "null"],
++                "description": "What you did to get past it, or null."
++              },
++              "severity": {
++                "type": "string",
++                "enum": ["blocking", "degrading", "annoying"],
++                "description": "How badly this affected you."
++              }
++            }
++          },
++          "description": "Structured friction reports for the difficulty ledger."
+         }
+       }
+     }
+diff --git a/docs/domains/cli/domain.md b/docs/domains/cli/domain.md
+index 227d61a..740243b 100644
+--- a/docs/domains/cli/domain.md
++++ b/docs/domains/cli/domain.md
+@@ -27,6 +27,7 @@
+ | `src/cli/commands/validate.ts` | internal | Re-validate latest output (Phase 4) |
+ | `src/cli/commands/last-run.ts` | internal | Latest run info (Phase 4) |
+ | `src/cli/commands/tail.ts` | internal | Follow event stream (Phase 4) |
++| `src/cli/commands/difficulties.ts` | internal | Aggregate difficulty reports across all agents (006-compounding-value) |
+ 
+ ## Contracts
+ 
+@@ -54,3 +55,4 @@
+ | 003-resume-prompt | Added `resume` command (follow-up messages to completed sessions), `connect` command (print copilot CLI resume command). Extracted shared `sdk-runtime.ts` from `run.ts`. Updated `history` with `↩` indicator for resumed runs. |
+ | FX001-quickstart | Added `quickstart` command — scaffold + run hello-world in one command. Extracted `ensurePreamble()` from `init.ts`. |
+ | FX002-agent-ux | Suppressed SQLite ExperimentalWarning via `NODE_NO_WARNINGS`. Added tool elapsed timer to pretty mode. |
++| 006-compounding-value | Added `difficulties` command (aggregates difficulty reports across all agents). Added velocity trend column + summary line to `history`. Run envelope now includes summary/magicWand/magicWandTarget/difficulties from parsed report.json. |
+diff --git a/docs/domains/runner/domain.md b/docs/domains/runner/domain.md
+index 092fc2b..e8f236a 100644
+--- a/docs/domains/runner/domain.md
++++ b/docs/domains/runner/domain.md
+@@ -43,6 +43,9 @@
+ | `PrettyDisplay` | Class | cli (run command — default display mode) |
+ | `parseFrontmatter(content)` | Function | cli (doctor frontmatter checks) |
+ | `retrospective.json` | JSON Schema | Agent output schemas (via $ref), cli (doctor checks) |
++| `VelocityData` | Type | cli (history trend display) |
++| `ParsedReport` | Type | cli (run envelope surfacing) |
++| `computeVelocity(durationMs, agentDir, runId)` | Function | runner (post-run velocity computation) |
+ 
+ ## Concepts
+ 
+@@ -53,6 +56,9 @@
+ | Degraded vs Failed | Invalid output = "degraded" (agent worked, schema didn't match), not hard failure. |
+ | Prompt assembly | preamble → instructions → output hint → params → prompt, joined by `\n\n---\n\n`. Frontmatter stripped. |
+ | Magic wand | Every agent output MUST include retrospective with magicWand feedback. |
++| Velocity tracking | Per-agent velocity data computed at run end, stored in completed.json. Chains from prior runs for O(1) computation. |
++| Difficulty ledger | Agents report structured friction in `retrospective.difficulties`. Pipeline: agents report → `minih difficulties` aggregates → human curates preamble. |
++| Parsed report surfacing | Runner parses report.json after run to extract summary/magicWand/difficulties for CLI envelope. |
+ | Session resume | Resume sends follow-up message directly — skips prompt assembly and system output validation. SDK conversation history provides context. |
+ 
+ ## History
+@@ -65,3 +71,4 @@
+ | 002-pretty-mode | Added pretty.ts — clean streaming display with delta accumulation, thinking suppression, inline intent. PrettyDisplay exported from barrel. |
+ | FX002-agent-ux | Added tool elapsed timer to pretty mode. Added fuzzy property name suggestions to validator error messages (substring + Levenshtein matching). |
+ | 003-resume-prompt | Added `sessionId`, `resumedFromRunId`, `promptOverride` to `AgentRunConfig`. Added `resumedFromRunId` to `CompletedMetadata`. Added `findRunSession()` helper. Resume path in `runAgent()` skips system validation and sends follow-up message directly. |
++| 006-compounding-value | Added `VelocityData`, `ParsedReport` types. `computeVelocity()` computes per-agent velocity at run end. Report.json parsed after run for envelope surfacing. `magicWandTarget` + `difficulties` added to retro/system-output schemas. SYSTEM_OUTPUT_INSTRUCTIONS updated with difficulty reporting guidance. |
+diff --git a/docs/plans/006-compounding-value/compounding-value-plan.md b/docs/plans/006-compounding-value/compounding-value-plan.md
+new file mode 100644
+index 0000000..2c40b49
+--- /dev/null
++++ b/docs/plans/006-compounding-value/compounding-value-plan.md
+@@ -0,0 +1,146 @@
++# Compounding Value Implementation Plan
++
++**Mode**: Simple
++**Plan Version**: 1.0.0
++**Created**: 2026-04-14
++**Spec**: [compounding-value-spec.md](./compounding-value-spec.md)
++**Workshop**: [workshops/001-compounding-value-in-minih.md](./workshops/001-compounding-value-in-minih.md)
++**Status**: COMPLETE
++
++## Summary
++
++minih has the self-improvement loop (magic wand → fix → verify) but doesn't measure or surface the compounding effect. This plan adds structured difficulty reporting, per-agent velocity tracking, retrospective data in the run envelope, and philosophy docs — making the compound curve visible and actionable. All changes are internal to minih, touching the runner and cli domains.
++
++## Target Domains
++
++| Domain | Status | Relationship | Role |
++|--------|--------|-------------|------|
++| runner | existing | **modify** | Schema updates, velocity computation, report.json parsing, SYSTEM_OUTPUT_INSTRUCTIONS |
++| cli | existing | **modify** | Run envelope surfacing, history trend column, new `difficulties` command |
++| adapter | existing | **consume** | No changes |
++
++## Domain Manifest
++
++| File | Domain | Classification | Rationale |
++|------|--------|---------------|-----------|
++| `src/schemas/retrospective.json` | runner | contract | Add `magicWandTarget` + `difficulties` fields |
++| `src/schemas/system-output.json` | runner | contract | Mirror new retro fields in system output |
++| `src/runner/types.ts` | runner | contract | Add `velocity` to CompletedMetadata, add parsed report to AgentRunResult |
++| `src/runner/runner.ts` | runner | internal | Velocity computation, report.json parsing after run |
++| `agents/code-review/output-schema.json` | runner | internal | Update inlined retrospective |
++| `agents/convention-check/output-schema.json` | runner | internal | Update inlined retrospective |
++| `agents/first-time-experience/output-schema.json` | runner | internal | Update inlined retrospective |
++| `agents/feedback-digest/output-schema.json` | runner | internal | Update inlined retrospective |
++| `agents/mcp-smoke-test/output-schema.json` | runner | internal | Update inlined retrospective |
++| `agents/prompt-review/output-schema.json` | runner | internal | Update inlined retrospective |
++| `agents/self-review/output-schema.json` | runner | internal | Update inlined retrospective |
++| `agents/smoke-test/output-schema.json` | runner | internal | Update inlined retrospective |
++| `src/cli/commands/run.ts` | cli | internal | Surface retro fields in stdout envelope |
++| `src/cli/commands/history.ts` | cli | internal | Add trend column + velocity summary line |
++| `src/cli/commands/difficulties.ts` | cli | internal | NEW — aggregation command |
++| `src/cli/index.ts` | cli | internal | Register difficulties command |
++| `src/runner/display.ts` | runner | internal | Show magicWand + difficulty count in stderr summary |
++| `agents/_shared/preamble.md` | runner | internal | Known difficulties, gift-to-future-self, category guidance |
++| `AGENTS_README.md` | — | docs | Philosophy enrichment, difficulty ledger docs, CLI reference |
++| `~/github/tools/agents/v2-commands/harness-is-the-product-v2.md` | — | external | Reference minih mechanisms |
++| `test/runner/velocity.test.ts` | runner | internal | NEW — velocity computation tests |
++| `test/runner/schema-compat.test.ts` | runner | internal | NEW — backward compat tests |
++| `docs/domains/runner/domain.md` | runner | docs | Update contracts, concepts, history |
++| `docs/domains/cli/domain.md` | cli | docs | Update composition, concepts, history |
++| `src/runner/index.ts` | runner | contract | Export new types if needed |
++
++## Key Findings
++
++| # | Impact | Finding | Action |
++|---|--------|---------|--------|
++| 01 | Critical | Runner doesn't parse report.json after run — `AgentRunResult` has no parsed report content, so stdout envelope and displaySummary can't access summary/magicWand/difficulties | Parse report.json after run, add parsed report to AgentRunResult (T004) |
++| 02 | Critical | Retrospective schema inlined in 10 places (retrospective.json, system-output.json, 8 agent schemas) — must update all consistently | Update all 10 in a single task (T001) |
++| 03 | Critical | No velocity/difficulty infrastructure exists — entirely net-new | Ground-up implementation across tasks T001-T008 |
++| 04 | High | Velocity lookup scans all run folders — could be slow with hundreds of runs | Only read most recent completed.json (sort folders desc, take first valid) (T003) |
++| 05 | High | displaySummary() only receives metadata, not report content — needs AgentRunResult expansion | Extend AgentRunResult with parsed report (T004), update displaySummary (T005) |
++| 06 | High | CompletedMetadata is flat — no velocity block yet | Add optional `velocity` field to type and runner (T002, T003) |
++| 07 | High | History table has 4 columns, no trend | Add Trend column + summary line (T006) |
++
++## Implementation
++
++**Objective**: Add difficulty reporting, velocity tracking, run output surfacing, and philosophy docs to make minih's compounding value loop visible and measurable.
++
++**Testing Approach**: Lightweight — real fixture files, no mocks. Tests for schema backward compat and velocity computation. Manual verify for docs and CLI output.
++
++### Tasks
++
++| Status | ID | Task | Domain | Path(s) | Done When | Notes |
++|--------|-----|------|--------|---------|-----------|-------|
++| [x] | T001 | Update retrospective + system-output schemas | runner | `src/schemas/retrospective.json`, `src/schemas/system-output.json`, 8 agent `output-schema.json` files | AC1, AC2, AC3, AC4 — new optional fields added, existing outputs still validate | Add `magicWandTarget` (string), `difficulties` (array of {category, description, workaround, severity}). Update all 10 schema locations (2 shared + 8 agents: code-review, convention-check, first-time-experience, feedback-digest, mcp-smoke-test, prompt-review, self-review, smoke-test). |
++| [x] | T002 | Add velocity type to CompletedMetadata | runner | `src/runner/types.ts` | AC5 — velocity type defined with all 5 fields | Add optional `velocity` block: `previousDurationMs`, `changePercent`, `runNumber`, `firstDurationMs`, `overallChangePercent` |
++| [x] | T003 | Compute and store velocity at run end | runner | `src/runner/runner.ts` | AC5, AC6, AC7 — velocity block written to completed.json, first run has null previous, non-completed runs skipped | After run completes, scan run folders desc for previous completed run (result === 'completed' only — skip failed AND degraded). For `previousDurationMs`/`changePercent`: read last completed run's metadata. For `runNumber`/`firstDurationMs`/`overallChangePercent`: if prior run has `velocity` block, chain from it (O(1)). If no prior velocity (legacy runs), scan back to first completed run to establish baseline, then persist so future runs are O(1). Handle edge cases: no prior completed runs (null velocity fields, runNumber=1), corrupted completed.json (skip with try/catch), all-failed history (same as no prior). |
++| [x] | T004 | Parse report.json and surface in AgentRunResult | runner | `src/runner/runner.ts`, `src/runner/types.ts` | AC24 — parsed report available on AgentRunResult | Per finding 01. After validation, safely parse report.json (try/catch for missing/empty/invalid JSON, type-check nested fields before extraction). Extract summary, magicWand, magicWandTarget, difficulties into a `parsedReport` field on AgentRunResult. All extracted fields are nullable — if report.json is missing or malformed, envelope gets metadata only (graceful degradation, never throws). |
++| [x] | T005 | Surface retro in run envelope + displaySummary | cli, runner | `src/cli/commands/run.ts`, `src/runner/display.ts` | AC24, AC25 — envelope has retro fields, stderr shows magicWand + difficulty count | Per finding 05. Add fields to formatSuccess call. Update displaySummary to show magicWand text and difficulty count. |
++| [x] | T006 | Add trend column + velocity summary to history | cli | `src/cli/commands/history.ts` | AC8, AC9 — trend column with ▼/▲/— indicators, summary line at bottom | Per finding 07. Read velocity block from completed.json. Green ▼ = faster, Red ▲ = slower, — = first/within 5%. |
++| [x] | T007 | Create `minih difficulties` command | cli | `src/cli/commands/difficulties.ts`, `src/cli/index.ts` | AC10, AC11, AC12, AC13 — aggregates across all agents, auto-assigns MH-IDs, table on stderr, JSON on stdout | Scan all agents' run folders (completed runs only, skip in-progress/malformed). Read report.json, extract difficulties arrays, flatten. Auto-assign MH-001+ IDs in encounter order. Compute frequency by exact-description grouping (counting, not deduplication — all entries shown). Status defaults to "open" (no status store — humans promote resolved items to preamble manually). Table columns: ID, category, description, agent, frequency, severity. Handle zero difficulties gracefully. Add `--agent <slug>` filter for single-agent view. |
++| [x] | T008 | Update SYSTEM_OUTPUT_INSTRUCTIONS | runner | `src/runner/runner.ts` | AC14, AC15 — JSON example with difficulties + magicWandTarget, instruction text | Add difficulties array example, magicWandTarget guidance, category suggestions (freeform, not enum). |
++| [x] | T009 | Update preamble | runner | `agents/_shared/preamble.md` | AC16, AC17, AC18 — Known Difficulties table, gift-to-future-self, category guidance | Add Known Difficulties section (initially populated with minih's own MH- entries). Add "every task sends a gift" framing. Add suggested categories with "use your own" note. |
++| [x] | T010 | Update AGENTS_README philosophy | — | `AGENTS_README.md` | AC19, AC20, AC21, AC22 — Core Principle, Encode Don't Document, Maturity Curve, Difficulty Ledger subsections | Surgical insertions into existing Philosophy section. Add `minih difficulties` to CLI reference. |
++| [x] | T011 | Update harness-is-the-product skill | — | `~/github/tools/agents/v2-commands/harness-is-the-product-v2.md` | AC23 — skill references minih mechanisms | Add minih-specific section: MH- IDs, `minih difficulties`, `retrospective.difficulties`, A→B→C pipeline. |
++| [x] | T012 | Tests: schema compat + velocity + CLI | runner, cli | `test/runner/velocity.test.ts`, `test/runner/schema-compat.test.ts` | AC3, AC5, AC6, AC7 — backward compat confirmed, velocity math correct, CLI surfacing works | Test: existing output without new fields validates. Test: velocity for first run (null previous, runNumber=1), nth run (chained), skip failed, skip degraded, corrupted completed.json (skipped), no prior completed runs, legacy runs without velocity block (backfill scan). Test: report.json parsing (valid, missing, malformed, missing fields). Use real fixture folders. |
++| [x] | T013 | Update domain docs + barrel export | runner, cli | `docs/domains/runner/domain.md`, `docs/domains/cli/domain.md`, `src/runner/index.ts` | Domain docs reflect new contracts/concepts, barrel exports new types | Add velocity concept + parsedReport to runner domain. Add difficulties command to cli domain. Export new types from barrel if any named types added. Update domain history tables. |
++
++### Acceptance Criteria
++
++- [x] AC1: Schemas include optional `magicWandTarget` field
++- [x] AC2: Schemas include optional `difficulties` array
++- [x] AC3: Existing outputs without new fields still validate
++- [x] AC4: Inlined agent schemas updated (code-review, convention-check, first-time-experience)
++- [x] AC5: `completed.json` includes velocity block
++- [x] AC6: First run has null previous, runNumber=1
++- [x] AC7: Failed/degraded runs skipped for velocity
++- [x] AC8: `minih history` shows trend column (▼/▲/—)
++- [x] AC9: `minih history` shows velocity summary line
++- [x] AC10: `minih difficulties` aggregates across all agents
++- [x] AC11: Auto-assigns MH-001+ IDs (raw, no dedup)
++- [x] AC12: Table on stderr, JSON on stdout
++- [x] AC13: Zero difficulties handled gracefully
++- [x] AC14: SYSTEM_OUTPUT_INSTRUCTIONS has difficulties example
++- [x] AC15: SYSTEM_OUTPUT_INSTRUCTIONS has magicWandTarget guidance
++- [x] AC16: Preamble has Known Difficulties table
++- [x] AC17: Preamble has "gift to future self" framing
++- [x] AC18: Preamble has suggested categories
++- [x] AC19: AGENTS_README has "Core Principle" subsection
++- [x] AC20: AGENTS_README has "Encode, Don't Document" subsection
++- [x] AC21: AGENTS_README has "Maturity Curve" named concept
++- [x] AC22: AGENTS_README has "Difficulty Ledger" A→B→C subsection
++- [x] AC23: harness-is-the-product skill updated
++- [x] AC24: Run envelope includes summary/magicWand/magicWandTarget/difficulties
++- [x] AC25: stderr summary shows magicWand + difficulty count
++
++### Risks
++
++| Risk | Likelihood | Impact | Mitigation |
++|------|------------|--------|------------|
++| Velocity scan slow with many runs | Low | Low | Sort desc, read first valid completed.json only |
++| Schema changes break existing outputs | Low | High | All fields optional, backward compat test (T012) |
++| Agents ignore new fields | Medium | Medium | Explicit JSON examples in SYSTEM_OUTPUT_INSTRUCTIONS (T008) |
++| Report.json parsing fails (malformed JSON) | Low | Medium | Try/catch with graceful fallback — envelope gets metadata only |
++| harness-is-the-product is different repo | Low | Low | Separate commit, same session |
++
++---
++
++## Validation Record (2026-04-14)
++
++| Agent | Lenses Covered | Issues | Verdict |
++|-------|---------------|--------|---------|
++| Coherence (GPT-5.4) | Integration & Ripple, System Behavior, Domain Boundaries | 4 (2 HIGH, 1 MEDIUM, 1 LOW) — all fixed | ✅ |
++| Risk (GPT-5.4) | Hidden Assumptions, Edge Cases, Performance, Security | 5 (3 HIGH, 2 MEDIUM) — all fixed | ✅ |
++| Completeness (GPT-5.4) | User Experience, Technical Constraints, Deployment, Concept Docs | 6 (2 HIGH, 3 MEDIUM, 1 LOW) — all fixed | ✅ |
++
++**Fixes applied**:
++1. T001 expanded from 3 to 8 agent schemas (all agents with inlined retro)
++2. T003 fully specified: chain velocity from prior runs, backfill for legacy, skip failed+degraded, handle edge cases
++3. T004 safe parsing: try/catch, type-check, nullable fields, graceful degradation
++4. T007 frequency/status clarified: exact-description grouping for frequency, status defaults "open"
++5. AC4/AC12 updated in spec to match
++6. T012 expanded: degraded runs, CLI tests, report parsing edge cases
++7. T013 added: domain doc updates + barrel export
++8. Flight plan parallelism corrected: T004 parallel with T003, T009-T011 independent
++
++Overall: ⚠️ **VALIDATED WITH FIXES** — 15 issues found across 3 agents, all addressed
+diff --git a/docs/plans/006-compounding-value/compounding-value-spec.md b/docs/plans/006-compounding-value/compounding-value-spec.md
+new file mode 100644
+index 0000000..84d310e
+--- /dev/null
++++ b/docs/plans/006-compounding-value/compounding-value-spec.md
+@@ -0,0 +1,164 @@
++# Compounding Value — Difficulty Ledger, Velocity Tracking & Philosophy
++
++**Mode**: Simple
++
++📚 This specification incorporates findings from `workshops/001-compounding-value-in-minih.md`
++
++## Summary
++
++minih already has the core self-improvement loop — magic wand → fix → verify. But it doesn't **measure** or **surface** the compounding effect. Users can't see that their harness investment is paying off, agents can't report structured friction, and velocity trends are invisible.
++
++This feature adds three capabilities that make the compounding value loop visible, measurable, and actionable:
++
++1. **Difficulty Ledger** — agents report structured friction (`retrospective.difficulties`), minih aggregates it (`minih difficulties`), resolved items feed back to agents via the preamble
++2. **Velocity Tracking** — per-agent velocity data stored in `completed.json`, surfaced in `minih history` as trend indicators
++3. **Philosophy & Docs** — weave the experiment's key framings ("every task sends a gift to its future self", "encode don't document", "the maturity curve") into AGENTS_README, preamble, and SYSTEM_OUTPUT_INSTRUCTIONS
++
++**WHY**: The velocity experiment proved 64× improvement across 5 iterations on the same codebase. minih is the engine that powers this loop — but today it doesn't surface the evidence. Users should be able to see the curve, agents should be able to report the friction that's slowing it, and the docs should articulate why this matters.
++
++## Goals
++
++- Agents can report structured difficulties with category, description, workaround, and severity
++- Humans can see all difficulties across all agents in a single view (`minih difficulties`)
++- Known/mitigated difficulties are visible to agents on startup (preamble)
++- Velocity data (change vs previous run, overall trend) is computed and stored per-agent
++- `minih history` shows velocity trends (faster/slower vs previous run)
++- The magic wand target (project vs minih) is explicit in the schema, not just prose
++- AGENTS_README and preamble articulate the compounding value philosophy with the experiment's best framings
++- Agents are prompted to report difficulties in SYSTEM_OUTPUT_INSTRUCTIONS
++
++## Non-Goals
++
++- No "value axis" measurement — quality of output is inherently qualitative, stays in `summary`
++- No automated difficulty-to-fix pipeline — humans curate the preamble manually
++- No magic wand maturity auto-classification — the maturity curve is a teaching concept, not a feature
++- No cross-agent velocity comparison — velocity trends are per-slug only
++- No dashboard or visualization — `minih difficulties` and `minih history` are CLI tools, not a web UI
++- No changes to how agents run — this is data capture, surfacing, and documentation
++
++## Target Domains
++
++| Domain | Status | Relationship | Role in This Feature |
++|--------|--------|-------------|---------------------|
++| runner | existing | **modify** | Store velocity block in completed.json, update SYSTEM_OUTPUT_INSTRUCTIONS, update retrospective schema |
++| cli | existing | **modify** | New `difficulties` command, velocity trend column in `history` |
++| adapter | existing | **consume** | No changes — velocity is computed after adapter returns |
++
++No new domains. This feature enriches existing domains with new data capture and surfacing.
++
++## Complexity
++
++- **Score**: CS-3 (medium)
++- **Breakdown**: S=2, I=0, D=1, N=0, F=0, T=1 → Total P=4 → CS-2/CS-3 boundary
++- **Confidence**: 0.85
++- **Assumptions**:
++  - Difficulty categories are freeform strings with suggested defaults (not enums)
++  - MH- IDs are auto-generated by `minih difficulties` aggregation
++  - Velocity block is computed at run completion time by reading previous completed.json files
++  - Philosophy/doc changes are straightforward text edits
++- **Dependencies**: None — all internal to minih
++- **Risks**:
++  - Velocity computation needs to scan previous run folders (could be slow with hundreds of runs — mitigate by only reading last completed.json)
++  - Schema changes must be backward compatible (all new fields optional)
++  - Agents with inlined retrospective schemas (3 agents) need updating
++- **Phases**: 3 suggested — (1) schema + velocity storage, (2) difficulties command + history enhancement, (3) philosophy docs
++
++## Acceptance Criteria
++
++### Schema & Data Model
++
++- **AC1**: `retrospective.json` and `system-output.json` schemas include optional `magicWandTarget` field (string: `"project"` or `"minih"`)
++- **AC2**: `retrospective.json` and `system-output.json` schemas include optional `difficulties` array with objects containing `category` (string), `description` (string), `workaround` (string or null), `severity` (string: `"blocking"`, `"degrading"`, or `"annoying"`)
++- **AC3**: Existing agent outputs without the new fields still validate successfully (backward compatible)
++- **AC4**: All agents with inlined retrospective schemas (code-review, convention-check, first-time-experience, feedback-digest, mcp-smoke-test, prompt-review, self-review, smoke-test — 8 total) are updated to include the new optional fields
++
++### Velocity Tracking
++
++- **AC5**: `completed.json` includes a `velocity` block with `previousDurationMs`, `changePercent`, `runNumber`, `firstDurationMs`, `overallChangePercent`
++- **AC6**: First run for an agent has `velocity.previousDurationMs` as null and `velocity.runNumber` as 1
++- **AC7**: Only completed runs are compared (failed/degraded are skipped for velocity calculation)
++- **AC8**: `minih history` displays a trend column showing ▼ (faster), ▲ (slower), or — (first run / within 5% noise)
++- **AC9**: `minih history` displays a velocity summary line: `Velocity: Xm Xs → Ym Ys over N runs (Z% faster)`
++
++### Difficulty Ledger
++
++- **AC10**: `minih difficulties` command aggregates difficulties from all agent run outputs across all agents
++- **AC11**: `minih difficulties` auto-assigns MH-001, MH-002... IDs to each reported difficulty (raw aggregation, no deduplication — agents/humans curate after the fact)
++- **AC12**: `minih difficulties` output shows ID, category, description, agent slug, frequency (exact-description count), severity on stderr as a table and stdout as JSON envelope. Status defaults to "open" (humans curate resolved items into preamble manually).
++- **AC13**: `minih difficulties` handles the case of zero difficulties gracefully (empty table)
++
++### Prompting & Documentation
++
++- **AC14**: SYSTEM_OUTPUT_INSTRUCTIONS in runner.ts explains the `difficulties` array with a JSON example and instruction text
++- **AC15**: SYSTEM_OUTPUT_INSTRUCTIONS mentions `magicWandTarget` with guidance on project vs minih
++- **AC16**: Preamble includes a "Known Difficulties" section with a table (initially populated with minih's own known difficulties)
++- **AC17**: Preamble includes "Every task must send a gift to its future self" framing
++- **AC18**: Preamble includes suggested difficulty categories with note that agents can use their own
++- **AC19**: AGENTS_README includes "The Core Principle" subsection with "gift to future self" language
++- **AC20**: AGENTS_README includes "Encode, Don't Document" subsection
++- **AC21**: AGENTS_README includes "The Maturity Curve" as a named concept
++- **AC22**: AGENTS_README includes "The Difficulty Ledger" subsection explaining the A→B→C pipeline
++
++### Run Output Surfacing
++
++- **AC24**: The stdout JSON envelope from `minih run` includes `summary`, `magicWand`, `magicWandTarget`, and `difficulties` fields extracted from the agent's report.json (so calling agents/scripts see retrospective data immediately without reading report.json)
++- **AC25**: The stderr human-readable summary displays the magic wand text and difficulty count when present
++
++### External
++
++- **AC23**: `harness-is-the-product-v2.md` skill (in `~/github/tools/agents/v2-commands/`) updated to reference minih-specific mechanisms (MH- IDs, `minih difficulties`, `retrospective.difficulties`, A→B→C pipeline)
++
++## Risks & Assumptions
++
++| Risk | Likelihood | Impact | Mitigation |
++|------|-----------|--------|------------|
++| Velocity computation slow with many runs | Low | Low | Only scan last completed.json, not all history |
++| Difficulty deduplication hard to get right | Medium | Low | Start with exact description match, iterate |
++| Schema changes break existing agent outputs | Low | High | All new fields are optional, tested for backward compat |
++| Agents ignore new fields if not prompted well | Medium | Medium | Explicit JSON examples in SYSTEM_OUTPUT_INSTRUCTIONS |
++| harness-is-the-product-v2.md is in a different repo | Low | Low | Separate commit, same session |
++
++## Open Questions
++
++All resolved — see Clarifications below.
++
++## Workshop Opportunities
++
++| Topic | Type | Why Workshop | Key Questions |
++|-------|------|--------------|---------------|
++| ~~Compounding Value in minih~~ | ~~Integration Pattern~~ | ~~COMPLETED~~ | See `workshops/001-compounding-value-in-minih.md` |
++
++## Testing Strategy
++
++- **Approach**: Lightweight
++- **Rationale**: Schema changes need backward compat validation, velocity computation has math logic worth testing, but docs/CLI are manual verify
++- **Focus Areas**: Schema backward compatibility (existing outputs still valid), velocity computation correctness (first run, nth run, skip failed), difficulty aggregation across fixture run folders
++- **Mock Usage**: None — real fixture files and run folders, matching minih's existing test pattern (FakeAgentAdapter for runner, real filesystem for everything else)
++- **Excluded**: Doc content verification, CLI output formatting, preamble text
++
++## Documentation Strategy
++
++- **Location**: AGENTS_README + preamble only
++- **Rationale**: The philosophy updates ARE the documentation — they go directly into AGENTS_README (human audience) and preamble (agent audience). `minih difficulties` gets added to the CLI reference in AGENTS_README. No separate how-to guide needed.
++
++## Clarifications
++
++### Session 2026-04-14
++
++**Q1: Workflow Mode** → **Simple Mode**. Single-phase plan, inline tasks, lighter process. Despite CS-3 scoring, the work is well-understood from the workshop and doesn't need multi-phase gates.
++
++**Q2: Testing Strategy** → **Lightweight**. Minimal validation tests for schema backward compat and velocity computation. Manual verify for docs and CLI output.
++
++**Q3: Mock Usage** → **Avoid mocks entirely**. Real fixture files and run folders, matching minih's existing test patterns.
++
++**Q4: Documentation Strategy** → **AGENTS_README + preamble only**. The changes ARE the docs. No separate guide.
++
++**Q5: Difficulty Deduplication** → **No deduplication in the command**. `minih difficulties` does raw aggregation — lists every reported difficulty as-is. Calling agents or humans can curate/tidy after the fact if it gets messy. Keeps the command simple and predictable.
++
++**Q6: Velocity Command** → **`minih history` is sufficient**. No dedicated `minih velocity` command. Velocity data stored in `completed.json` for agents to read directly; `minih history` shows trends for humans.
++
++**Q7: Preamble Known Difficulties** → **Manually curated**. Human reviews `minih difficulties` output, promotes resolved items to preamble's Known Difficulties table. Same pattern as the existing evidence table.
++
++**Q8: Domain Review** → **Confirmed**. runner (modify), cli (modify), adapter (consume only). No new domains. Import direction unchanged.
++
++**Q9: Run Output Surfacing** → **Include in stdout envelope**. Currently the JSON envelope from `minih run` only has metadata (slug, runId, durationMs, validated). The agent's actual retrospective content (summary, magicWand, difficulties) sits in `report.json` and callers have to dig for it. Resolution: extract key retrospective fields into the stdout envelope AND display magic wand + difficulty count in the stderr summary. This makes the compounding value data immediately visible to calling agents and scripts.
+diff --git a/docs/plans/006-compounding-value/compounding-value.fltplan.md b/docs/plans/006-compounding-value/compounding-value.fltplan.md
+new file mode 100644
+index 0000000..91431c7
+--- /dev/null
++++ b/docs/plans/006-compounding-value/compounding-value.fltplan.md
+@@ -0,0 +1,113 @@
++# Flight Plan: Compounding Value
++
++**Plan**: [compounding-value-plan.md](./compounding-value-plan.md)
++**Spec**: [compounding-value-spec.md](./compounding-value-spec.md)
++**Workshop**: [workshops/001-compounding-value-in-minih.md](./workshops/001-compounding-value-in-minih.md)
++**Generated**: 2026-04-14
++**Status**: Landed
++
++---
++
++## What & Why
++
++minih has the self-improvement loop (magic wand → fix → verify) but doesn't **measure or surface** the compounding effect. This feature adds structured friction reporting (difficulty ledger), per-agent velocity tracking, run output surfacing, and philosophy docs that articulate why harness investment compounds.
++
++**The pitch**: Agents report friction → humans see it aggregated → fixes flow back to agents → everything gets faster. Make the curve visible.
++
++## Scope
++
++| In Scope | Out of Scope |
++|----------|-------------|
++| `retrospective.difficulties` schema field | Value axis measurement |
++| `magicWandTarget` schema field | Automated difficulty-to-fix pipeline |
++| `velocity` block in completed.json | Cross-agent velocity comparison |
++| `minih difficulties` command | Web dashboard |
++| Trend column in `minih history` | Magic wand maturity auto-classification |
++| Retro fields in run stdout envelope | |
++| Magic wand + difficulty count in stderr summary | |
++| Philosophy updates (AGENTS_README, preamble, SYSTEM_OUTPUT_INSTRUCTIONS) | |
++| `harness-is-the-product-v2` skill update | |
++
++## Domains Touched
++
++- **runner** — modify: schema updates, velocity computation, report parsing, system prompt, display
++- **cli** — modify: run envelope, history enhancement, new difficulties command
++- **adapter** — consume only (no changes)
++
++## Complexity: CS-3 (medium)
++
++S=2, I=0, D=1, N=0, F=0, T=1 · Confidence: 0.85
++
++## Key Findings (from research)
++
++| # | Impact | Finding |
++|---|--------|---------|
++| 01 | Critical | Runner doesn't parse report.json — must add plumbing for envelope |
++| 02 | Critical | Retro schema inlined in 5 places — update all consistently |
++| 03 | Critical | No velocity/difficulty infra exists — net-new |
++| 04 | High | Velocity scan could be slow — only read most recent |
++| 05 | High | displaySummary needs AgentRunResult expansion |
++
++## Tasks (Simple Mode — 13 tasks)
++
++```
++T001  Schema updates (retro + system-output + 8 agents)      ← foundation
++T002  Velocity type on CompletedMetadata                      ← foundation
++T003  Compute velocity at run end                             ← depends T002
++T004  Parse report.json → AgentRunResult                      ← independent (parallel with T003)
++T005  Surface retro in envelope + displaySummary              ← depends T004
++T006  History trend column + velocity summary                 ← depends T003
++T007  `minih difficulties` command                            ← depends T001
++T008  Update SYSTEM_OUTPUT_INSTRUCTIONS                       ← depends T001
++T009  Update preamble                                         ← independent
++T010  Update AGENTS_README                                    ← independent
++T011  Update harness-is-the-product skill                     ← independent
++T012  Tests: schema compat + velocity + CLI                   ← depends T001-T005
++T013  Update domain docs + barrel export                      ← depends T001-T007
++```
++
++## Key Decisions (from workshop)
++
++- Difficulty categories: **freeform string** with suggested defaults (not enum)
++- Difficulty IDs: **auto-generated** by `minih difficulties` (MH-001, MH-002...)
++- No deduplication: raw aggregation, humans/agents curate
++- Velocity: **stored per-agent** in completed.json, not computed on display
++- Three axes only: difficulty, mitigation, velocity — value axis dropped
++- Difficulty pipeline: A (schema) → B (aggregation command) → C (preamble curation)
++- Preamble Known Difficulties: manually curated (like evidence table)
++- Run envelope: includes summary + magicWand + magicWandTarget + difficulties
++
++## Checklist
++
++- [x] T001 Schema updates (10 files)
++- [x] T002 Velocity type
++- [x] T003 Velocity computation (with legacy backfill)
++- [x] T004 Parse report.json (with safe parsing)
++- [x] T005 Envelope + display surfacing
++- [x] T006 History trend column
++- [x] T007 Difficulties command (with frequency grouping)
++- [x] T008 SYSTEM_OUTPUT_INSTRUCTIONS
++- [x] T009 Preamble
++- [x] T010 AGENTS_README
++- [x] T011 harness-is-the-product skill
++- [x] T012 Tests (schema + velocity + CLI)
++- [x] T013 Domain docs + barrel export
++
++## Flight Status
++
++```mermaid
++graph LR
++    S1[T001-T002 Schema]:::done --> S2[T003 Velocity]:::done
++    S1 --> S4[T004 Parse Report]:::done
++    S2 --> S3[T006 History]:::done
++    S4 --> S5[T005 Envelope]:::done
++    S1 --> S6[T007-T008 Difficulties+Prompt]:::done
++    S7[T009-T011 Docs]:::done
++    S3 --> S8[T012-T013 Tests+Domain]:::done
++    S5 --> S8
++    S6 --> S8
++```
++
++---
++
++*Next: `/plan-6-v2-implement-phase --plan "docs/plans/006-compounding-value/compounding-value-plan.md"`*
+diff --git a/docs/plans/006-compounding-value/execution.log.md b/docs/plans/006-compounding-value/execution.log.md
+new file mode 100644
+index 0000000..f990fea
+--- /dev/null
++++ b/docs/plans/006-compounding-value/execution.log.md
+@@ -0,0 +1,7 @@
++# Execution Log — Compounding Value (006)
++
++**Plan**: Simple Mode, 13 tasks
++**Started**: 2026-04-14
++
++---
++
+diff --git a/docs/plans/006-compounding-value/workshops/001-compounding-value-in-minih.md b/docs/plans/006-compounding-value/workshops/001-compounding-value-in-minih.md
+new file mode 100644
+index 0000000..c1dab15
+--- /dev/null
++++ b/docs/plans/006-compounding-value/workshops/001-compounding-value-in-minih.md
+@@ -0,0 +1,590 @@
++# Workshop: Compounding Value in minih
++
++**Type**: Integration Pattern / Data Model / Philosophy
++**Plan**: 006-compounding-value
++**Source**: Velocity Experiment Write-up (April 2026)
++**Created**: 2026-04-14
++**Status**: Draft
++
++**Related Documents**:
++- [Velocity Experiment Write-up](../../../scratch/paste/20260414T035726.md) — the source material
++- [AGENTS_README.md](../../../AGENTS_README.md) — current philosophy section
++- [agents/_shared/preamble.md](../../../agents/_shared/preamble.md) — agent-facing instructions
++- [src/schemas/retrospective.json](../../../src/schemas/retrospective.json) — current retro schema
++
++---
++
++## Purpose
++
++The velocity experiment proved that harness investment compounds — 16 hours → 15 minutes (64×) across 5 iterations. minih already has the core feedback loop (magic wand → fix → verify), but it doesn't yet **measure or surface** the compounding effect. This workshop designs how to incorporate the experiment's key concepts into minih so that users can see, feel, and leverage the compound curve in their own projects.
++
++## Key Questions Addressed
++
++1. Where does the "difficulty ledger" concept land — new schema field, standalone artifact, or enriched retrospective?
++2. How should minih surface velocity trends (run-over-run improvement)?
++3. Should the retrospective schema grow to capture the four measurement axes?
++4. How should the "agents don't adapt" and "encode don't document" philosophy be woven into docs?
++5. What changes to the preamble would make agents better reporters of compounding value?
++6. What's the right granularity — per-agent, per-project, or both?
++
++---
++
++## Concept 1: The Difficulty Ledger
++
++### What the experiment did
++
++Every difficulty encountered got a structured entry:
++
++| ID | Category | Description | Mitigation | Status |
++|----|----------|-------------|------------|--------|
++| MH-01 | build | C# destructor crash in DEBUG builds | Harness patches on build | ✅ Mitigated |
++| MH-02 | data | Fresh DB missing audit columns | Seed command auto-applies | ✅ Mitigated |
++| MH-03 | test | 32-bit test runner can't load 64-bit DLLs | Harness wraps correct runner | ✅ Mitigated |
++
++Categories (suggested, not enforced — agents can use their own): `build`, `config`, `data`, `test`, `debug`, `knowledge`
++
++The ledger itself became one of the most valuable artifacts — a structured record of everything that's hard about a codebase.
++
++### How this could land in minih
++
++**Option A: Difficulty as a retrospective field** (lowest friction)
++
++Add an optional `difficulties` array to the retrospective schema:
++
++```json
++{
++  "retrospective": {
++    "workedWell": "...",
++    "confusing": "...",
++    "magicWand": "...",
++    "difficulties": [
++      {
++        "category": "build",
++        "description": "npm install fails silently when copilot-sdk peer dep is missing",
++        "workaround": "Manually ran npm install @github/copilot-sdk first",
++        "severity": "blocking"
++      }
++    ]
++  }
++}
++```
++
++Pro: Zero new infrastructure. Agents already produce retrospectives.
++Con: Difficulties are scattered across run outputs. No single ledger view.
++
++**Option B: Auto-aggregated difficulty ledger** (medium effort)
++
++minih reads `difficulties` from every run output and maintains a project-level ledger file:
++
++```
++agents/_shared/difficulty-ledger.md    # Or .json
++```
++
++A new command — `minih difficulties` — aggregates across all agent runs:
++
++```bash
++$ minih difficulties
++Difficulty Ledger (12 entries, 8 mitigated)
++
++  ID    Category  Description                              Status
++  MH-01  build     copilot-sdk peer dep not auto-resolved   ✅ mitigated (v0.1.3)
++  MH-02  config    .env file not loaded automatically       ⚠️ partial
++  MH-03  knowledge No docs on how resume works              ❌ open
++```
++
++Pro: Single view of all friction. Trackable over time.
++Con: New command, new file, aggregation logic.
++
++**Option C: Difficulties in the preamble** (highest leverage)
++
++Like the evidence table already in the preamble, add a "Known Difficulties" section that agents read on startup. Agents see what's already known, don't re-report it, and can confirm mitigations work:
++
++```markdown
++## Known Difficulties
++
++| ID | Category | Description | Status |
++|----|----------|-------------|--------|
++| MH-01 | build | copilot-sdk peer dep resolution via npx | ✅ mitigated (createRequire fallback) |
++| MH-02 | config | MCP server cwd defaults to run folder | ✅ mitigated (runner injects project root) |
++
++If you encounter a NEW difficulty not listed here, report it in your retrospective.difficulties array.
++If a "mitigated" difficulty still affects you, report that too — the mitigation may be incomplete.
++```
++
++Pro: Agents become aware of known issues. Closes the loop — agents verify mitigations.
++Con: Manual curation of preamble (but that's already the pattern with the evidence table).
++
++### **Recommendation: A + B + C** — All three layers, each serving a different audience:
++
++- **A (schema field)** — agents report difficulties as structured data in their retrospective. This is the input pipeline.
++- **B (aggregation command)** — `minih difficulties` reads across all run outputs and produces a unified view. This is the human dashboard — you see every friction point across all agents, sorted by frequency and status. Without aggregation, difficulties are scattered across hundreds of `report.json` files and nobody ever reads them.
++- **C (preamble curation)** — known/mitigated difficulties go into the preamble so agents are aware on startup. This is the output — the curated, resolved entries that close the loop.
++
++The flow: Agents report (A) → humans review aggregated view (B) → resolved items get curated into preamble (C) → future agents read them and either confirm mitigations work or report regressions.
++
++---
++
++## Concept 2: Velocity Tracking
++
++### What the experiment measured
++
++```
++Iteration 1:  ~16 hours
++Iteration 2:  ~6 hours
++Iteration 3:  ~3 hours
++Iteration 4:  ~30 minutes
++Iteration 5:  ~15 minutes
++```
++
++The declining curve IS the proof that harness investment compounds.
++
++### What minih already captures
++
++`completed.json` in each run folder already contains:
++- `durationMs` — how long the run took
++- `result` — completed/degraded/failed
++- `validated` — true/false
++- `toolCallCount` (in events.ndjson stats)
++
++`minih history <slug>` already shows a table with Duration column.
++
++### What's missing
++
++The history command shows absolute durations, but doesn't surface the **trend**. You can't see "this agent is getting faster over time" or "something regressed."
++
++### Design: Velocity annotations in history
++
++**Minimum viable**: Add a trend indicator to `minih history` output:
++
++```
++Run History: code-review (8 runs)
++
++  Run ID                          Result     Duration  Trend    Validated
++  2026-04-14T10-41-12-887Z-9816   completed  2m 14s    ▼ 23%   ✓
++  2026-04-13T15-22-05-123Z-4421   completed  2m 52s    ▼ 11%   ✓
++  2026-04-12T09-15-33-456Z-7788   completed  3m 12s    ▲ 5%    ✓
++  2026-04-11T14-08-41-789Z-2345   completed  3m 03s    ▼ 40%   ✓
++  2026-04-10T11-30-22-012Z-6677   completed  5m 05s    —        ✓
++```
++
++The trend column compares to the previous run. Over time this tells a story.
++
++**Nice-to-have**: A summary line at the bottom:
++
++```
++  Velocity: 5m 05s → 2m 14s over 8 runs (56% faster)
++```
++
++### Implementation notes
++
++- Only compare completed↔completed runs (skip failed/degraded)
++- Trend = `(prevDuration - currentDuration) / prevDuration * 100`
++- First run shows `—` (no baseline)
++- Green ▼ = faster, Red ▲ = slower, Grey `—` = first run or within 5% (noise)
++
++### **Recommendation**: Add trend column to `minih history`. Low effort, high insight. The velocity summary line is a nice-to-have.
++
++### Velocity data as stored per-agent data
++
++Beyond the display in `minih history`, velocity data should be stored in `completed.json` so that calling agents can read it and report on trends. This turns velocity from a human-readable table into **machine-readable data** that agents can use to feed work items.
++
++When writing `completed.json`, the runner should compute and store:
++
++```json
++{
++  "runId": "2026-04-14T10-41-12-887Z-9816",
++  "durationMs": 134200,
++  "result": "completed",
++  "validated": true,
++  "velocity": {
++    "previousDurationMs": 172300,
++    "changePercent": -22.1,
++    "runNumber": 8,
++    "firstDurationMs": 305000,
++    "overallChangePercent": -56.0
++  }
++}
++```
++
++New `velocity` block (per-agent, computed at run end):
++- **`previousDurationMs`** — duration of the last completed run (null if first run)
++- **`changePercent`** — % change vs previous run (negative = faster)
++- **`runNumber`** — which completed run this is (1-indexed)
++- **`firstDurationMs`** — duration of the first ever completed run
++- **`overallChangePercent`** — % change from first to current (the big number)
++
++This means any agent — a feedback-digest, a CI reporter, a dashboard agent — can read `completed.json` from any agent's last run and get velocity data without computing it themselves. Agents can flag regressions ("code-review got 40% slower — investigate"), surface wins ("smoke-test down from 5min to 2min over 8 runs"), or feed work items ("velocity plateaued — check difficulty ledger for unresolved MH- entries").
++
++### Implementation notes
++
++- Only compare completed↔completed runs (skip failed/degraded)
++- Trend = `(prevDuration - currentDuration) / prevDuration * 100`
++- First run shows `—` (no baseline), velocity block has nulls for previous
++- Green ▼ = faster, Red ▲ = slower, Grey `—` = first run or within 5% (noise)
++- `velocity` block is written by the runner at run completion, same time as the rest of `completed.json`
++
++---
++
++## Concept 3: The Three Measurement Axes
++
++### What the experiment measured (adapted — value axis dropped)
++
++| Axis | Question | Maps to minih |
++|------|----------|---------------|
++| **Difficulty** | How hard is the platform for agents? | `confusing` + `difficulties` |
++| **Mitigation** | What tooling reduces difficulty? | `workedWell` + evidence table |
++| **Velocity** | How much faster each iteration? | `velocity` block in `completed.json` |
++
++The experiment also tracked a "value axis" (how good is the information). We're dropping that — it's inherently qualitative and the summary field already captures it. Three axes that can be measured beat four where one is hand-wavy.
++
++### **Recommendation**: Reference the three axes in AGENTS_README as a framing device. They map cleanly to existing + proposed schema fields. No additional schema needed — difficulty, mitigation, and velocity are already captured.
++
++---
++
++## Concept 4: Philosophy Enrichment
++
++### What the experiment articulated that minih's docs don't yet say
++
++The experiment write-up has several powerful framings that should be woven into AGENTS_README and the preamble:
++
++#### 4a. "Every task must send a gift to its future self"
++
++This is the most concise statement of the compounding value principle. Currently, AGENTS_README says "The Feedback Loop" and "The Compound Effect" — but it doesn't use this language. It should.
++
++**Where**: AGENTS_README § Philosophy, near the feedback loop diagram.
++
++```markdown
++### The Core Principle
++
++> **Every task must send a gift to its future self.**
++
++If you hit a problem, don't just solve it — encode the solution. The agent that runs 
++tomorrow should never hit the same problem you hit today. This is the core mechanism 
++behind the velocity curve.
++```
++
++#### 4b. "Agents don't adapt — that's the feature"
++
++Already partially in AGENTS_README (line 40-41), but could be stronger. The experiment write-up nails it:
++
++> "Humans learn workarounds and stop noticing friction. An agent reports the same problem fresh every single run, until you fix it."
++
++This deserves more prominence — it's the single most compelling argument for agent-driven improvement.
++
++**Where**: AGENTS_README § "Why the Magic Wand Works" — elevate this point.
++
++#### 4c. "Encode, don't document"
++
++The distinction between "build scripts" (everyone has those) and "executable knowledge" (the harness tests things, not tells you how to test them). minih's preamble already does this with the evidence table, but the AGENTS_README doesn't articulate the principle.
++
++**Where**: AGENTS_README new tip or philosophy subsection.
++
++```markdown
++### Encode, Don't Document
++
++The harness doesn't *tell you* how to test things. It *tests things*. There's a 
++difference.
++
++A wiki page that says "to validate audit provenance, create an invoice and check the 
++database" is documentation. It rots. A command that creates an invoice, checks the 
++database, and reports pass/fail is *encoded knowledge*. It runs forever.
++
++When your agents discover how something works — encode it. Make it a command, a recipe, 
++a pre-flight check. Make it so the next agent (or human) never has to rediscover it.
++```
++
++#### 4d. "The harness is the product"
++
++Already the section title in AGENTS_README. But the experiment write-up adds a powerful frame: "the harness gives us the ability to stand up the platform locally in minutes... The broader approach — parallel research agents, structured experiments — that's the engineering system we built *around* the harness."
++
++minih IS that harness layer. The AGENTS_README should make this explicit.
++
++#### 4e. "Democratising the codebase"
++
++> "It's not giving everyone commit access. It's giving everyone the *ability to understand* — to explore, to experiment, to ask 'what if?' and get a real answer, fast."
++
++This is a motivation section that AGENTS_README doesn't have. It could be a brief "Why This Matters" opener or sidebar.
++
++### **Recommendation**: Weave 4a, 4b, 4c into existing AGENTS_README sections. 4d is already there. 4e could be a brief addition to the intro or a sidebar. Don't bloat the doc — surgical insertions.
++
++---
++
++## Concept 5: Preamble Enhancements
++
++### Current preamble structure
++
++1. Environment Variables
++2. Feedback — The Self-Improving Loop (two-layer feedback)
++3. Evidence — Feedback That Was Acted On
++4. Filing Issues — Close the Loop Faster
++
++### Proposed additions
++
++#### 5a. Known Difficulties section (from Concept 1)
++
++After the Evidence table, add:
++
++```markdown
++## Known Difficulties — What's Hard About This Project
++
++| ID | Category | What Hurts | Status |
++|----|----------|-----------|--------|
++| MH-01 | config | copilot-sdk peer dep not auto-resolved via npx | ✅ mitigated |
++| MH-02 | config | MCP server cwd defaults to run folder | ✅ mitigated |
++
++**If you hit a difficulty NOT listed here**, add it to your `retrospective.difficulties`.
++**If a "mitigated" difficulty still affects you**, report that — the mitigation may be incomplete.
++```
++
++**Note**: This is project-specific. The preamble lives in `agents/_shared/preamble.md` which is per-project. minih's own preamble documents minih's own difficulties. A user's project preamble documents their project's difficulties. This is the right granularity.
++
++#### 5b. "Gift to your future self" framing
++
++Add one line to the feedback section:
++
++```markdown
++> **Every task must send a gift to its future self.** Your retrospective IS that gift.
++```
++
++#### 5c. Difficulty category guidance
++
++Suggest categories but don't enforce them — agents know their domain better than we do:
++
++```markdown
++When reporting difficulties, here are some common categories — but use whatever fits:
++- **build**: compilation, bundling, dependency resolution
++- **config**: environment setup, credentials, env vars
++- **data**: test data, seeding, database state
++- **test**: test execution, assertion, validation
++- **debug**: observability, logging, error messages
++- **knowledge**: missing docs, tribal knowledge, unclear architecture
++
++Use your own category if none of these fit (e.g., "permissions", "networking", "perf").
++```
++
++### **Recommendation**: Add 5a (known difficulties) and 5b (gift framing). ~~Skip 5c~~ → Include 5c but as guidance, not enforcement. The suggested categories give agents a starting vocabulary without constraining them. New categories that emerge from agent runs become signal about what kinds of friction the project actually has.
++
++---
++
++## Concept 6: Retrospective Schema Evolution
++
++### Current schema
++
++```json
++{
++  "workedWell": "string (min 10)",
++  "confusing": "string (min 10)",
++  "magicWand": "string (min 20)",
++  "improvementSuggestions": ["string[]", "optional, 1-5 items"]
++}
++```
++
++### Proposed evolution
++
++```json
++{
++  "workedWell": "string (min 10)",
++  "confusing": "string (min 10)",
++  "magicWand": "string (min 20)",
++  "magicWandTarget": "enum: project | minih",
++  "improvementSuggestions": ["string[]", "optional, 1-5 items"],
++  "difficulties": [
++    {
++      "category": "string (suggested: build, config, data, test, debug, knowledge — but agents can use their own)",
++      "description": "string",
++      "workaround": "string | null",
++      "severity": "enum: blocking | degrading | annoying"
++    }
++  ]
++}
++```
++
++New fields:
++1. **`magicWandTarget`** — Makes the two-layer feedback explicit in schema (currently just in prose). `project` or `minih`.
++2. **`difficulties`** — Structured friction reporting. Optional array.
++
++Both are **optional** (not required) — existing agents don't break.
++
++### Migration path
++
++- Add fields to `retrospective.json` schema as optional
++- Update `system-output.json` to match
++- Update preamble and SYSTEM_OUTPUT_INSTRUCTIONS to explain new fields
++- Update agents' inlined retrospective schemas (code-review, convention-check, first-time-experience)
++
++### **Recommendation**: Add `magicWandTarget` and `difficulties` as optional fields. Both earn their keep — target disambiguates feedback routing, difficulties enables the ledger concept.
++
++### Where difficulties get prompted
++
++The schema captures the data, but agents need to be **told** about difficulties in three places:
++
++#### 1. SYSTEM_OUTPUT_INSTRUCTIONS (runner.ts) — the runtime instruction
++
++This is what the agent actually sees during execution. Add difficulties to the JSON example and explain what makes a good difficulty report:
++
++```json
++{
++  "summary": "...",
++  "retrospective": {
++    "workedWell": "...",
++    "confusing": "...",
++    "magicWand": "...",
++    "magicWandTarget": "project",
++    "difficulties": [
++      {
++        "category": "config",
++        "description": "GH_TOKEN not set, no actionable error — just a cryptic 401",
++        "workaround": "Guessed from SDK source that GH_TOKEN was needed",
++        "severity": "blocking"
++      }
++    ]
++  }
++}
++```
++
++Add instruction text:
++
++```
++If you hit friction during this run — something that slowed you down, confused you, or
++required a workaround — report it in retrospective.difficulties. Each difficulty needs:
++- category: what kind of friction (e.g., build, config, data, test, debug, knowledge — or your own)
++- description: what happened, specifically
++- workaround: what you did to get past it (or null if you couldn't)
++- severity: blocking (couldn't proceed), degrading (worked around it), or annoying (minor friction)
++
++These reports feed the difficulty ledger. The ones you report today get fixed for tomorrow.
++```
++
++#### 2. Preamble (agents/_shared/preamble.md) — the onboarding context
++
++The preamble already has the evidence table showing shipped magic wands. Add the known difficulties table (Concept 5a) and a one-liner connecting difficulties to the compounding loop:
++
++```markdown
++## Reporting Difficulties
++
++If something slows you down, report it in `retrospective.difficulties`. Common categories:
++build, config, data, test, debug, knowledge — but use whatever fits.
++
++> **Every difficulty you report is a gift to the next agent.** The difficulty ledger
++> tracks friction across all runs. What you report today gets mitigated tomorrow.
++```
++
++#### 3. AGENTS_README — the human documentation
++
++Add a new subsection under Philosophy explaining the difficulty ledger concept, the A→B→C pipeline, and how `minih difficulties` works. This is for the human building agents, not the agent itself. Include:
++
++- What the difficulty ledger is and why it matters
++- How agents report difficulties (schema field)
++- How humans review them (`minih difficulties`)
++- How resolved difficulties flow back to agents (preamble curation)
++- The "friction compounds in the wrong direction" framing from the experiment
++
++```markdown
++### The Difficulty Ledger
++
++Friction compounds — in the wrong direction. Every unresolved difficulty costs the next
++agent hours. The difficulty ledger tracks what's hard and what's been fixed.
++
++**The pipeline:**
++1. Agents report difficulties in `retrospective.difficulties` (structured: category, description, workaround, severity)
++2. You review them with `minih difficulties` — a single view across all agent runs
++3. You fix the worst ones and add them to the preamble's Known Difficulties table
++4. Future agents read the preamble, see what's known, and confirm mitigations work
++
++The categories are suggested, not enforced — agents use `build`, `config`, `data`,
++`test`, `debug`, `knowledge`, or whatever fits. New categories that emerge from runs
++are signal about what kinds of friction your project actually has.
++```
++
++---
++
++## Concept 7: The Maturity Curve as a Teaching Tool
++
++### The insight
++
++Magic wands follow a predictable maturity progression:
++
++```
++Week 1:  "I can't do X"              → Missing capabilities
++Week 2:  "I can, but it's awkward"   → Convenience gaps  
++Week 4:  "Edge case Y breaks"        → Polish & robustness
++Week 8:  "Auto-detect regressions"   → Strategic improvements
++```
++
++### Where this belongs
++
++**AGENTS_README** already has "The Compound Effect" section with this exact progression (lines 48-54). It's good but could reference this as "The Maturity Curve" — a named concept that harness owners can use to assess where they are.
++
++**Preamble** could reference it briefly:
++
++```markdown
++As the harness matures, your magic wands should evolve from "missing capabilities" to 
++"edge cases" to "strategic improvements." If you're still reporting missing basics after 
++many runs, something is wrong — flag it.
++```
++
++### **Recommendation**: Name it explicitly in AGENTS_README as "The Maturity Curve." Add a one-liner to the preamble. This is a teaching moment, not a feature.
++
++---
++
++## Summary: What to Build
++
++### Tier 1 — Philosophy & Docs (do now, zero code changes)
++
++| Change | File | Effort |
++|--------|------|--------|
++| "Every task sends a gift to its future self" | AGENTS_README | 5 min |
++| "Encode, don't document" subsection | AGENTS_README | 10 min |
++| Name "The Maturity Curve" | AGENTS_README | 5 min |
++| Known Difficulties section | preamble.md | 10 min |
++| "Gift to future self" one-liner | preamble.md | 2 min |
++| Maturity curve hint | preamble.md | 2 min |
++
++### Tier 2 — Schema & Data Model (do next, small code changes)
++
++| Change | File | Effort |
++|--------|------|--------|
++| Add `magicWandTarget` to retro schema | retrospective.json, system-output.json | 15 min |
++| Add `difficulties` array to retro schema | retrospective.json, system-output.json | 20 min |
++| Store `velocity` block in completed.json | runner.ts | 30 min |
++| Update SYSTEM_OUTPUT_INSTRUCTIONS | runner.ts | 10 min |
++| Update inlined schemas in agents | 3 agent output-schema.json files | 15 min |
++| `minih difficulties` aggregation command | new command file | 1-2 hrs |
++
++### Tier 3 — Velocity Display (do later, uses stored data)
++
++| Change | File | Effort |
++|--------|------|--------|
++| Trend column in `minih history` (reads velocity block) | history.ts | 30 min |
++| Velocity summary line | history.ts | 15 min |
++
++### Tier 4 — Aspirational (park for later)
++
++| Change | Why later |
++|--------|-----------|
++| Four-axis measurement dashboard | Over-engineering for current scale |
++| Magic wand maturity auto-classification | ML territory — not worth it yet |
++
++---
++
++## Open Questions
++
++### Q1: Should difficulties be per-agent or per-project?
++
++**RESOLVED**: Per-project. Difficulties are about the codebase/harness, not individual agents. The preamble (per-project) is the right home for known difficulties. Agent retrospectives report new ones.
++
++### Q2: Should velocity tracking compare same-agent runs only?
++
++**RESOLVED**: Yes. Cross-agent comparison is meaningless (different tasks, different complexity). Velocity trends are per-slug.
++
++### Q3: Should the measurement axes become schema fields?
++
++**RESOLVED**: Three axes (difficulty, mitigation, velocity) — value axis dropped. Difficulty maps to `confusing` + `difficulties`. Mitigation maps to `workedWell`. Velocity is stored per-agent in `completed.json` as a `velocity` block computed by the runner. No value axis — it's qualitative and the summary field covers it.
++
++### Q4: Should the article's "difficulty ledger" IDs be auto-generated?
++
++**RESOLVED**: Auto-generated by `minih difficulties` command. IDs use `MH-` prefix (MH-001, MH-002...) assigned on first aggregation. When promoting to the preamble's Known Difficulties table, the auto-generated ID carries over.
++
++### Q5: How does this relate to the harness-is-the-product skill?
++
++**RESOLVED**: Update `harness-is-the-product-v2.md` (at `~/github/tools/agents/v2-commands/`) to reference minih-specific mechanisms — the A→B→C difficulty pipeline, MH- IDs, `minih difficulties` command, `retrospective.difficulties` schema field. The skill already covers the philosophy (difficulty ledgers, velocity compounding, encode-don't-document) but doesn't know about the minih implementation of those concepts. This is a separate repo change (`~/github/tools/`).
+diff --git a/scratch/paste/20260414T035621.md b/scratch/paste/20260414T035621.md
+new file mode 100644
+index 0000000..a1a5cf9
+--- /dev/null
++++ b/scratch/paste/20260414T035621.md
+@@ -0,0 +1,176 @@
++# We Ran a Harness Velocity Experiment — Here's What We Learned
++
++**Author**: Jordan Knight · **Date**: April 2026
++
++---
++
++## The Real Problem
++
++We have a platform that powers accounting for hundreds of thousands of Australian businesses. It's 15 years old, built on .NET Framework, with two execution stacks (one from 2008, one from 2020), multiple build systems, and six cloud service dependencies just to make a single local API call.
++
++Here's the uncomfortable truth: **the platform is hard to work on.** Not because the code is bad — it's mature, it works, it handles real money for real businesses. But the knowledge required to be productive in it is vast, tribal, and largely undocumented. The people who built it have moved on. The feedback loop is slow. New engineers face months of ramp-up. And the ideas we want to explore — AI agent integration, new capabilities, architectural experiments — are bottlenecked by the sheer difficulty of *getting in*.
++
++As bringers of an agentic engineering future, our job isn't to rewrite the platform. Our job is to **break down the barriers** — to create the capability to rapidly experiment and iterate on it. To make it possible to ask a question about the codebase and get an answer in hours, not weeks. To try an architectural approach, prove or disprove it, and move on.
++
++We needed a real problem to drive the experiment. We chose audit provenance — making the system record when an AI agent (rather than a human) makes a change. That was the exercise. But the experiment was about something bigger:
++
++> **Can we build an engineering system that makes a difficult legacy codebase accessible to rapid experimentation?**
++
++---
++
++## The Harness Concept
++
++When you name a thing you make it a first class concept. This is why I think the harness concept is so powerful - its creating a campfire. We named it *the Huxley Harness* (named for the codeword of the codebase), gave it a CLI, gave it prompts and subagents, and treated it as a first-class product — not scaffolding, not a nice-to-have, not something we'd clean up later.
++
++Why does naming it matter? Because once something has a name, you can measure it — is it getting better? You can improve it — there's one place to invest instead of ad-hoc scripts scattered across wikis. And you can talk about it. "The harness needs X" is a real conversation. "We should probably write a script for that" is a hope that dies in the backlog.
++
++The harness is a CLI with commands like `build`, `run`, `health`, `seed`, and `test`. It automates the lifecycle of the system under experiment. It has 16 commands and 32 recipes. It eliminates cloud dependencies, automates database seeding, and lets an agent go from zero to a working API call in under two minutes.
++
++Most imporatntly its discoverable by agents. It can be known instantly. It gives them a way to edit, build, see inside the running product. Close the loop. And even more imporatntly, instruct them how to improve it over time - a gift to our future selves. 
++
++
++
++## The Experiment
++
++We ran this as a formal experiment with a direct hypothesis:
++
++> If we invest in harness tooling, executable knowledge, and feedback loops, an AI agent can productively modify, build, test, and validate changes to a complex legacy system — and the ROI of that investment pays for itself within the first 3–4 iterations.
++
++In other words: does the harness actually compound value delivery? Or does every session start from scratch regardless?
++
++We measured four things. How hard is the platform for agents today (the difficulty axis). What harness tooling reduces that difficulty (the mitigation axis). How much faster is each successive change (the velocity axis). And — just as importantly — how good is the information we're getting back (the value axis).
++
++The value axis is what makes the whole thing worth doing. Going fast is meaningless if the outputs are shallow. What we actually care about is: are we learning real things about this codebase? Are the architectural questions getting answered with evidence, not guesses? Are the experiments producing findings that change how the team thinks about the platform?
++
++If the harness just made us faster at producing junk, it would be a waste of time. The claim is stronger than that — the harness produces *better* information because it lets us explore more thoroughly, validate from multiple angles (we ran parallel research agents and validation agents against every artifact), and prove things end-to-end against the real running system instead of speculating from code reading alone.
++---
++
++## The Start: 16 Hours
++
++The first real task was painful. The agent had to learn the codebase from scratch — understand the architecture, figure out build systems, navigate thousands of files, work out which of the two execution stacks handled which operations.
++
++**First iteration: ~16 hours** to complete a meaningful code change with end-to-end proof.
++
++Here's what happened during those 16 hours: every time the agent hit a problem, we encoded the fix. Not in a wiki. Not in a document. In the harness itself — as a command, a pre-flight check, a recipe.
++
++Every difficulty catalogued became a gift to the next session.
++
++We tracked every one of them. We call it the **difficulty ledger**. Each entry gets an ID (HC-01, HC-02, ...), a category (build, config, data, test, debug, knowledge), and — critically — a mitigation status. The question isn't "did we solve it?" It's "did we encode the solution so nobody ever hits it again?"
++
++By the end: 36 entries. 29 fully mitigated as harness automation. 4 partially mitigated. The ledger itself became one of the most valuable artifacts we produced — a structured record of everything that's hard about this codebase, and what we did about it.
++
++Some examples of what "encoding" looks like in practice. A C# destructor crashes the process silently after garbage collection — only in DEBUG builds, only after a few API calls. An engineer debugging this would lose hours. The harness patches it automatically on build. Nobody ever hits it again. Fresh test databases don't have the new audit columns — the API returns 500 with no useful error. The harness seed command now auto-applies the columns. Every future database works first time. The test framework ships a 32-bit runner that can't load 64-bit test DLLs. The harness wraps a working runner — 29 tests in 5 seconds.
++
++None of these are interesting problems. They're *friction*. But friction compounds just as surely as value does — in the wrong direction. Left unencoded, each one costs the next person hours.
++
++---
++
++## The Compounding Loop
++
++The second iteration was faster — about 6 hours. But it revealed a new problem: the agent was *forgetting*. It would re-discover things it had already learned. It would try approaches we'd already rejected.
++
++So we locked down the harness concept harder. We created structured knowledge that persisted between sessions — experiment files, design workshops, research dossiers. We gave the harness the ability to tell the agent what it already knew, what had already been tried, and what had already failed.
++
++The third iteration took about 3 hours. The code change was similar in complexity. The difference was the harness — it handled setup, build, deploy, seed, and verification automatically. The agent could focus on the actual problem.
++
++The fourth iteration — 30 minutes. A single line of code to enable, one command to prove it. The fifth — 15 minutes. Zero new difficulties encountered. Zero debugging. Every tool worked first try.
++
++---
++
++## Where It Gets Interesting
++
++By the fourth and fifth iterations, something remarkable happened:
++
++```
++Iteration 1:  ~16 hours
++Iteration 2:  ~6 hours
++Iteration 3:  ~3 hours
++Iteration 4:  ~30 minutes
++Iteration 5:  ~15 minutes
++```
++
++**64× improvement.** Same codebase. Same kind of task. Same agent capability.
++
++The difference was entirely in the harness and the knowledge it carried forward. Each session left the system better than it found it. Not just the code — the *development infrastructure*. The ability to work on the code.
++
++---
++
++## What Made It Work
++
++Three principles emerged from the experiment.
++
++The first is the compounding value loop. Every task must send a gift to its future self. If you hit a problem, don't just solve it — encode the solution. The agent that runs tomorrow should never hit the same problem you hit today. This is the core mechanism behind the velocity curve.
++
++The second: encode, don't document. But I don't mean build scripts — everyone has build scripts. Here's what's actually different.
++
++The harness has a self-improvement loop. When an agent finishes a task, it produces a retrospective with three fields: what worked, what was confusing, and a "magic wand" — the one thing it would change. The harness's `retro` command reads that retrospective and automatically adds the magic wand to a wishlist. The next agent session reads the wishlist. The harness literally improves itself through use. The agents aren't just users of the tooling — they're the QA team, filing structured improvement requests every time they run. We've had 21 wishlist items flow through this pipeline, most of them resolved.
++
++The other example: the harness doesn't tell you how to test things. It *tests things*. There are full SDK services — invoice, bank transfer, supplier, account — that create real business objects through the API, inject agent identity headers, validate request/response schemas, hit the database to verify the audit trail, and report pass/fail. One command — `just sdk-invoice --agent-id test/1.0` — is a complete end-to-end proof that agent identity flows from an HTTP header through the middleware, through the business logic, into the database. That's not a build script. That's executable knowledge about how a 15-year-old system actually behaves.
++
++The third is rapid experimentation over perfect planning. We ran 6 formal experiments. One was cancelled early (wrong abstraction). Four were confirmed. One is planned. The experiment structure is lightweight — a hypothesis, success criteria, failure criteria, and a go/no-go decision. This let us explore multiple approaches to the same problem and discard bad ideas cheaply.
++
++We used parallel research agents — up to 9 running simultaneously — to explore the codebase from different angles. One traces the inheritance hierarchy. Another checks for double-counting risks. Another reviews prior decisions. They report back structured findings that feed into design workshops. A single engineer looking at a 15-year-old codebase they've never seen would take days to build that mental model. The agents did it in minutes.
++
++---
++
++## Democratising the Codebase
++
++Legacy codebases accumulate knowledge debt. The people who understand the architecture move on. The remaining team knows their corner but not the whole system. New engineers face a cliff: months of ramp-up before they can contribute meaningfully. Ideas for improvement — even small ones — get stuck in a queue behind "we don't have anyone who knows that part of the code."
++
++The harness breaks this pattern. By encoding operational knowledge — how to build, how to run, where the hooks are, what patterns to follow — we make the codebase *accessible*. Not just to AI agents, but to any engineer who picks it up. The harness is an interface. You don't need to understand everything beneath it. You need six verbs: build, run, health, seed, test, stop.
++
++But the harness alone isn't the full picture. The approach we built around it — structured experiments, parallel research agents, design workshops — creates a new way to explore a codebase.
++
++We can ask architectural questions and get answers fast. Remember the parallel research agents I mentioned earlier — 9 of them, each with a different lens on the same question? That produced 77 structured, numbered findings from a single research session. An engineer doing this manually against an unfamiliar 15-year-old codebase would take days.
++
++We can explore multiple approaches cheaply. Six formal experiments. One cancelled early — wrong abstraction. Four confirmed. One planned. Each with a hypothesis and a go/no-go gate. Bad ideas get discarded in hours, not weeks.
++
++And we captured institutional knowledge at the speed of exploration. 109 workshop documents exploring the system's architecture — not because we needed 109, but because the process was cheap enough to be thorough. Each one captures not just what we decided, but why, and what we rejected. That's institutional knowledge that normally takes years to accumulate, captured in weeks.
++
++This is what "democratising the codebase" actually means. It's not giving everyone commit access. It's giving everyone the *ability to understand* — to explore, to experiment, to ask "what if?" and get a real answer, fast.
++
++---
++
++## What We Actually Built
++
++To keep this concrete: the exercise was adding audit provenance to the legacy system. When an AI agent creates an invoice or updates a customer record, the system now records *that it was an agent* — which agent, what type, and when. No API contract changes. No service signature changes. Nine files modified in the monolith. Four audit hooks covering two execution stacks. Eight entity types proven end-to-end with real database verification, ~60 more enabled and ready, targeting 80 of 88 total.
++
++But the real deliverable is the capability itself — and not all of it lives in the harness. The harness gives us the ability to stand up the platform locally in minutes with zero cloud dependencies, and to prove or disprove a code change end-to-end in under an hour. That's the harness's job: make the system workable.
++
++The broader approach — parallel research agents, structured experiments, design workshops, validation agents — that's the engineering system we built *around* the harness. This is based on RPI (Research, Plan, Implement - a set of prompts aimed at exploration, engineering and design - a flow as it were.). Those capabilities aren't unique to this codebase. Any team could use parallel agents to explore an unfamiliar architecture, or run structured experiments to compare approaches. What we did is bring those techniques together into a repeatable process and demonstrate that they work against a real, difficult legacy system. The harness makes it practical. The approach makes it valuable. Together, they're something the team can pick up and use — not just on audit provenance, but on whatever question they want to ask next.
++
++The platform didn't get rewritten. It didn't need to be. It got *accessible*.
++
++---
++
++## The Takeaway
++
++The experiment confirmed something we suspected but couldn't prove:
++
++> **Agentic engineering velocity compounds — but only if you invest in the development infrastructure.**
++
++An AI agent without a harness is a fresh graduate staring at a codebase. Every session starts from zero. Every problem is new. Every question takes days.
++
++An AI agent *with* a harness inherits every lesson learned by every agent that came before it. The 34th session is faster than the 1st because 26 problems have already been solved.
++
++For MYOB, this changes what's possible. We don't need to wait for a rewrite to experiment on the platform. We don't need deep tribal knowledge to explore architectural options. We don't need weeks to answer "what if?" The harness gives us the capability to iterate — rapidly, cheaply, and with compounding returns.
++
++The harness is the product. Everything else is the exercise.
++
++---
++
++## If You Want to Try This
++
++The self-improvement loop I described — agents run, report friction, that friction gets fixed, the next run is smoother — isn't something we built from scratch. It's powered by [minih](https://github.com/AI-Substrate/minih), a standalone agent runner that executes declarative AI agents against GitHub's Copilot SDK.
++
++It's worth distinguishing *minih* agents from Copilot skills (the `/plan-*` commands we used throughout). Skills are valuable — they encode a repeatable process, like "research a codebase" or "write a spec." But skills are static. They're instructions. They don't have opinions about whether the tooling is good or bad, and they don't get better through use. You could prompt each skill to report feedback — but then you're bolting the same concept onto every skill as an afterthought, duplicating something that *minih* bakes in at its core.
++
++*minih* agents are different. They're *users*. They use the harness CLI, hit real friction, and report back what hurt. They're improving their own environment to make things better for themselves. That's the key distinction — a skill tells an agent what to do, but a *minih* agent tells *you* what to fix.
++
++The key idea in *minih* is the **magic wand**. Every agent, after finishing its task, must answer three questions: what worked well, what was confusing, and — the important one — if you could change *one thing* to make your job easier, what would it be? That magic wand is concrete and specific. Not "improve the CLI" but "add a `--viewport mobile` flag to the screenshot command." Not "better error messages" but "when validation fails, include the near-match property name."
++
++What makes this powerful is that agents don't adapt. Humans learn workarounds and stop noticing friction. An agent reports the same problem fresh every single run, until you fix it. And once you fix it, the same agent runs again and validates the fix. The agent is both the user who requested the feature and the QA that tests it shipped.
++
++The compound effect is real. Week 1, magic wands are about missing capabilities — "I can't do X." Week 2, they shift to "I can, but it's awkward." By week 4, they're about edge cases and polish. By week 8, new agents are productive on their first run because the accumulated magic wands have smoothed every rough edge.
++
++You don't need a legacy codebase to benefit from this. Any project with a CLI, a build system, or developer tooling can run *minih* agents against it and start the loop. `npx github:AI-Substrate/minih quickstart` gets you from zero to your first magic wand in about 60 seconds. If you've got something more ambitious — a real project harness, something like what we built — the [RPI framework](https://github.com/AI-Substrate/rpi) gives you the structured planning pipeline (research → specify → clarify → architect → implement → review) that we used to go from "we've never seen this codebase" to "we can modify it in 15 minutes."
+\ No newline at end of file
+diff --git a/scratch/paste/20260414T035726.md b/scratch/paste/20260414T035726.md
+new file mode 100644
+index 0000000..a1a5cf9
+--- /dev/null
++++ b/scratch/paste/20260414T035726.md
+@@ -0,0 +1,176 @@
++# We Ran a Harness Velocity Experiment — Here's What We Learned
++
++**Author**: Jordan Knight · **Date**: April 2026
++
++---
++
++## The Real Problem
++
++We have a platform that powers accounting for hundreds of thousands of Australian businesses. It's 15 years old, built on .NET Framework, with two execution stacks (one from 2008, one from 2020), multiple build systems, and six cloud service dependencies just to make a single local API call.
++
++Here's the uncomfortable truth: **the platform is hard to work on.** Not because the code is bad — it's mature, it works, it handles real money for real businesses. But the knowledge required to be productive in it is vast, tribal, and largely undocumented. The people who built it have moved on. The feedback loop is slow. New engineers face months of ramp-up. And the ideas we want to explore — AI agent integration, new capabilities, architectural experiments — are bottlenecked by the sheer difficulty of *getting in*.
++
++As bringers of an agentic engineering future, our job isn't to rewrite the platform. Our job is to **break down the barriers** — to create the capability to rapidly experiment and iterate on it. To make it possible to ask a question about the codebase and get an answer in hours, not weeks. To try an architectural approach, prove or disprove it, and move on.
++
++We needed a real problem to drive the experiment. We chose audit provenance — making the system record when an AI agent (rather than a human) makes a change. That was the exercise. But the experiment was about something bigger:
++
++> **Can we build an engineering system that makes a difficult legacy codebase accessible to rapid experimentation?**
++
++---
++
++## The Harness Concept
++
++When you name a thing you make it a first class concept. This is why I think the harness concept is so powerful - its creating a campfire. We named it *the Huxley Harness* (named for the codeword of the codebase), gave it a CLI, gave it prompts and subagents, and treated it as a first-class product — not scaffolding, not a nice-to-have, not something we'd clean up later.
++
++Why does naming it matter? Because once something has a name, you can measure it — is it getting better? You can improve it — there's one place to invest instead of ad-hoc scripts scattered across wikis. And you can talk about it. "The harness needs X" is a real conversation. "We should probably write a script for that" is a hope that dies in the backlog.
++
++The harness is a CLI with commands like `build`, `run`, `health`, `seed`, and `test`. It automates the lifecycle of the system under experiment. It has 16 commands and 32 recipes. It eliminates cloud dependencies, automates database seeding, and lets an agent go from zero to a working API call in under two minutes.
++
++Most imporatntly its discoverable by agents. It can be known instantly. It gives them a way to edit, build, see inside the running product. Close the loop. And even more imporatntly, instruct them how to improve it over time - a gift to our future selves. 
++
++
++
++## The Experiment
++
++We ran this as a formal experiment with a direct hypothesis:
++
++> If we invest in harness tooling, executable knowledge, and feedback loops, an AI agent can productively modify, build, test, and validate changes to a complex legacy system — and the ROI of that investment pays for itself within the first 3–4 iterations.
++
++In other words: does the harness actually compound value delivery? Or does every session start from scratch regardless?
++
++We measured four things. How hard is the platform for agents today (the difficulty axis). What harness tooling reduces that difficulty (the mitigation axis). How much faster is each successive change (the velocity axis). And — just as importantly — how good is the information we're getting back (the value axis).
++
++The value axis is what makes the whole thing worth doing. Going fast is meaningless if the outputs are shallow. What we actually care about is: are we learning real things about this codebase? Are the architectural questions getting answered with evidence, not guesses? Are the experiments producing findings that change how the team thinks about the platform?
++
++If the harness just made us faster at producing junk, it would be a waste of time. The claim is stronger than that — the harness produces *better* information because it lets us explore more thoroughly, validate from multiple angles (we ran parallel research agents and validation agents against every artifact), and prove things end-to-end against the real running system instead of speculating from code reading alone.
++---
++
++## The Start: 16 Hours
++
++The first real task was painful. The agent had to learn the codebase from scratch — understand the architecture, figure out build systems, navigate thousands of files, work out which of the two execution stacks handled which operations.
++
++**First iteration: ~16 hours** to complete a meaningful code change with end-to-end proof.
++
++Here's what happened during those 16 hours: every time the agent hit a problem, we encoded the fix. Not in a wiki. Not in a document. In the harness itself — as a command, a pre-flight check, a recipe.
++
++Every difficulty catalogued became a gift to the next session.
++
++We tracked every one of them. We call it the **difficulty ledger**. Each entry gets an ID (HC-01, HC-02, ...), a category (build, config, data, test, debug, knowledge), and — critically — a mitigation status. The question isn't "did we solve it?" It's "did we encode the solution so nobody ever hits it again?"
++
++By the end: 36 entries. 29 fully mitigated as harness automation. 4 partially mitigated. The ledger itself became one of the most valuable artifacts we produced — a structured record of everything that's hard about this codebase, and what we did about it.
++
++Some examples of what "encoding" looks like in practice. A C# destructor crashes the process silently after garbage collection — only in DEBUG builds, only after a few API calls. An engineer debugging this would lose hours. The harness patches it automatically on build. Nobody ever hits it again. Fresh test databases don't have the new audit columns — the API returns 500 with no useful error. The harness seed command now auto-applies the columns. Every future database works first time. The test framework ships a 32-bit runner that can't load 64-bit test DLLs. The harness wraps a working runner — 29 tests in 5 seconds.
++
++None of these are interesting problems. They're *friction*. But friction compounds just as surely as value does — in the wrong direction. Left unencoded, each one costs the next person hours.
++
++---
++
++## The Compounding Loop
++
++The second iteration was faster — about 6 hours. But it revealed a new problem: the agent was *forgetting*. It would re-discover things it had already learned. It would try approaches we'd already rejected.
++
++So we locked down the harness concept harder. We created structured knowledge that persisted between sessions — experiment files, design workshops, research dossiers. We gave the harness the ability to tell the agent what it already knew, what had already been tried, and what had already failed.
++
++The third iteration took about 3 hours. The code change was similar in complexity. The difference was the harness — it handled setup, build, deploy, seed, and verification automatically. The agent could focus on the actual problem.
++
++The fourth iteration — 30 minutes. A single line of code to enable, one command to prove it. The fifth — 15 minutes. Zero new difficulties encountered. Zero debugging. Every tool worked first try.
++
++---
++
++## Where It Gets Interesting
++
++By the fourth and fifth iterations, something remarkable happened:
++
++```
++Iteration 1:  ~16 hours
++Iteration 2:  ~6 hours
++Iteration 3:  ~3 hours
++Iteration 4:  ~30 minutes
++Iteration 5:  ~15 minutes
++```
++
++**64× improvement.** Same codebase. Same kind of task. Same agent capability.
++
++The difference was entirely in the harness and the knowledge it carried forward. Each session left the system better than it found it. Not just the code — the *development infrastructure*. The ability to work on the code.
++
++---
++
++## What Made It Work
++
++Three principles emerged from the experiment.
++
++The first is the compounding value loop. Every task must send a gift to its future self. If you hit a problem, don't just solve it — encode the solution. The agent that runs tomorrow should never hit the same problem you hit today. This is the core mechanism behind the velocity curve.
++
++The second: encode, don't document. But I don't mean build scripts — everyone has build scripts. Here's what's actually different.
++
++The harness has a self-improvement loop. When an agent finishes a task, it produces a retrospective with three fields: what worked, what was confusing, and a "magic wand" — the one thing it would change. The harness's `retro` command reads that retrospective and automatically adds the magic wand to a wishlist. The next agent session reads the wishlist. The harness literally improves itself through use. The agents aren't just users of the tooling — they're the QA team, filing structured improvement requests every time they run. We've had 21 wishlist items flow through this pipeline, most of them resolved.
++
++The other example: the harness doesn't tell you how to test things. It *tests things*. There are full SDK services — invoice, bank transfer, supplier, account — that create real business objects through the API, inject agent identity headers, validate request/response schemas, hit the database to verify the audit trail, and report pass/fail. One command — `just sdk-invoice --agent-id test/1.0` — is a complete end-to-end proof that agent identity flows from an HTTP header through the middleware, through the business logic, into the database. That's not a build script. That's executable knowledge about how a 15-year-old system actually behaves.
++
++The third is rapid experimentation over perfect planning. We ran 6 formal experiments. One was cancelled early (wrong abstraction). Four were confirmed. One is planned. The experiment structure is lightweight — a hypothesis, success criteria, failure criteria, and a go/no-go decision. This let us explore multiple approaches to the same problem and discard bad ideas cheaply.
++
++We used parallel research agents — up to 9 running simultaneously — to explore the codebase from different angles. One traces the inheritance hierarchy. Another checks for double-counting risks. Another reviews prior decisions. They report back structured findings that feed into design workshops. A single engineer looking at a 15-year-old codebase they've never seen would take days to build that mental model. The agents did it in minutes.
++
++---
++
++## Democratising the Codebase
++
++Legacy codebases accumulate knowledge debt. The people who understand the architecture move on. The remaining team knows their corner but not the whole system. New engineers face a cliff: months of ramp-up before they can contribute meaningfully. Ideas for improvement — even small ones — get stuck in a queue behind "we don't have anyone who knows that part of the code."
++
++The harness breaks this pattern. By encoding operational knowledge — how to build, how to run, where the hooks are, what patterns to follow — we make the codebase *accessible*. Not just to AI agents, but to any engineer who picks it up. The harness is an interface. You don't need to understand everything beneath it. You need six verbs: build, run, health, seed, test, stop.
++
++But the harness alone isn't the full picture. The approach we built around it — structured experiments, parallel research agents, design workshops — creates a new way to explore a codebase.
++
++We can ask architectural questions and get answers fast. Remember the parallel research agents I mentioned earlier — 9 of them, each with a different lens on the same question? That produced 77 structured, numbered findings from a single research session. An engineer doing this manually against an unfamiliar 15-year-old codebase would take days.
++
++We can explore multiple approaches cheaply. Six formal experiments. One cancelled early — wrong abstraction. Four confirmed. One planned. Each with a hypothesis and a go/no-go gate. Bad ideas get discarded in hours, not weeks.
++
++And we captured institutional knowledge at the speed of exploration. 109 workshop documents exploring the system's architecture — not because we needed 109, but because the process was cheap enough to be thorough. Each one captures not just what we decided, but why, and what we rejected. That's institutional knowledge that normally takes years to accumulate, captured in weeks.
++
++This is what "democratising the codebase" actually means. It's not giving everyone commit access. It's giving everyone the *ability to understand* — to explore, to experiment, to ask "what if?" and get a real answer, fast.
++
++---
++
++## What We Actually Built
++
++To keep this concrete: the exercise was adding audit provenance to the legacy system. When an AI agent creates an invoice or updates a customer record, the system now records *that it was an agent* — which agent, what type, and when. No API contract changes. No service signature changes. Nine files modified in the monolith. Four audit hooks covering two execution stacks. Eight entity types proven end-to-end with real database verification, ~60 more enabled and ready, targeting 80 of 88 total.
++
++But the real deliverable is the capability itself — and not all of it lives in the harness. The harness gives us the ability to stand up the platform locally in minutes with zero cloud dependencies, and to prove or disprove a code change end-to-end in under an hour. That's the harness's job: make the system workable.
++
++The broader approach — parallel research agents, structured experiments, design workshops, validation agents — that's the engineering system we built *around* the harness. This is based on RPI (Research, Plan, Implement - a set of prompts aimed at exploration, engineering and design - a flow as it were.). Those capabilities aren't unique to this codebase. Any team could use parallel agents to explore an unfamiliar architecture, or run structured experiments to compare approaches. What we did is bring those techniques together into a repeatable process and demonstrate that they work against a real, difficult legacy system. The harness makes it practical. The approach makes it valuable. Together, they're something the team can pick up and use — not just on audit provenance, but on whatever question they want to ask next.
++
++The platform didn't get rewritten. It didn't need to be. It got *accessible*.
++
++---
++
++## The Takeaway
++
++The experiment confirmed something we suspected but couldn't prove:
++
++> **Agentic engineering velocity compounds — but only if you invest in the development infrastructure.**
++
++An AI agent without a harness is a fresh graduate staring at a codebase. Every session starts from zero. Every problem is new. Every question takes days.
++
++An AI agent *with* a harness inherits every lesson learned by every agent that came before it. The 34th session is faster than the 1st because 26 problems have already been solved.
++
++For MYOB, this changes what's possible. We don't need to wait for a rewrite to experiment on the platform. We don't need deep tribal knowledge to explore architectural options. We don't need weeks to answer "what if?" The harness gives us the capability to iterate — rapidly, cheaply, and with compounding returns.
++
++The harness is the product. Everything else is the exercise.
++
++---
++
++## If You Want to Try This
++
++The self-improvement loop I described — agents run, report friction, that friction gets fixed, the next run is smoother — isn't something we built from scratch. It's powered by [minih](https://github.com/AI-Substrate/minih), a standalone agent runner that executes declarative AI agents against GitHub's Copilot SDK.
++
++It's worth distinguishing *minih* agents from Copilot skills (the `/plan-*` commands we used throughout). Skills are valuable — they encode a repeatable process, like "research a codebase" or "write a spec." But skills are static. They're instructions. They don't have opinions about whether the tooling is good or bad, and they don't get better through use. You could prompt each skill to report feedback — but then you're bolting the same concept onto every skill as an afterthought, duplicating something that *minih* bakes in at its core.
++
++*minih* agents are different. They're *users*. They use the harness CLI, hit real friction, and report back what hurt. They're improving their own environment to make things better for themselves. That's the key distinction — a skill tells an agent what to do, but a *minih* agent tells *you* what to fix.
++
++The key idea in *minih* is the **magic wand**. Every agent, after finishing its task, must answer three questions: what worked well, what was confusing, and — the important one — if you could change *one thing* to make your job easier, what would it be? That magic wand is concrete and specific. Not "improve the CLI" but "add a `--viewport mobile` flag to the screenshot command." Not "better error messages" but "when validation fails, include the near-match property name."
++
++What makes this powerful is that agents don't adapt. Humans learn workarounds and stop noticing friction. An agent reports the same problem fresh every single run, until you fix it. And once you fix it, the same agent runs again and validates the fix. The agent is both the user who requested the feature and the QA that tests it shipped.
++
++The compound effect is real. Week 1, magic wands are about missing capabilities — "I can't do X." Week 2, they shift to "I can, but it's awkward." By week 4, they're about edge cases and polish. By week 8, new agents are productive on their first run because the accumulated magic wands have smoothed every rough edge.
++
++You don't need a legacy codebase to benefit from this. Any project with a CLI, a build system, or developer tooling can run *minih* agents against it and start the loop. `npx github:AI-Substrate/minih quickstart` gets you from zero to your first magic wand in about 60 seconds. If you've got something more ambitious — a real project harness, something like what we built — the [RPI framework](https://github.com/AI-Substrate/rpi) gives you the structured planning pipeline (research → specify → clarify → architect → implement → review) that we used to go from "we've never seen this codebase" to "we can modify it in 15 minutes."
+\ No newline at end of file
+diff --git a/src/cli/commands/difficulties.ts b/src/cli/commands/difficulties.ts
+new file mode 100644
+index 0000000..af513fd
+--- /dev/null
++++ b/src/cli/commands/difficulties.ts
+@@ -0,0 +1,157 @@
++/**
++ * minih difficulties — aggregate difficulty reports across all agent runs.
++ */
++
++import * as fs from 'node:fs';
++import * as path from 'node:path';
++import chalk from 'chalk';
++import Table from 'cli-table3';
++import type { Command } from 'commander';
++import { listAgents } from '../../runner/index.js';
++import { exitWithEnvelope, formatSuccess } from '../output.js';
++
++interface DifficultyEntry {
++  id: string;
++  category: string;
++  description: string;
++  workaround: string | null;
++  severity: string;
++  agent: string;
++  runId: string;
++}
++
++export function registerDifficultiesCommand(program: Command): void {
++  program
++    .command('difficulties')
++    .description('Aggregate difficulty reports across all agent runs')
++    .option('--agent <slug>', 'Filter to a specific agent')
++    .action((opts: { agent?: string }) => {
++      const agentsDir = program.opts().agentsDir ?? 'agents';
++      const agents = listAgents(agentsDir);
++
++      const filteredAgents = opts.agent
++        ? agents.filter((a) => a.slug === opts.agent)
++        : agents;
++
++      const entries: DifficultyEntry[] = [];
++      let idCounter = 1;
++
++      for (const agent of filteredAgents) {
++        const runsDir = path.join(agent.dir, 'runs');
++        if (!fs.existsSync(runsDir)) continue;
++
++        const runDirs = fs
++          .readdirSync(runsDir, { withFileTypes: true })
++          .filter((e) => e.isDirectory())
++          .sort((a, b) => b.name.localeCompare(a.name));
++
++        for (const runDir of runDirs) {
++          // Only read completed runs
++          const completedPath = path.join(
++            runsDir,
++            runDir.name,
++            'completed.json',
++          );
++          try {
++            if (!fs.existsSync(completedPath)) continue;
++            const meta = JSON.parse(fs.readFileSync(completedPath, 'utf-8'));
++            if (meta.result !== 'completed' && meta.result !== 'degraded')
++              continue;
++          } catch {
++            continue;
++          }
++
++          // Read report.json for difficulties
++          const reportPath = path.join(
++            runsDir,
++            runDir.name,
++            'output',
++            'report.json',
++          );
++          try {
++            if (!fs.existsSync(reportPath)) continue;
++            const report = JSON.parse(fs.readFileSync(reportPath, 'utf-8'));
++            const difficulties = report?.retrospective?.difficulties;
++            if (!Array.isArray(difficulties)) continue;
++
++            for (const d of difficulties) {
++              if (
++                typeof d !== 'object' ||
++                !d ||
++                typeof d.description !== 'string'
++              )
++                continue;
++              entries.push({
++                id: `MH-${String(idCounter++).padStart(3, '0')}`,
++                category: String(d.category ?? 'unknown'),
++                description: d.description,
++                workaround: d.workaround ?? null,
++                severity: String(d.severity ?? 'unknown'),
++                agent: agent.slug,
++                runId: runDir.name,
++              });
++            }
++          } catch {}
++        }
++      }
++
++      // Compute frequency by exact description
++      const freqMap = new Map<string, number>();
++      for (const e of entries) {
++        freqMap.set(e.description, (freqMap.get(e.description) ?? 0) + 1);
++      }
++
++      if (process.stderr.isTTY) {
++        if (entries.length === 0) {
++          process.stderr.write(
++            `\n  ${chalk.dim('No difficulties reported across agent runs.')}\n\n`,
++          );
++        } else {
++          process.stderr.write(
++            `\n  ${chalk.bold('Difficulty Ledger')} (${entries.length} entries)\n\n`,
++          );
++
++          const table = new Table({
++            head: [
++              chalk.bold('ID'),
++              chalk.bold('Category'),
++              chalk.bold('Description'),
++              chalk.bold('Agent'),
++              chalk.bold('Freq'),
++              chalk.bold('Severity'),
++            ],
++            style: { head: [], border: [] },
++            colWidths: [10, 12, 50, 16, 6, 12],
++            wordWrap: true,
++          });
++
++          for (const e of entries) {
++            const sevColor =
++              e.severity === 'blocking'
++                ? chalk.red
++                : e.severity === 'degrading'
++                  ? chalk.yellow
++                  : chalk.dim;
++            table.push([
++              chalk.cyan(e.id),
++              e.category,
++              e.description.slice(0, 100),
++              chalk.dim(e.agent),
++              String(freqMap.get(e.description) ?? 1),
++              sevColor(e.severity),
++            ]);
++          }
++
++          process.stderr.write(`${table.toString()}\n\n`);
++        }
++      }
++
++      exitWithEnvelope(
++        formatSuccess('difficulties', {
++          entries,
++          count: entries.length,
++          ...(opts.agent && { agent: opts.agent }),
++        }),
++      );
++    });
++}
+diff --git a/src/cli/commands/history.ts b/src/cli/commands/history.ts
+index 7d19def..2cd6871 100644
+--- a/src/cli/commands/history.ts
++++ b/src/cli/commands/history.ts
+@@ -74,6 +74,7 @@ export function registerHistoryCommand(program: Command): void {
+             chalk.bold('Run ID'),
+             chalk.bold('Result'),
+             chalk.bold('Duration'),
++            chalk.bold('Trend'),
+             chalk.bold('Validated'),
+           ],
+           style: { head: [], border: [] },
+@@ -96,15 +97,51 @@ export function registerHistoryCommand(program: Command): void {
+                 ? chalk.red('✗')
+                 : chalk.dim('—');
+           const resumeIndicator = run.resumedFromRunId ? chalk.cyan(' ↩') : '';
++
++          // Velocity trend indicator
++          let trend = chalk.dim('—');
++          if (run.velocity?.changePercent != null) {
++            const pct = run.velocity.changePercent;
++            if (pct < -5) {
++              trend = chalk.green(`▼ ${Math.abs(pct)}%`);
++            } else if (pct > 5) {
++              trend = chalk.red(`▲ ${pct}%`);
++            }
++          }
++
+           table.push([
+             chalk.dim(run.runId) + resumeIndicator,
+             resultColor(run.result),
+             duration,
++            trend,
+             validated,
+           ]);
+         }
+ 
+-        process.stderr.write(`${table.toString()}\n\n`);
++        process.stderr.write(`${table.toString()}\n`);
++
++        // Velocity summary line
++        const completedRuns = runs.filter(
++          (r: Record<string, unknown>) =>
++            r.result === 'completed' && r.durationMs,
++        );
++        if (completedRuns.length >= 2) {
++          const oldest = completedRuns[completedRuns.length - 1];
++          const newest = completedRuns[0];
++          const oldDur = (oldest.durationMs / 1000).toFixed(1);
++          const newDur = (newest.durationMs / 1000).toFixed(1);
++          const pct = (
++            ((newest.durationMs - oldest.durationMs) / oldest.durationMs) *
++            100
++          ).toFixed(0);
++          const arrow =
++            Number(pct) < 0 ? chalk.green(`${pct}%`) : chalk.red(`+${pct}%`);
++          process.stderr.write(
++            `  ${chalk.dim(`Velocity: ${oldDur}s → ${newDur}s over ${completedRuns.length} runs (${arrow})`)}\n`,
++          );
++        }
++
++        process.stderr.write('\n');
+       }
+ 
+       exitWithEnvelope(formatSuccess('history', { runs, count: runs.length }));
+diff --git a/src/cli/commands/run.ts b/src/cli/commands/run.ts
+index 8097c5e..55ad823 100644
+--- a/src/cli/commands/run.ts
++++ b/src/cli/commands/run.ts
+@@ -304,6 +304,15 @@ export function registerRunCommand(program: Command): void {
+                   validationErrors: result.metadata.validationErrors,
+                   eventCount: result.metadata.eventCount,
+                   toolCallCount: result.metadata.toolCallCount,
++                  ...(result.metadata.velocity && {
++                    velocity: result.metadata.velocity,
++                  }),
++                  ...(result.parsedReport && {
++                    summary: result.parsedReport.summary,
++                    magicWand: result.parsedReport.magicWand,
++                    magicWandTarget: result.parsedReport.magicWandTarget,
++                    difficulties: result.parsedReport.difficulties,
++                  }),
+                 },
+                 status as 'ok' | 'degraded',
+               ),
+diff --git a/src/cli/index.ts b/src/cli/index.ts
+index abe211c..52e2343 100644
+--- a/src/cli/index.ts
++++ b/src/cli/index.ts
+@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
+ import { Command } from 'commander';
+ import { registerCheckCommand } from './commands/check.js';
+ import { registerConnectCommand } from './commands/connect.js';
++import { registerDifficultiesCommand } from './commands/difficulties.js';
+ import { registerDoctorCommand } from './commands/doctor.js';
+ import { registerHistoryCommand } from './commands/history.js';
+ import { registerInitCommand } from './commands/init.js';
+@@ -70,6 +71,7 @@ registerLastRunCommand(program);
+ registerStatusCommand(program);
+ registerTailCommand(program);
+ registerDoctorCommand(program);
++registerDifficultiesCommand(program);
+ registerCheckCommand(program);
+ registerInitCommand(program);
+ 
+diff --git a/src/runner/display.ts b/src/runner/display.ts
+index d27f3d8..d73fc04 100644
+--- a/src/runner/display.ts
++++ b/src/runner/display.ts
+@@ -84,7 +84,7 @@ export function displayEvent(event: AgentEvent): void {
+ }
+ 
+ export function displaySummary(result: AgentRunResult): void {
+-  const { metadata, validation, runDir } = result;
++  const { metadata, validation, runDir, parsedReport } = result;
+   const statusColor =
+     metadata.result === 'completed'
+       ? chalk.green
+@@ -115,6 +115,37 @@ export function displaySummary(result: AgentRunResult): void {
+     }
+   }
+ 
++  if (metadata.velocity) {
++    const v = metadata.velocity;
++    const arrow =
++      v.changePercent === null
++        ? chalk.dim('—')
++        : v.changePercent < -5
++          ? chalk.green(`▼ ${Math.abs(v.changePercent)}%`)
++          : v.changePercent > 5
++            ? chalk.red(`▲ ${v.changePercent}%`)
++            : chalk.dim('—');
++    process.stderr.write(`  Velocity:   run #${v.runNumber} ${arrow}\n`);
++  }
++
++  if (parsedReport?.magicWand) {
++    process.stderr.write(
++      `  ${chalk.magenta('🪄 Magic wand')}: ${parsedReport.magicWand.slice(0, 120)}${parsedReport.magicWand.length > 120 ? '...' : ''}\n`,
++    );
++  }
++
++  if (parsedReport?.difficulties && parsedReport.difficulties.length > 0) {
++    const count = parsedReport.difficulties.length;
++    const blocking = parsedReport.difficulties.filter(
++      (d) => d.severity === 'blocking',
++    ).length;
++    const label =
++      blocking > 0
++        ? chalk.red(`${count} (${blocking} blocking)`)
++        : chalk.yellow(`${count}`);
++    process.stderr.write(`  Difficulties: ${label}\n`);
++  }
++
+   process.stderr.write(`  Run dir:    ${chalk.dim(runDir)}\n`);
+   process.stderr.write(`  Artifacts:  ${metadata.artifacts.join(', ')}\n`);
+ }
+diff --git a/src/runner/index.ts b/src/runner/index.ts
+index df7d3d2..06435f6 100644
+--- a/src/runner/index.ts
++++ b/src/runner/index.ts
+@@ -16,14 +16,20 @@ export {
+   validateSlug,
+ } from './folder.js';
+ export { PrettyDisplay } from './pretty.js';
+-export { runAgent, SYSTEM_OUTPUT_INSTRUCTIONS } from './runner.js';
++export {
++  computeVelocity,
++  runAgent,
++  SYSTEM_OUTPUT_INSTRUCTIONS,
++} from './runner.js';
+ export type {
+   AgentDefinition,
+   AgentRunConfig,
+   AgentRunResult,
+   CompletedMetadata,
++  ParsedReport,
+   RunEventStats,
+   ValidationResult,
++  VelocityData,
+ } from './types.js';
+ export {
+   validateInput,
+diff --git a/src/runner/runner.ts b/src/runner/runner.ts
+index ebaef6b..3817609 100644
+--- a/src/runner/runner.ts
++++ b/src/runner/runner.ts
+@@ -21,8 +21,10 @@ import type {
+   AgentRunConfig,
+   AgentRunResult,
+   CompletedMetadata,
++  ParsedReport,
+   RunEventStats,
+   ValidationResult,
++  VelocityData,
+ } from './types.js';
+ import {
+   validateInput,
+@@ -50,11 +52,38 @@ At minimum, your JSON must include these fields:
+   "retrospective": {
+     "workedWell": "What about the tools, workflow, or environment was smooth? Be specific.",
+     "confusing": "What was unclear, confusing, or required trial-and-error?",
+-    "magicWand": "If you could change ONE thing about this experience to make your job easier, what would it be? Be concrete — name a specific tool, command, flag, or workflow improvement. Specify whether this is a PROJECT improvement (the codebase/tools you tested) or a MINIH improvement (the agent runner itself)."
++    "magicWand": "If you could change ONE thing about this experience to make your job easier, what would it be? Be concrete — name a specific tool, command, flag, or workflow improvement.",
++    "magicWandTarget": "project or minih — which system does your magic wand target? 'project' = the codebase/tools you tested. 'minih' = the agent runner itself.",
++    "difficulties": [
++      {
++        "category": "config",
++        "description": "GH_TOKEN not set, no actionable error — just a cryptic 401",
++        "workaround": "Guessed from SDK source that GH_TOKEN was needed",
++        "severity": "blocking"
++      }
++    ]
+   }
+ }
+ \`\`\`
+ 
++### Magic Wand Target
++
++Your magicWand should specify which layer it targets:
++- **"project"** — the codebase, CLI tools, or developer experience you're testing/reviewing
++- **"minih"** — the agent runner, validation, prompt assembly, or conventions
++
++### Reporting Difficulties
++
++If you hit friction during this run — something that slowed you down, confused you, or
++required a workaround — report it in retrospective.difficulties. Each difficulty needs:
++- **category**: what kind of friction (suggested: build, config, data, test, debug, knowledge — or your own)
++- **description**: what happened, specifically
++- **workaround**: what you did to get past it (or null if you couldn't)
++- **severity**: blocking (couldn't proceed), degrading (worked around it), or annoying (minor friction)
++
++These reports feed the difficulty ledger. What you report today gets fixed for tomorrow.
++Every difficulty you report is a gift to the next agent.
++
+ Your agent-specific output fields go alongside these system fields in the same JSON object.
+ The retrospective.magicWand is the most valuable thing you produce — it directly improves
+ this system for every agent that runs after you.
+@@ -202,6 +231,7 @@ export async function runAgent(
+         },
+         validation: null,
+         runDir,
++        parsedReport: null,
+       };
+     }
+     if (Object.keys(params).length > 0) {
+@@ -425,6 +455,12 @@ export async function runAgent(
+ 
+   const artifacts = listArtifacts(runDir);
+ 
++  // Compute velocity (skip for resumed runs — they share the original run's history)
++  let velocity: VelocityData | undefined;
++  if (!isResume && resultStatus === 'completed') {
++    velocity = computeVelocity(durationMs, definition.dir, runId);
++  }
++
+   // Write completed.json
+   const metadata: CompletedMetadata = {
+     slug: definition.slug,
+@@ -445,6 +481,7 @@ export async function runAgent(
+     ...(config.resumedFromRunId && {
+       resumedFromRunId: config.resumedFromRunId,
+     }),
++    ...(velocity && { velocity }),
+   };
+ 
+   fs.writeFileSync(
+@@ -452,12 +489,21 @@ export async function runAgent(
+     JSON.stringify(metadata, null, 2),
+   );
+ 
++  // Parse report.json for envelope surfacing
++  const parsedReport = parseReportJson(outputPath);
++
+   // Clean up runtime environment (Workshop 007)
+   for (const key of MINIH_ENV_KEYS) {
+     delete process.env[key];
+   }
+ 
+-  return { agentResult, metadata, validation: userValidation, runDir };
++  return {
++    agentResult,
++    metadata,
++    validation: userValidation,
++    runDir,
++    parsedReport,
++  };
+ }
+ 
+ function listArtifacts(dir: string, base?: string): string[] {
+@@ -473,3 +519,127 @@ function listArtifacts(dir: string, base?: string): string[] {
+   }
+   return files;
+ }
++
++/**
++ * Compute velocity data by comparing this run against previous completed runs.
++ * Chains from prior velocity blocks when available (O(1)).
++ * Falls back to scanning run history for legacy runs without velocity data.
++ */
++export function computeVelocity(
++  currentDurationMs: number,
++  agentDir: string,
++  currentRunId: string,
++): VelocityData {
++  const runsDir = path.join(agentDir, 'runs');
++  if (!fs.existsSync(runsDir)) {
++    return {
++      previousDurationMs: null,
++      changePercent: null,
++      runNumber: 1,
++      firstDurationMs: currentDurationMs,
++      overallChangePercent: null,
++    };
++  }
++
++  // Scan run folders in reverse chronological order (newest first)
++  const entries = fs
++    .readdirSync(runsDir, { withFileTypes: true })
++    .filter((e) => e.isDirectory() && e.name !== currentRunId)
++    .sort((a, b) => b.name.localeCompare(a.name));
++
++  let previousCompleted: CompletedMetadata | null = null;
++  let firstCompleted: CompletedMetadata | null = null;
++
++  for (const entry of entries) {
++    const completedPath = path.join(runsDir, entry.name, 'completed.json');
++    try {
++      if (!fs.existsSync(completedPath)) continue;
++      const meta: CompletedMetadata = JSON.parse(
++        fs.readFileSync(completedPath, 'utf-8'),
++      );
++      if (meta.result !== 'completed') continue;
++
++      if (!previousCompleted) {
++        previousCompleted = meta;
++        // If prior run has velocity, chain from it
++        if (meta.velocity) {
++          firstCompleted = {
++            durationMs: meta.velocity.firstDurationMs ?? meta.durationMs,
++          } as CompletedMetadata;
++          break;
++        }
++      }
++
++      // Legacy run without velocity — keep scanning for first
++      firstCompleted = meta;
++    } catch {
++      // Skip corrupted completed.json
++    }
++  }
++
++  if (!previousCompleted) {
++    return {
++      previousDurationMs: null,
++      changePercent: null,
++      runNumber: 1,
++      firstDurationMs: currentDurationMs,
++      overallChangePercent: null,
++    };
++  }
++
++  const prevDuration = previousCompleted.durationMs;
++  const changePercent =
++    ((currentDurationMs - prevDuration) / prevDuration) * 100;
++
++  const runNumber = previousCompleted.velocity
++    ? previousCompleted.velocity.runNumber + 1
++    : 2; // At minimum this is the 2nd completed run
++
++  const firstDuration = firstCompleted
++    ? (firstCompleted.velocity?.firstDurationMs ?? firstCompleted.durationMs)
++    : prevDuration;
++
++  const overallChangePercent =
++    ((currentDurationMs - firstDuration) / firstDuration) * 100;
++
++  return {
++    previousDurationMs: prevDuration,
++    changePercent: Math.round(changePercent * 10) / 10,
++    runNumber,
++    firstDurationMs: firstDuration,
++    overallChangePercent: Math.round(overallChangePercent * 10) / 10,
++  };
++}
++
++/**
++ * Safely parse report.json and extract key retrospective fields.
++ * Returns null on any failure — never throws.
++ */
++function parseReportJson(outputPath: string): ParsedReport | null {
++  try {
++    if (!fs.existsSync(outputPath)) return null;
++    const content = fs.readFileSync(outputPath, 'utf-8').trim();
++    if (!content) return null;
++    const parsed = JSON.parse(content);
++    if (typeof parsed !== 'object' || parsed === null) return null;
++
++    const retro =
++      typeof parsed.retrospective === 'object' && parsed.retrospective !== null
++        ? parsed.retrospective
++        : null;
++
++    return {
++      summary: typeof parsed.summary === 'string' ? parsed.summary : null,
++      magicWand:
++        retro && typeof retro.magicWand === 'string' ? retro.magicWand : null,
++      magicWandTarget:
++        retro && typeof retro.magicWandTarget === 'string'
++          ? retro.magicWandTarget
++          : null,
++      difficulties:
++        retro && Array.isArray(retro.difficulties) ? retro.difficulties : null,
++    };
++  } catch {
++    return null;
++  }
++}
+diff --git a/src/runner/types.ts b/src/runner/types.ts
+index e684944..726958c 100644
+--- a/src/runner/types.ts
++++ b/src/runner/types.ts
+@@ -54,6 +54,33 @@ export interface ValidationResult {
+   errors: string[];
+ }
+ 
++/** Velocity data computed at run end — tracks compounding improvement per agent. */
++export interface VelocityData {
++  /** Duration of the previous completed run (null if first run) */
++  previousDurationMs: number | null;
++  /** % change vs previous run (negative = faster) */
++  changePercent: number | null;
++  /** Which completed run this is (1-indexed) */
++  runNumber: number;
++  /** Duration of the first ever completed run */
++  firstDurationMs: number | null;
++  /** % change from first to current (the big number) */
++  overallChangePercent: number | null;
++}
++
++/** Parsed report fields extracted from agent output for envelope surfacing. */
++export interface ParsedReport {
++  summary: string | null;
++  magicWand: string | null;
++  magicWandTarget: string | null;
++  difficulties: Array<{
++    category: string;
++    description: string;
++    workaround: string | null;
++    severity: string;
++  }> | null;
++}
++
+ /** Metadata written to completed.json after each run. */
+ export interface CompletedMetadata {
+   slug: string;
+@@ -75,6 +102,8 @@ export interface CompletedMetadata {
+   artifacts: string[];
+   /** Run ID of the original run, if this is a resumed session */
+   resumedFromRunId?: string;
++  /** Velocity data — compounding improvement tracking */
++  velocity?: VelocityData;
+ }
+ 
+ /** Result returned from the runner to the CLI command. */
+@@ -83,6 +112,8 @@ export interface AgentRunResult {
+   metadata: CompletedMetadata;
+   validation: ValidationResult | null;
+   runDir: string;
++  /** Parsed fields from report.json for envelope surfacing */
++  parsedReport: ParsedReport | null;
+ }
+ 
+ /** Events collected during a run, for counting and analysis. */
+diff --git a/src/schemas/retrospective.json b/src/schemas/retrospective.json
+index 8530e60..faaa5dd 100644
+--- a/src/schemas/retrospective.json
++++ b/src/schemas/retrospective.json
+@@ -22,12 +22,47 @@
+       "minLength": 20,
+       "description": "If you had a magic wand, what ONE thing would you change? Be concrete."
+     },
++    "magicWandTarget": {
++      "type": "string",
++      "enum": ["project", "minih"],
++      "description": "Which system does the magic wand target — the project being tested or minih itself?"
++    },
+     "improvementSuggestions": {
+       "type": "array",
+       "items": { "type": "string", "minLength": 10 },
+       "minItems": 1,
+       "maxItems": 5,
+       "description": "1-5 specific, actionable improvements."
++    },
++    "difficulties": {
++      "type": "array",
++      "items": {
++        "type": "object",
++        "required": ["category", "description", "severity"],
++        "additionalProperties": false,
++        "properties": {
++          "category": {
++            "type": "string",
++            "minLength": 2,
++            "description": "Friction category (suggested: build, config, data, test, debug, knowledge — or your own)."
++          },
++          "description": {
++            "type": "string",
++            "minLength": 10,
++            "description": "What happened — be specific."
++          },
++          "workaround": {
++            "type": ["string", "null"],
++            "description": "What you did to get past it, or null if you couldn't."
++          },
++          "severity": {
++            "type": "string",
++            "enum": ["blocking", "degrading", "annoying"],
++            "description": "blocking = couldn't proceed, degrading = worked around it, annoying = minor friction."
++          }
++        }
++      },
++      "description": "Structured friction reports. Each difficulty feeds the difficulty ledger."
+     }
+   }
+ }
+diff --git a/src/schemas/system-output.json b/src/schemas/system-output.json
+index 8936f9d..fbfc4a0 100644
+--- a/src/schemas/system-output.json
++++ b/src/schemas/system-output.json
+@@ -32,12 +32,47 @@
+           "minLength": 20,
+           "description": "If you had a magic wand, what ONE thing would you change about the harness, prompt, or agent config? Be concrete."
+         },
++        "magicWandTarget": {
++          "type": "string",
++          "enum": ["project", "minih"],
++          "description": "Which system does the magic wand target — the project being tested or minih itself?"
++        },
+         "improvementSuggestions": {
+           "type": "array",
+           "items": { "type": "string", "minLength": 10 },
+           "minItems": 1,
+           "maxItems": 5,
+           "description": "1-5 specific, actionable improvements."
++        },
++        "difficulties": {
++          "type": "array",
++          "items": {
++            "type": "object",
++            "required": ["category", "description", "severity"],
++            "additionalProperties": false,
++            "properties": {
++              "category": {
++                "type": "string",
++                "minLength": 2,
++                "description": "Friction category (suggested: build, config, data, test, debug, knowledge — or your own)."
++              },
++              "description": {
++                "type": "string",
++                "minLength": 10,
++                "description": "What happened — be specific."
++              },
++              "workaround": {
++                "type": ["string", "null"],
++                "description": "What you did to get past it, or null if you couldn't."
++              },
++              "severity": {
++                "type": "string",
++                "enum": ["blocking", "degrading", "annoying"],
++                "description": "blocking = couldn't proceed, degrading = worked around it, annoying = minor friction."
++              }
++            }
++          },
++          "description": "Structured friction reports. Each difficulty feeds the difficulty ledger."
+         }
+       }
+     }
+diff --git a/test/runner/schema-compat.test.ts b/test/runner/schema-compat.test.ts
+new file mode 100644
+index 0000000..b48d530
+--- /dev/null
++++ b/test/runner/schema-compat.test.ts
+@@ -0,0 +1,108 @@
++/**
++ * Schema backward compatibility tests.
++ * Verifies that outputs without new optional fields still validate.
++ */
++
++import * as fs from 'node:fs';
++import * as path from 'node:path';
++import { afterEach, beforeEach, describe, expect, it } from 'vitest';
++import { validateSystemOutput } from '../../src/runner/validator.js';
++
++describe('Schema backward compatibility', () => {
++  let tmpDir: string;
++
++  beforeEach(() => {
++    tmpDir = fs.mkdtempSync(
++      path.join(import.meta.dirname ?? __dirname, 'tmp-schema-'),
++    );
++  });
++
++  afterEach(() => {
++    fs.rmSync(tmpDir, { recursive: true, force: true });
++  });
++
++  it('validates output without magicWandTarget or difficulties', () => {
++    const outputPath = path.join(tmpDir, 'report.json');
++    fs.writeFileSync(
++      outputPath,
++      JSON.stringify({
++        summary: 'Completed the task successfully.',
++        retrospective: {
++          workedWell: 'Everything worked smoothly.',
++          confusing: 'Nothing was confusing at all.',
++          magicWand: 'Add a --verbose flag for debugging output.',
++        },
++      }),
++    );
++    const result = validateSystemOutput(outputPath);
++    expect(result.valid).toBe(true);
++    expect(result.errors).toHaveLength(0);
++  });
++
++  it('validates output WITH magicWandTarget and difficulties', () => {
++    const outputPath = path.join(tmpDir, 'report.json');
++    fs.writeFileSync(
++      outputPath,
++      JSON.stringify({
++        summary: 'Completed the task with some friction.',
++        retrospective: {
++          workedWell: 'The CLI tools were discoverable.',
++          confusing: 'MCP config was hard to set up.',
++          magicWand: 'Add auto-detection for MCP config location.',
++          magicWandTarget: 'minih',
++          difficulties: [
++            {
++              category: 'config',
++              description:
++                'MCP server cwd defaults to run folder, not project root',
++              workaround: 'Manually set cwd in .mcp.json',
++              severity: 'degrading',
++            },
++          ],
++        },
++      }),
++    );
++    const result = validateSystemOutput(outputPath);
++    expect(result.valid).toBe(true);
++    expect(result.errors).toHaveLength(0);
++  });
++
++  it('allows unknown magicWandTarget values (system validator is permissive)', () => {
++    const outputPath = path.join(tmpDir, 'report.json');
++    fs.writeFileSync(
++      outputPath,
++      JSON.stringify({
++        summary: 'Completed the task successfully.',
++        retrospective: {
++          workedWell: 'Everything worked smoothly.',
++          confusing: 'Nothing was confusing at all.',
++          magicWand: 'Add a --verbose flag for debugging output.',
++          magicWandTarget: 'some-other-value',
++        },
++      }),
++    );
++    // System validator only checks required fields — doesn't enforce magicWandTarget enum
++    const result = validateSystemOutput(outputPath);
++    expect(result.valid).toBe(true);
++  });
++
++  it('allows extra fields in retrospective (additionalProperties: true)', () => {
++    const outputPath = path.join(tmpDir, 'report.json');
++    fs.writeFileSync(
++      outputPath,
++      JSON.stringify({
++        summary: 'Completed the task successfully.',
++        retrospective: {
++          workedWell: 'Everything worked smoothly.',
++          confusing: 'Nothing was confusing at all.',
++          magicWand: 'Add a --verbose flag for debugging output.',
++          difficulties: [{ category: 'build' }],
++          someRandomField: 'should be allowed',
++        },
++      }),
++    );
++    // System validator only checks required fields — additionalProperties are allowed
++    const result = validateSystemOutput(outputPath);
++    expect(result.valid).toBe(true);
++  });
++});
+diff --git a/test/runner/velocity.test.ts b/test/runner/velocity.test.ts
+new file mode 100644
+index 0000000..5142e5d
+--- /dev/null
++++ b/test/runner/velocity.test.ts
+@@ -0,0 +1,131 @@
++/**
++ * Velocity computation tests.
++ * Tests the computeVelocity function with real fixture folders.
++ */
++
++import * as fs from 'node:fs';
++import * as path from 'node:path';
++import { afterEach, beforeEach, describe, expect, it } from 'vitest';
++import { computeVelocity } from '../../src/runner/runner.js';
++
++describe('computeVelocity', () => {
++  let tmpDir: string;
++
++  beforeEach(() => {
++    tmpDir = fs.mkdtempSync(
++      path.join(import.meta.dirname ?? __dirname, 'tmp-velocity-'),
++    );
++    fs.mkdirSync(path.join(tmpDir, 'runs'), { recursive: true });
++  });
++
++  afterEach(() => {
++    fs.rmSync(tmpDir, { recursive: true, force: true });
++  });
++
++  function writeRun(
++    runId: string,
++    result: string,
++    durationMs: number,
++    velocity?: Record<string, unknown>,
++  ) {
++    const runDir = path.join(tmpDir, 'runs', runId);
++    fs.mkdirSync(runDir, { recursive: true });
++    const meta: Record<string, unknown> = {
++      slug: 'test-agent',
++      runId,
++      result,
++      durationMs,
++    };
++    if (velocity) meta.velocity = velocity;
++    fs.writeFileSync(path.join(runDir, 'completed.json'), JSON.stringify(meta));
++  }
++
++  it('returns runNumber=1 for first run with no history', () => {
++    const v = computeVelocity(5000, tmpDir, 'current-run');
++    expect(v.runNumber).toBe(1);
++    expect(v.previousDurationMs).toBeNull();
++    expect(v.changePercent).toBeNull();
++    expect(v.firstDurationMs).toBe(5000);
++    expect(v.overallChangePercent).toBeNull();
++  });
++
++  it('computes velocity from previous completed run', () => {
++    writeRun('2026-04-10T00-00-00Z-0001', 'completed', 10000);
++
++    const v = computeVelocity(8000, tmpDir, 'current-run');
++    expect(v.runNumber).toBe(2);
++    expect(v.previousDurationMs).toBe(10000);
++    expect(v.changePercent).toBe(-20); // 20% faster
++    expect(v.firstDurationMs).toBe(10000);
++    expect(v.overallChangePercent).toBe(-20);
++  });
++
++  it('skips failed runs', () => {
++    writeRun('2026-04-10T00-00-00Z-0001', 'completed', 10000);
++    writeRun('2026-04-11T00-00-00Z-0002', 'failed', 3000);
++
++    const v = computeVelocity(7000, tmpDir, 'current-run');
++    expect(v.runNumber).toBe(2);
++    expect(v.previousDurationMs).toBe(10000);
++  });
++
++  it('skips degraded runs', () => {
++    writeRun('2026-04-10T00-00-00Z-0001', 'completed', 10000);
++    writeRun('2026-04-11T00-00-00Z-0002', 'degraded', 3000);
++
++    const v = computeVelocity(7000, tmpDir, 'current-run');
++    expect(v.runNumber).toBe(2);
++    expect(v.previousDurationMs).toBe(10000);
++  });
++
++  it('chains from prior velocity block (O(1))', () => {
++    writeRun('2026-04-10T00-00-00Z-0001', 'completed', 20000, {
++      previousDurationMs: null,
++      changePercent: null,
++      runNumber: 1,
++      firstDurationMs: 20000,
++      overallChangePercent: null,
++    });
++    writeRun('2026-04-11T00-00-00Z-0002', 'completed', 15000, {
++      previousDurationMs: 20000,
++      changePercent: -25,
++      runNumber: 2,
++      firstDurationMs: 20000,
++      overallChangePercent: -25,
++    });
++
++    const v = computeVelocity(10000, tmpDir, 'current-run');
++    expect(v.runNumber).toBe(3);
++    expect(v.previousDurationMs).toBe(15000);
++    expect(v.firstDurationMs).toBe(20000);
++    expect(v.overallChangePercent).toBe(-50);
++  });
++
++  it('handles legacy runs without velocity block', () => {
++    writeRun('2026-04-10T00-00-00Z-0001', 'completed', 20000);
++    writeRun('2026-04-11T00-00-00Z-0002', 'completed', 15000);
++
++    const v = computeVelocity(10000, tmpDir, 'current-run');
++    expect(v.previousDurationMs).toBe(15000);
++    expect(v.firstDurationMs).toBe(20000);
++  });
++
++  it('handles corrupted completed.json gracefully', () => {
++    const runDir = path.join(tmpDir, 'runs', '2026-04-10T00-00-00Z-0001');
++    fs.mkdirSync(runDir, { recursive: true });
++    fs.writeFileSync(path.join(runDir, 'completed.json'), 'not valid json');
++
++    const v = computeVelocity(5000, tmpDir, 'current-run');
++    expect(v.runNumber).toBe(1);
++    expect(v.previousDurationMs).toBeNull();
++  });
++
++  it('handles all-failed history', () => {
++    writeRun('2026-04-10T00-00-00Z-0001', 'failed', 10000);
++    writeRun('2026-04-11T00-00-00Z-0002', 'timeout', 20000);
++
++    const v = computeVelocity(5000, tmpDir, 'current-run');
++    expect(v.runNumber).toBe(1);
++    expect(v.previousDurationMs).toBeNull();
++  });
++});

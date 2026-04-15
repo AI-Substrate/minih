@@ -74,6 +74,7 @@ export function registerHistoryCommand(program: Command): void {
             chalk.bold('Run ID'),
             chalk.bold('Result'),
             chalk.bold('Duration'),
+            chalk.bold('Trend'),
             chalk.bold('Validated'),
           ],
           style: { head: [], border: [] },
@@ -96,15 +97,51 @@ export function registerHistoryCommand(program: Command): void {
                 ? chalk.red('✗')
                 : chalk.dim('—');
           const resumeIndicator = run.resumedFromRunId ? chalk.cyan(' ↩') : '';
+
+          // Velocity trend indicator
+          let trend = chalk.dim('—');
+          if (run.velocity?.changePercent != null) {
+            const pct = run.velocity.changePercent;
+            if (pct < -5) {
+              trend = chalk.green(`▼ ${Math.abs(pct)}%`);
+            } else if (pct > 5) {
+              trend = chalk.red(`▲ ${pct}%`);
+            }
+          }
+
           table.push([
             chalk.dim(run.runId) + resumeIndicator,
             resultColor(run.result),
             duration,
+            trend,
             validated,
           ]);
         }
 
-        process.stderr.write(`${table.toString()}\n\n`);
+        process.stderr.write(`${table.toString()}\n`);
+
+        // Velocity summary line
+        const completedRuns = runs.filter(
+          (r: Record<string, unknown>) =>
+            r.result === 'completed' && r.durationMs,
+        );
+        if (completedRuns.length >= 2) {
+          const oldest = completedRuns[completedRuns.length - 1];
+          const newest = completedRuns[0];
+          const oldDur = (oldest.durationMs / 1000).toFixed(1);
+          const newDur = (newest.durationMs / 1000).toFixed(1);
+          const pct = (
+            ((newest.durationMs - oldest.durationMs) / oldest.durationMs) *
+            100
+          ).toFixed(0);
+          const arrow =
+            Number(pct) < 0 ? chalk.green(`${pct}%`) : chalk.red(`+${pct}%`);
+          process.stderr.write(
+            `  ${chalk.dim(`Velocity: ${oldDur}s → ${newDur}s over ${completedRuns.length} runs (${arrow})`)}\n`,
+          );
+        }
+
+        process.stderr.write('\n');
       }
 
       exitWithEnvelope(formatSuccess('history', { runs, count: runs.length }));

@@ -20,20 +20,30 @@
         "type": "object",
         "required": ["step", "description", "result", "notes"],
         "properties": {
-          "step": { "type": "integer" },
-          "description": { "type": "string" },
+          "step": {
+            "type": "integer"
+          },
+          "description": {
+            "type": "string"
+          },
           "result": {
             "type": "string",
             "enum": ["pass", "fail", "partial", "skipped"]
           },
-          "notes": { "type": "string" },
+          "notes": {
+            "type": "string"
+          },
           "commandsRun": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           },
           "errorMessages": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           }
         }
       }
@@ -46,17 +56,23 @@
     },
     "blockers": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "description": "Things that completely stopped progress"
     },
     "confusionPoints": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "description": "Things that were unclear or required trial-and-error"
     },
     "suggestions": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "description": "Concrete improvements for the first-time experience"
     },
     "summary": {
@@ -68,9 +84,57 @@
       "required": ["workedWell", "confusing", "magicWand"],
       "additionalProperties": true,
       "properties": {
-        "workedWell": { "type": "string", "minLength": 10 },
-        "confusing": { "type": "string", "minLength": 10 },
-        "magicWand": { "type": "string", "minLength": 20 }
+        "workedWell": {
+          "type": "string",
+          "minLength": 10
+        },
+        "confusing": {
+          "type": "string",
+          "minLength": 10
+        },
+        "magicWand": {
+          "type": "string",
+          "minLength": 20
+        },
+        "magicWandTarget": {
+          "type": "string",
+          "enum": ["project", "minih"],
+          "description": "Which system does the magic wand target — the project being tested or minih itself?"
+        },
+        "difficulties": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["category", "description", "severity"],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Self-assigned ID (e.g., MH-001)."
+              },
+              "category": {
+                "type": "string",
+                "minLength": 2,
+                "description": "Friction category (e.g., build, config, data, test, debug, knowledge)."
+              },
+              "description": {
+                "type": "string",
+                "minLength": 10,
+                "description": "What happened — be specific."
+              },
+              "workaround": {
+                "type": ["string", "null"],
+                "description": "What you did to get past it, or null."
+              },
+              "severity": {
+                "type": "string",
+                "enum": ["blocking", "degrading", "annoying"],
+                "description": "How badly this affected you."
+              }
+            }
+          },
+          "description": "Structured friction reports for the difficulty ledger."
+        }
       }
     }
   }

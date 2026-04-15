@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.5](https://github.com/AI-Substrate/minih/compare/minih-v0.1.4...minih-v0.1.5) (2026-04-15)
+
+
+### Features
+
+* difficulty ledger, velocity tracking, and compounding value philosophy ([#15](https://github.com/AI-Substrate/minih/issues/15)) ([d4aa6d2](https://github.com/AI-Substrate/minih/commit/d4aa6d2c2099720354272befdd51bdcda2c41929))
+
 ## [0.1.4](https://github.com/AI-Substrate/minih/compare/minih-v0.1.3...minih-v0.1.4) (2026-04-11)
 
 

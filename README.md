@@ -1,6 +1,8 @@
 # minih
 
-Standalone declarative agent runner with self-improving feedback.
+*The miniest self-improving agent harness.*
+
+> **⚠️ WARNING: minih runs agents in YOLO mode.** Agents have unrestricted tool access — they can read, write, and execute anything on your machine. There is no sandbox, no tool allowlist, no confirmation prompt. A plan to support tool restrictions exists but is not yet implemented. **Use at your own risk.** Run in containers or throwaway environments if you're executing untrusted agents.
 
 Define AI agents as folders containing `prompt.md` + optional schemas + instructions, then run them against `@github/copilot-sdk`. Every agent produces structured retrospective feedback — what worked, what was confusing, and a **magic wand** wish for what should change. This feedback loop makes both the agents and the harness better over time.
 
@@ -295,6 +297,81 @@ minih uses agents to test and improve itself. These are the best examples of how
 | [`self-review`](agents/self-review/) | Complete | Production-grade code review with complex schema |
 
 Start with `hello-world`, then read through in order. Each agent builds on the concepts introduced by the previous one.
+
+## Why minih? Skills Do Most of This
+
+Both Claude Code and Copilot CLI have skills — markdown files that give an LLM a prompt and get a response. You could build most of what minih does as individual skills. So why does minih exist?
+
+### Skills bundle implicit concepts. minih decomposes them.
+
+In a skill, everything is bundled into a single markdown file. Input parameters are a raw `$ARGUMENTS` string. Output is whatever the LLM feels like returning. Instructions are mixed into the prompt. Feedback doesn't exist unless you build it yourself. None of it is enforced — it's all implicit, all on the honour system.
+
+minih takes each of those bundled concepts and makes them **explicit, separate, enforceable first-class citizens** — the same way you'd extract inline code into classes and interfaces:
+
+| Concept | In a skill | In minih |
+|---|---|---|
+| **Input** | `$ARGUMENTS` — a raw string | `input-schema.json` — typed, validated before execution |
+| **Output** | Whatever the LLM returns | `output-schema.json` — AJV-enforced every run |
+| **Instructions** | Mixed into the prompt markdown | `instructions.md` — separate concern |
+| **Shared context** | Global instructions file (one big blob) | `_shared/preamble.md` — agent-specific, injected at assembly |
+| **Feedback** | Doesn't exist | Mandatory `retrospective` — enforced by the runner |
+| **Run artifacts** | Gone when session ends | First-class timestamped folder with events, metadata, output |
+
+Because each concept is its own file, you get composition for free — symlink an `output-schema.json` across agents that share a contract, `$ref` into shared schema fragments, or point multiple agents at the same `instructions.md`. Skills can also reference shared files via relative paths and bundled `scripts/` directories, but since skill output isn't validated and input isn't typed, sharing a schema between skills doesn't buy you enforcement. In minih, shared files are shared *contracts* — the runner actually enforces what it finds.
+
+Once these concepts are decomposed, they become infrastructure. The runner handles prompt assembly, the system output contract enforces retrospectives on every agent, the shared preamble injects project context, and validation runs automatically. When you improve the runner or add a capability like velocity tracking, every agent gets it for free without touching individual files.
+
+**Skills are inline code. minih is shared infrastructure.**
+
+### What minih adds beyond skills
+
+| Capability | Skills | minih |
+|---|---|---|
+| **Validated output** | Freeform text — no enforcement | JSON Schema (AJV) validates every run |
+| **Run independently** | Must run inside a Claude/Copilot session | Standalone CLI — `npx minih run` from any terminal, CI, or cron |
+| **Run history** | Gone when session ends | Timestamped run folders with `history` and `last-run` |
+| **Event-level observability** | Not available | `events.ndjson` captures every tool call, every message |
+| **Session resume** | Not available | `resume` sends follow-ups; `connect` opens interactive sessions |
+| **Velocity tracking** | Not available | Per-agent run-over-run timing with trend indicators |
+| **Self-improving feedback** | Must be built per-skill | Mandatory `retrospective` with workedWell/confusing/magicWand on every run |
+| **Difficulty aggregation** | Not available | `minih difficulties` aggregates friction reports across all agents |
+| **Prompt inspection** | Can't see the composed prompt | `minih inspect` shows exactly what the LLM receives |
+| **Health checks** | Not available | `minih doctor` validates all agents and harness structure |
+| **Update propagation** | Edit every skill file | Change the runner, preamble, or schema once — all agents inherit |
+| **Namespace** | Every agent is a `/slash` command in your skills list | Agents live in `agents/` — your skills stay clean for workflow commands |
+
+### Where skills win
+
+Skills have real advantages: **zero setup** (drop a markdown file, it works), **conversation context** (they see your files, git state, current session), **native tools** (the host's grep, edit, bash), and **orchestration** (the LLM can auto-invoke them mid-conversation). Copilot CLI in particular has powerful task orchestration — `/fleet` decomposes work into parallel subagents, `/tasks` lets you manage background agents and shell sessions, `/plan` builds step-by-step execution plans, and `/delegate` hands off to a coding agent that creates branches and PRs autonomously. That kind of interactive, multi-agent orchestration is where skills shine and minih deliberately stays out of the way.
+
+### When NOT to use minih
+
+minih is for **repeatable, unattended agent runs** that produce structured output. It's the wrong tool for interactive, user-driven work:
+
+- **Research and exploration** — you need the LLM to ask you clarifying questions, follow up on leads, and adjust direction mid-conversation. That's a skill.
+- **Planning and architecture** — iterative back-and-forth where you refine scope, make trade-offs, and approve decisions. That's a skill.
+- **Implementation** — editing files, running tests, fixing errors in a feedback loop with you watching. That's a skill.
+- **One-off questions** — "how does this module work?" or "what's the best approach here?" Just ask your agent directly.
+
+The rule of thumb: if the task needs your input during execution, use a skill. If the task should run the same way every time and produce a structured report, use minih.
+
+### The complement
+
+They're not competitors — they work together:
+
+```
+Skills (workflow layer)       →  /plan, /review, /research, /validate
+                                       ↓ calls
+minih (execution layer)       →  npx minih run smoke-test
+                                       ↓ produces
+Structured artifacts          →  report.json + events.ndjson + velocity + difficulties
+                                       ↓ feeds back into
+Skills + preamble + harness   →  self-improving loop
+```
+
+Skills are great for interactive workflow orchestration. minih is great for repeatable, observable, self-improving agent execution that persists beyond any single session.
+
+The self-improving feedback loop described in the [Philosophy section](AGENTS_README.md#philosophy-the-harness-is-the-product) — where agents report friction, you fix it, and the next run is faster — is what makes minih more than a runner. Projects using this loop have seen complex multi-hour tasks compress to minutes over successive iterations, because every agent run leaves the system better than it found it. Skills don't have the infrastructure (run history, velocity tracking, difficulty ledger, mandatory retrospectives) to drive that loop automatically.
 
 ## Output Format
 

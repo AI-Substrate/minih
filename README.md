@@ -302,9 +302,24 @@ Start with `hello-world`, then read through in order. Each agent builds on the c
 
 Both Claude Code and Copilot CLI have skills — markdown files that give an LLM a prompt and get a response. You could build most of what minih does as individual skills. So why does minih exist?
 
-**Skills are inline code. minih is shared infrastructure.**
+### Skills bundle implicit concepts. minih decomposes them.
 
-With skills, each agent is a standalone markdown file that must define its own input handling, output format, validation, instructions, and feedback conventions. With minih, you define those once — schemas, preamble, system output requirements, validation rules — and every agent inherits them. When you improve the runner or add a capability like velocity tracking, every agent gets it for free without touching individual files.
+In a skill, everything is bundled into a single markdown file. Input parameters are a raw `$ARGUMENTS` string. Output is whatever the LLM feels like returning. Instructions are mixed into the prompt. Feedback doesn't exist unless you build it yourself. None of it is enforced — it's all implicit, all on the honour system.
+
+minih takes each of those bundled concepts and makes them **explicit, separate, enforceable first-class citizens** — the same way you'd extract inline code into classes and interfaces:
+
+| Concept | In a skill | In minih |
+|---|---|---|
+| **Input** | `$ARGUMENTS` — a raw string | `input-schema.json` — typed, validated before execution |
+| **Output** | Whatever the LLM returns | `output-schema.json` — AJV-enforced every run |
+| **Instructions** | Mixed into the prompt markdown | `instructions.md` — separate concern |
+| **Shared context** | Global instructions file (one big blob) | `_shared/preamble.md` — agent-specific, injected at assembly |
+| **Feedback** | Doesn't exist | Mandatory `retrospective` — enforced by the runner |
+| **Run artifacts** | Gone when session ends | First-class timestamped folder with events, metadata, output |
+
+Once these concepts are decomposed, they become infrastructure. You define schemas, preamble, system output requirements, and validation rules once — and every agent inherits them. When you improve the runner or add a capability like velocity tracking, every agent gets it for free without touching individual files.
+
+**Skills are inline code. minih is shared infrastructure.**
 
 ### What minih adds beyond skills
 

@@ -344,6 +344,17 @@ Once these concepts are decomposed, they become infrastructure. The runner handl
 
 Skills have real advantages: **zero setup** (drop a markdown file, it works), **conversation context** (they see your files, git state, current session), **native tools** (the host's grep, edit, bash), and **orchestration** (the LLM can auto-invoke them mid-conversation). minih agents start fresh and need explicit invocation.
 
+### When NOT to use minih
+
+minih is for **repeatable, unattended agent runs** that produce structured output. It's the wrong tool for interactive, user-driven work:
+
+- **Research and exploration** — you need the LLM to ask you clarifying questions, follow up on leads, and adjust direction mid-conversation. That's a skill.
+- **Planning and architecture** — iterative back-and-forth where you refine scope, make trade-offs, and approve decisions. That's a skill.
+- **Implementation** — editing files, running tests, fixing errors in a feedback loop with you watching. That's a skill.
+- **One-off questions** — "how does this module work?" or "what's the best approach here?" Just ask your agent directly.
+
+The rule of thumb: if the task needs your input during execution, use a skill. If the task should run the same way every time and produce a structured report, use minih.
+
 ### The complement
 
 They're not competitors — they work together:

@@ -1,6 +1,6 @@
 # minih
 
-Standalone declarative agent runner with self-improving feedback.
+*The miniest self-improving agent harness.*
 
 > **⚠️ WARNING: minih runs agents in YOLO mode.** Agents have unrestricted tool access — they can read, write, and execute anything on your machine. There is no sandbox, no tool allowlist, no confirmation prompt. A plan to support tool restrictions exists but is not yet implemented. **Use at your own risk.** Run in containers or throwaway environments if you're executing untrusted agents.
 

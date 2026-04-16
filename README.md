@@ -317,6 +317,8 @@ minih takes each of those bundled concepts and makes them **explicit, separate, 
 | **Feedback** | Doesn't exist | Mandatory `retrospective` — enforced by the runner |
 | **Run artifacts** | Gone when session ends | First-class timestamped folder with events, metadata, output |
 
+Because each concept is its own file, you get composition for free — symlink an `output-schema.json` across agents that share a contract, `$ref` into shared schema fragments, or point multiple agents at the same `instructions.md`. Skills can also reference shared files via relative paths and bundled `scripts/` directories, but since skill output isn't validated and input isn't typed, sharing a schema between skills doesn't buy you enforcement. In minih, shared files are shared *contracts* — the runner actually enforces what it finds.
+
 Once these concepts are decomposed, they become infrastructure. The runner handles prompt assembly, the system output contract enforces retrospectives on every agent, the shared preamble injects project context, and validation runs automatically. When you improve the runner or add a capability like velocity tracking, every agent gets it for free without touching individual files.
 
 **Skills are inline code. minih is shared infrastructure.**

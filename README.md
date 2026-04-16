@@ -317,7 +317,7 @@ minih takes each of those bundled concepts and makes them **explicit, separate, 
 | **Feedback** | Doesn't exist | Mandatory `retrospective` — enforced by the runner |
 | **Run artifacts** | Gone when session ends | First-class timestamped folder with events, metadata, output |
 
-Once these concepts are decomposed, they become infrastructure. You define schemas, preamble, system output requirements, and validation rules once — and every agent inherits them. When you improve the runner or add a capability like velocity tracking, every agent gets it for free without touching individual files.
+Once these concepts are decomposed, they become infrastructure. The runner handles prompt assembly, the system output contract enforces retrospectives on every agent, the shared preamble injects project context, and validation runs automatically. When you improve the runner or add a capability like velocity tracking, every agent gets it for free without touching individual files.
 
 **Skills are inline code. minih is shared infrastructure.**
 

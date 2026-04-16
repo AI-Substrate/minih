@@ -342,7 +342,7 @@ Once these concepts are decomposed, they become infrastructure. The runner handl
 
 ### Where skills win
 
-Skills have real advantages: **zero setup** (drop a markdown file, it works), **conversation context** (they see your files, git state, current session), **native tools** (the host's grep, edit, bash), and **orchestration** (the LLM can auto-invoke them mid-conversation). minih agents start fresh and need explicit invocation.
+Skills have real advantages: **zero setup** (drop a markdown file, it works), **conversation context** (they see your files, git state, current session), **native tools** (the host's grep, edit, bash), and **orchestration** (the LLM can auto-invoke them mid-conversation). Copilot CLI in particular has powerful task orchestration — `/fleet` decomposes work into parallel subagents, `/tasks` lets you manage background agents and shell sessions, `/plan` builds step-by-step execution plans, and `/delegate` hands off to a coding agent that creates branches and PRs autonomously. That kind of interactive, multi-agent orchestration is where skills shine and minih deliberately stays out of the way.
 
 ### When NOT to use minih
 

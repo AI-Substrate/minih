@@ -296,6 +296,53 @@ minih uses agents to test and improve itself. These are the best examples of how
 
 Start with `hello-world`, then read through in order. Each agent builds on the concepts introduced by the previous one.
 
+## Why minih? Skills Do Most of This
+
+Both Claude Code and Copilot CLI have skills — markdown files that give an LLM a prompt and get a response. You could build most of what minih does as individual skills. So why does minih exist?
+
+**Skills are inline code. minih is shared infrastructure.**
+
+With skills, each agent is a standalone markdown file that must define its own input handling, output format, validation, instructions, and feedback conventions. With minih, you define those once — schemas, preamble, system output requirements, validation rules — and every agent inherits them. When you improve the runner or add a capability like velocity tracking, every agent gets it for free without touching individual files.
+
+### What minih adds beyond skills
+
+| Capability | Skills | minih |
+|---|---|---|
+| **Validated output** | Freeform text — no enforcement | JSON Schema (AJV) validates every run |
+| **Run independently** | Must run inside a Claude/Copilot session | Standalone CLI — `npx minih run` from any terminal, CI, or cron |
+| **Run history** | Gone when session ends | Timestamped run folders with `history` and `last-run` |
+| **Event-level observability** | Not available | `events.ndjson` captures every tool call, every message |
+| **Session resume** | Not available | `resume` sends follow-ups; `connect` opens interactive sessions |
+| **Velocity tracking** | Not available | Per-agent run-over-run timing with trend indicators |
+| **Self-improving feedback** | Must be built per-skill | Mandatory `retrospective` with workedWell/confusing/magicWand on every run |
+| **Difficulty aggregation** | Not available | `minih difficulties` aggregates friction reports across all agents |
+| **Prompt inspection** | Can't see the composed prompt | `minih inspect` shows exactly what the LLM receives |
+| **Health checks** | Not available | `minih doctor` validates all agents and harness structure |
+| **Update propagation** | Edit every skill file | Change the runner, preamble, or schema once — all agents inherit |
+| **Namespace** | Every agent is a `/slash` command in your skills list | Agents live in `agents/` — your skills stay clean for workflow commands |
+
+### Where skills win
+
+Skills have real advantages: **zero setup** (drop a markdown file, it works), **conversation context** (they see your files, git state, current session), **native tools** (the host's grep, edit, bash), and **orchestration** (the LLM can auto-invoke them mid-conversation). minih agents start fresh and need explicit invocation.
+
+### The complement
+
+They're not competitors — they work together:
+
+```
+Skills (workflow layer)       →  /plan, /review, /research, /validate
+                                       ↓ calls
+minih (execution layer)       →  npx minih run smoke-test
+                                       ↓ produces
+Structured artifacts          →  report.json + events.ndjson + velocity + difficulties
+                                       ↓ feeds back into
+Skills + preamble + harness   →  self-improving loop
+```
+
+Skills are great for interactive workflow orchestration. minih is great for repeatable, observable, self-improving agent execution that persists beyond any single session.
+
+The self-improving feedback loop described in the [Philosophy section](AGENTS_README.md#philosophy-the-harness-is-the-product) — where agents report friction, you fix it, and the next run is faster — is what makes minih more than a runner. Projects using this loop have seen complex multi-hour tasks compress to minutes over successive iterations, because every agent run leaves the system better than it found it. Skills don't have the infrastructure (run history, velocity tracking, difficulty ledger, mandatory retrospectives) to drive that loop automatically.
+
 ## Output Format
 
 All commands (except `tail`) output a JSON envelope on stdout:

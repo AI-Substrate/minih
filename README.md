@@ -2,6 +2,8 @@
 
 Standalone declarative agent runner with self-improving feedback.
 
+> **⚠️ WARNING: minih runs agents in YOLO mode.** Agents have unrestricted tool access — they can read, write, and execute anything on your machine. There is no sandbox, no tool allowlist, no confirmation prompt. A plan to support tool restrictions exists but is not yet implemented. **Use at your own risk.** Run in containers or throwaway environments if you're executing untrusted agents.
+
 Define AI agents as folders containing `prompt.md` + optional schemas + instructions, then run them against `@github/copilot-sdk`. Every agent produces structured retrospective feedback — what worked, what was confusing, and a **magic wand** wish for what should change. This feedback loop makes both the agents and the harness better over time.
 
 ## Quick Start

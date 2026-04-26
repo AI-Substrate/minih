@@ -36,7 +36,7 @@ Pin the on-disk layout of inbox messages and state files so every other workshop
 
 - **Inbox retention** → **RESOLVED**: keep forever in v1. Pruning is a follow-up. Defensible because individual messages are tiny (KBs), grow slowly, and history has audit value.
 - **Inbox/state per-agent vs cross-agent** → **RESOLVED**: per-agent only in v1. No cross-agent inbox. If two distinct agents need to coordinate, they each own one side of the same inbox/state pair (one is "outside" caller of the other). Multi-agent meshes are out of scope per the spec.
-- **Initial state auto-create** → **RESOLVED**: lazy auto-create on first read or first write. No explicit `minih state init` command. Default content: `{ "phase": "idle", "data": {} }`. Initial state is *not* recorded in `state/history.ndjson` — only transitions are.
+- **Initial state auto-create** → **RESOLVED**: lazy auto-create on first read or first write. No explicit `minih state init` command. Default content: `{ "status": "idle", "data": {} }`. Initial state is *not* recorded in `state/history.ndjson` — only transitions are.
 - **Inbox sender identity** → **RESOLVED for v1**: sender is `'outside' | 'inside'` — a *side*, not a *principal*. Implicit context from the lane the message landed in. Adding richer sender metadata (e.g., host caller's identity) is a follow-up; the schema includes a `sender` field but we constrain its values for now.
 - **Asymmetric write access** → **RESOLVED**: outside CLI can read both `outside.json` and `inside.json`, write only `outside.json`. Inside MCP can read both, write only `inside.json`. Symmetric. Each side owns its own state file. Inbox lanes follow the same rule (each side writes only to its own outgoing lane).
 
@@ -56,6 +56,8 @@ These live at `agents/<slug>/{inbox,state}/` and persist across runs. Each run c
 The user's stated use case requires cross-run continuity:
 
 > "outside agent can be like 'I've just finished phase 2'. The inside agent can be like, 'I've just finished reviewing phase 2'."
+>
+> *(Note: in v1 minih's canonical state field is `status`, not `phase` — agents may use the word "phase" in their own domain examples and prompts, but the underlying state field name is `status`. See didyouknow #5, 2026-04-26.)*
 
 If inbox/state were per-run, this conversation could only happen during one run. The user's model is multi-turn coordination across many runs of the same agent (or many runs of an inside agent driven by outside events). Per-run isolation breaks the model.
 
@@ -159,7 +161,7 @@ Single JSON object. Atomic write (write-temp + rename).
 ```jsonc
 // Example: state/outside.json
 {
-  "phase": "in-progress",
+  "status": "in-progress",
   "data": {
     "currentPhase": 2,
     "filesEdited": ["src/auth.ts", "src/auth.test.ts"]
@@ -173,21 +175,21 @@ Single JSON object. Atomic write (write-temp + rename).
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
-| `phase` | string (enum) | yes | Set of allowed values comes from state machine (workshop 002). Default enums shipped; per-agent overridable via frontmatter. |
+| `status` | string (enum) | yes | Set of allowed values comes from state machine (workshop 002). Default enums shipped; per-agent overridable via frontmatter. |
 | `data` | object | yes | Free-form per-side payload. May be empty `{}`. |
 | `updatedAt` | string (ISO 8601 UTC) | yes | Set by writer on every write. |
 | `updatedBy` | enum: `"outside"\|"inside"` | yes | Must match the side that owns this file. Validated on write. |
 
-The two schemas (`outside-state.json`, `inside-state.json`) differ ONLY in the allowed `phase` enum values and the constrained `updatedBy` value. Same outer shape.
+The two schemas (`outside-state.json`, `inside-state.json`) differ ONLY in the allowed `status` enum values and the constrained `updatedBy` value. Same outer shape.
 
 ### `state/history.ndjson`
 
 One JSON object per line. Append-only.
 
 ```jsonc
-{"ts":"2026-04-26T10:00:00.000Z","side":"outside","from":"idle","to":"in-progress","reason":null,"peerStateAtTime":{"phase":"idle"}}
-{"ts":"2026-04-26T10:14:30.000Z","side":"outside","from":"in-progress","to":"done","reason":"phase 2 wrapped","peerStateAtTime":{"phase":"reviewing"}}
-{"ts":"2026-04-26T10:21:11.000Z","side":"inside","from":"reviewing","to":"complete","reason":"3 issues filed","peerStateAtTime":{"phase":"done"}}
+{"ts":"2026-04-26T10:00:00.000Z","side":"outside","from":"idle","to":"in-progress","reason":null,"peerStateAtTime":{"status":"idle"}}
+{"ts":"2026-04-26T10:14:30.000Z","side":"outside","from":"in-progress","to":"done","reason":"phase 2 wrapped","peerStateAtTime":{"status":"reviewing"}}
+{"ts":"2026-04-26T10:21:11.000Z","side":"inside","from":"reviewing","to":"complete","reason":"3 issues filed","peerStateAtTime":{"status":"done"}}
 ```
 
 **Field shape (validated by `state-history-entry.json` schema):**
@@ -201,7 +203,7 @@ One JSON object per line. Append-only.
 | `reason` | string \| null | yes | Human-readable explanation; nullable if not provided |
 | `peerStateAtTime` | object | yes | Snapshot of peer's `{ phase }` at the moment transition was applied. Used by retroactive analysis to reconstruct the gating context. |
 
-**Why include `peerStateAtTime`**: the user's invariant ("inside complete only after outside done") is enforced at transition time. Recording the peer's phase at that moment lets future debugging answer "why was this transition allowed/rejected" without reconstructing from interleaved files.
+**Why include `peerStateAtTime`**: the user's convention ("inside complete only after outside done") is observed at transition time. Recording the peer's status at that moment lets future debugging answer "what was the peer's status when this transition happened" without reconstructing from interleaved files. (Per workshop 002 down-scope: minih does not enforce gates — it only records.)
 
 ---
 
@@ -228,8 +230,8 @@ Combined snapshot of both side states at run end:
 ```jsonc
 {
   "ts": "2026-04-26T10:25:00.000Z",
-  "outside": { "phase": "done", "data": {...}, "updatedAt": "...", "updatedBy": "outside" },
-  "inside":  { "phase": "complete", "data": {...}, "updatedAt": "...", "updatedBy": "inside" }
+  "outside": { "status": "done", "data": {...}, "updatedAt": "...", "updatedBy": "outside" },
+  "inside":  { "status": "complete", "data": {...}, "updatedAt": "...", "updatedBy": "inside" }
 }
 ```
 
@@ -254,6 +256,15 @@ If side files don't exist, the corresponding sub-object is `null`.
 **For lines exceeding `PIPE_BUF`**: write a temp line file then `cat` append (or open with `O_APPEND` and write — also atomic per-write under POSIX). Document the line-size budget. We'll set a soft limit of 8 KB per inbox message (subject + body + headers); enforce at MCP tool input validation.
 
 **Concurrent appenders to same lane**: not a concern in v1 because each lane has exactly one writer (outside CLI for outside lane; inside MCP for inside lane). If we ever change that, revisit with `flock` or single-writer enforcement.
+
+**Forwarder-side robustness (added per Critical Insights 2026-04-26 #1)**: even with the single-call atomic append above, the daemon-light forwarder can race with an in-flight write if a future change exceeds the PIPE_BUF guarantee (e.g., line size cap is loosened, or someone hand-edits the file). The forwarder MUST therefore:
+
+1. Read the file from the watermark to EOF on each `fs.watch` event.
+2. Split on `\n`. For each non-empty line, attempt `JSON.parse`.
+3. **On parse failure**: do NOT advance the watermark past that line. Log the failure (warn level) and exit the read loop — the next `fs.watch` event (or the cold-start drain on resume) will retry the same byte range, by which time the writer has finished and the line parses cleanly.
+4. **On parse success**: forward via `session.send`, advance watermark to the byte after the trailing `\n`, fsync the watermark file BEFORE attempting the next line so a crash mid-batch can't double-deliver.
+
+This makes torn-line handling a self-healing transient, not a data-loss event.
 
 ### State JSON files (mutable state.<side>.json)
 
@@ -294,7 +305,7 @@ When `state.get` (or any read) is called and the side file doesn't exist:
 function getStateLazy(side: Side, slug: string, agentsDir: string): SideState {
   const path = stateFilePath(side, slug, agentsDir);
   if (!fs.existsSync(path)) {
-    return { phase: 'idle', data: {}, updatedAt: new Date().toISOString(), updatedBy: side };
+    return { status: 'idle', data: {}, updatedAt: new Date().toISOString(), updatedBy: side };
   }
   return JSON.parse(fs.readFileSync(path, 'utf8'));
 }
@@ -317,9 +328,9 @@ These are the *defaults*; agents can override via frontmatter (workshop 002 cove
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://minih.dev/schemas/outside-state.json",
   "type": "object",
-  "required": ["phase", "data", "updatedAt", "updatedBy"],
+  "required": ["status", "data", "updatedAt", "updatedBy"],
   "properties": {
-    "phase": {
+    "status": {
       "type": "string",
       "enum": ["idle", "in-progress", "paused", "done", "error"]
     },
@@ -338,9 +349,9 @@ These are the *defaults*; agents can override via frontmatter (workshop 002 cove
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://minih.dev/schemas/inside-state.json",
   "type": "object",
-  "required": ["phase", "data", "updatedAt", "updatedBy"],
+  "required": ["status", "data", "updatedAt", "updatedBy"],
   "properties": {
-    "phase": {
+    "status": {
       "type": "string",
       "enum": ["idle", "in-progress", "paused", "reviewing", "complete", "error"]
     },
@@ -390,9 +401,9 @@ These are the *defaults*; agents can override via frontmatter (workshop 002 cove
     "reason": { "type": ["string", "null"] },
     "peerStateAtTime": {
       "type": "object",
-      "required": ["phase"],
+      "required": ["status"],
       "properties": {
-        "phase": { "type": "string" }
+        "status": { "type": "string" }
       }
     }
   },
@@ -414,7 +425,7 @@ minih outside-send my-agent --type note --subject "phase 2 done" --body "ready f
 minih outside-inbox-list my-agent
 
 # Outside sets its own state
-minih state set my-agent --side outside --key phase --value done
+minih state set my-agent --side outside --status done
 
 # Outside reads either side
 minih state get my-agent --side outside
@@ -448,5 +459,5 @@ state.transition({ to: "complete", reason: "3 issues filed" })
 
 ### Q3: Is `data` field on state objects free-form or schema-validated?
 
-**OPEN** (defer to per-agent schemas): in v1, the system schema only validates the outer shape (`phase`, `data: object`, `updatedAt`, `updatedBy`). The agent can ship its own per-side schema for `data` payload (e.g., `agents/<slug>/outside-state-data-schema.json`) and the runner validates against it on write. Mirror existing pattern with `output-schema.json`.
+**OPEN** (defer to per-agent schemas): in v1, the system schema only validates the outer shape (`status`, `data: object`, `updatedAt`, `updatedBy`). The agent can ship its own per-side schema for `data` payload (e.g., `agents/<slug>/outside-state-data-schema.json`) and the runner validates against it on write. Mirror existing pattern with `output-schema.json`.
 - **Leaning**: v1 = system schema only (free-form `data: object`); per-agent payload schemas = follow-up enhancement.

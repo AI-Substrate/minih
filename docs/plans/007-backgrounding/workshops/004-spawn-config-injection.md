@@ -85,6 +85,16 @@ The `mcpServers` config we add looks like:
 }
 ```
 
+### Path resolution for the spawned server (didyouknow #4 — 2026-04-26)
+
+The `args[0]` path is resolved at spawn time using `fileURLToPath(new URL('./inside-server.cjs', import.meta.url))` from `src/mcp/spawn.ts`:
+
+- **Dev** (`npm run dev` via tsx): `import.meta.url` resolves to the `src/mcp/spawn.ts` location; `./inside-server.cjs` → `src/mcp/inside-server.cjs` (we ship a CJS server entry alongside the TS source for dev).
+- **Built** (`npm run build && node dist/...`): `import.meta.url` resolves to `dist/mcp/spawn.js`; `./inside-server.cjs` → `dist/mcp/inside-server.cjs`.
+- **System-wide install** (`npm i -g minih` or `npx -y minih`): same as Built — npm resolves the package and `import.meta.url` carries the installed location regardless of cache directory.
+
+**Stance**: minih is intended for system-wide install (`npm i -g minih`) or `npx -y minih`. We don't bake env-detection or alternative resolution paths into spawn. Outside-side validation (e.g., `which minih` + `minih doctor` in a host CI script before delegating coordination work) is the **outside agent's** concern, not minih's. If `inside-server.cjs` can't be located at spawn time, the SDK surfaces the spawn failure cleanly via `events.ndjson` and `completed.json`; the outside agent's pre-flight should have caught this earlier.
+
 The server name `minih-coordination` is part of the MCP namespace and shows up in `tools/list` outputs. Tool names get prefixed by the server name in some MCP clients (rendered as `minih-coordination/inbox.list`); in our own logging we strip back to bare names.
 
 ### Why env vars (not CLI args) for context

@@ -45,8 +45,8 @@ Pin down the inside-agent tool surface — exact tool names, parameter shapes, r
 | `inbox.send` | Append a message to caller's outgoing lane | No (each call → new message) |
 | `inbox.ack` | Acknowledge a peer's message (append "ack" record to caller's lane) | Yes (re-ack = no-op + idempotent record) |
 | `state.get` | Read self / peer / both states | Yes (read-only) |
-| `state.set` | Update non-phase fields of caller's state | Yes (same value = no-op) |
-| `state.transition` | Move caller's `phase` per the rule machine | No (each successful call is a new event in history) |
+| `state.set` | Update non-status fields of caller's state | Yes (same value = no-op) |
+| `state.transition` | Move caller's `status` per the rule machine | No (each successful call is a new event in history) |
 
 **No nested namespaces beyond the dot.** No `inbox/notifications/send` or similar — flat-with-dot keeps the surface readable in completion menus and docs.
 
@@ -223,7 +223,7 @@ Read self state, peer state, or both.
   "type": "object",
   "properties": {
     "side": { "type": "string", "enum": ["self", "peer", "both"], "default": "both" },
-    "key":  { "type": "string", "description": "Optional: dot-path into the side's state object (e.g., 'phase', 'data.filesEdited'). If omitted, returns the whole side object." }
+    "key":  { "type": "string", "description": "Optional: dot-path into the side's state object (e.g., 'status', 'data.filesEdited'). If omitted, returns the whole side object." }
   },
   "additionalProperties": false
 }
@@ -235,8 +235,8 @@ When `side: "both"` and no `key`:
 
 ```jsonc
 {
-  "self": { "phase": "reviewing", "data": { "issuesFound": 2 }, "updatedAt": "...", "updatedBy": "inside" },
-  "peer": { "phase": "in-progress", "data": {}, "updatedAt": "...", "updatedBy": "outside" }
+  "self": { "status": "reviewing", "data": { "issuesFound": 2 }, "updatedAt": "...", "updatedBy": "inside" },
+  "peer": { "status": "in-progress", "data": {}, "updatedAt": "...", "updatedBy": "outside" }
 }
 ```
 
@@ -249,7 +249,7 @@ When `side: "self"` and `key: "phase"`:
 When the side file doesn't exist (lazy default):
 
 ```jsonc
-{ "self": { "phase": "idle", "data": {}, "updatedAt": "<now>", "updatedBy": "inside" }, ... }
+{ "self": { "status": "idle", "data": {}, "updatedAt": "<now>", "updatedBy": "inside" }, ... }
 ```
 
 **Implementation sketch:**
@@ -268,7 +268,7 @@ When the side file doesn't exist (lazy default):
 
 ### `state.set`
 
-Update non-phase fields of caller's state. Phase changes go through `state.transition`.
+Update non-status fields of caller's state. Phase changes go through `state.transition`.
 
 **Input schema (agent-visible):**
 
@@ -277,7 +277,7 @@ Update non-phase fields of caller's state. Phase changes go through `state.trans
   "type": "object",
   "required": ["key", "value"],
   "properties": {
-    "key":   { "type": "string", "pattern": "^data(\\.[a-zA-Z_][a-zA-Z0-9_]*)*$", "description": "Dot-path into the 'data' object; cannot target 'phase' or other top-level fields" },
+    "key":   { "type": "string", "pattern": "^data(\\.[a-zA-Z_][a-zA-Z0-9_]*)*$", "description": "Dot-path into the 'data' object; cannot target 'status' or other top-level fields" },
     "value": { "description": "Any JSON-serializable value" }
   },
   "additionalProperties": false
@@ -309,13 +309,13 @@ Update non-phase fields of caller's state. Phase changes go through `state.trans
 
 **Idempotency**: idempotent. Same value → no-op + no history record (because `data` writes don't transition).
 
-**Why restrict to `data.*`**: prevents agents from sneaking phase changes through `state.set` (bypassing `state.transition` and the rule check). The rule machine is the only path to phase changes.
+**Why restrict to `data.*`**: prevents agents from sneaking status changes through `state.set` (bypassing `state.transition` and the rule check). The rule machine is the only path to status changes.
 
 ---
 
 ### `state.transition`
 
-Move caller's `phase` per the rule machine. The user's invariant lives here.
+Move caller's `status` per the rule machine. The user's invariant lives here.
 
 **Input schema (agent-visible):**
 
@@ -324,7 +324,7 @@ Move caller's `phase` per the rule machine. The user's invariant lives here.
   "type": "object",
   "required": ["to"],
   "properties": {
-    "to":     { "type": "string", "minLength": 1, "description": "Target phase (must be in caller side's phase enum)" },
+    "to":     { "type": "string", "minLength": 1, "description": "Target phase (must be in caller side's status enum (per the agent's `inside-state.schema.json` / `outside-state.schema.json`))" },
     "reason": { "type": "string", "description": "Optional human-readable explanation; persisted in history" }
   },
   "additionalProperties": false
@@ -373,7 +373,7 @@ On rejection (returned as MCP tool error, not a normal result — see Error Mode
 7. Return success shape.
 
 **Errors (returned as MCP tool errors):**
-- `E_VALIDATION` — malformed input or `to` not in caller's phase enum.
+- `E_VALIDATION` — malformed input or `to` not in caller's status enum (per the agent's `inside-state.schema.json` / `outside-state.schema.json`).
 - `INVALID` — no rule allows this transition.
 - `GATED` — rule exists but peer not in required phase.
 - `E_IO` — write or history-append failure.
@@ -433,9 +433,9 @@ When the SDK calls `tools/list` against our spawned MCP server, we return:
       "inputSchema": <inbox.ack schema> },
     { "name": "state.get",        "description": "Read your state, your peer's state, or both. Optional dot-path key to read a single field.",
       "inputSchema": <state.get schema> },
-    { "name": "state.set",        "description": "Update a field in your `data` object. Cannot change `phase` — use `state.transition` for that.",
+    { "name": "state.set",        "description": "Update a field in your `data` object. Cannot change `status` — use `state.transition` for that.",
       "inputSchema": <state.set schema> },
-    { "name": "state.transition", "description": "Change your `phase` per the agreed state machine rules. Some transitions are gated on the peer's phase.",
+    { "name": "state.transition", "description": "Change your `status` per the agreed state machine rules. Some transitions are gated on the peer's status.",
       "inputSchema": <state.transition schema> }
   ]
 }
@@ -460,7 +460,7 @@ await inbox.ack({ msgId: '01J3...' })
 // → { ackId: '01J6...', ts: '...', wasAlreadyAcked: false }
 
 await state.get({ side: 'peer' })
-// → { peer: { phase: 'in-progress', ... } }
+// → { peer: { status: 'in-progress', ... } }
 
 await state.set({ key: 'data.issuesFound', value: 3 })
 // → { ok: true, before: undefined, after: 3 }

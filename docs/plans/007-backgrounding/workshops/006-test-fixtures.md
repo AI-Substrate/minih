@@ -4,7 +4,18 @@
 **Plan**: 007-backgrounding
 **Spec**: [coordination-spec.md](../coordination-spec.md)
 **Created**: 2026-04-26
-**Status**: Draft
+**Status**: Draft (NEEDS UPDATE 2026-04-26 after workshop 007 daemon-light pivot — see "Daemon-light additions" note below)
+
+> **⚠️ Update needed (2026-04-26)**: workshop 007 was revised to ship the daemon-light pattern in v1 (live cross-process delivery via `node:fs.watch` + `session.send`). New test categories required, additive to the layers below:
+> - **Layer 4 (NEW): file-watcher integration**. Spawn two node processes: one with the watcher loop running against a tmp inbox dir; the other writes files. Assert: watcher fires < 200ms; debounce coalesces bursts; atomic-rename detected; per-file ordering preserved.
+> - **Layer 2 extension**: `mcp/` integration tests now ALSO need to verify that `runAgent` (the new event-driven shape) processes both the initial prompt AND watcher-triggered `session.send` calls correctly. Use FakeAgentAdapter extended with a fake `session.send` that records calls + a fake `session.idle` event emitter the test can fire on demand.
+> - **Layer 3b extension**: `e2e/daemon-light.test.ts` — full-stack: real `minih run` (backgrounded), separate process writes inbox file, assert agent emits a turn within 5s. Same opt-in CI tier as the MCP-CLEAN regression.
+> - **AC mapping table below** also expands; see workshop 007 "New Acceptance Criteria" for the full updated list.
+> - **Pre-work scratch tests** (workshop 007 §"Pre-Work Required") are not strictly part of the test suite but should be preserved as reference under `scratch/` to inform regression-style tests later.
+
+The remainder of this workshop documents the original 3-layer test design, which is still correct as a foundation; daemon-light additions layer on top.
+
+---
 
 **Related Documents**:
 - [research-dossier.md](../research-dossier.md) — QT-02, QT-05, QT-06 (FakeAgentAdapter extensibility, concurrency, two-agent gap)

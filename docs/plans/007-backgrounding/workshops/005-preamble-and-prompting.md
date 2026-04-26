@@ -70,10 +70,10 @@ description: ...
 coordination:
   enabled: true                  # opt-in; default false
   outside:                       # optional; if omitted, defaults from workshop 002
-    phases: [...]
+    statuses: [...]
     transitions: [...]
   inside:                        # optional; if omitted, defaults from workshop 002
-    phases: [...]
+    statuses: [...]
     transitions: [...]
 ---
 ```
@@ -124,15 +124,15 @@ You can communicate with the *outside* (the human or system that started this ru
 - `inbox.send({ type, subject, body, ackOf? })` — send a message to outside
 - `inbox.ack({ msgId })` — acknowledge an outside message
 - `state.get({ side?, key? })` — read your state, the peer's, or both
-- `state.set({ key, value })` — set a non-phase field of your `data` object
-- `state.transition({ to, reason? })` — change your `phase` per the rules
+- `state.set({ key, value })` — set a non-status field of your `data` object
+- `state.transition({ to, reason? })` — change your `status` per the rules
 
-### Your phase machine
+### Your status states
 
-Default inside phases: `idle` → `in-progress` → (`paused`) → `reviewing` → `complete`.
+Default inside statuses: `idle` → `in-progress` → (`paused`) → `reviewing` → `complete`.
 Plus terminal `error` from any non-terminal state.
 
-**The gate**: `reviewing` → `complete` is gated on the outside being in phase `done`. If you call `state.transition({ to: 'complete' })` and outside isn't done, the call returns a typed error (`_meta.code === 'GATED'`). Don't try to force it; either continue work, send an inbox message asking outside to signal done, or exit cleanly.
+**The gate**: `reviewing` → `complete` is gated on the outside being at status `done`. If you call `state.transition({ to: 'complete' })` and outside isn't done, the call returns a typed error (`_meta.code === 'GATED'`). Don't try to force it; either continue work, send an inbox message asking outside to signal done, or exit cleanly.
 
 ### How to handle a `GATED` error
 
@@ -155,7 +155,7 @@ try {
 
 ### How to handle an `INVALID` error
 
-`INVALID` means there's no transition rule from your current phase to the requested target. Check your current phase via `state.get({ side: 'self', key: 'phase' })`. The error's `_meta.details.allowedFromCurrent` lists what you CAN transition to.
+`INVALID` means there's no transition rule from your current phase to the requested target. Check your current phase via `state.get({ side: 'self', key: 'status' })`. The error's `_meta.details.allowedFromCurrent` lists what you CAN transition to.
 
 ---
 ```
@@ -185,7 +185,7 @@ Before producing your final `report.json`, do these checks:
    - If there are unread messages, address each one (typically by writing back via `inbox.send` and then `inbox.ack`-ing each).
    - The act of ignoring an unread message is a coordination failure — note it in `retrospective.difficulties` as a `coordination` category if you cannot address it.
 
-2. **If your phase machine has a terminal "complete" state, try to reach it**:
+2. **If your status states has a terminal "complete" state, try to reach it**:
    ```
    await state.transition({ to: 'complete', reason: '<one line why you're done>' });
    ```
@@ -204,7 +204,7 @@ Before producing your final `report.json`, do these checks:
 
 ## Frontmatter Examples
 
-### Default opt-in (uses default phase machine)
+### Default opt-in (uses default status states)
 
 ```yaml
 ---
@@ -221,13 +221,13 @@ description: Multi-phase analyzer
 coordination:
   enabled: true
   outside:
-    phases: [idle, drafting, requesting-review, done, error]
+    statuses: [idle, drafting, requesting-review, done, error]
     transitions:
       - { from: idle, to: drafting }
       - { from: drafting, to: requesting-review }
       - { from: requesting-review, to: done }
   inside:
-    phases: [idle, listening, analyzing, awaiting-finalization, complete, error]
+    statuses: [idle, listening, analyzing, awaiting-finalization, complete, error]
     transitions:
       - { from: idle, to: listening }
       - { from: listening, to: analyzing }
@@ -353,7 +353,7 @@ You review source files for issues. The outside agent (a human or another system
 2. If outside has sent `{type: 'note', subject: 'phase X done', body: '...'}`, read the body to learn which files to review.
 3. Run your review (your normal logic).
 4. Send a status message back: `inbox.send({type: 'status', subject: 'review of phase X done', body: '<summary>'})`.
-5. If your phase machine allows, transition: `state.transition({to: 'complete', reason: 'reviewed N files'})`.
+5. If your status states allows, transition: `state.transition({to: 'complete', reason: 'reviewed N files'})`.
 6. The pre-completion checklist (in your system instructions) covers the cleanup. Trust it.
 
 ## Domain knowledge

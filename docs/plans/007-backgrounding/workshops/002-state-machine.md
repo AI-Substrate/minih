@@ -8,12 +8,16 @@
 
 > **⚠️ Scope reduction (2026-04-26, user direction):** "not sure we need to overbake the state machine aspect — agents can figure it out." This workshop is preserved as REFERENCE for the rich state-machine design (with `requiresPeer` gates, default phase enums, frontmatter overrides). For v1 implementation, treat it as **optional / aspirational**: ship `state.get`/`state.set` (free-form `data` object + free-form `phase` string) with NO transition rules and NO peer-state gating in the runner. Agents encode their own conventions in their prompts. Workshop 003's `state.transition` MCP tool degrades to "set the phase field with audit trail" — no rule check, no GATED error.
 >
+> **Further refinement after workshop 007 daemon-light pivot (2026-04-26)**: with live cross-process push of state changes, the inside agent now RECEIVES a notification message every time outside changes its state (and vice versa). This makes the convention-based "wait for outside.done before transitioning to complete" much more practically enforceable: the agent literally sees a "📌 Outside state changed: phase = 'done'" prompt in its next turn. Coordination via prompt + push notification is more responsive than coordination via gated transitions ever could be — another argument for the down-scope being correct.
+>
 > **What stays**: state files, history.ndjson, schemas (just the *shape*, not the enums), `state.get`/`state.set` API.
 > **What moves to follow-up plan**: `state.transition` rule machine, default phase enums, `requiresPeer` gating, frontmatter `coordination.outside.transitions`, the `isAllowedTransition` function.
 >
 > **Why this is OK**: agents are already trusted to follow output schemas, magic-wand instructions, and the SYSTEM_OUTPUT_INSTRUCTIONS pre-completion checklist (workshop 005). Adding state-machine gates is belt-and-suspenders. If a real coordination scenario surfaces a need for *enforced* gates (e.g., a buggy agent transitions prematurely and breaks something), upgrade then.
 >
 > **The user's "inside complete only after outside done" invariant**: still expressible — agents include in their prompt: "Do not call `state.set({key: 'phase', value: 'complete'})` until `state.get({side: 'peer', key: 'phase'})` returns `'done'`." Same intent, no rule machinery.
+>
+> **Stance reaffirmed 2026-04-26 (didyouknow #2)**: minih is an **enabler, not an orchestrator**. We do NOT enforce "inside complete only after outside done" at the runner/MCP layer. If the inside agent transitions to `complete` while outside disagrees, outside can `outside-send` a "hey, not done yet" message and negotiation continues via the inbox. Adding `phaseSetAt`-based gates, premature-completion warnings, or any other server-side guard would bake orchestration semantics minih intentionally rejects. The invariant is a per-agent **convention** documented in that agent's `outside.md` (workshop 008) and prompt (workshop 005).
 >
 > The remainder of this workshop documents the rich design for posterity / future-plan reference.
 

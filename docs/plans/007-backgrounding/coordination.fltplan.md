@@ -5,7 +5,7 @@
 **Workshops**: 8 — [001-filesystem-layout](./workshops/001-filesystem-layout.md) · [002-state-machine](./workshops/002-state-machine.md) · [003-mcp-tool-surface](./workshops/003-mcp-tool-surface.md) · [004-spawn-config-injection](./workshops/004-spawn-config-injection.md) · [005-preamble-and-prompting](./workshops/005-preamble-and-prompting.md) · [006-test-fixtures](./workshops/006-test-fixtures.md) · [007-user-journey-coder-and-reviewer](./workshops/007-user-journey-coder-and-reviewer.md) · [008-inside-outside-prompting-and-retro](./workshops/008-inside-outside-prompting-and-retro.md)
 **Research**: [research-dossier.md](./research-dossier.md) + [external-research/](./external-research/) (5 files)
 **Generated**: 2026-04-26 (plan-1b initial; revised after workshop 007 daemon-light pivot; plan-3 generated 2026-04-26)
-**Status**: **Phase 3 LANDED + CODE REVIEW FIXED** — runner-owned daemon-light forwarders now cold-drain per-agent inbox/state files, watch cross-process updates, deliver changes through the live `SessionSender`, wait for pending/debounced forwarder work before terminal completion, commit watermarks only after completed terminal runs, and reject simultaneous coordinated runs with a typed `RunLockHeldError`. Default `just fft` and the opt-in `MINIH_E2E=1` daemon-light gate pass after code-review fixes. **P6 unlocked on the critical path.**
+**Status**: **Phase 4 LANDED** — new `mcp` domain provides the inside-only `minih-coordination` stdio MCP server with six inbox/state tools, redacted hidden-context validation, install-safe spawn config, coordinated run/resume merge seam, real MCP JSON-RPC coverage, opt-in `MINIH_PGREP=1` process-marker leak regression, and domain registration. `just fft` passes; minih code review is running next.
 
 Phase 0 LANDED 2026-04-26 — all 4 scratch tests executed; FULL GO memo at [prework-results.md](./prework-results.md); spec polished to 37 ACs.
 
@@ -153,7 +153,8 @@ graph LR
     P1[P1 Runner Foundations<br/>✓ LANDED 2026-04-26]:::done
     P2[P2 runAgent event-driven<br/>✓ LANDED 2026-04-26]:::done
     P3L[P3 fs.watch + forwarders<br/>✓ LANDED 2026-04-26]:::done
-    Remaining[P4-P7 implementation]:::next
+    P4[P4 MCP domain<br/>✓ IMPLEMENTED 2026-04-26]:::done
+    Remaining[P5-P7 implementation]:::next
     Done[37 ACs verified]:::pending
 
     Spec --> WS
@@ -163,7 +164,8 @@ graph LR
     SP --> P1
     P1 --> P2
     P2 --> P3L
-    P3L --> Remaining
+    P3L --> P4
+    P4 --> Remaining
     Remaining --> Done
 
     classDef done fill:#9f9,color:#000
@@ -205,3 +207,4 @@ graph LR
 | 2026-04-26 | Phase 2 implementation (plan-6) | LANDED | Event-driven `runAgent`/adapter contract; preamble builder with coordination stubs; fake queued-run/session sender helpers; gated doctor/list + representative run-path regression; default + `MINIH_REGRESSION=1` `just fft` pass; baseline diff exit=0 across 2 files; zero audit findings after lockfile update |
 | 2026-04-26 | Phase 3 implementation (plan-6) | LANDED | Debounced native file watcher; private SDK watermark; outside inbox/state forwarders; cold-start drain + live watcher delivery through `SessionSender`; live pending-forwarder terminal condition; per-agent run lock with `RunLockHeldError`; opt-in daemon-light e2e; `just fft` pass and `MINIH_E2E=1` gate pass |
 | 2026-04-26 | Phase 3 minih code review | FIXED | `code-review` requested changes for timeout watermark durability and debounced watcher terminal-drain visibility; fixed with manual post-terminal watermark commits plus watcher pending-count accounting; post-fix `just fft` and opt-in daemon-light e2e pass |
+| 2026-04-26 | Phase 4 implementation (plan-6) | LANDED | New mcp domain with six inside tools, hidden context validation, stdio server, spawn config, runner/CLI merge seam, coexistence tests, real MCP JSON-RPC tests, opt-in leak regression, and domain docs; `just fft` passes |

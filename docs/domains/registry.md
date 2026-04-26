@@ -4,4 +4,5 @@
 |--------|-------|--------|---------|
 | adapter | minih | Active | SDK integration: wraps copilot-sdk, translates events, manages sessions |
 | runner | minih | Active | Core orchestration: prompt assembly, execution, event handling, artifact writing |
+| mcp | minih | Active | Inside-only coordination MCP server: inbox/state tools, spawn config, cleanup regression |
 | cli | minih | Active | User-facing commands: quickstart, init, run, resume, connect, list, doctor, check, validate, history, tail, last-run, status, inspect, difficulties |

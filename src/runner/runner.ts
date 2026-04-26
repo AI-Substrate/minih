@@ -452,6 +452,20 @@ export async function runAgent(
         }
       }
     }
+    const insideMcpServers =
+      coordinationEnabled && agentsDir && config.insideMcpServerFactory
+        ? config.insideMcpServerFactory({
+            runId,
+            runDir,
+            agentSlug: definition.slug,
+            agentsDir: path.resolve(agentsDir),
+          })
+        : undefined;
+    mcpServers = mergeMcpServers(
+      mcpServers,
+      insideMcpServers,
+      config.reservedMcpToolPrefixes ?? [],
+    );
 
     const runPromise = adapter
       .run({
@@ -621,6 +635,54 @@ export async function runAgent(
     runDir,
     parsedReport,
   };
+}
+
+function mergeMcpServers(
+  userServers: Record<string, unknown> | undefined,
+  internalServers: Record<string, unknown> | undefined,
+  reservedToolPrefixes: string[],
+): Record<string, unknown> | undefined {
+  if (!internalServers || Object.keys(internalServers).length === 0) {
+    validateReservedMcpToolPrefixes(userServers, reservedToolPrefixes);
+    return userServers;
+  }
+
+  for (const name of Object.keys(internalServers)) {
+    if (userServers && Object.hasOwn(userServers, name)) {
+      throw new Error(`MCP server name "${name}" is reserved by this run`);
+    }
+  }
+  validateReservedMcpToolPrefixes(userServers, reservedToolPrefixes);
+  return { ...(userServers ?? {}), ...internalServers };
+}
+
+function validateReservedMcpToolPrefixes(
+  servers: Record<string, unknown> | undefined,
+  reservedToolPrefixes: string[],
+): void {
+  if (!servers || reservedToolPrefixes.length === 0) return;
+  for (const [serverName, server] of Object.entries(servers)) {
+    if (
+      typeof server !== 'object' ||
+      server === null ||
+      Array.isArray(server)
+    ) {
+      continue;
+    }
+    const tools = (server as Record<string, unknown>).tools;
+    if (!Array.isArray(tools)) continue;
+    for (const tool of tools) {
+      if (typeof tool !== 'string') continue;
+      const collidingPrefix = reservedToolPrefixes.find((prefix) =>
+        tool.startsWith(prefix),
+      );
+      if (collidingPrefix) {
+        throw new Error(
+          `MCP server "${serverName}" declares reserved tool namespace "${collidingPrefix}*"`,
+        );
+      }
+    }
+  }
 }
 
 function listArtifacts(dir: string, base?: string): string[] {

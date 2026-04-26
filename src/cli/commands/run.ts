@@ -12,6 +12,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import chalk from 'chalk';
 import type { Command } from 'commander';
+import { buildInsideMcpServerConfig } from '../../mcp/index.js';
 import type { AgentRunConfig } from '../../runner/index.js';
 import {
   displayEvent,
@@ -164,6 +165,14 @@ export function registerRunCommand(program: Command): void {
             : (definition.timeout ?? DEFAULT_TIMEOUT),
           cwd: process.cwd(),
           params: Object.keys(params).length > 0 ? params : undefined,
+          insideMcpServerFactory: ({ runId, runDir, agentSlug, agentsDir }) =>
+            buildInsideMcpServerConfig({
+              runId,
+              runDir,
+              agentSlug,
+              agentsDir,
+            }),
+          reservedMcpToolPrefixes: ['inbox.', 'state.'],
           ...(mcpServers && { mcpServers }),
         };
 

@@ -41,6 +41,7 @@
 |----------|------|-----------|
 | `AgentDefinition` | Type | cli (discovery, listing) |
 | `AgentRunConfig` | Type | cli (run configuration) |
+| `InsideMcpServerFactoryContext` | Type | cli/mcp composition seam (P4 inside MCP merge without runner importing mcp) |
 | `AgentRunResult` | Type | cli (result display) |
 | `CompletedMetadata` | Type | cli (history, validate) |
 | `ValidationResult` | Type | cli (validation display) |
@@ -72,6 +73,7 @@
 | `ulid()` | Function | mcp (P4 inbox.send), cli (P5 outside-send) |
 | `StateCorruptError` / `HistoryLineTooLargeError` / `InvalidSlugError` / `InvalidCoordinationFrontmatterError` / `OutsideAgentsDirError` | Error | mcp + cli (typed error handling) |
 | `RunLockHeldError` / `RUN_LOCK_HELD` | Error/Const | cli (future JSON envelope mapping for simultaneous coordinated runs) |
+| `AgentRunConfig.insideMcpServerFactory` / `reservedMcpToolPrefixes` | Config seam | cli supplies mcp-domain spawn config; runner merges user/internal MCP servers and detects reserved collisions |
 | `AgentDefinition.outsideContract` / `AgentDefinition.coordination` | Type field | preamble-builder (P2 — peer contract injection), cli (P5 outside-context, init --coordinated) |
 | `inbox-message.json` / `outside-state.json` / `inside-state.json` / `state-history-entry.json` | JSON Schema | mcp (P4 AJV input/output validation), cli (P5 outside-send validation) |
 
@@ -98,6 +100,7 @@
 | Session resume | Resume sends follow-up message directly — skips prompt assembly and system output validation. SDK conversation history provides context. |
 | Daemon-light forwarders | For `coordination: enabled` runs, runner-owned inbox/state forwarders cold-drain per-agent shared files, watch for cross-process updates, send rendered changes through the live `SessionSender`, and commit private watermarks only after successful sends. |
 | Single live-run ownership | Coordinated runs acquire a per-agent `state/run.lock` before watcher startup. A second live run fails with `RunLockHeldError` (`RUN_LOCK_HELD`) so only one process owns file watchers and watermark advancement for a slug at a time. |
+| Internal MCP merge seam | `runAgent` accepts a generic factory that can add per-run MCP servers after runId/runDir exist. The runner owns merging/collision checks but never imports the mcp domain. |
 
 ## History
 
@@ -113,3 +116,4 @@
 | 007/P2 (2026-04-26) | Added `preamble-builder.ts`; switched `runAgent` prompt assembly to the builder; added event-driven terminal-condition helper and gated doctor/list baseline regression. |
 | 007-backgrounding P1 | Coordination foundations (pure addition). NEW: `state.ts` (pure helpers, no rule engine), `context.ts` (`detectContext` + composed env-key array), `atomic-write.ts` (POSIX write-then-rename + typed errors), `ulid.ts` (in-tree, monotonic). 4 NEW JSON schemas: inbox-message, default outside-state, default inside-state, state-history-entry. EXTENDED `folder.ts`: 6 path helpers (all absolute, slug-validated), outside.md discovery (truncate at 16KB, symlink-out-of-tree guard), `parseFrontmatter` recognizes `coordination` field (3 valid forms, 4 typed-error cases). EXTENDED `AgentDefinition` with `outsideContract` + `coordination`. EXPORTED `MINIH_ENV_KEYS` from runner.ts. Added `ajv-formats@^3.0.1` (decision logged — needed for live `format: date-time` validation). 230/230 tests pass; baseline diff against pre-P1 dist exit=0; zero behavior change to existing 9 agents. P2 unlocked. |
 | 007-backgrounding P3 | Added daemon-light file watcher and forwarders in runner: debounced `fs.watch`, private SDK watermark, outside inbox/state forwarders, live pending-drain terminal condition, per-agent run lock, opt-in cross-process e2e gate, and `RunLockHeldError` export. |
+| 007-backgrounding P4 | Added generic inside MCP merge seam (`insideMcpServerFactory`, reserved tool-prefix collision checks) so CLI can supply the mcp-domain server while runner remains mcp-independent. |

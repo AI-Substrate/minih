@@ -59,6 +59,19 @@ export interface AgentRunConfig {
   configDir?: string;
   /** Explicit MCP servers loaded from --mcp-config file */
   mcpServers?: Record<string, unknown>;
+  /** Optional domain-supplied MCP servers created after runId/runDir are known. */
+  insideMcpServerFactory?: (
+    context: InsideMcpServerFactoryContext,
+  ) => Record<string, unknown>;
+  /** Tool-name prefixes reserved by internally supplied MCP servers. */
+  reservedMcpToolPrefixes?: string[];
+}
+
+export interface InsideMcpServerFactoryContext {
+  runId: string;
+  runDir: string;
+  agentSlug: string;
+  agentsDir: string;
 }
 
 /** Validation result from JSON Schema check. */

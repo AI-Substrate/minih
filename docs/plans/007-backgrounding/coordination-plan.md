@@ -3,7 +3,7 @@
 **Plan Version**: 1.0.0
 **Created**: 2026-04-26
 **Spec**: [coordination-spec.md](./coordination-spec.md)
-**Workshops**: [001-filesystem-layout](./workshops/001-filesystem-layout.md), [002-state-machine](./workshops/002-state-machine.md), [003-mcp-tool-surface](./workshops/003-mcp-tool-surface.md), [004-spawn-config-injection](./workshops/004-spawn-config-injection.md), [005-preamble-and-prompting](./workshops/005-preamble-and-prompting.md), [006-test-fixtures](./workshops/006-test-fixtures.md), [007-user-journey-coder-and-reviewer](./workshops/007-user-journey-coder-and-reviewer.md), [008-inside-outside-prompting-and-retro](./workshops/008-inside-outside-prompting-and-retro.md)
+**Workshops**: [001-filesystem-layout](./workshops/001-filesystem-layout.md), [002-state-machine](./workshops/002-state-machine.md), [003-mcp-tool-surface](./workshops/003-mcp-tool-surface.md), [004-spawn-config-injection](./workshops/004-spawn-config-injection.md), [005-preamble-and-prompting](./workshops/005-preamble-and-prompting.md), [006-test-fixtures](./workshops/006-test-fixtures.md), [007-user-journey-coder-and-reviewer](./workshops/007-user-journey-coder-and-reviewer.md), [008-inside-outside-prompting-and-retro](./workshops/008-inside-outside-prompting-and-retro.md), [009-mcp-server-harness-standup-and-probing](./workshops/009-mcp-server-harness-standup-and-probing.md)
 **Research**: [research-dossier.md](./research-dossier.md) (80 findings, 12 prior learnings) + [external-research/](./external-research/) (5 files)
 **Status**: DRAFT
 **Mode**: Full

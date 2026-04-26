@@ -60,6 +60,7 @@ export type {
   CompletedMetadata,
   CoordinationFrontmatter,
   InboxMessage,
+  InsideMcpServerFactoryContext,
   InsideState,
   OutsideState,
   ParsedReport,

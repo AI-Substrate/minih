@@ -11,6 +11,7 @@
  */
 
 import type { Command } from 'commander';
+import { buildInsideMcpServerConfig } from '../../mcp/index.js';
 import type { AgentRunConfig } from '../../runner/index.js';
 import {
   displayEvent,
@@ -154,6 +155,14 @@ export function registerResumeCommand(program: Command): void {
           sessionId: session.sessionId,
           resumedFromRunId: session.runId,
           promptOverride: message,
+          insideMcpServerFactory: ({ runId, runDir, agentSlug, agentsDir }) =>
+            buildInsideMcpServerConfig({
+              runId,
+              runDir,
+              agentSlug,
+              agentsDir,
+            }),
+          reservedMcpToolPrefixes: ['inbox.', 'state.'],
           ...(mcpServers && { mcpServers }),
         };
 

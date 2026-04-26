@@ -1,12 +1,12 @@
 # Domain: cli
 
-**Purpose**: User-facing CLI commands and composition root. Only place that directly imports `@github/copilot-sdk` (via dynamic import for the `run` command).
+**Purpose**: User-facing CLI commands and composition root. Owns SDK runtime construction and wires domain-specific run configuration such as the inside MCP spawn factory.
 
 ## Boundary
 
-**Owns**: Command definitions (init, run, resume, connect, list, doctor, check, history, validate, tail, last-run), argument parsing, JSON output envelope, SDK client instantiation (composition root), agent scaffolding (init), SDK runtime helper (shared by run + resume)
+**Owns**: Command definitions (init, run, resume, connect, list, doctor, check, history, validate, tail, last-run), argument parsing, JSON output envelope, SDK client instantiation (composition root), agent scaffolding (init), SDK runtime helper (shared by run + resume), cross-domain composition wiring
 
-**Excludes**: Execution logic (runner), SDK communication (adapter), schema validation (runner)
+**Excludes**: Execution logic (runner), SDK communication (adapter), schema validation (runner), MCP tool implementation (mcp)
 
 ## Composition
 
@@ -14,8 +14,8 @@
 |------|---------------|---------|
 | `src/cli/index.ts` | internal | CLI entry point (shebang, commander program) |
 | `src/cli/output.ts` | contract | MinihEnvelope — JSON output format (Phase 4) |
-| `src/cli/commands/run.ts` | internal | Composition root — dynamic SDK import (Phase 4) |
-| `src/cli/commands/resume.ts` | internal | Resume session — follow-up messages (003-resume-prompt) |
+| `src/cli/commands/run.ts` | internal | Composition root — dynamic SDK import + inside MCP factory wiring (Phase 4 / 007 P4) |
+| `src/cli/commands/resume.ts` | internal | Resume session — follow-up messages + inside MCP factory wiring (003-resume-prompt / 007 P4) |
 | `src/cli/commands/connect.ts` | internal | Print copilot CLI resume command (003-resume-prompt) |
 | `src/cli/commands/quickstart.ts` | internal | Scaffold + run hello-world in one command (FX001-quickstart) |
 | `src/cli/commands/sdk-runtime.ts` | internal | Shared SDK bootstrap: auth, import, client, SIGINT (003-resume-prompt) |
@@ -41,6 +41,7 @@
 | Concept | Definition |
 |---------|-----------|
 | Composition root | `sdk-runtime.ts` owns shared SDK bootstrap (auth check, dynamic import, CopilotClient, SIGINT). Used by both `run.ts` and `resume.ts`. |
+| Inside MCP wiring | `run.ts` and `resume.ts` import `mcp` spawn config and pass a generic factory to runner only at the CLI composition boundary. |
 | stdout = machine | JSON envelope on stdout. Human formatting on stderr. TTY-detected. |
 | Three consumers | Agent inside minih, external coding agents, humans/CI. |
 
@@ -56,3 +57,4 @@
 | FX001-quickstart | Added `quickstart` command — scaffold + run hello-world in one command. Extracted `ensurePreamble()` from `init.ts`. |
 | FX002-agent-ux | Suppressed SQLite ExperimentalWarning via `NODE_NO_WARNINGS`. Added tool elapsed timer to pretty mode. |
 | 006-compounding-value | Added `difficulties` command (aggregates difficulty reports across all agents). Added velocity trend column + summary line to `history`. Run envelope now includes summary/magicWand/magicWandTarget/difficulties from parsed report.json. |
+| 007-backgrounding P4 | Wired coordinated `run` and `resume` sessions to supply the inside MCP spawn config factory and reserved inbox/state tool namespace checks. |

@@ -90,11 +90,20 @@ Phase 007 includes an opt-in cross-process coordination test that exercises nati
 MINIH_E2E=1 npx vitest run test/e2e/daemon-light.test.ts
 ```
 
+#### Optional MCP leak regression gate
+
+The inside MCP server uses a `minih-mcp-<runId>` process marker so cleanup can be checked without broad process killing. This gate is skipped by default and requires `pgrep`:
+
+```bash
+MINIH_PGREP=1 npx vitest run test/mcp/leak-regression.test.ts
+```
+
 ### Project Structure
 
 ```
 src/
 ├── adapter/      # SDK wrapper (IAgentAdapter interface)
+├── mcp/          # Inside-only coordination MCP server and tools
 ├── runner/       # Orchestration (prompt assembly, execution, validation)
 └── cli/          # Commands (run, status, inspect, etc.)
     └── commands/

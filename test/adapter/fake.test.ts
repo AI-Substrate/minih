@@ -190,4 +190,78 @@ describe('FakeAgentAdapter', () => {
     const result = await fake.run({ prompt: 'test' });
     expect(result.stderr).toBe('error details');
   });
+
+  it('emitSessionIdle adds a session idle event to the run stream', async () => {
+    const fake = new FakeAgentAdapter();
+    fake.emitSessionIdle();
+    const events: AgentEvent[] = [];
+
+    await fake.run({ prompt: 'test', onEvent: (event) => events.push(event) });
+
+    expect(events).toHaveLength(1);
+    expect(events[0].type).toBe('session_idle');
+  });
+
+  it('setQueuedRun emits turns separated by idle events', async () => {
+    const fake = new FakeAgentAdapter();
+    fake.setQueuedRun([
+      [
+        {
+          type: 'message',
+          timestamp: '2026-01-01T00:00:00.000Z',
+          data: { content: 'turn one' },
+        },
+      ],
+      [
+        {
+          type: 'message',
+          timestamp: '2026-01-01T00:00:01.000Z',
+          data: { content: 'turn two' },
+        },
+      ],
+    ]);
+    const events: AgentEvent[] = [];
+
+    await fake.run({ prompt: 'test', onEvent: (event) => events.push(event) });
+
+    expect(events.map((event) => event.type)).toEqual([
+      'message',
+      'session_idle',
+      'message',
+      'session_idle',
+    ]);
+  });
+
+  it('emitPendingMessagesModified records fake queue-depth observations', () => {
+    const fake = new FakeAgentAdapter();
+    fake.emitPendingMessagesModified(3);
+
+    expect(fake.getEvents()).toEqual([
+      expect.objectContaining({
+        type: 'raw',
+        data: {
+          provider: 'fake',
+          originalType: 'pending_messages.modified',
+          originalData: { queueDepth: 3 },
+        },
+      }),
+    ]);
+  });
+
+  it('onSessionReady receives a sender that records sends in order', async () => {
+    const fake = new FakeAgentAdapter();
+
+    await fake.run({
+      prompt: 'test',
+      onSessionReady: (sender) => {
+        void sender.send('first follow-up');
+        void sender.send('second follow-up');
+      },
+    });
+
+    expect(fake.getSessionSendHistory()).toEqual([
+      'first follow-up',
+      'second follow-up',
+    ]);
+  });
 });

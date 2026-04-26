@@ -267,7 +267,9 @@ describe('createRunFolder', () => {
     fs.writeFileSync(path.join(dir, 'output-schema.json'), '{"type":"object"}');
     fs.writeFileSync(path.join(dir, 'instructions.md'), '# Instructions');
 
-    const agent = resolveAgent('test-agent', tmpDir)!;
+    const agent = resolveAgent('test-agent', tmpDir);
+    expect(agent).not.toBeNull();
+    if (!agent) throw new Error('expected test-agent to resolve');
     const { runDir, runId } = createRunFolder(agent);
 
     expect(fs.existsSync(runDir)).toBe(true);

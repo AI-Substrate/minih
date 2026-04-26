@@ -11,7 +11,17 @@
 import type { AgentResult, AgentRunOptions } from './events.js';
 
 export interface IAgentAdapter {
-  /** Execute a prompt through the agent. */
+  /**
+   * Execute a prompt through the agent.
+   *
+   * The event-driven run contract resolves when the SDK session emits
+   * `session_idle` and the caller has no more queued `session.send` work.
+   * If `session_error` fires before idle, implementations return an
+   * `AgentResult` with `status: 'failed'` instead of throwing or hanging.
+   *
+   * Implementations that expose a live session handle invoke
+   * `options.onSessionReady` once the initial prompt has been sent.
+   */
   run(options: AgentRunOptions): Promise<AgentResult>;
 
   /** Send compact command to reduce context. */

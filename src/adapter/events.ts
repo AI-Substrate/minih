@@ -34,11 +34,16 @@ export interface AgentResult {
   tokens: TokenMetrics | null;
 }
 
+export interface SessionSender {
+  send(prompt: string): Promise<string>;
+}
+
 export interface AgentRunOptions {
   prompt: string;
   sessionId?: string;
   cwd?: string;
   onEvent?: AgentEventHandler;
+  onSessionReady?: (sender: SessionSender) => void;
   model?: string;
   reasoningEffort?: ReasoningEffort;
   timeout?: number;

@@ -16,6 +16,7 @@ import * as path from 'node:path';
 import type { AgentEvent, AgentResult } from '../adapter/events.js';
 import type { IAgentAdapter } from '../adapter/interface.js';
 import { createRunFolder, parseFrontmatter } from './folder.js';
+import { buildInsidePreamble } from './preamble-builder.js';
 import type {
   AgentDefinition,
   AgentRunConfig,
@@ -156,6 +157,28 @@ export const MINIH_ENV_KEYS = [
   'MINIH_PARAMS',
 ];
 
+const TERMINAL_CONDITION_POLL_MS = 10;
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Wait for the runner-owned terminal condition after the adapter reaches idle.
+ *
+ * P2 uses a zero-count placeholder. P3 replaces that getter with a live view of
+ * inbox/state forwarder queues without changing the runner/adapter contract.
+ */
+export async function awaitTerminalCondition(
+  adapterResult: AgentResult,
+  pendingForwarderCount: () => number,
+): Promise<AgentResult> {
+  while (pendingForwarderCount() > 0) {
+    await wait(TERMINAL_CONDITION_POLL_MS);
+  }
+  return adapterResult;
+}
+
 /**
  * Execute an agent from its definition.
  *
@@ -257,16 +280,16 @@ export async function runAgent(
   } else {
     // Fresh run: full prompt assembly (preamble + instructions + output hint + params + prompt + system requirements)
     const outputHint = `Write your final JSON report to: ${outputPath}`;
-    finalPrompt = [
+    finalPrompt = buildInsidePreamble({
+      definition,
+      runId,
       preamble,
       instructions,
       outputHint,
       paramsHint,
-      prompt,
-      SYSTEM_OUTPUT_INSTRUCTIONS,
-    ]
-      .filter(Boolean)
-      .join('\n\n---\n\n');
+      userPrompt: prompt,
+      systemOutputInstructions: SYSTEM_OUTPUT_INSTRUCTIONS,
+    });
   }
 
   // Set runtime environment for the agent (Workshop 007)
@@ -373,17 +396,20 @@ export async function runAgent(
       }
     }
 
-    const runPromise = adapter.run({
-      prompt: finalPrompt,
-      sessionId: config.sessionId,
-      model: config.model,
-      reasoningEffort: config.reasoningEffort,
-      cwd: runDir, // SDK isolated to run folder (Workshop 005)
-      onEvent: handleEvent,
-      timeout: timeoutMs,
-      configDir: config.configDir ?? config.cwd,
-      ...(mcpServers && { mcpServers }),
-    });
+    const pendingForwarderCount = (): number => 0;
+    const runPromise = adapter
+      .run({
+        prompt: finalPrompt,
+        sessionId: config.sessionId,
+        model: config.model,
+        reasoningEffort: config.reasoningEffort,
+        cwd: runDir, // SDK isolated to run folder (Workshop 005)
+        onEvent: handleEvent,
+        onSessionReady: () => {},
+        configDir: config.configDir ?? config.cwd,
+        ...(mcpServers && { mcpServers }),
+      })
+      .then((result) => awaitTerminalCondition(result, pendingForwarderCount));
     const timeoutPromise = new Promise<never>((_, reject) => {
       timeoutHandle = setTimeout(() => {
         timedOut = true;

@@ -17,6 +17,7 @@
 | `src/runner/validator.ts` | internal | AJV 2020-12 schema validation (Phase 2) |
 | `src/runner/display.ts` | internal | Verbose terminal output formatting (Phase 2) |
 | `src/runner/pretty.ts` | internal | Pretty streaming display — clean output with delta accumulation (002-pretty-mode) |
+| `src/runner/preamble-builder.ts` | contract | Pure inside-prompt assembly with coordination stub injection points (007/P2) |
 | `src/runner/runner.ts` | internal | Core orchestration (Phase 2) |
 | `src/runner/index.ts` | contract | Barrel export |
 | `src/schemas/retrospective.json` | contract | Reusable retrospective schema fragment (Phase 2) |
@@ -41,6 +42,7 @@
 | `listAgents(agentsDir)` | Function | cli (list, doctor) |
 | `resolveAgent(slug, agentsDir)` | Function | cli (run, validate, history) |
 | `runAgent(adapter, def, config, onEvent?, agentsDir?)` | Function | cli (run command) |
+| `buildInsidePreamble(input)` / `PreambleAssemblyInput` | Function/Type | runner (fresh-run prompt assembly), future coordinated-agent prompt wiring |
 | `findRunSession(slug, agentsDir, runId?)` | Function | cli (resume, connect — session lookup from completed.json) |
 | `RunSession` | Type | cli (resume, connect — session lookup result) |
 | `validateInput(schemaPath, params)` | Function | cli (check --input), runner (pre-execution) |
@@ -74,7 +76,8 @@
 | Folder convention | An agent IS a folder. prompt.md with frontmatter = agent exists. |
 | Frozen inputs | Every run copies its inputs into the run folder for reproducibility. |
 | Degraded vs Failed | Invalid output = "degraded" (agent worked, schema didn't match), not hard failure. |
-| Prompt assembly | preamble → instructions → output hint → params → prompt, joined by `\n\n---\n\n`. Frontmatter stripped. |
+| Prompt assembly | `buildInsidePreamble` preserves the legacy preamble → instructions → output hint → params → prompt join for non-coordinated agents, and inserts section-framed coordination stubs only when `coordination.enabled` is true. Frontmatter stripped. |
+| Event-driven terminal condition | `runAgent` relies on adapter idle completion, then waits for `awaitTerminalCondition(adapterResult, pendingForwarderCount)` so P3 can supply a live forwarder drain counter without changing the adapter contract. |
 | Magic wand | Every agent output MUST include retrospective with magicWand feedback. |
 | Velocity tracking | Per-agent velocity data computed at run end, stored in completed.json. Chains from prior runs for O(1) computation. |
 | Difficulty ledger | Agents report structured friction in `retrospective.difficulties`. Pipeline: agents report → `minih difficulties` aggregates → human curates preamble. |
@@ -99,4 +102,5 @@
 | FX002-agent-ux | Added tool elapsed timer to pretty mode. Added fuzzy property name suggestions to validator error messages (substring + Levenshtein matching). |
 | 003-resume-prompt | Added `sessionId`, `resumedFromRunId`, `promptOverride` to `AgentRunConfig`. Added `resumedFromRunId` to `CompletedMetadata`. Added `findRunSession()` helper. Resume path in `runAgent()` skips system validation and sends follow-up message directly. |
 | 006-compounding-value | Added `VelocityData`, `ParsedReport` types. `computeVelocity()` computes per-agent velocity at run end. Report.json parsed after run for envelope surfacing. `magicWandTarget` + `difficulties` added to retro/system-output schemas. SYSTEM_OUTPUT_INSTRUCTIONS updated with difficulty reporting guidance. |
+| 007/P2 (2026-04-26) | Added `preamble-builder.ts`; switched `runAgent` prompt assembly to the builder; added event-driven terminal-condition helper and gated doctor/list baseline regression. |
 | 007-backgrounding P1 | Coordination foundations (pure addition). NEW: `state.ts` (pure helpers, no rule engine), `context.ts` (`detectContext` + composed env-key array), `atomic-write.ts` (POSIX write-then-rename + typed errors), `ulid.ts` (in-tree, monotonic). 4 NEW JSON schemas: inbox-message, default outside-state, default inside-state, state-history-entry. EXTENDED `folder.ts`: 6 path helpers (all absolute, slug-validated), outside.md discovery (truncate at 16KB, symlink-out-of-tree guard), `parseFrontmatter` recognizes `coordination` field (3 valid forms, 4 typed-error cases). EXTENDED `AgentDefinition` with `outsideContract` + `coordination`. EXPORTED `MINIH_ENV_KEYS` from runner.ts. Added `ajv-formats@^3.0.1` (decision logged — needed for live `format: date-time` validation). 230/230 tests pass; baseline diff against pre-P1 dist exit=0; zero behavior change to existing 9 agents. P2 unlocked. |

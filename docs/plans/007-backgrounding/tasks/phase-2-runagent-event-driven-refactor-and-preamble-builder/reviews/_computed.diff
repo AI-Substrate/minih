@@ -1,0 +1,2355 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index 3ef2200..88caa01 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -6,6 +6,7 @@
+ just fft                    # Full quality gate: lint → format → build → typecheck → test → audit
+ npm run build               # TypeScript compile + copy schemas to dist/
+ npm test                    # Run all tests (vitest)
++MINIH_REGRESSION=1 npm test  # Include slow doctor/list baseline regression
+ npx vitest run test/runner/runner.test.ts           # Single test file
+ npx vitest run -t "validates output"                # Single test by name
+ npx biome check .           # Lint + format check
+@@ -16,6 +17,8 @@ npx biome check --write .   # Auto-fix lint/format issues
+ 
+ **ALWAYS run `just fft` before `git commit` and before `git push`.** The pipeline is the contract — lint, format, build, typecheck, test, audit. If any step fails, fix it before committing.
+ 
++The backward-compatibility regression for all existing agents is gated behind `MINIH_REGRESSION=1` because it shells out to the built CLI and compares `doctor`/`list` output against the P1 baselines. Run `npm run build` first when invoking that gate directly.
++
+ **Own every finding.** Anything `fft` surfaces is ours, regardless of which file it lives in. Don't dismiss a lint warning, type error, or test failure as "pre-existing" or "unrelated to my change" — if our pipeline turns it up, our PR fixes it. If the noise is genuinely out-of-scope for the current change, raise it explicitly with the user before deciding to defer; never commit past it silently. Audit findings (transitive deps) follow the same rule: surface and decide, don't ignore.
+ 
+ ## Architecture
+diff --git a/docs/domains/adapter/domain.md b/docs/domains/adapter/domain.md
+index d663e44..b7b2cdc 100644
+--- a/docs/domains/adapter/domain.md
++++ b/docs/domains/adapter/domain.md
+@@ -12,11 +12,11 @@
+ 
+ | File | Classification | Purpose |
+ |------|---------------|---------|
+-| `src/adapter/events.ts` | contract | AgentEvent union (10 types), AgentResult, AgentRunOptions, TokenMetrics |
++| `src/adapter/events.ts` | contract | AgentEvent union (10 types), AgentResult, AgentRunOptions, SessionSender, TokenMetrics |
+ | `src/adapter/interface.ts` | contract | IAgentAdapter — run(), compact(), terminate() |
+-| `src/adapter/copilot-types.ts` | contract | Local Copilot SDK facade — ICopilotClient, ICopilotSession, session configs |
+-| `src/adapter/fake.ts` | internal | FakeAgentAdapter test double |
+-| `src/adapter/sdk-copilot.ts` | internal | SdkCopilotAdapter — wraps @github/copilot-sdk |
++| `src/adapter/copilot-types.ts` | contract | Local Copilot SDK facade — ICopilotClient, ICopilotSession with send/sendAndWait, session configs |
++| `src/adapter/fake.ts` | internal | FakeAgentAdapter test double with event-driven queued-run/session-ready helpers |
++| `src/adapter/sdk-copilot.ts` | internal | SdkCopilotAdapter — wraps @github/copilot-sdk; run() uses session.send + session_idle |
+ | `src/adapter/index.ts` | contract | Barrel export |
+ 
+ ## Contracts
+@@ -28,6 +28,7 @@
+ | `AgentThinkingEvent.data.isDelta` | Field | runner/pretty.ts (delta vs final suppression) |
+ | `AgentResult` | Type | runner (result processing) |
+ | `AgentRunOptions` | Type | runner (adapter invocation) |
++| `SessionSender` | Type | runner/P3 forwarders (`onSessionReady` live session.send handle) |
+ | `SdkCopilotAdapter` | Class | cli (composition root), external programmatic consumers |
+ | `ICopilotClient` / `ICopilotSession` | Interface | cli (SDK client wiring), adapter tests/fakes |
+ 
+@@ -40,6 +41,8 @@
+ | Auto-approve | All agent permissions auto-approved (yolo). No safety gates. |
+ | Local Copilot facade | `copilot-types.ts` defines the subset of SDK types the adapter depends on, so the rest of minih avoids SDK internals. |
+ | Duplicate suppression | SDK emits deltas during streaming then re-emits consolidated content; adapter suppresses the duplicates. |
++| Event-driven run | `run()` sends the initial prompt with `session.send`, streams events through `onEvent`, and resolves on `session_idle`; `compact()` remains a terminal `sendAndWait` call. |
++| Session sender seam | `AgentRunOptions.onSessionReady` receives a `SessionSender` after the initial send so future forwarders can queue mid-turn messages without importing SDK-specific adapter internals. |
+ 
+ ## History
+ 
+@@ -49,3 +52,4 @@
+ | Phase 3 | Added SdkCopilotAdapter (~250 LOC), copilot-types.ts (local SDK interfaces). Event translation, permission auto-approval, prompt validation, duplicate suppression. |
+ | 002-pretty-mode | Added `isDelta?: boolean` to `AgentThinkingEvent.data`. Adapter sets `true` for `reasoning_delta`, `false` for `reasoning` — enables pretty display to suppress duplicate thinking finals. |
+ | 003-resume-prompt | Switched `run()` from `session.destroy()` to `session.disconnect()` — sessions preserved for resumption. |
++| 007/P2 (2026-04-26) | Switched `SdkCopilotAdapter.run()` to event-driven `session.send` + idle subscription; added `SessionSender`/`onSessionReady`; extended `FakeAgentAdapter` with queued-run and session-send test helpers. |
+diff --git a/docs/domains/runner/domain.md b/docs/domains/runner/domain.md
+index 3e30873..d78d78c 100644
+--- a/docs/domains/runner/domain.md
++++ b/docs/domains/runner/domain.md
+@@ -17,6 +17,7 @@
+ | `src/runner/validator.ts` | internal | AJV 2020-12 schema validation (Phase 2) |
+ | `src/runner/display.ts` | internal | Verbose terminal output formatting (Phase 2) |
+ | `src/runner/pretty.ts` | internal | Pretty streaming display — clean output with delta accumulation (002-pretty-mode) |
++| `src/runner/preamble-builder.ts` | contract | Pure inside-prompt assembly with coordination stub injection points (007/P2) |
+ | `src/runner/runner.ts` | internal | Core orchestration (Phase 2) |
+ | `src/runner/index.ts` | contract | Barrel export |
+ | `src/schemas/retrospective.json` | contract | Reusable retrospective schema fragment (Phase 2) |
+@@ -41,6 +42,7 @@
+ | `listAgents(agentsDir)` | Function | cli (list, doctor) |
+ | `resolveAgent(slug, agentsDir)` | Function | cli (run, validate, history) |
+ | `runAgent(adapter, def, config, onEvent?, agentsDir?)` | Function | cli (run command) |
++| `buildInsidePreamble(input)` / `PreambleAssemblyInput` | Function/Type | runner (fresh-run prompt assembly), future coordinated-agent prompt wiring |
+ | `findRunSession(slug, agentsDir, runId?)` | Function | cli (resume, connect — session lookup from completed.json) |
+ | `RunSession` | Type | cli (resume, connect — session lookup result) |
+ | `validateInput(schemaPath, params)` | Function | cli (check --input), runner (pre-execution) |
+@@ -74,7 +76,8 @@
+ | Folder convention | An agent IS a folder. prompt.md with frontmatter = agent exists. |
+ | Frozen inputs | Every run copies its inputs into the run folder for reproducibility. |
+ | Degraded vs Failed | Invalid output = "degraded" (agent worked, schema didn't match), not hard failure. |
+-| Prompt assembly | preamble → instructions → output hint → params → prompt, joined by `\n\n---\n\n`. Frontmatter stripped. |
++| Prompt assembly | `buildInsidePreamble` preserves the legacy preamble → instructions → output hint → params → prompt join for non-coordinated agents, and inserts section-framed coordination stubs only when `coordination.enabled` is true. Frontmatter stripped. |
++| Event-driven terminal condition | `runAgent` relies on adapter idle completion, then waits for `awaitTerminalCondition(adapterResult, pendingForwarderCount)` so P3 can supply a live forwarder drain counter without changing the adapter contract. |
+ | Magic wand | Every agent output MUST include retrospective with magicWand feedback. |
+ | Velocity tracking | Per-agent velocity data computed at run end, stored in completed.json. Chains from prior runs for O(1) computation. |
+ | Difficulty ledger | Agents report structured friction in `retrospective.difficulties`. Pipeline: agents report → `minih difficulties` aggregates → human curates preamble. |
+@@ -99,4 +102,5 @@
+ | FX002-agent-ux | Added tool elapsed timer to pretty mode. Added fuzzy property name suggestions to validator error messages (substring + Levenshtein matching). |
+ | 003-resume-prompt | Added `sessionId`, `resumedFromRunId`, `promptOverride` to `AgentRunConfig`. Added `resumedFromRunId` to `CompletedMetadata`. Added `findRunSession()` helper. Resume path in `runAgent()` skips system validation and sends follow-up message directly. |
+ | 006-compounding-value | Added `VelocityData`, `ParsedReport` types. `computeVelocity()` computes per-agent velocity at run end. Report.json parsed after run for envelope surfacing. `magicWandTarget` + `difficulties` added to retro/system-output schemas. SYSTEM_OUTPUT_INSTRUCTIONS updated with difficulty reporting guidance. |
++| 007/P2 (2026-04-26) | Added `preamble-builder.ts`; switched `runAgent` prompt assembly to the builder; added event-driven terminal-condition helper and gated doctor/list baseline regression. |
+ | 007-backgrounding P1 | Coordination foundations (pure addition). NEW: `state.ts` (pure helpers, no rule engine), `context.ts` (`detectContext` + composed env-key array), `atomic-write.ts` (POSIX write-then-rename + typed errors), `ulid.ts` (in-tree, monotonic). 4 NEW JSON schemas: inbox-message, default outside-state, default inside-state, state-history-entry. EXTENDED `folder.ts`: 6 path helpers (all absolute, slug-validated), outside.md discovery (truncate at 16KB, symlink-out-of-tree guard), `parseFrontmatter` recognizes `coordination` field (3 valid forms, 4 typed-error cases). EXTENDED `AgentDefinition` with `outsideContract` + `coordination`. EXPORTED `MINIH_ENV_KEYS` from runner.ts. Added `ajv-formats@^3.0.1` (decision logged — needed for live `format: date-time` validation). 230/230 tests pass; baseline diff against pre-P1 dist exit=0; zero behavior change to existing 9 agents. P2 unlocked. |
+diff --git a/docs/plans/007-backgrounding/coordination.fltplan.md b/docs/plans/007-backgrounding/coordination.fltplan.md
+index f669415..e2d2f7f 100644
+--- a/docs/plans/007-backgrounding/coordination.fltplan.md
++++ b/docs/plans/007-backgrounding/coordination.fltplan.md
+@@ -5,7 +5,7 @@
+ **Workshops**: 8 — [001-filesystem-layout](./workshops/001-filesystem-layout.md) · [002-state-machine](./workshops/002-state-machine.md) · [003-mcp-tool-surface](./workshops/003-mcp-tool-surface.md) · [004-spawn-config-injection](./workshops/004-spawn-config-injection.md) · [005-preamble-and-prompting](./workshops/005-preamble-and-prompting.md) · [006-test-fixtures](./workshops/006-test-fixtures.md) · [007-user-journey-coder-and-reviewer](./workshops/007-user-journey-coder-and-reviewer.md) · [008-inside-outside-prompting-and-retro](./workshops/008-inside-outside-prompting-and-retro.md)
+ **Research**: [research-dossier.md](./research-dossier.md) + [external-research/](./external-research/) (5 files)
+ **Generated**: 2026-04-26 (plan-1b initial; revised after workshop 007 daemon-light pivot; plan-3 generated 2026-04-26)
+-**Status**: **Phase 1 LANDED** — coordination foundations shipped. 4 JSON schemas + 4 new runner modules (`state.ts`, `context.ts`, `atomic-write.ts`, `ulid.ts`) + extensions to `folder.ts`, `types.ts`, `index.ts`. 230/230 tests pass; pre-vs-post-P1 baseline diff exit=0 across 10 files; zero behavior change to existing 9 agents. `RetrospectiveCoordination` and `MagicWandTarget` widening explicitly deferred to P6 (no type-vs-validator drift). **P2 unlocked.**
++**Status**: **Phase 2 LANDED** — `runAgent` is event-driven (`session.send` + `session_idle`), `preamble-builder.ts` owns full fresh-run prompt assembly with coordination stubs, adapter/fake seams are ready for P3 forwarders, and doctor/list baselines remain byte-equivalent for all 9 existing agents. Default and `MINIH_REGRESSION=1` quality gates pass with zero audit findings. **P3 unlocked.**
+ 
+ Phase 0 LANDED 2026-04-26 — all 4 scratch tests executed; FULL GO memo at [prework-results.md](./prework-results.md); spec polished to 37 ACs.
+ 
+@@ -151,8 +151,8 @@ graph LR
+     P0[P0 scratch tests + memo<br/>✓ FULL GO 2026-04-26]:::done
+     SP[Spec polish: 37 ACs<br/>✓ merged 2026-04-26]:::done
+     P1[P1 Runner Foundations<br/>✓ LANDED 2026-04-26]:::done
+-    P2[P2 runAgent event-driven]:::next
+-    Phases[P3-P7 implementation]:::pending
++    P2[P2 runAgent event-driven<br/>✓ LANDED 2026-04-26]:::done
++    Phases[P3-P7 implementation]:::next
+     Done[37 ACs verified]:::pending
+ 
+     Spec --> WS
+@@ -178,8 +178,10 @@ graph LR
+ 3. ~~Spec polish (20 ACs)~~ ✓ done — `coordination-spec.md` now has 37 ACs
+ 4. ~~`/plan-5-v2-phase-tasks-and-brief` for P1~~ ✓ done — dossier + flight plan generated, validated (4-agent broad sweep)
+ 5. ~~`/plan-6-v2-implement-phase` for P1~~ ✓ done — 230/230 tests, baseline diff exit=0, zero regressions
+-6. **`/plan-7-v2-code-review --phase "Phase 1: Runner Foundations" --plan "docs/plans/007-backgrounding/coordination-plan.md"`** — formal phase review (recommended next)
+-7. Then `/plan-5-v2-phase-tasks-and-brief --phase "Phase 2: runAgent Event-Driven Refactor + Preamble Builder"` to start P2
++6. ~~`/plan-7-v2-code-review --phase "Phase 1: Runner Foundations" --plan "docs/plans/007-backgrounding/coordination-plan.md"`~~ ✓ deferred in favor of P2 implementation per user direction
++7. ~~`/plan-5-v2-phase-tasks-and-brief --phase "Phase 2: runAgent Event-Driven Refactor + Preamble Builder"`~~ ✓ done — dossier + flight plan generated and validated
++8. ~~`/plan-6-v2-implement-phase` for P2~~ ✓ done — event-driven runner/adapter seam landed, default + regression gates green, baseline diff exit=0
++9. **Run minih code review command for P2 and apply fixes** — requested follow-up before moving to P3
+ 
+ ---
+ 
+@@ -195,3 +197,4 @@ graph LR
+ | 2026-04-26 | Spec polish (20 ACs) | done | Spec now has 37 ACs total; AC-STATE-TRANSITION-GATED removed inline |
+ | 2026-04-26 | Phase 1 dossier (plan-5) | done | 10 tasks expanded from plan-3 1.1-1.10; reordered for dependency correctness; broad 4-agent validation surfaced 27 issues, 9 HIGH fixed inline pre-implementation |
+ | 2026-04-26 | Phase 1 implementation (plan-6) | LANDED | 4 schemas + 4 new modules + 3 modified + 5 new test files + 2 baseline scripts; 230/230 tests pass; baseline diff exit=0 across 10 files; zero behavior change to existing 9 agents; `MagicWandTarget`/`RetrospectiveCoordination` correctly deferred to P6 (no type-vs-validator drift); ajv-formats added for live `format: date-time` validation |
++| 2026-04-26 | Phase 2 implementation (plan-6) | LANDED | Event-driven `runAgent`/adapter contract; preamble builder with coordination stubs; fake queued-run/session sender helpers; gated doctor/list regression; default + `MINIH_REGRESSION=1` `just fft` pass; baseline diff exit=0 across 2 files; zero audit findings after lockfile update |
+diff --git a/package-lock.json b/package-lock.json
+index c1f3069..602187e 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -1693,9 +1693,9 @@
+       }
+     },
+     "node_modules/postcss": {
+-      "version": "8.5.8",
+-      "resolved": "https://registry.npmjs.org/postcss/-/postcss-8.5.8.tgz",
+-      "integrity": "sha512-OW/rX8O/jXnm82Ey1k44pObPtdblfiuWnrd8X7GJ7emImCOstunGbXUpp7HdBrFQX6rJzn3sPT397Wp5aCwCHg==",
++      "version": "8.5.10",
++      "resolved": "https://registry.npmjs.org/postcss/-/postcss-8.5.10.tgz",
++      "integrity": "sha512-pMMHxBOZKFU6HgAZ4eyGnwXF/EvPGGqUr0MnZ5+99485wwW41kW91A4LOGxSHhgugZmSChL5AlElNdwlNgcnLQ==",
+       "dev": true,
+       "funding": [
+         {
+@@ -1958,9 +1958,9 @@
+       "license": "MIT"
+     },
+     "node_modules/vite": {
+-      "version": "7.3.1",
+-      "resolved": "https://registry.npmjs.org/vite/-/vite-7.3.1.tgz",
+-      "integrity": "sha512-w+N7Hifpc3gRjZ63vYBXA56dvvRlNWRczTdmCBBa+CotUzAPf5b7YMdMR/8CQoeYE5LX3W4wj6RYTgonm1b9DA==",
++      "version": "7.3.2",
++      "resolved": "https://registry.npmjs.org/vite/-/vite-7.3.2.tgz",
++      "integrity": "sha512-Bby3NOsna2jsjfLVOHKes8sGwgl4TT0E6vvpYgnAYDIF/tie7MRaFthmKuHx1NSXjiTueXH3do80FMQgvEktRg==",
+       "dev": true,
+       "license": "MIT",
+       "dependencies": {
+diff --git a/src/adapter/copilot-types.ts b/src/adapter/copilot-types.ts
+index 8cf5073..0e28b53 100644
+--- a/src/adapter/copilot-types.ts
++++ b/src/adapter/copilot-types.ts
+@@ -38,6 +38,7 @@ export interface CopilotResumeSessionConfig {
+ 
+ export interface ICopilotSession {
+   readonly sessionId: string;
++  send(options: { prompt: string }): Promise<unknown>;
+   sendAndWait(options: { prompt: string }, timeout?: number): Promise<unknown>;
+   on(handler: (event: CopilotSessionEventLike) => void): () => void;
+   abort(): Promise<void>;
+diff --git a/src/adapter/events.ts b/src/adapter/events.ts
+index a14f02c..036abe0 100644
+--- a/src/adapter/events.ts
++++ b/src/adapter/events.ts
+@@ -34,11 +34,16 @@ export interface AgentResult {
+   tokens: TokenMetrics | null;
+ }
+ 
++export interface SessionSender {
++  send(prompt: string): Promise<string>;
++}
++
+ export interface AgentRunOptions {
+   prompt: string;
+   sessionId?: string;
+   cwd?: string;
+   onEvent?: AgentEventHandler;
++  onSessionReady?: (sender: SessionSender) => void;
+   model?: string;
+   reasoningEffort?: ReasoningEffort;
+   timeout?: number;
+diff --git a/src/adapter/fake.ts b/src/adapter/fake.ts
+index 0a2ee3b..77ceb76 100644
+--- a/src/adapter/fake.ts
++++ b/src/adapter/fake.ts
+@@ -39,6 +39,8 @@ export class FakeAgentAdapter implements IAgentAdapter {
+   private readonly _options: ResolvedOptions;
+   private readonly _runDuration: number;
+   private _events: AgentEvent[];
++  private _queuedRun: AgentEvent[][] | null = null;
++  private _sessionSendHistory: string[] = [];
+   private _runHistory: AgentRunOptions[] = [];
+   private _terminateHistory: string[] = [];
+   private _compactHistory: string[] = [];
+@@ -62,13 +64,29 @@ export class FakeAgentAdapter implements IAgentAdapter {
+   async run(options: AgentRunOptions): Promise<AgentResult> {
+     this._runHistory.push({ ...options });
+ 
++    options.onSessionReady?.({
++      send: async (prompt: string): Promise<string> => {
++        this._sessionSendHistory.push(prompt);
++        return prompt;
++      },
++    });
++
+     if (this._runDuration > 0) {
+       await new Promise((resolve) => setTimeout(resolve, this._runDuration));
+     }
+ 
+-    if (options.onEvent && this._events.length > 0) {
+-      for (const event of this._events) {
+-        options.onEvent(event);
++    if (options.onEvent) {
++      if (this._queuedRun) {
++        for (const turn of this._queuedRun) {
++          for (const event of turn) {
++            options.onEvent(event);
++          }
++          options.onEvent(createSessionIdleEvent());
++        }
++      } else {
++        for (const event of this._events) {
++          options.onEvent(event);
++        }
+       }
+     }
+ 
+@@ -122,6 +140,10 @@ export class FakeAgentAdapter implements IAgentAdapter {
+     return [...this._compactHistory];
+   }
+ 
++  getSessionSendHistory(): string[] {
++    return [...this._sessionSendHistory];
++  }
++
+   assertRunCalled(expected: Partial<AgentRunOptions>): void {
+     const match = this._runHistory.some((call) => {
+       return Object.entries(expected).every(([key, value]) => {
+@@ -167,17 +189,25 @@ export class FakeAgentAdapter implements IAgentAdapter {
+     this._runHistory = [];
+     this._terminateHistory = [];
+     this._compactHistory = [];
++    this._sessionSendHistory = [];
+   }
+ 
+   setEvents(events: AgentEvent[]): void {
+     this._events = [...events];
++    this._queuedRun = null;
++  }
++
++  setQueuedRun(turns: AgentEvent[][]): void {
++    this._queuedRun = turns.map((turn) => [...turn]);
+   }
+ 
+   addEvent(event: AgentEvent): void {
++    this._queuedRun = null;
+     this._events.push(event);
+   }
+ 
+   clearEvents(): void {
++    this._queuedRun = null;
+     this._events = [];
+   }
+ 
+@@ -186,6 +216,7 @@ export class FakeAgentAdapter implements IAgentAdapter {
+   }
+ 
+   emitToolCall(toolName: string, input: unknown, toolCallId: string): void {
++    this._queuedRun = null;
+     this._events.push({
+       type: 'tool_call',
+       timestamp: new Date().toISOString(),
+@@ -194,6 +225,7 @@ export class FakeAgentAdapter implements IAgentAdapter {
+   }
+ 
+   emitToolResult(toolCallId: string, output: string, isError = false): void {
++    this._queuedRun = null;
+     this._events.push({
+       type: 'tool_result',
+       timestamp: new Date().toISOString(),
+@@ -202,10 +234,37 @@ export class FakeAgentAdapter implements IAgentAdapter {
+   }
+ 
+   emitThinking(content: string, signature?: string): void {
++    this._queuedRun = null;
+     this._events.push({
+       type: 'thinking',
+       timestamp: new Date().toISOString(),
+       data: { content, signature },
+     });
+   }
++
++  emitSessionIdle(): void {
++    this._queuedRun = null;
++    this._events.push(createSessionIdleEvent());
++  }
++
++  emitPendingMessagesModified(queueDepth: number): void {
++    this._queuedRun = null;
++    this._events.push({
++      type: 'raw',
++      timestamp: new Date().toISOString(),
++      data: {
++        provider: 'fake',
++        originalType: 'pending_messages.modified',
++        originalData: { queueDepth },
++      },
++    });
++  }
++}
++
++function createSessionIdleEvent(): AgentEvent {
++  return {
++    type: 'session_idle',
++    timestamp: new Date().toISOString(),
++    data: {},
++  };
+ }
+diff --git a/src/adapter/index.ts b/src/adapter/index.ts
+index c97d8e9..e6e9983 100644
+--- a/src/adapter/index.ts
++++ b/src/adapter/index.ts
+@@ -24,6 +24,7 @@ export type {
+   AgentUsageEvent,
+   AgentUserPromptEvent,
+   ReasoningEffort,
++  SessionSender,
+   TokenMetrics,
+ } from './events.js';
+ export type { FakeAgentAdapterOptions } from './fake.js';
+diff --git a/src/adapter/interface.ts b/src/adapter/interface.ts
+index 1cb90dd..783c467 100644
+--- a/src/adapter/interface.ts
++++ b/src/adapter/interface.ts
+@@ -11,7 +11,17 @@
+ import type { AgentResult, AgentRunOptions } from './events.js';
+ 
+ export interface IAgentAdapter {
+-  /** Execute a prompt through the agent. */
++  /**
++   * Execute a prompt through the agent.
++   *
++   * The event-driven run contract resolves when the SDK session emits
++   * `session_idle` and the caller has no more queued `session.send` work.
++   * If `session_error` fires before idle, implementations return an
++   * `AgentResult` with `status: 'failed'` instead of throwing or hanging.
++   *
++   * Implementations that expose a live session handle invoke
++   * `options.onSessionReady` once the initial prompt has been sent.
++   */
+   run(options: AgentRunOptions): Promise<AgentResult>;
+ 
+   /** Send compact command to reduce context. */
+diff --git a/src/adapter/sdk-copilot.ts b/src/adapter/sdk-copilot.ts
+index 412a16d..df99add 100644
+--- a/src/adapter/sdk-copilot.ts
++++ b/src/adapter/sdk-copilot.ts
+@@ -79,44 +79,70 @@ export class SdkCopilotAdapter implements IAgentAdapter {
+     }
+ 
+     let sessionDestroyed = false;
++    let unsubscribeRun: (() => void) | undefined;
+ 
+     try {
+       let output = '';
+       let hasStreamedThinking = false;
+       let hasStreamedText = false;
+-
+-      session.on((event: CopilotSessionEventLike) => {
+-        // Suppress duplicate consolidated events.
+-        // SDK emits deltas during streaming, then re-emits full consolidated
+-        // content after the turn. We skip the duplicates.
+-        if (event.type === 'assistant.reasoning_delta') {
+-          hasStreamedThinking = true;
+-        }
+-        if (event.type === 'assistant.message_delta') {
+-          hasStreamedText = true;
+-        }
+-        if (event.type === 'assistant.reasoning' && hasStreamedThinking) {
+-          return;
+-        }
+-        if (event.type === 'assistant.message' && hasStreamedText) {
+-          output = event.data?.content ?? '';
+-          return;
+-        }
+-
+-        const agentEvent = translateEvent(event);
+-        if (agentEvent && onEvent) {
+-          onEvent(agentEvent);
+-        }
+-
+-        if (event.type === 'assistant.message') {
+-          output = event.data?.content ?? '';
+-        }
++      let idleSettled = false;
++
++      const idlePromise = new Promise<void>((resolve, reject) => {
++        const unsubscribe = session.on((event: CopilotSessionEventLike) => {
++          // Suppress duplicate consolidated events.
++          // SDK emits deltas during streaming, then re-emits full consolidated
++          // content after the turn. We skip the duplicates.
++          if (event.type === 'assistant.reasoning_delta') {
++            hasStreamedThinking = true;
++          }
++          if (event.type === 'assistant.message_delta') {
++            hasStreamedText = true;
++          }
++          if (event.type === 'assistant.reasoning' && hasStreamedThinking) {
++            return;
++          }
++          if (event.type === 'assistant.message' && hasStreamedText) {
++            output = event.data?.content ?? '';
++            return;
++          }
++
++          const agentEvent = translateEvent(event);
++          if (agentEvent && onEvent) {
++            onEvent(agentEvent);
++          }
++
++          if (event.type === 'assistant.message') {
++            output = event.data?.content ?? '';
++          }
++
++          if (isSessionIdleEvent(event) && !idleSettled) {
++            idleSettled = true;
++            resolve();
++          }
++          if (isSessionErrorEvent(event) && !idleSettled) {
++            idleSettled = true;
++            reject(new Error(sessionErrorMessage(event)));
++          }
++        });
++        unsubscribeRun = unsubscribe;
+       });
+ 
+-      await session.sendAndWait(
+-        { prompt: prompt.trim() },
+-        options.timeout ? options.timeout * 1000 : undefined,
+-      );
++      const sender = {
++        send: async (nextPrompt: string): Promise<string> => {
++          await session.send({ prompt: nextPrompt });
++          return nextPrompt;
++        },
++      };
++
++      const initialSend = session.send({ prompt: prompt.trim() });
++      try {
++        options.onSessionReady?.(sender);
++      } catch (error) {
++        await initialSend;
++        throw error;
++      }
++      await initialSend;
++      await idlePromise;
+ 
+       return {
+         output,
+@@ -149,6 +175,9 @@ export class SdkCopilotAdapter implements IAgentAdapter {
+         tokens: null,
+       };
+     } finally {
++      if (unsubscribeRun) {
++        unsubscribeRun();
++      }
+       if (!sessionDestroyed) {
+         sessionDestroyed = true;
+         // Disconnect but don't destroy — session state preserved for resumption
+@@ -232,6 +261,18 @@ function validatePrompt(prompt: string): string | null {
+   return null;
+ }
+ 
++function isSessionIdleEvent(event: CopilotSessionEventLike): boolean {
++  return event.type === 'session.idle' || event.type === 'session_idle';
++}
++
++function isSessionErrorEvent(event: CopilotSessionEventLike): boolean {
++  return event.type === 'session.error' || event.type === 'session_error';
++}
++
++function sessionErrorMessage(event: CopilotSessionEventLike): string {
++  return event.data?.message ?? 'Session error';
++}
++
+ function translateEvent(event: CopilotSessionEventLike): AgentEvent | null {
+   const timestamp = new Date().toISOString();
+ 
+@@ -267,6 +308,7 @@ function translateEvent(event: CopilotSessionEventLike): AgentEvent | null {
+       };
+ 
+     case 'session.idle':
++    case 'session_idle':
+       return {
+         type: 'session_idle',
+         timestamp,
+@@ -274,6 +316,7 @@ function translateEvent(event: CopilotSessionEventLike): AgentEvent | null {
+       };
+ 
+     case 'session.error':
++    case 'session_error':
+       return null; // Handled in catch block
+ 
+     case 'tool.execution_start':
+diff --git a/src/runner/index.ts b/src/runner/index.ts
+index b93031d..8eb2845 100644
+--- a/src/runner/index.ts
++++ b/src/runner/index.ts
+@@ -36,6 +36,8 @@ export {
+   validateSlug,
+   watermarkPath,
+ } from './folder.js';
++export type { PreambleAssemblyInput } from './preamble-builder.js';
++export { buildInsidePreamble } from './preamble-builder.js';
+ export { PrettyDisplay } from './pretty.js';
+ export {
+   computeVelocity,
+diff --git a/src/runner/runner.ts b/src/runner/runner.ts
+index 809f070..ae06d04 100644
+--- a/src/runner/runner.ts
++++ b/src/runner/runner.ts
+@@ -16,6 +16,7 @@ import * as path from 'node:path';
+ import type { AgentEvent, AgentResult } from '../adapter/events.js';
+ import type { IAgentAdapter } from '../adapter/interface.js';
+ import { createRunFolder, parseFrontmatter } from './folder.js';
++import { buildInsidePreamble } from './preamble-builder.js';
+ import type {
+   AgentDefinition,
+   AgentRunConfig,
+@@ -156,6 +157,28 @@ export const MINIH_ENV_KEYS = [
+   'MINIH_PARAMS',
+ ];
+ 
++const TERMINAL_CONDITION_POLL_MS = 10;
++
++function wait(ms: number): Promise<void> {
++  return new Promise((resolve) => setTimeout(resolve, ms));
++}
++
++/**
++ * Wait for the runner-owned terminal condition after the adapter reaches idle.
++ *
++ * P2 uses a zero-count placeholder. P3 replaces that getter with a live view of
++ * inbox/state forwarder queues without changing the runner/adapter contract.
++ */
++export async function awaitTerminalCondition(
++  adapterResult: AgentResult,
++  pendingForwarderCount: () => number,
++): Promise<AgentResult> {
++  while (pendingForwarderCount() > 0) {
++    await wait(TERMINAL_CONDITION_POLL_MS);
++  }
++  return adapterResult;
++}
++
+ /**
+  * Execute an agent from its definition.
+  *
+@@ -257,16 +280,16 @@ export async function runAgent(
+   } else {
+     // Fresh run: full prompt assembly (preamble + instructions + output hint + params + prompt + system requirements)
+     const outputHint = `Write your final JSON report to: ${outputPath}`;
+-    finalPrompt = [
++    finalPrompt = buildInsidePreamble({
++      definition,
++      runId,
+       preamble,
+       instructions,
+       outputHint,
+       paramsHint,
+-      prompt,
+-      SYSTEM_OUTPUT_INSTRUCTIONS,
+-    ]
+-      .filter(Boolean)
+-      .join('\n\n---\n\n');
++      userPrompt: prompt,
++      systemOutputInstructions: SYSTEM_OUTPUT_INSTRUCTIONS,
++    });
+   }
+ 
+   // Set runtime environment for the agent (Workshop 007)
+@@ -373,17 +396,20 @@ export async function runAgent(
+       }
+     }
+ 
+-    const runPromise = adapter.run({
+-      prompt: finalPrompt,
+-      sessionId: config.sessionId,
+-      model: config.model,
+-      reasoningEffort: config.reasoningEffort,
+-      cwd: runDir, // SDK isolated to run folder (Workshop 005)
+-      onEvent: handleEvent,
+-      timeout: timeoutMs,
+-      configDir: config.configDir ?? config.cwd,
+-      ...(mcpServers && { mcpServers }),
+-    });
++    const pendingForwarderCount = (): number => 0;
++    const runPromise = adapter
++      .run({
++        prompt: finalPrompt,
++        sessionId: config.sessionId,
++        model: config.model,
++        reasoningEffort: config.reasoningEffort,
++        cwd: runDir, // SDK isolated to run folder (Workshop 005)
++        onEvent: handleEvent,
++        onSessionReady: () => {},
++        configDir: config.configDir ?? config.cwd,
++        ...(mcpServers && { mcpServers }),
++      })
++      .then((result) => awaitTerminalCondition(result, pendingForwarderCount));
+     const timeoutPromise = new Promise<never>((_, reject) => {
+       timeoutHandle = setTimeout(() => {
+         timedOut = true;
+diff --git a/test/adapter/fake.test.ts b/test/adapter/fake.test.ts
+index a4310d8..19fb51d 100644
+--- a/test/adapter/fake.test.ts
++++ b/test/adapter/fake.test.ts
+@@ -190,4 +190,78 @@ describe('FakeAgentAdapter', () => {
+     const result = await fake.run({ prompt: 'test' });
+     expect(result.stderr).toBe('error details');
+   });
++
++  it('emitSessionIdle adds a session idle event to the run stream', async () => {
++    const fake = new FakeAgentAdapter();
++    fake.emitSessionIdle();
++    const events: AgentEvent[] = [];
++
++    await fake.run({ prompt: 'test', onEvent: (event) => events.push(event) });
++
++    expect(events).toHaveLength(1);
++    expect(events[0].type).toBe('session_idle');
++  });
++
++  it('setQueuedRun emits turns separated by idle events', async () => {
++    const fake = new FakeAgentAdapter();
++    fake.setQueuedRun([
++      [
++        {
++          type: 'message',
++          timestamp: '2026-01-01T00:00:00.000Z',
++          data: { content: 'turn one' },
++        },
++      ],
++      [
++        {
++          type: 'message',
++          timestamp: '2026-01-01T00:00:01.000Z',
++          data: { content: 'turn two' },
++        },
++      ],
++    ]);
++    const events: AgentEvent[] = [];
++
++    await fake.run({ prompt: 'test', onEvent: (event) => events.push(event) });
++
++    expect(events.map((event) => event.type)).toEqual([
++      'message',
++      'session_idle',
++      'message',
++      'session_idle',
++    ]);
++  });
++
++  it('emitPendingMessagesModified records fake queue-depth observations', () => {
++    const fake = new FakeAgentAdapter();
++    fake.emitPendingMessagesModified(3);
++
++    expect(fake.getEvents()).toEqual([
++      expect.objectContaining({
++        type: 'raw',
++        data: {
++          provider: 'fake',
++          originalType: 'pending_messages.modified',
++          originalData: { queueDepth: 3 },
++        },
++      }),
++    ]);
++  });
++
++  it('onSessionReady receives a sender that records sends in order', async () => {
++    const fake = new FakeAgentAdapter();
++
++    await fake.run({
++      prompt: 'test',
++      onSessionReady: (sender) => {
++        void sender.send('first follow-up');
++        void sender.send('second follow-up');
++      },
++    });
++
++    expect(fake.getSessionSendHistory()).toEqual([
++      'first follow-up',
++      'second follow-up',
++    ]);
++  });
+ });
+diff --git a/test/runner/folder.test.ts b/test/runner/folder.test.ts
+index de21a4d..9d78a2e 100644
+--- a/test/runner/folder.test.ts
++++ b/test/runner/folder.test.ts
+@@ -267,7 +267,9 @@ describe('createRunFolder', () => {
+     fs.writeFileSync(path.join(dir, 'output-schema.json'), '{"type":"object"}');
+     fs.writeFileSync(path.join(dir, 'instructions.md'), '# Instructions');
+ 
+-    const agent = resolveAgent('test-agent', tmpDir)!;
++    const agent = resolveAgent('test-agent', tmpDir);
++    expect(agent).not.toBeNull();
++    if (!agent) throw new Error('expected test-agent to resolve');
+     const { runDir, runId } = createRunFolder(agent);
+ 
+     expect(fs.existsSync(runDir)).toBe(true);
+diff --git a/docs/plans/007-backgrounding/tasks/phase-2-runagent-event-driven-refactor-and-preamble-builder/execution.log.md b/docs/plans/007-backgrounding/tasks/phase-2-runagent-event-driven-refactor-and-preamble-builder/execution.log.md
+new file mode 100644
+index 0000000..c2cef09
+--- /dev/null
++++ b/docs/plans/007-backgrounding/tasks/phase-2-runagent-event-driven-refactor-and-preamble-builder/execution.log.md
+@@ -0,0 +1,275 @@
++# Phase 2 — Execution Log
++
++**Plan**: `docs/plans/007-backgrounding/coordination-plan.md`
++**Phase**: Phase 2: runAgent Event-Driven Refactor + Preamble Builder
++**Status**: Landed
++
++---
++
++## Pre-Phase Validation
++
++| Check | Status | Evidence |
++|-------|--------|----------|
++| Harness file | unavailable | `docs/project-rules/harness.md` is absent; proceed with standard repository tests |
++| Context loaded | complete | Read coordination spec/plan, P0/P1 dossiers and execution logs, P2 dossier/flight plan, runner+adapter domain docs, and current adapter/runner source |
++| Starting task | T001 | Adapter contract seam is first dependency for T002/T003 and P3 forwarders |
++
++---
++
++## Tasks
++
++### T010 — Domain documentation updates
++
++**Status**: `[x]` DONE
++
++**Files changed**:
++- `docs/domains/runner/domain.md`
++- `docs/domains/adapter/domain.md`
++
++**Implementation**:
++- Added `preamble-builder.ts`, `buildInsidePreamble`, and the event-driven terminal-condition concept to the runner domain.
++- Added `SessionSender`, `onSessionReady`, event-driven `run()`, and fake queued-run helpers to the adapter domain.
++- Appended incremental `007/P2` history entries to both domains.
++
++**Evidence**:
++```bash
++node dist/cli/index.js doctor >/tmp/minih-t010-doctor.json && rm -f /tmp/minih-t010-doctor.json
++# exit 0; 9 agents healthy
++```
++
++---
++
++### T009 — Quality gates and baseline diff
++
++**Status**: `[x]` DONE
++
++**Commands run**:
++- `just fft`
++- `MINIH_REGRESSION=1 just fft`
++- `bash scripts/capture-p1-baseline.sh /tmp/p2-baselines`
++- `node scripts/diff-baselines.mjs docs/plans/007-backgrounding/tasks/phase-1-runner-foundations/baselines /tmp/p2-baselines`
++
++**Evidence**:
++```bash
++just fft
++# exit 0; 253 tests passed, 2 skipped; npm audit found 0 vulnerabilities after audit fix
++
++MINIH_REGRESSION=1 just fft
++# exit 0; 255 tests passed; npm audit found 0 vulnerabilities
++
++rm -rf /tmp/p2-baselines && bash scripts/capture-p1-baseline.sh /tmp/p2-baselines && node scripts/diff-baselines.mjs docs/plans/007-backgrounding/tasks/phase-1-runner-foundations/baselines /tmp/p2-baselines && rm -rf /tmp/p2-baselines
++# OK: 2 file(s) match (after key-strip)
++```
++
++**Discovery**: the first default `just fft` surfaced Vite/PostCSS audit findings. `npm audit fix` updated the lockfile; rerunning both gates reported zero vulnerabilities.
++
++---
++
++### T008 — Re-export contracts
++
++**Status**: `[x]` DONE
++
++**Files changed**:
++- `src/runner/index.ts`
++- `src/adapter/index.ts`
++
++**Implementation**:
++- Re-exported `buildInsidePreamble` and `PreambleAssemblyInput` from the runner barrel.
++- Re-exported `SessionSender` from the adapter barrel.
++
++**Evidence**:
++```bash
++npx tsc --noEmit
++# exit 0
++```
++
++---
++
++### T007 — Backward-compat regression
++
++**Status**: `[x]` DONE
++
++**Files changed**:
++- `test/cli/all-existing-agents-pass-doctor.test.ts`
++- `AGENTS.md`
++
++**Implementation**:
++- Added a gated Vitest suite enabled only when `MINIH_REGRESSION=1`.
++- Shells the built CLI for `doctor` and `list`, strips transient keys with the same key set as `scripts/diff-baselines.mjs`, and compares against the P1 baselines.
++- Emits the first differing JSON path in the assertion message.
++- Documented the regression gate in `AGENTS.md`.
++
++**Evidence**:
++```bash
++npx vitest run test/cli/all-existing-agents-pass-doctor.test.ts
++# 2 tests skipped
++
++npm run build -- --pretty false
++# exit 0
++
++MINIH_REGRESSION=1 npx vitest run test/cli/all-existing-agents-pass-doctor.test.ts
++# 2 tests passed
++```
++
++**Discovery**: the P1 baseline capture is aggregate `doctor` + `list` output. Running those two commands once each covers all nine current agents and avoids unnecessary subprocess fan-out.
++
++---
++
++### T006 — Terminal condition helper
++
++**Status**: `[x]` DONE
++
++**Files changed**:
++- `src/runner/runner.ts`
++- `test/runner/runner-event-driven.test.ts`
++
++**Implementation**:
++- Added `awaitTerminalCondition(adapterResult, pendingForwarderCount: () => number)`.
++- Wrapped `adapter.run().then(awaitTerminalCondition)` inside the runner's existing timeout `Promise.race`.
++- Used `() => 0` as the P2 placeholder pending-forwarder getter.
++- Removed the runner-to-adapter `timeout` option so the runner remains the sole timeout owner for `runAgent`.
++
++**Evidence**:
++```bash
++npx vitest run test/runner/runner-event-driven.test.ts test/runner/runner.test.ts
++# 20 tests passed
++
++npx tsc --noEmit
++# exit 0
++```
++
++**Discovery**: the old timeout unit-confusion risk is best avoided by not passing runner timeouts into the SDK adapter at all for `runAgent`; the outer runner race now guards both adapter idle and pending-forwarder drain.
++
++---
++
++### T001 — Extend adapter contract
++
++**Status**: `[x]` DONE
++
++**Files changed**:
++- `src/adapter/interface.ts`
++- `src/adapter/events.ts`
++
++**Implementation**:
++- Added `SessionSender` to the adapter contract surface.
++- Added optional `AgentRunOptions.onSessionReady?: (sender: SessionSender) => void`.
++- Expanded `IAgentAdapter.run()` JSDoc to lock the event-driven terminal condition: idle resolves, session error returns failed result, and the live session sender is surfaced once the initial prompt is sent.
++
++**Evidence**:
++```bash
++npx tsc --noEmit
++# exit 0
++```
++
++**Notes**: T001 intentionally does not change runtime behavior yet. T002 and T003 wire the callback in the real and fake adapters.
++
++---
++
++### T002 — Rewrite SdkCopilotAdapter.run()
++
++**Status**: `[x]` DONE
++
++**Files changed**:
++- `src/adapter/copilot-types.ts`
++- `src/adapter/sdk-copilot.ts`
++- `test/adapter/sdk-copilot.test.ts`
++
++**Implementation**:
++- Extended the local SDK facade with `ICopilotSession.send(...)`.
++- Replaced the `run()` path's `sendAndWait` call with `session.send(...)` plus an idle Promise resolved by `session.idle` / `session_idle`.
++- Rejected the idle Promise on `session.error` / `session_error`, returning a failed `AgentResult` rather than hanging.
++- Captured and invoked the session event unsubscribe function in `finally` before `session.disconnect()`.
++- Added an `idleSettled` guard so duplicate idle events are emitted but settle the Promise only once.
++- Invoked `onSessionReady` after the initial `session.send` is issued, passing a bound sender that records the live session-send seam for P3.
++- Left `compact()` and `terminate()` unchanged.
++
++**Evidence**:
++```bash
++npx vitest run test/adapter/sdk-copilot.test.ts
++# 4 tests passed
++
++npx tsc --noEmit
++# exit 0
++```
++
++**Discovery**: `ICopilotSession` needed an explicit `send()` member in the local facade; without it the adapter would either reach into SDK internals or keep a hidden `any` seam.
++
++---
++
++### T003 — Extend FakeAgentAdapter
++
++**Status**: `[x]` DONE
++
++**Files changed**:
++- `src/adapter/fake.ts`
++- `test/adapter/fake.test.ts`
++
++**Implementation**:
++- Added `emitSessionIdle()`.
++- Added `setQueuedRun(turns)` that emits each turn followed by `session_idle`.
++- Added `emitPendingMessagesModified(queueDepth)` as a fake-only raw event.
++- Added `onSessionReady` support in `run()` with a sender that records prompts.
++- Added `getSessionSendHistory()`.
++- Preserved existing event helpers and runner-test behavior.
++
++**Evidence**:
++```bash
++npx vitest run test/adapter/fake.test.ts test/runner/runner.test.ts
++# 36 tests passed
++
++npx tsc --noEmit
++# exit 0
++```
++
++**Discovery**: `setQueuedRun` auto-inserts idle events to make callers describe logical turns instead of SDK lifecycle boilerplate.
++
++---
++
++### T004 — Create preamble-builder
++
++**Status**: `[x]` DONE
++
++**Files changed**:
++- `src/runner/preamble-builder.ts`
++- `test/runner/preamble-builder.test.ts`
++
++**Implementation**:
++- Added `PreambleAssemblyInput` and `buildInsidePreamble`.
++- Preserved the disabled path as the exact old inline join order.
++- Added identity/tools/peer-contract stub sections for `coordination.enabled`.
++- Blockquote-framed `outsideContract` under `## Peer's Contract (from outside.md)`.
++- Added JSDoc requiring callers not to use the builder for resume turns.
++
++**Evidence**:
++```bash
++npx vitest run test/runner/preamble-builder.test.ts
++# 5 tests passed
++
++npx tsc --noEmit
++# exit 0
++```
++
++**Discovery**: Enabled coordination prompt order can follow workshop 008 without changing any current agent because the disabled branch is pinned byte-for-byte against the pre-T005 inline assembly.
++
++---
++
++### T005 — Refactor runner.ts
++
++**Status**: `[x]` DONE
++
++**Files changed**:
++- `src/runner/runner.ts`
++
++**Implementation**:
++- Imported and used `buildInsidePreamble` in the fresh-run branch.
++- Left the resume branch sending only the follow-up prompt.
++- Passed `onSessionReady: () => {}` through `adapter.run()` as the P2 placeholder for P3 forwarder wiring.
++
++**Evidence**:
++```bash
++npx vitest run test/runner/runner.test.ts test/runner/preamble-builder.test.ts
++# 21 tests passed
++
++npx tsc --noEmit
++# exit 0
++```
+diff --git a/docs/plans/007-backgrounding/tasks/phase-2-runagent-event-driven-refactor-and-preamble-builder/tasks.fltplan.md b/docs/plans/007-backgrounding/tasks/phase-2-runagent-event-driven-refactor-and-preamble-builder/tasks.fltplan.md
+new file mode 100644
+index 0000000..221381d
+--- /dev/null
++++ b/docs/plans/007-backgrounding/tasks/phase-2-runagent-event-driven-refactor-and-preamble-builder/tasks.fltplan.md
+@@ -0,0 +1,181 @@
++# Flight Plan: Phase 2 — runAgent Event-Driven Refactor + Preamble Builder
++
++**Plan**: [coordination-plan.md](../../coordination-plan.md)
++**Phase**: Phase 2: runAgent Event-Driven Refactor + Preamble Builder
++**Generated**: 2026-04-26
++**Status**: Landed
++
++---
++
++## Departure → Destination
++
++**Where we are**: Phase 1 landed runner foundations — `state.ts`, `context.ts`, `atomic-write.ts`, `ulid.ts`, `folder.ts` extensions (path helpers + `outside.md` discovery + `parseCoordinationField`), four JSON schemas, and types (`InboxMessage`, `OutsideState`, `InsideState`, `Side`, `CoordinationFrontmatter`). All 9 existing agents pass `doctor` + `list` baselines unchanged. `runAgent` still uses `session.sendAndWait(prompt)` for a single-turn, blocking call. The preamble assembly is an inline string-join in `runner.ts:252–270`. `IAgentAdapter.run()` semantics are "send-and-wait" — it can't yet support mid-turn `session.send` from forwarders.
++
++**Where we're going**: After P2, `runAgent` will be **event-driven**: `session.send(prompt)` once, then resolve on `session_idle`. `compact()` keeps `sendAndWait` (terminal call). The preamble assembly moves into a pure `buildInsidePreamble(...)` function in a new `src/runner/preamble-builder.ts`, with stub injection points for the workshop-005 tools section, the workshop-008 identity block, and the workshop-008 peer-contract section. Stubs are conditional on `coordination.enabled`, so the 9 existing agents see byte-identical preamble output. `FakeAgentAdapter` gains event-driven test helpers (`emitSessionIdle`, queued-run support) so P3–P6 forwarder tests can drive the loop programmatically. A backward-compat regression test (`test/cli/all-existing-agents-pass-doctor.test.ts`) diffs every agent's `doctor` + `list` output against the P1 baseline. After this phase, P3 can wire forwarders that call `session.send` mid-turn without changing the adapter contract.
++
++---
++
++## Domain Context
++
++### Domains We're Changing
++
++| Domain | What Changes | Key Files |
++|--------|--------------|-----------|
++| `runner` | New `preamble-builder.ts` (pure assembly module). `runner.ts` inner loop refactored to consume it + integrate the event-driven adapter contract. `index.ts` re-exports `buildInsidePreamble`. | `src/runner/preamble-builder.ts` (NEW), `src/runner/runner.ts` (MODIFY lines 252–270 + 344–410), `src/runner/index.ts` (MODIFY — additive re-export) |
++| `adapter` | `IAgentAdapter.run()` JSDoc clarifies the event-driven terminal-condition contract (no signature change). `SdkCopilotAdapter.run()` swaps `sendAndWait` → `session.send` + idle Promise. `compact()` UNCHANGED. `FakeAgentAdapter` gains event-driven test helpers. | `src/adapter/interface.ts` (MODIFY), `src/adapter/sdk-copilot.ts` (MODIFY lines 116–119), `src/adapter/fake.ts` (MODIFY) |
++
++### Domains We Depend On (no changes)
++
++| Domain | What We Consume | Contract |
++|--------|----------------|----------|
++| `runner` (P1 outputs) | `AgentDefinition.coordination` + `AgentDefinition.outsideContract` (set by `parseFrontmatter`); `MINIH_ENV_KEYS` constant | `src/runner/folder.ts`, `src/runner/types.ts`, `src/runner/runner.ts:142` |
++| `adapter` events | `AgentSessionEvent` with `'session_idle'` discriminant (already exists at `events.ts:84–91`) | `src/adapter/events.ts` |
++
++---
++
++## Flight Status
++
++<!-- Updated by /plan-6-v2: pending → active → done. Use blocked for problems/input needed. -->
++
++```mermaid
++stateDiagram-v2
++    classDef pending fill:#9E9E9E,stroke:#757575,color:#fff
++    classDef active fill:#FFC107,stroke:#FFA000,color:#000
++    classDef done fill:#4CAF50,stroke:#388E3C,color:#fff
++    classDef blocked fill:#F44336,stroke:#D32F2F,color:#fff
++
++    state "1: Adapter contract" as S1
++    state "2: SDK adapter rewrite" as S2
++    state "3: Fake adapter helpers" as S3
++    state "4: preamble-builder" as S4
++    state "5: runner refactor" as S5
++    state "6: Terminal condition" as S6
++    state "7: Backward-compat test" as S7
++    state "8: Re-exports" as S8
++    state "9: just fft + baseline" as S9
++    state "10: Domain.md updates" as S10
++
++    [*] --> S1
++    S1 --> S2
++    S1 --> S3
++    S2 --> S5
++    S3 --> S5
++    S4 --> S5
++    S5 --> S6
++    S6 --> S7
++    S4 --> S8
++    S7 --> S9
++    S9 --> S10
++    S10 --> [*]
++
++    class S1 done
++    class S2 done
++    class S3 done
++    class S4 done
++    class S5 done
++    class S6 done
++    class S7 done
++    class S8 done
++    class S9 done
++    class S10 done
++```
++
++**Legend**: grey = pending | yellow = active | red = blocked/needs input | green = done
++
++---
++
++## Stages
++
++<!-- Updated by /plan-6-v2 during implementation: [ ] → [~] → [x] -->
++
++- [x] **Stage 1: Extend adapter contract** — JSDoc on `IAgentAdapter.run()` (idle = resolve, error = fail-not-throw); add `SessionSender` type + `AgentRunOptions.onSessionReady?` callback in `src/adapter/events.ts` (load-bearing seam for P3 forwarders) (`src/adapter/interface.ts`, `src/adapter/events.ts`)
++- [x] **Stage 2: Rewrite SdkCopilotAdapter.run()** — swap `sendAndWait` → `session.send` + idle Promise; reject on `session_error`; capture `unsubscribe()` for finally; `idleSettled` guard; invoke `onSessionReady` with bound send. `compact()` + `terminate()` UNCHANGED. Cover with `test/adapter/sdk-copilot.test.ts` (new) (`src/adapter/sdk-copilot.ts`)
++- [x] **Stage 3: Extend FakeAgentAdapter** — `emitSessionIdle` + `setQueuedRun` + `emitPendingMessagesModified` + `onSessionReady` stub with `getSessionSendHistory()` recorder (`src/adapter/fake.ts`, `test/adapter/fake.test.ts` — new file)
++- [x] **Stage 4: Create preamble-builder** — pure module with section-framed stub markers (HTML comment + section header + blockquote-framed peer-contract); snapshot tests for enabled/disabled × outside.md presence + JSDoc "do not call for resume" (`src/runner/preamble-builder.ts` — new file, `test/runner/preamble-builder.test.ts` — new file)
++- [x] **Stage 5: Refactor runner.ts** — consume `buildInsidePreamble` in non-resume branch; resume bypass at lines 254–256 unchanged; wire `onSessionReady` (no-op in P2; P3 wires real); existing 9 agents unchanged (`src/runner/runner.ts`)
++- [x] **Stage 6: Terminal-condition machinery** — `awaitTerminalCondition(adapterResult, pendingForwarderCount: () => number)` accepts a GETTER (P3 supplies live counter); P2 placeholder `() => 0`; test SDK-level timeout drop + outer-race + clean adapter finally (`src/runner/runner.ts`, `test/runner/runner-event-driven.test.ts` — new file)
++- [x] **Stage 7: Backward-compat regression** — `test/cli/all-existing-agents-pass-doctor.test.ts` diffs against P1 baselines; **gated behind `MINIH_REGRESSION=1`** (default `npm test` skips, ~9s runtime); document in AGENTS.md (`test/cli/all-existing-agents-pass-doctor.test.ts` — new file)
++- [x] **Stage 8: Re-export buildInsidePreamble + SessionSender** — `src/runner/index.ts` additive; `SessionSender` re-exported so P3's forwarders can type their session-handle parameter (`src/runner/index.ts`)
++- [x] **Stage 9: just fft + baseline diff** — pipeline green with AND without `MINIH_REGRESSION=1`; baseline diff exits 0; own every finding
++- [x] **Stage 10: Update domain.md** — incremental History-entry append + minor Composition addition (preamble-builder); full restructure deferred to P7 task 7.4 (`docs/domains/runner/domain.md`, `docs/domains/adapter/domain.md`)
++
++---
++
++## Architecture: Before & After
++
++```mermaid
++flowchart LR
++    classDef existing fill:#E8F5E9,stroke:#4CAF50,color:#000
++    classDef changed fill:#FFF3E0,stroke:#FF9800,color:#000
++    classDef new fill:#E3F2FD,stroke:#2196F3,color:#000
++
++    subgraph Before["Before Phase 2"]
++        B1[runner.ts<br/>inline preamble assembly<br/>+ sendAndWait call]:::existing
++        B2[IAgentAdapter<br/>run = sendAndWait]:::existing
++        B3[SdkCopilotAdapter<br/>session.sendAndWait]:::existing
++        B4[FakeAgentAdapter<br/>basic emit helpers]:::existing
++        B1 --> B2
++        B2 --> B3
++        B2 --> B4
++    end
++
++    subgraph After["After Phase 2"]
++        A1[runner.ts<br/>calls buildInsidePreamble<br/>+ awaitTerminalCondition]:::changed
++        A2[IAgentAdapter<br/>run = event-driven<br/>idle = terminal]:::changed
++        A3[SdkCopilotAdapter<br/>session.send + idle Promise]:::changed
++        A4[FakeAgentAdapter<br/>+ emitSessionIdle<br/>+ setQueuedRun]:::changed
++        A5[preamble-builder.ts<br/>pure assembly<br/>stub injection points]:::new
++        A6[all-existing-agents-pass-doctor.test.ts<br/>backward-compat regression]:::new
++
++        A1 --> A2
++        A1 --> A5
++        A2 --> A3
++        A2 --> A4
++        A6 -.-> A1
++    end
++```
++
++**Legend**: existing (green, unchanged) | changed (orange, modified) | new (blue, created)
++
++---
++
++## Acceptance Criteria
++
++- [x] **AC-RUN-AGENT-EVENT-DRIVEN** (workshop 007 §"Terminal condition for runAgent") — `runAgent` uses `session.send` + idle subscription, NOT `sendAndWait`. Single-message and queued-message flows both reach completion via the same idle path; `session_error` before `session_idle` resolves with `status: 'failed'` (does NOT hang).
++- [x] **AC-BACKWARD-COMPAT (continued)** — all 9 existing agents produce byte-identical `doctor` + `list` output to the P1 baseline. Verified by `MINIH_REGRESSION=1 npm test` running `test/cli/all-existing-agents-pass-doctor.test.ts` + manual `bash scripts/capture-p1-baseline.sh /tmp/p2 && node scripts/diff-baselines.mjs <p1-baselines> /tmp/p2` exit 0.
++- [x] **Preamble byte-equivalence** — `buildInsidePreamble` produces identical output to today's inline assembly when `coordination.enabled === false` (or `coordination` undefined → defaults to `{enabled: false}`). Snapshot test in `test/runner/preamble-builder.test.ts`; fixture captured BEFORE T005 runs.
++- [x] **Forward-compat seams in place** — `onSessionReady` callback fires once with a working `send` reference; `awaitTerminalCondition` accepts `() => number` getter (P3 wires live counter); FakeAgentAdapter exposes `emitSessionIdle`, `setQueuedRun`, `emitPendingMessagesModified`, `getSessionSendHistory` for P3–P6.
++- [x] **`just fft` exits 0** — no new lint, type, test, or audit findings, with AND without `MINIH_REGRESSION=1` (per AGENTS.md "Pre-commit / pre-push gate" rule).
++
++## Goals & Non-Goals
++
++**Goals**:
++- Lift `runAgent` from `sendAndWait` to event-driven loop using `session.send` + `session_idle`.
++- Extract preamble assembly into `preamble-builder.ts` with stub injection points for P6 wiring.
++- Extend `FakeAgentAdapter` to support event-driven test contract (for P3–P6).
++- Preserve byte-identical behavior for the 9 existing non-coordinated agents.
++- Establish the terminal-condition seam (`awaitTerminalCondition`) for P3 to wire real forwarder-queue tracking.
++
++**Non-Goals**:
++- No real identity-block / tools-section / peer-contract content (P6).
++- No forwarders (P3).
++- No file-watcher (P3).
++- No MCP tools (P4).
++- No new CLI commands (P5).
++- No widening of `MagicWandTarget` or new `RetrospectiveCoordination` type (P6).
++- No change to `compact()` or `terminate()` adapter methods.
++
++---
++
++## Checklist
++
++- [x] T001: Document the event-driven terminal-condition contract on `IAgentAdapter.run()` (JSDoc; no signature change unless tests prove ergonomics gain)
++- [x] T002: Rewrite `SdkCopilotAdapter.run()` — `sendAndWait` → `session.send` + idle Promise; cover with `test/adapter/sdk-copilot.test.ts`
++- [x] T003: Extend `FakeAgentAdapter` with `emitSessionIdle` + queued-run helpers; cover with `test/adapter/fake.test.ts`
++- [x] T004: Create `src/runner/preamble-builder.ts` + snapshot tests (enabled/disabled × outside.md presence × resume mode)
++- [x] T005: Refactor `runner.ts` to consume `buildInsidePreamble` + integrate event-driven adapter contract
++- [x] T006: Add `awaitTerminalCondition` machinery (placeholder pending-forwarder count = 0; P3 wires real)
++- [x] T007: Implement `test/cli/all-existing-agents-pass-doctor.test.ts` — backward-compat regression diffing P1 baselines
++- [x] T008: Re-export `buildInsidePreamble` + `PreambleAssemblyInput` from `src/runner/index.ts`
++- [x] T009: Run `just fft` + baseline diff (exit 0); own every finding
++- [x] T010: Update `docs/domains/runner/domain.md` + `docs/domains/adapter/domain.md` (Composition + Contracts + History entries for P2)
+diff --git a/docs/plans/007-backgrounding/tasks/phase-2-runagent-event-driven-refactor-and-preamble-builder/tasks.md b/docs/plans/007-backgrounding/tasks/phase-2-runagent-event-driven-refactor-and-preamble-builder/tasks.md
+new file mode 100644
+index 0000000..144c6d0
+--- /dev/null
++++ b/docs/plans/007-backgrounding/tasks/phase-2-runagent-event-driven-refactor-and-preamble-builder/tasks.md
+@@ -0,0 +1,383 @@
++# Phase 2 — runAgent Event-Driven Refactor + Preamble Builder
++
++**Plan**: [coordination-plan.md](../../coordination-plan.md)
++**Phase**: Phase 2: runAgent Event-Driven Refactor + Preamble Builder
++**Generated**: 2026-04-26
++**Status**: Landed
++**Mode**: Full
++**Complexity**: CS-4 (load-bearing — every downstream phase depends on this contract)
++
++---
++
++## Executive Briefing
++
++**Purpose**: This phase performs the load-bearing pivot at the core of plan 007. Today `runAgent` calls `session.sendAndWait(prompt)` and waits for the entire turn to complete before returning. Phase 2 lifts that to an **event-driven loop** — `session.send(prompt)` once, then subscribe to `session_idle` (and `pending_messages.modified` for queue observability) to know when to terminate. This is the contract every later phase requires: P3's forwarders push more messages mid-turn via `session.send`; P4's MCP tools assume the SDK queue is the only queue; P6 layers identity-block + peer-contract content into the preamble. To keep the preamble assembly composable, P2 also extracts it from the inline `runner.ts` block (lines 252–269 today) into a dedicated `preamble-builder.ts` module with stub injection points for the P6 content.
++
++**What We're Building**:
++1. A new pure module `src/runner/preamble-builder.ts` that assembles the inside prompt by layering: universal preamble → identity-block stub → workshop-005 tools-section stub → peer-contract stub → agent body → instructions → SYSTEM_OUTPUT_INSTRUCTIONS. The stubs are conditional on `coordination.enabled` (always `false` for the 9 existing agents → byte-identical preamble).
++2. An extended `IAgentAdapter` contract that exposes the event-stream + idle subscription primitive (the existing `onEvent` callback already streams events; the new contract clarifies the terminal-condition guarantee).
++3. A rewritten `SdkCopilotAdapter.run()` that drops `sendAndWait` and uses `session.send` + a Promise-wrapped subscription to `session_idle`. `compact()` keeps its `sendAndWait` (single-turn, terminal — out of scope per workshop 007).
++4. An extended `FakeAgentAdapter` that supports the same event-stream + idle contract for downstream tests in P3–P6 (inbox-injection harnesses).
++5. A refactored `runner.ts` inner loop that consumes `preamble-builder` and tracks the new terminal condition (idle reached + zero pending forwarders queued — the forwarder count is a placeholder of `0` until P3 wires the real counter).
++6. A backward-compat regression test (`test/cli/all-existing-agents-pass-doctor.test.ts`) that runs `minih check` + `minih doctor` against every agent in `agents/` and asserts no behavior change vs the captured P1 baseline.
++
++**Goals**:
++- ✅ AC-RUN-AGENT-EVENT-DRIVEN — `runAgent` reaches completion using `session.send` + `session_idle` subscription only, validated for both single-message and queued (back-to-back send) flows.
++- ✅ AC-BACKWARD-COMPAT (continued from P1) — all 9 existing agents produce the same `report.json` shape and `doctor` output as the P1 baseline. No visible behavior change for non-coordinated agents.
++- ✅ Preamble-builder produces byte-identical output to today's inline assembly when `coordination.enabled === false`. Snapshot test pins this.
++- ✅ FakeAgentAdapter supports event-driven contract so P3–P6 tests can drive the loop programmatically (inject `session_idle` events, assert terminal condition).
++
++**Non-Goals**:
++- ❌ Wiring real identity-block content (workshop 008) — stubs only; real content lands in P6 task 6.1.
++- ❌ Wiring real peer-contract content (workshop 008) — stubs only; real content lands in P6 task 6.3.
++- ❌ Wiring workshop 005 tools-section content — stubs only; real content lands in P6 task 6.2.
++- ❌ Implementing forwarders (`inbox-forwarder.ts`, `state-forwarder.ts`) — P3.
++- ❌ Implementing `file-watcher.ts` — P3.
++- ❌ Adding any new MCP tooling — P4.
++- ❌ Adding any new CLI commands — P5.
++- ❌ Cold-start drain on resume — P3 task 3.4.
++- ❌ Run-folder snapshot logic (`state-snapshot.json` + `inbox-snapshot/`) — P6 task 6.9.
++- ❌ Widening `MagicWandTarget` enum or adding `RetrospectiveCoordination` type — P6 (avoid type-vs-validator drift, per Phase 1's deferral).
++- ❌ Per-agent state schema files (`inside-state.schema.json`, `outside-state.schema.json`) — P6.
++
++---
++
++## Prior Phase Context (Phase 1: Runner Foundations)
++
++### A. Deliverables from Phase 1 (consumable by Phase 2)
++
++| Module | Path | Phase 2 use |
++|--------|------|-------------|
++| `state.ts` | `src/runner/state.ts` | Not consumed by P2 directly; available if preamble needs to surface state shape examples (it shouldn't) |
++| `context.ts` | `src/runner/context.ts` | `MINIH_ENV_KEYS_ALL` may be referenced if preamble lists env-vars; `detectContext` not used in P2 |
++| `atomic-write.ts` | `src/runner/atomic-write.ts` | Not consumed by P2 directly (P2 doesn't write state) |
++| `ulid.ts` | `src/runner/ulid.ts` | Not consumed by P2 directly |
++| `folder.ts` extensions | `src/runner/folder.ts` | `parseFrontmatter`, `hasOutsideMd`, `outsideMdPath` are exported P1 helpers. Note: `parseCoordinationField` is **private** to `folder.ts` (called internally by `parseFrontmatter`); P2 does NOT call it — the parsed `coordination` field arrives via `AgentDefinition.coordination` populated upstream by `resolveAgent`. |
++| `types.ts` extensions | `src/runner/types.ts` | `CoordinationFrontmatter`, `Side`, plus `AgentDefinition.coordination?` (optional — defaults to `undefined` when frontmatter absent; P2 normalizes via `definition.coordination ?? { enabled: false }`) and `AgentDefinition.outsideContract?` are the fields P2's preamble-builder branches on |
++| Schemas | `src/schemas/inbox-message.json`, `outside-state.json`, `inside-state.json`, `state-history-entry.json` | Not consumed in P2; P2 doesn't validate inbox/state |
++| `runner/index.ts` | re-exports | P2 imports everything via `../runner/index.js` per established pattern |
++
++### B. Dependencies Exported (exact import statements P2 uses)
++
++```typescript
++// preamble-builder.ts will import:
++import {
++  type AgentDefinition,
++  type CoordinationFrontmatter,
++} from './types.js';
++// (preamble-builder is internal to the runner domain — it imports siblings directly,
++//  not via index.ts re-export, since it IS part of the runner contract surface)
++
++// runner.ts (after refactor) will import the new preamble-builder:
++import { buildInsidePreamble, type PreambleAssemblyInput } from './preamble-builder.js';
++
++// runner.ts already exports MINIH_ENV_KEYS (line 142–157, P1-exported).
++// P2 does NOT extend this literal — the three coordination keys
++// (MINIH_INBOX_DIR, MINIH_STATE_DIR, MINIH_CONTEXT) live in
++// MINIH_ENV_KEYS_COORDINATION (context.ts) and are composed via
++// MINIH_ENV_KEYS_ALL. They are surfaced into the spawned process env
++// in P3 (forwarders) / P4 (MCP spawn config), NOT in P2.
++```
++
++`AgentDefinition` carries optional `coordination?: CoordinationFrontmatter` (per `src/runner/types.ts:41`) and optional `outsideContract?: string`. The preamble-builder normalizes `definition.coordination ?? { enabled: false }` then branches on the resolved `enabled` flag and `definition.outsideContract`.
++
++### C. Gotchas & Debt explicitly carried forward
++
++1. **`pending_messages.modified` is currently SKIPPED in `translateEvent`** (`src/adapter/sdk-copilot.ts:320`). Today the adapter intentionally drops it as "lifecycle noise." For P2's terminal-condition observability the adapter does NOT need to expose this event publicly — `session.idle` alone is sufficient (P0 T001 PASS evidence: both single + queued reach idle cleanly with no extra signal needed). P3 may want it for queue-depth telemetry; P2 leaves the skip in place.
++2. **Type-vs-validator drift discipline (from P1)**: do NOT widen `MagicWandTarget` to include `'coordination'` and do NOT add `RetrospectiveCoordination` to `types.ts`. Both are deferred to P6 task 6.4 where the schema, validator, and type all change together.
++3. **F002 lesson (from P1 review)**: when validating something, type-check VALUES not just key presence. The preamble-builder doesn't validate untrusted input (it consumes already-validated `AgentDefinition`), but if a future task adds JSON-schema-driven prompt fragments, follow the F002 pattern.
++4. **F001 lesson (from P1 review)**: when parsing user-supplied JSON inline, use strict `JSON.parse` with full-object validation. Not directly applicable to P2 but mentioned for consistency.
++5. **No-rule-engine guarantee**: state.ts deliberately has no `requiresPeer` / `transitionAllowed` / `gate` keywords. P2's preamble may MENTION the convention-based state machine in copy, but must not introduce server-side gating logic in `runner.ts`.
++6. **`sendAndWait` removal contract (per finding 05)**: drop completely from `runAgent`'s code path — do NOT branch (`if firstMessage use sendAndWait else session.send`). The fallback in workshop 007 (P0 risk register) was explicitly NOT triggered by the P0 T001 PASS result.
++7. **`compact()` keeps `sendAndWait`** (`src/adapter/sdk-copilot.ts:173`) — it is a single-turn terminal call with no mid-turn injection use case. Out of scope for P2.
++8. **`terminate()` UNCHANGED in P2**: It already uses `resumeSession` + `abort()` + `destroy()` (`sdk-copilot.ts:198–216`) with no `sendAndWait` dependency. No modification required.
++9. **Pre-existing timeout-unit double-multiplication bug at `sdk-copilot.ts:118`**: `runner.ts:341/383` already converts `config.timeout` (seconds) to `timeoutMs`, but `sdk-copilot.ts:118` does `options.timeout * 1000` — a 1000× overshoot. **P2 naturally avoids this** in the `run()` path because the new `session.send` flow does NOT pass a timeout to the SDK at all (the runner's outer `Promise.race` is the sole timer). The bug remains in `compact()` — flag for follow-up fix mode, but explicitly out of scope for P2.
++
++### D. Incomplete Items (P2 owns these)
++
++- `src/runner/preamble-builder.ts` (NEW) — the assembly skeleton + stubs.
++- Refactor of `runner.ts:252–270` to consume `preamble-builder` instead of inline string-join.
++- Refactor of `runner.ts:344–410` (the `adapter.run(...)` call + timeout race) to handle the event-driven idle contract — minimal change since `adapter.run()` already returns when complete, but the test expectations change.
++- `src/adapter/interface.ts` — add JSDoc clarifying the `run()` terminal-condition contract; add an optional `onSessionIdle?: () => void` hook to `AgentRunOptions` (or use the existing `onEvent` for `'session_idle'` event — pick one and document; see Discoveries).
++- `src/adapter/sdk-copilot.ts:116–119` — replace `session.sendAndWait(...)` with `session.send(...)` + a Promise-wrapped `session_idle` event subscription. Keep the timeout-race pattern at `runner.ts:387–393` (it already wraps `adapter.run()`).
++- `src/adapter/fake.ts` — extend `FakeAgentAdapter` so tests can drive the event-driven contract: emit `session_idle` to signal terminal, support multiple `setEvents` cycles for queued-message scenarios.
++- `test/runner/preamble-builder.test.ts` (NEW) — snapshot tests for both `coordination.enabled === false` (byte-identical to today's output) and `coordination.enabled === true` (stubs render with predictable placeholders).
++- `test/runner/runner-event-driven.test.ts` (NEW) — covers `runAgent` happy-path + queued-message ordering + terminal-condition (idle reached) + early-termination (timeout) + error paths.
++- `test/adapter/sdk-copilot.test.ts` (NEW or MODIFY) — covers the `session.send` + `session_idle` flow against a mock SDK client.
++- `test/adapter/fake.test.ts` (NEW or MODIFY) — covers the new event-driven helpers.
++- `test/cli/all-existing-agents-pass-doctor.test.ts` (NEW) — backward-compat regression: runs `minih check` + `minih doctor` against every agent in `agents/`; asserts no behavior change vs the P1 baseline files (`docs/plans/007-backgrounding/tasks/phase-1-runner-foundations/baselines/{doctor.json,list.json}`).
++
++### E. Patterns to Follow (established by P1)
++
++1. **Re-export contract through `runner/index.ts`** for anything outside the runner domain consumes. `preamble-builder` IS internal to runner — it can be consumed via direct path (`./preamble-builder.js`) OR via index.ts re-export. Add it to the index.ts re-export so `cli` and tests can import it without reaching into internals.
++2. **Typed errors** (`StateCorruptError`, `InvalidSlugError`, `OutsideAgentsDirError` pattern). If P2 introduces new error classes (e.g., `PreambleAssemblyError`), follow the same Error-subclass pattern with `this.name = 'PreambleAssemblyError'`.
++3. **vitest layout**: `test/<domain>/<module>.test.ts` mirrors `src/<domain>/<module>.ts`. Snapshot tests via vitest's `toMatchInlineSnapshot()` for stability.
++4. **Schema $id contract** (P1): all JSON schemas use absolute URIs `https://minih.dev/schemas/<name>.json`. P2 doesn't add schemas, so not applicable.
++5. **No-rule-engine self-grep** (`test/runner/state.test.ts:316–330`): runtime test that the source file contains no rule-engine keywords. P2 should consider adding a similar test if the preamble-builder grows logic — but for stubs-only it's overkill.
++6. **Atomic-write convention**: P2 doesn't mutate state; not applicable.
++7. **Backward-compat baseline diffing**: P1 captured `doctor.json` + `list.json` baselines via `scripts/capture-p1-baseline.sh` and compared via `scripts/diff-baselines.mjs`. P2 task 2.7 reuses this infrastructure — the baseline files already exist; the test just re-captures + diffs.
++8. **Pre-commit / pre-push gate** (per AGENTS.md addition from P1): every `just fft` finding is ours. P2 must run `just fft` before commit and own every lint, type, or test failure surfaced.
++
++---
++
++## Pre-Implementation Check
++
++| File | Exists? | Domain Check | Notes |
++|------|---------|--------------|-------|
++| `src/runner/preamble-builder.ts` | NO | runner/internal — correct domain (preamble assembly is runner's responsibility per `_shared/preamble.md` ownership and existing `runner.ts:39–41` resolver) | NEW — pure function module; no I/O |
++| `src/runner/runner.ts` | YES | runner/contract — correct domain | MODIFY lines 252–270 (preamble assembly) and 344–410 (adapter.run call site, post-event-driven contract). Existing 684 LOC; expect net change ≤ 80 LOC. |
++| `src/runner/index.ts` | YES | runner/contract | MODIFY — add `buildInsidePreamble` + `PreambleAssemblyInput` re-exports (plan manifest lists this file as P1, P3; P2 additive re-export is consistent and forward-compatible with P3's later additions). |
++| `src/adapter/interface.ts` | YES | adapter/contract | MODIFY — add JSDoc clarifying terminal-condition (idle resolves, error fails-not-throws). 22 LOC today; expect ≤ 40 LOC after. |
++| `src/adapter/events.ts` | YES | adapter/contract | MODIFY — add `SessionSender` type alias and extend `AgentRunOptions` with optional `onSessionReady?: (sender: SessionSender) => void`. `AgentSessionEvent` discriminant unchanged (`'session_idle'` already present at lines 84–91). |
++| `src/adapter/sdk-copilot.ts` | YES | adapter/internal | MODIFY — `run()` swap `sendAndWait` → `session.send` + idle Promise (lines 116–119). `compact()` UNCHANGED (line 173). 338 LOC today; expect ≤ 360 LOC after. |
++| `src/adapter/fake.ts` | YES | adapter/internal | MODIFY — extend with `emitSessionIdle()` helper + `runDuration` interaction with idle event ordering. 211 LOC today; expect ≤ 260 LOC after. |
++| `test/runner/preamble-builder.test.ts` | NO | runner/internal | NEW — snapshot tests (≥ 6 cases: enabled/disabled × no-outside.md/with-outside.md × no-instructions/with-instructions). |
++| `test/runner/runner-event-driven.test.ts` | NO | runner/internal | NEW — happy path + queued + timeout + error + idle-with-pending vs idle-with-no-pending. |
++| `test/adapter/sdk-copilot.test.ts` | unknown — check | adapter/internal | NEW or MODIFY — covers event-driven `session.send` + idle path against a mock `ICopilotClient`. |
++| `test/adapter/fake.test.ts` | unknown — check | adapter/internal | NEW or MODIFY — covers `emitSessionIdle` + queued-message helpers. |
++| `test/cli/all-existing-agents-pass-doctor.test.ts` | NO | cli/internal | NEW — backward-compat regression test running `minih check` + `minih doctor` against all 9 `agents/`. Diffs against `docs/plans/007-backgrounding/tasks/phase-1-runner-foundations/baselines/{doctor.json,list.json}`. |
++
++**Concept-search check**: searched for existing `preamble`-named modules (`grep -rn "buildPreamble\|assemblePrompt\|preambleBuilder" src/` recommended at task start) — `runner.ts:39–41` has `resolvePreamblePath` (a path resolver) and the inline assembly at lines 252–270 (a string-join). No prior abstraction exists; clean greenfield for `preamble-builder.ts`.
++
++**Contract changes flagged**:
++- `IAgentAdapter.run()` semantic contract changes (no signature change required, but the terminal-condition guarantee tightens). Document in JSDoc; existing callers (`runner.ts`, both adapters) all migrate together.
++- `runner/index.ts` re-export surface grows by 1 export (`buildInsidePreamble`). Additive; no breaking change.
++
++**Harness context**: No `docs/project-rules/harness.md` exists in this repo. P2 uses standard testing approach (vitest unit + the regression test in 2.7 acts as the L2-equivalent harness sweep over real agents). Phase 0 scratch tests already empirically validated the SDK-level pattern; P2 implements production-quality coverage on top of that evidence base.
++
++---
++
++## Architecture Map
++
++```mermaid
++flowchart TD
++    classDef pending fill:#9E9E9E,stroke:#757575,color:#fff
++    classDef inprogress fill:#FFC107,stroke:#FFA000,color:#000
++    classDef completed fill:#4CAF50,stroke:#388E3C,color:#fff
++    classDef new fill:#E3F2FD,stroke:#2196F3,color:#000
++    classDef changed fill:#FFF3E0,stroke:#FF9800,color:#000
++
++    subgraph Phase["Phase 2: runAgent Event-Driven Refactor + Preamble Builder"]
++        T001["T001: Extend IAgentAdapter contract<br/>(JSDoc terminal-condition)"]:::completed
++        T002["T002: Rewrite SdkCopilotAdapter.run()<br/>session.send + idle Promise"]:::completed
++        T003["T003: Extend FakeAgentAdapter<br/>event-driven helpers"]:::completed
++        T004["T004: Create preamble-builder.ts<br/>(stubs for P6 wiring)"]:::completed
++        T005["T005: Refactor runner.ts<br/>consume preamble-builder + event-driven"]:::completed
++        T006["T006: Terminal-condition machinery<br/>idle + zero-pending placeholder"]:::completed
++        T007["T007: Backward-compat regression<br/>all-existing-agents-pass-doctor"]:::completed
++        T008["T008: Re-export buildInsidePreamble<br/>from runner/index.ts"]:::completed
++        T009["T009: just fft + baseline diff<br/>(zero regressions)"]:::completed
++        T010["T010: Domain.md updates<br/>runner + adapter histories"]:::completed
++
++        T001 --> T002
++        T001 --> T003
++        T002 --> T005
++        T003 --> T005
++        T004 --> T005
++        T005 --> T006
++        T006 --> T007
++        T004 --> T008
++        T007 --> T009
++        T009 --> T010
++    end
++
++    subgraph Files["Files Touched"]
++        F1["src/adapter/interface.ts + events.ts<br/>(MODIFY)"]:::completed
++        F2["src/adapter/sdk-copilot.ts + copilot-types.ts<br/>(MODIFY)"]:::completed
++        F3["src/adapter/fake.ts<br/>(MODIFY)"]:::completed
++        F4["src/runner/preamble-builder.ts<br/>(NEW)"]:::completed
++        F5["src/runner/runner.ts<br/>(MODIFY)"]:::completed
++        F6["src/runner/index.ts<br/>(MODIFY — re-export)"]:::completed
++        F7["test/runner/preamble-builder.test.ts<br/>(NEW)"]:::completed
++        F8["test/runner/runner-event-driven.test.ts<br/>(NEW)"]:::completed
++        F9["test/adapter/sdk-copilot.test.ts<br/>(NEW)"]:::completed
++        F10["test/adapter/fake.test.ts<br/>(MODIFY)"]:::completed
++        F11["test/cli/all-existing-agents-pass-doctor.test.ts<br/>(NEW)"]:::completed
++        F12["docs/domains/runner/domain.md<br/>(MODIFY — Composition + History)"]:::completed
++        F13["docs/domains/adapter/domain.md<br/>(MODIFY — History)"]:::completed
++        F14["src/adapter/index.ts<br/>(MODIFY — type re-export)"]:::completed
++    end
++
++    T001 -.-> F1
++    T002 -.-> F2
++    T002 -.-> F9
++    T003 -.-> F3
++    T003 -.-> F10
++    T004 -.-> F4
++    T004 -.-> F7
++    T005 -.-> F5
++    T005 -.-> F8
++    T006 -.-> F5
++    T006 -.-> F8
++    T007 -.-> F11
++    T008 -.-> F6
++    T008 -.-> F14
++    T010 -.-> F12
++    T010 -.-> F13
++```
++
++---
++
++## Tasks
++
++| Status | ID | Task | Domain | Path(s) | Done When | Notes |
++|--------|-----|------|--------|---------|-----------|-------|
++| [x] | T001 | Extend `IAgentAdapter` contract for the event-driven terminal-condition. Add JSDoc to `run()` stating: "`run()` resolves when the SDK session emits `session_idle` AND no further `session.send` calls are queued by the caller. If `session_error` fires before `session_idle`, `run()` resolves with `status: 'failed'` (NOT a thrown rejection)." Add optional `onSessionReady?: (sender: SessionSender) => void` field to `AgentRunOptions` (where `SessionSender = { send: (prompt: string) => Promise<string> }`) — invoked once `session.send({prompt})` has been called and the live session handle is available; this is the seam P3's forwarders use to call `session.send` mid-turn without importing `sdk-copilot.ts`. Both `SdkCopilotAdapter` and `FakeAgentAdapter` must implement this contract. | adapter | `/Users/jordanknight/substrate/minih/src/adapter/interface.ts`, `/Users/jordanknight/substrate/minih/src/adapter/events.ts` (add `SessionSender` type + extend `AgentRunOptions`) | JSDoc updated; `SessionSender` type added; `AgentRunOptions.onSessionReady` optional field added; both adapters implement the contract; tsc clean. | Per finding 05 + workshop 007 §"Terminal condition for runAgent". `AgentSessionEvent` already includes `'session_idle'` (`events.ts:84–91`) — no event-schema change needed. **`onSessionReady` is the load-bearing seam for P3 forwarders.** |
++| [x] | T002 | Rewrite `SdkCopilotAdapter.run()` (lines 116–119): replace `await session.sendAndWait({prompt: prompt.trim()}, timeout)` with `await session.send({prompt: prompt.trim()})` followed by a Promise wrapped around the existing `session.on(...)` subscription (lines 88–114) that resolves on first `session_idle` and REJECTS on first `session_error`. Capture `const unsubscribe = session.on(...)` so `finally` can call `unsubscribe()` BEFORE `session.disconnect()` — prevents subscription leak on session reuse. Set `idleSettled` boolean guard inside the handler so the second `session_idle` event in queued flow is still translated and emitted via `onEvent` (NDJSON log stays complete) but does NOT re-resolve the already-settled Promise. Invoke `options.onSessionReady?.({ send: (p) => session.send({prompt: p}) })` immediately after the initial `session.send` so P3's forwarders can wire to the live handle. **`compact()` (line 173) and `terminate()` (line 198) UNCHANGED** — single-turn / abort-only use cases. **Note**: pre-existing timeout-unit double-multiplication bug at `sdk-copilot.ts:118` (`options.timeout * 1000` where `runner.ts:383` already passes ms) is OUT OF SCOPE for P2; P2's new `run()` path doesn't pass a timeout to the SDK at all (the runner's outer `Promise.race` is the sole timer), so the bug is naturally avoided in `run()`; document for a follow-up fix on `compact()`. | adapter | `/Users/jordanknight/substrate/minih/src/adapter/sdk-copilot.ts`, `/Users/jordanknight/substrate/minih/test/adapter/sdk-copilot.test.ts` | New event-driven test covers: (a) single-message run reaches idle and resolves; (b) queued-message scenario emits two `session_idle` events in NDJSON but `adapter.run()` returns exactly once (idleSettled guard); (c) outer-race timeout cancels mid-turn AND `terminate()` is called AND `session.disconnect()` runs in adapter's `finally` without unhandled rejection; (d) `session_error` before `session_idle` → idle Promise rejects → `status: 'failed'` envelope returned (not hung); (e) `unsubscribe()` is called exactly once per `run()` invocation; (f) `onSessionReady` callback is invoked exactly once with a working `send` reference. P0 T001 evidence: single scenario reached idle at `idleAfterMs: 6239` (~6.24s); queued at `idleAfterMs: 9960` (~9.96s). See `prework-results.md` §"T001 — scratch/runagent-eventdriven/". | Per finding 05 + P0 T001 PASS. |
++| [x] | T003 | Extend `FakeAgentAdapter`: add `emitSessionIdle()` helper, ensure the `_events` array can hold a `session_idle` event that triggers the new terminal condition in tests. Add `setQueuedRun(turns: AgentEvent[][])` test helper that simulates queued-message flow (multiple bursts of events separated by idles) for P3–P6 forwarder tests. Add `emitPendingMessagesModified(queueDepth: number)` helper so P3's `daemon-light.test.ts` and AC-DEBOUNCE-BURSTS can assert queue-depth observations (does NOT require un-skipping the real adapter's `pending_messages.modified` translator — fake-only surface). Implement `onSessionReady` callback in `FakeAgentAdapter.run()` — invoke with a stub `send` that records calls into an inspectable history (`getSessionSendHistory(): string[]`). Preserve all existing helpers (`assertRunCalled`, `getRunHistory`, `setEvents`, etc.). | adapter | `/Users/jordanknight/substrate/minih/src/adapter/fake.ts`, `/Users/jordanknight/substrate/minih/test/adapter/fake.test.ts` | New helpers tested; `onSessionReady` invocation covered; `getSessionSendHistory` returns recorded sends in order; existing 49+ tests in `test/runner/runner.test.ts` (which uses FakeAgentAdapter) still pass with zero behavior change for legacy callers. | Workshop 006 Layer 2 extension (daemon-light update note). Critical for P3–P6 test ergonomics. |
++| [x] | T004 | Create `src/runner/preamble-builder.ts` exporting a pure function `buildInsidePreamble(input: PreambleAssemblyInput): string`. Input includes: `definition: AgentDefinition`, `runId: string`, `preamble: string \| null`, `instructions: string \| null`, `outputHint: string`, `paramsHint: string \| null`, `userPrompt: string`, `systemOutputInstructions: string`. Output is the assembled prompt string. Normalize coordination flag via `const coord = definition.coordination ?? { enabled: false }`. Layering when `coord.enabled === false`: identical to today's `runner.ts:252–270` join (zero deviation). Layering when `coord.enabled === true`: insert SECTION-FRAMED stubs (so P6 wiring is a single-string content swap, not a structure invention) between the universal preamble and the agent body — exact stub markers: `<!-- coordination.identity-block:stub -->\n\n## Your Context (coordination)\n\n_(P6 wires identity content here.)_`, then `<!-- coordination.tools-section:stub -->\n\n## Coordination tools available to you\n\n_(P6 wires workshop-005 tools section here.)_`, then if `definition.outsideContract` is present: `<!-- coordination.peer-contract:stub -->\n\n## Peer's Contract (from outside.md)\n\n> ${outsideContract.split('\\n').map(l => '> ' + l).join('\\n')}` (blockquote-framed per workshop 008 §"Decision: outside.md Body Injected as 'Peer's Contract'"). Real content lands in P6 (tasks 6.1, 6.2, 6.3). **Resume bypass remains in `runner.ts`** (caller gates the call); `buildInsidePreamble` does NOT accept an `isResume` flag — JSDoc states: "always assembles full inside preamble; do not call for resume turns." `runId` is included in the input even though the P2 stub ignores it — P6 task 6.1 substitutes it into `<runId>` template var without a contract change. | runner | `/Users/jordanknight/substrate/minih/src/runner/preamble-builder.ts`, `/Users/jordanknight/substrate/minih/test/runner/preamble-builder.test.ts` | Snapshot tests cover: (a) `coord.enabled === false` produces byte-identical output to a fixture captured from current `runner.ts` BEFORE T005 runs (capture via temporary inline test that calls today's exact `[preamble, instructions, outputHint, paramsHint, prompt, SYSTEM_OUTPUT_INSTRUCTIONS].filter(Boolean).join('\n\n---\n\n')` and pin via `toMatchInlineSnapshot()`); (b) `coord.enabled === true` + no `outside.md` renders identity + tools stubs with section headers present; (c) enabled + `outside.md` renders all three stubs with the `outsideContract` body inlined under blockquote-framed `## Peer's Contract (from outside.md)` header; (d) explicit JSDoc + test asserting buildInsidePreamble is NEVER called in resume path (caller gates). Pure function — no I/O, no fs. | Per finding 07 + workshop 005 §"Design Principles" (principle 2 — conditional template substitution) + workshop 008 §"Mental Model: The Four Prompt Layers (inside)" + workshop 008 §"Decision: outside.md Body Injected as 'Peer's Contract'". **Marker syntax review**: HTML comments may be echoed by some LLMs (low risk for stub-only P2 because content is empty placeholder text; P6 must reassess when wiring real content — if echoed, switch to a section-header-only sentinel without the HTML wrapper). |
++| [x] | T005 | Refactor `runner.ts:252–270` to call `buildInsidePreamble(...)` instead of inline join — only in the non-resume branch. The `if (isResume)` guard at lines 254–256 stays unchanged (caller gates whether to call buildInsidePreamble). Refactor `runner.ts:344–410` (the `adapter.run(...)` call + timeout race) to wire `onSessionReady` callback through to forwarders (placeholder no-op in P2; P3 wires real forwarders). Wire-through: `runAgent` constructs the `PreambleAssemblyInput` from existing locals (`runId` from line 179, `preamble`, `instructions`, `outputPath` → outputHint, `paramsHint`, `prompt`, `SYSTEM_OUTPUT_INSTRUCTIONS`) and normalizes `definition.coordination ?? { enabled: false }` before calling. | runner | `/Users/jordanknight/substrate/minih/src/runner/runner.ts` | Existing `test/runner/runner.test.ts` passes unchanged for all 9 non-coordinated agents (zero behavior change). Net diff in `runner.ts` ≤ 80 lines. | Per finding 05. The 252–270 line range is the inline assembly; 344–410 is the timeout race wrapping `adapter.run()`. |
++| [x] | T006 | Add terminal-condition machinery to `runAgent`: declare "done" when (a) `adapter.run()` returns AND (b) `pendingForwarderCount() === 0`. Add an internal helper `awaitTerminalCondition(adapterResult: AgentResult, pendingForwarderCount: () => number): Promise<AgentResult>` — accepts a `() => number` GETTER (NOT a bare number) so P3 can pass `() => inboxForwarder.pendingCount + stateForwarder.pendingCount` and have a live snapshot at every poll. P2's placeholder is `() => 0`. The helper polls the getter on each idle settling; P3 task 3.6 will replace the no-op poll with a real wait-for-drain loop. Tests cover: idle with `() => 0` → resolve immediately; idle with mocked `() => count > 0` falling to 0 → resolve after the count clears; SDK-level timeout dropped intentionally (only the runner's outer `Promise.race` fires) — assert via test that adapter.run() still-pending when runner's timeout wins, terminate() is called, session.disconnect() runs in adapter finally without unhandled rejection. | runner | `/Users/jordanknight/substrate/minih/src/runner/runner.ts`, `/Users/jordanknight/substrate/minih/test/runner/runner-event-driven.test.ts` | New tests in `runner-event-driven.test.ts` cover happy path + queued-message ordering (using extended FakeAgentAdapter from T003) + timeout + early-termination + the pending-forwarder getter contract. | Workshop 007 §"Terminal condition for runAgent". P2 establishes the seam; P3 fills in the real counter via `() => number` getter. |
++| [x] | T007 | Implement `test/cli/all-existing-agents-pass-doctor.test.ts`: for every directory in `agents/` (excluding `_shared/`), spawn `node dist/cli/index.js doctor` and `node dist/cli/index.js list`, capture stdout, and diff against the P1-captured baselines at `docs/plans/007-backgrounding/tasks/phase-1-runner-foundations/baselines/{doctor.json,list.json}` using the same key-stripping logic as `scripts/diff-baselines.mjs` (strip `timestamp, ts, runId, sessionId, duration, startedAt, completedAt, runDir`). Test fails if diff is non-empty. **Gate behind `MINIH_REGRESSION=1` env var** (or vitest tag `:slow`) so default `npm test` skips it — 18 subprocess spawns × ~500ms = ~9s minimum, too slow for the inner loop. Document the gate in `AGENTS.md` and mark CI to set the flag. | cli | `/Users/jordanknight/substrate/minih/test/cli/all-existing-agents-pass-doctor.test.ts`, `/Users/jordanknight/substrate/minih/AGENTS.md` (note the env-var gate next to the existing pre-commit/pre-push section) | Test passes locally with `MINIH_REGRESSION=1 npm test`; default `npm test` SKIPS it (preserves <2s inner loop); covers all 9 existing agents; emits a clear failure message naming the diverging field if a regression slips in. | AC-BACKWARD-COMPAT (continued from P1). Workshop 006 §Mapping Tests to ACs. Reuses P1 baseline infrastructure. |
++| [x] | T008 | Re-export `buildInsidePreamble` and the `PreambleAssemblyInput` type from `src/runner/index.ts`. Also re-export `SessionSender` type from `src/adapter/events.ts` (added in T001) — P3's `inbox-forwarder.ts` will import it to type its session-handle parameter. Maintain alphabetical ordering of exports (P1 convention). Verify all 19+ existing P1 exports remain intact. | runner + adapter | `/Users/jordanknight/substrate/minih/src/runner/index.ts`, `/Users/jordanknight/substrate/minih/src/adapter/index.ts` (if exists; otherwise direct import path is acceptable) | New exports added; tsc clean; test suite green; `cli` and `mcp` (P4–P5) and P3's forwarders can import via `from '../runner/index.js'` / `from '../adapter/events.js'` without reaching into internals. | P1-established re-export surface pattern. |
++| [x] | T009 | Run `just fft` (lint → format → build → typecheck → test → audit) — with and without `MINIH_REGRESSION=1` to confirm both paths green. Re-capture baselines via `bash scripts/capture-p1-baseline.sh /tmp/p2-baselines` and diff via `node scripts/diff-baselines.mjs docs/plans/007-backgrounding/tasks/phase-1-runner-foundations/baselines /tmp/p2-baselines` — exit 0 required. Own every finding (per AGENTS.md "Pre-commit / pre-push gate" rule from P1). | runner | `/Users/jordanknight/substrate/minih/justfile` (no edit), `scripts/capture-p1-baseline.sh` (no edit), `scripts/diff-baselines.mjs` (no edit) | `just fft` exits 0 with zero new lint/type/test failures; both default and `MINIH_REGRESSION=1` paths green; baseline diff exits 0; structurally-identical doctor + list output to P1 baseline. | AC-BACKWARD-COMPAT regression. AGENTS.md rule: every fft finding is ours, never deferred as "pre-existing". |
++| [x] | T010 | **History-entry append + minor Composition addition only** — full restructure deferred to P7 task 7.4. Update `docs/domains/runner/domain.md`: add `preamble-builder.ts` to Composition; add `buildInsidePreamble` to Contracts; append P2 entry to History (`\| 007/P2 \| Added preamble-builder; switched runAgent to event-driven loop \| 2026-04-26 \|`). Update `docs/domains/adapter/domain.md`: append P2 entry to History noting the event-driven shift + `onSessionReady` contract addition; reference workshop 007 + finding 05. NO change to `docs/domains/registry.md` (no new domain). NO change to `docs/domains/domain-map.md` (no new edges — `runner → adapter` already exists). **Plan classifies these files for P7** (line 143–145), but P1 established the pattern of incremental per-phase History entries with full restructure deferred to P7 — this task follows that pattern. | runner + adapter (docs) | `/Users/jordanknight/substrate/minih/docs/domains/runner/domain.md`, `/Users/jordanknight/substrate/minih/docs/domains/adapter/domain.md` | Both domain.md files updated incrementally; `minih doctor` (or equivalent stale-docs check) green; references workshops 005/007/008 where relevant. P7 task 7.4 will do the full restructure later. | P1 established the History / Composition / Contracts incremental pattern. |
++
++---
++
++## Context Brief
++
++### Key findings from plan (relevant to P2)
++
++- **Finding 05 (Critical)**: `runAgent` must move from `sendAndWait` to event-driven loop. Empirically validated by P0 T001 (both single + queued reach idle cleanly). Drop `sendAndWait` from the `run()` path completely; do NOT branch.
++- **Finding 07 (High)**: Two-sided agent file layout. `outside.md` body is injected into the inside prompt under a "Peer's Contract" blockquote-framed section when `coordination.enabled` is true. P2 stubs the injection point; P6 wires the real content.
++- **Finding 12 (Medium)**: Frontmatter parser already handles shallow YAML and extends to `coordination` (P1 done). P2 consumes `definition.coordination.enabled` and `definition.outsideContract` directly; no new parsing.
++- **Finding 02 (Critical)**: MCP-server-leak NOT REPRODUCED — `client.stop()` cascade is reliable. Not directly P2's concern but informs the `try/finally` discipline P2 inherits in `sdk-copilot.ts:151–157` (existing `await session.disconnect()` in finally — preserve).
++- **Finding 11 (Medium)**: FakeAgentAdapter does NOT cover two-agent coordination. T003 extends it to support event-driven contract — the same extension P3–P6 forwarder tests will leverage.
++
++### Domain dependencies (concepts and contracts P2 consumes)
++
++- `runner` (self): `AgentDefinition` (with `coordination: CoordinationFrontmatter` and `outsideContract?: string` from P1), `parseFrontmatter`, `createRunFolder`, `MINIH_ENV_KEYS` array, `SYSTEM_OUTPUT_INSTRUCTIONS` constant, `validateInput/Output/SystemOutput`.
++- `adapter`: `IAgentAdapter` interface (extending JSDoc only), `AgentEvent` discriminated union (`session_idle` already a member), `AgentRunOptions` (no signature change), `AgentResult`, `ICopilotClient` type alias.
++- No new dependencies on `cli` or `mcp` (those land in P4–P5).
++- No new external npm dependencies. (`@modelcontextprotocol/sdk` is P4.)
++
++### Domain constraints
++
++- **Dependency direction**: `runner → adapter` (existing) preserved. No backward edges. `runner` does NOT import from `adapter/sdk-copilot.ts` directly — only from `adapter/interface.ts` and `adapter/events.ts`. P2 maintains this.
++- **Adapter-agnostic runner**: `runner.ts:8` ("Zero SDK imports — the runner is adapter-agnostic"). P2 preserves this property — the event-driven contract lives in the `IAgentAdapter` JSDoc; both adapters implement it; the runner just calls `adapter.run()` and trusts the contract.
++- **Backward-compat invariant**: 9 existing agents have no `coordination` frontmatter → `definition.coordination = {enabled: false}` → preamble-builder produces byte-identical output to today's inline join → zero behavior change. T007 enforces this with the regression test.
++
++### Reusable from prior phases
++
++- P1 baseline infrastructure: `scripts/capture-p1-baseline.sh` + `scripts/diff-baselines.mjs` + the captured baselines under `docs/plans/007-backgrounding/tasks/phase-1-runner-foundations/baselines/`. P2 task 2.7 reuses these directly.
++- P0 T001 scratch test (`scratch/runagent-eventdriven/`) + result note (`prework-results.md` line 15) — empirical evidence the event-driven pattern works. P2's `runner-event-driven.test.ts` codifies this for production.
++- P1's typed-error pattern (`StateCorruptError`, `InvalidSlugError`, `OutsideAgentsDirError`, `InvalidCoordinationFrontmatterError`, etc.) — P2 follows the same pattern if introducing new error classes.
++- P1's `parseCoordinationField` (`src/runner/folder.ts`) — P2 does NOT call this directly; consumes the already-parsed `definition.coordination` field.
++
++### Mermaid: data flow (preamble assembly)
++
++```mermaid
++flowchart LR
++    A[runAgent caller<br/>cli/run.ts] --> B[runner.ts]
++    B -->|reads| C[definition.coordination]
++    B -->|reads| D[definition.outsideContract]
++    B -->|reads| E[_shared/preamble.md]
++    B -->|reads| F[instructions.md]
++    B -->|invokes| G[buildInsidePreamble]
++    G -->|conditional<br/>injection| H[Final prompt string]
++    H --> I[adapter.run]
++    I -->|session.send| J[Copilot SDK session]
++    J -.->|session_idle event| I
++    I -->|AgentResult| B
++    B --> A
++```
++
++### Mermaid: event-driven sequence (single + queued)
++
++```mermaid
++sequenceDiagram
++    participant Caller as runAgent
++    participant Adapter as SdkCopilotAdapter
++    participant SDK as Copilot SDK Session
++
++    Note over Caller,SDK: SINGLE-MESSAGE FLOW (today's behavior, refactored)
++    Caller->>Adapter: run({prompt, onEvent, timeout})
++    Adapter->>SDK: createSession(...)
++    Adapter->>SDK: session.on(eventTranslator)
++    Adapter->>SDK: session.send({prompt})
++    SDK-->>Adapter: text_delta, tool_call, tool_result, message...
++    SDK-->>Adapter: session.idle
++    Adapter->>Adapter: idle → resolve Promise
++    Adapter->>SDK: session.disconnect()
++    Adapter-->>Caller: AgentResult{status:'completed'}
++
++    Note over Caller,SDK: QUEUED-MESSAGE FLOW (new in P3, but contract validated here)
++    Caller->>Adapter: run({prompt:A, onEvent, timeout})
++    Adapter->>SDK: session.send({prompt:A})
++    Note over Adapter: P3 forwarder calls session.send({prompt:B}) mid-turn (out-of-band)
++    SDK-->>Adapter: pending_messages.modified (skipped today)
++    SDK-->>Adapter: turn_A events..., session.idle (after A)
++    SDK-->>Adapter: turn_B events..., session.idle (after B)
++    Adapter-->>Caller: AgentResult (resolves on FIRST idle in P2)
++    Note over Caller: P3 will track pending forwarder count<br/>and gate resolution on (idle && pending===0)
++```
++
++---
++
++## Discoveries & Learnings
++
++_Populated during implementation by plan-6._
++
++| Date | Task | Type | Discovery | Resolution | References |
++|------|------|------|-----------|------------|------------|
++| 2026-04-26 | T002 | gotcha | The local `ICopilotSession` facade only modeled `sendAndWait`; the event-driven run path needs `send()` on the facade so adapter tests and implementation stay SDK-isolated. | Added `send(options: { prompt: string }): Promise<unknown>` to `src/adapter/copilot-types.ts`; `SdkCopilotAdapter.run()` uses only the facade, not SDK internals. | `src/adapter/copilot-types.ts`; `test/adapter/sdk-copilot.test.ts` |
++| 2026-04-26 | T003 | decision | `FakeAgentAdapter.setQueuedRun(turns)` should model turns, not require callers to manually add idle events after every turn. | Helper emits each supplied turn then appends `session_idle`, giving P3-P6 tests a concise way to model SDK queue behavior. | `src/adapter/fake.ts`; `test/adapter/fake.test.ts` |
++| 2026-04-26 | T004 | decision | Coordinated prompt assembly can follow workshop 008 layer order without affecting existing agents because only `coordination.enabled` agents enter that path. | Disabled path remains byte-identical to the old inline join; enabled path places identity/tools/peer-contract stubs after universal preamble, then output/params/body/instructions/system for P6 content swaps. | `src/runner/preamble-builder.ts`; workshop 008 §Mental Model |
++| 2026-04-26 | T006 | decision | The runner owns timeout enforcement for `runAgent`; passing the already-ms-converted timeout into the SDK adapter would preserve the old unit-confusion seam. | Removed `timeout` from the runner's `adapter.run(...)` call and wrapped `adapter.run().then(awaitTerminalCondition)` in the existing outer `Promise.race`. | `src/runner/runner.ts`; `test/runner/runner-event-driven.test.ts` |
++| 2026-04-26 | T007 | insight | The P1 baseline is aggregate `doctor` + `list`, not per-agent command output; those two envelopes already cover all nine current agents. | The regression test shells the built CLI once per command, strips the same transient keys as `scripts/diff-baselines.mjs`, and reports the first differing JSON path. | `test/cli/all-existing-agents-pass-doctor.test.ts`; `scripts/capture-p1-baseline.sh` |
++| 2026-04-26 | T009 | gotcha | The full gate's audit step surfaced Vite/PostCSS advisories even though earlier focused tests were green. | Ran `npm audit fix`, which updated the lockfile to versions with zero reported vulnerabilities, then reran default and regression-enabled `just fft`. | `package-lock.json`; `just fft`; `MINIH_REGRESSION=1 just fft` |
++
++**Types**: `gotcha` | `research-needed` | `unexpected-behavior` | `workaround` | `decision` | `debt` | `insight`
++
++---
++
++## Directory Layout
++
++```
++docs/plans/007-backgrounding/
++├── coordination-plan.md
++├── coordination-spec.md
++├── coordination.fltplan.md
++├── workshops/                      ← 005, 007, 008 referenced in this dossier
++└── tasks/
++    ├── phase-0-pre-work-scratch-tests-and-decision-gate/
++    ├── phase-1-runner-foundations/
++    │   └── baselines/              ← T007 reuses doctor.json + list.json
++    └── phase-2-runagent-event-driven-refactor-and-preamble-builder/
++        ├── tasks.md                ← THIS FILE
++        ├── tasks.fltplan.md        ← generated by plan-5b
++        └── execution.log.md        ← created by plan-6
++```
++
++---
++
++## Validation Record (2026-04-26)
++
++| Agent | Lenses Covered | Issues | Verdict |
++|-------|---------------|--------|---------|
++| Source-Truth | Hidden Assumptions, Edge Cases & Failures, Technical Constraints | 1 HIGH, 1 MEDIUM, 1 LOW | All HIGH+MEDIUM fixed inline; LOW (pre-existing `compact()` timeout bug) flagged out-of-scope with documented rationale |
++| Cross-Reference | Integration & Ripple, Domain Boundaries, Concept Documentation | 2 HIGH, 4 MEDIUM, 1 LOW | All HIGH+MEDIUM fixed (workshop section names corrected; T010 P7 scope clarified; latency numbers corrected; prework citation made section-anchored; index.ts plan-manifest classification noted) |
++| Completeness | Edge Cases & Failures, Performance & Scale, Deployment & Operations, Hidden Assumptions | 2 CRITICAL, 3 HIGH, 4 MEDIUM | All CRITICAL+HIGH+MEDIUM fixed inline (session_error rejection path, idleSettled guard, subscription unsubscribe, T007 perf-gating, HTML-comment marker safety note, resume bypass location, timeout behavior change, snapshot fixture timing, terminate() status) |
++| Forward-Compatibility | Forward-Compatibility | 2 HIGH (CRITICAL for P3), 2 MEDIUM, 1 LOW | All fixed: `awaitTerminalCondition` now accepts `() => number` getter; `onSessionReady?: (sender: SessionSender) => void` added to `AgentRunOptions`; stub markers now include section-header wrapper for P6 single-string swap; `FakeAgentAdapter.emitPendingMessagesModified` added for P3 AC-DEBOUNCE-BURSTS tests; `runId: string` added to `PreambleAssemblyInput` |
++
++### Forward-Compatibility Matrix (post-fix)
++
++| Consumer | Requirement | Failure Mode | Verdict | Evidence |
++|----------|-------------|--------------|---------|----------|
++| Phase 3 file-watcher + forwarders | extended FakeAgentAdapter with emitSessionIdle + queued-run | test boundary | ✅ | T003 specifies `emitSessionIdle` + `setQueuedRun` + `emitPendingMessagesModified` + `getSessionSendHistory()` |
++| Phase 3 file-watcher + forwarders | awaitTerminalCondition seam for real pending-forwarder count | shape mismatch | ✅ | T006 rewritten: `pendingForwarderCount: () => number` getter; P3 supplies `() => inboxForwarder.pendingCount + stateForwarder.pendingCount` |
++| Phase 3 file-watcher + forwarders | event-driven IAgentAdapter.run supports mid-turn session.send | lifecycle ownership | ✅ | T001 + T002: `onSessionReady?: (sender: SessionSender) => void` callback in `AgentRunOptions`; `SdkCopilotAdapter` invokes with bound `session.send` |
++| Phase 4 MCP domain | stable runner + adapter foundations preserved | — | ✅ | `compact()` + `terminate()` UNCHANGED (Gotchas #7 + #8); `try/finally session.disconnect` preserved; MCP seam at `runner.ts:343–369` untouched |
++| Phase 4 MCP domain | client.stop cascade preserved (finding 02) | — | ✅ | Gotchas #4 explicitly preserves `await session.disconnect()` in finally; T002 captures `unsubscribe()` in finally before disconnect |
++| Phase 5 CLI outside surface | buildInsidePreamble re-exported via runner/index.ts | encapsulation lockout | ✅ | T008 re-exports `buildInsidePreamble` + `PreambleAssemblyInput` + `SessionSender` |
++| Phase 6 agent integration | greppable stub markers (identity-block, tools-section, peer-contract) | contract drift | ✅ | T004 specifies exact stubs with section-header wrapper: `## Your Context (coordination)`, `## Coordination tools available to you`, `## Peer's Contract (from outside.md)` (blockquote-framed) |
++| Phase 6 agent integration | definition.outsideContract inlined after peer-contract stub | encapsulation lockout | ✅ | T004 explicitly wraps `outsideContract` body in blockquote (`> ${outsideContract.split('\n').map(l => '> ' + l).join('\n')}`) per workshop 008 |
++| Phase 6 agent integration | byte-identical behavior for non-coordinated agents | contract drift | ✅ | T004 snapshot case (a) + T007 backward-compat regression + AC-RUN-FOLDER (P6) preserved |
++| Phase 6 agent integration | runId substitution in identity block | shape mismatch | ✅ | T004: `PreambleAssemblyInput.runId: string` included; P2 stub ignores it; P6 task 6.1 substitutes into `<runId>` template var |
++
++**Outcome alignment**: P2, as specified, advances the OUTCOME — *"There is no way for the host caller (Claude Code, CI, human) and the inside agent to coordinate progress mid-task"* — by replacing `sendAndWait` with an event-driven loop, exposing the `onSessionReady` seam P3's forwarders need to push live file changes mid-turn into an open SDK session, and establishing the `() => number` `awaitTerminalCondition` getter contract that lets P3 plug a live drain counter without re-architecting `runner.ts` or `sdk-copilot.ts` internals.
++
++**Standalone?**: No — Phase 3, 4, 5, 6 are all named consumers in the plan tree (`coordination-plan.md` lines 347–499); P2 is explicitly marked CS-4 load-bearing ("every downstream phase depends on this contract").
++
++**Overall**: VALIDATED WITH FIXES (4 CRITICAL + 9 HIGH + 6 MEDIUM applied inline; 2 LOW noted as informational).
+diff --git a/src/runner/preamble-builder.ts b/src/runner/preamble-builder.ts
+new file mode 100644
+index 0000000..5a31694
+--- /dev/null
++++ b/src/runner/preamble-builder.ts
+@@ -0,0 +1,78 @@
++import type { AgentDefinition } from './types.js';
++
++const SECTION_DIVIDER = '\n\n---\n\n';
++
++const IDENTITY_BLOCK_STUB = `<!-- coordination.identity-block:stub -->
++
++## Your Context (coordination)
++
++_(P6 wires identity content here.)_`;
++
++const TOOLS_SECTION_STUB = `<!-- coordination.tools-section:stub -->
++
++## Coordination tools available to you
++
++_(P6 wires workshop-005 tools section here.)_`;
++
++export interface PreambleAssemblyInput {
++  definition: AgentDefinition;
++  runId: string;
++  preamble: string | null;
++  instructions: string | null;
++  outputHint: string;
++  paramsHint: string | null;
++  userPrompt: string;
++  systemOutputInstructions: string;
++}
++
++/**
++ * Assemble the full inside-agent preamble for a fresh run.
++ *
++ * Always assembles the full inside preamble; do not call for resume turns.
++ * Resume callers send only the follow-up message because SDK conversation
++ * history already contains the original preamble.
++ */
++export function buildInsidePreamble(input: PreambleAssemblyInput): string {
++  const coord = input.definition.coordination ?? { enabled: false };
++  if (!coord.enabled) {
++    return [
++      input.preamble,
++      input.instructions,
++      input.outputHint,
++      input.paramsHint,
++      input.userPrompt,
++      input.systemOutputInstructions,
++    ]
++      .filter(Boolean)
++      .join(SECTION_DIVIDER);
++  }
++
++  return [
++    input.preamble,
++    IDENTITY_BLOCK_STUB,
++    TOOLS_SECTION_STUB,
++    peerContractSection(input.definition.outsideContract),
++    input.outputHint,
++    input.paramsHint,
++    input.userPrompt,
++    input.instructions,
++    input.systemOutputInstructions,
++  ]
++    .filter(Boolean)
++    .join(SECTION_DIVIDER);
++}
++
++function peerContractSection(
++  outsideContract: string | undefined,
++): string | null {
++  if (outsideContract === undefined) return null;
++  const quoted = outsideContract
++    .split('\n')
++    .map((line) => `> ${line}`)
++    .join('\n');
++  return `<!-- coordination.peer-contract:stub -->
++
++## Peer's Contract (from outside.md)
++
++${quoted}`;
++}
+diff --git a/test/adapter/sdk-copilot.test.ts b/test/adapter/sdk-copilot.test.ts
+new file mode 100644
+index 0000000..0ad1e7a
+--- /dev/null
++++ b/test/adapter/sdk-copilot.test.ts
+@@ -0,0 +1,199 @@
++import { describe, expect, it } from 'vitest';
++import type {
++  CopilotResumeSessionConfig,
++  CopilotSessionConfig,
++  CopilotSessionEventLike,
++  ICopilotClient,
++  ICopilotSession,
++} from '../../src/adapter/copilot-types.js';
++import type { AgentEvent } from '../../src/adapter/events.js';
++import { SdkCopilotAdapter } from '../../src/adapter/sdk-copilot.js';
++
++class MockSession implements ICopilotSession {
++  readonly sessionId = 'mock-session';
++  readonly sendCalls: Array<{ prompt: string }> = [];
++  readonly sendAndWaitCalls: Array<{ prompt: string }> = [];
++  readonly handlers: Array<(event: CopilotSessionEventLike) => void> = [];
++  disconnectCalls = 0;
++  unsubscribeCalls = 0;
++  abortCalls = 0;
++  destroyCalls = 0;
++
++  async send(options: { prompt: string }): Promise<string> {
++    this.sendCalls.push(options);
++    return options.prompt;
++  }
++
++  async sendAndWait(options: { prompt: string }): Promise<unknown> {
++    this.sendAndWaitCalls.push(options);
++    return undefined;
++  }
++
++  on(handler: (event: CopilotSessionEventLike) => void): () => void {
++    this.handlers.push(handler);
++    return () => {
++      this.unsubscribeCalls++;
++    };
++  }
++
++  async abort(): Promise<void> {
++    this.abortCalls++;
++  }
++
++  async disconnect(): Promise<void> {
++    this.disconnectCalls++;
++  }
++
++  async destroy(): Promise<void> {
++    this.destroyCalls++;
++  }
++
++  emit(event: CopilotSessionEventLike): void {
++    for (const handler of [...this.handlers]) {
++      handler(event);
++    }
++  }
++}
++
++class MockClient implements ICopilotClient {
++  createSessionCalls: CopilotSessionConfig[] = [];
++  resumeSessionCalls: CopilotResumeSessionConfig[] = [];
++
++  constructor(private readonly session: MockSession) {}
++
++  async createSession(config?: CopilotSessionConfig): Promise<ICopilotSession> {
++    this.createSessionCalls.push(config ?? {});
++    return this.session;
++  }
++
++  async resumeSession(
++    _sessionId: string,
++    config?: CopilotResumeSessionConfig,
++  ): Promise<ICopilotSession> {
++    this.resumeSessionCalls.push(config ?? {});
++    return this.session;
++  }
++
++  async stop(): Promise<unknown> {
++    return undefined;
++  }
++}
++
++async function waitFor(condition: () => boolean): Promise<void> {
++  const started = Date.now();
++  while (!condition()) {
++    if (Date.now() - started > 1000) {
++      throw new Error('condition not met before timeout');
++    }
++    await new Promise((resolve) => setTimeout(resolve, 0));
++  }
++}
++
++describe('SdkCopilotAdapter.run', () => {
++  it('uses session.send and resolves on session idle', async () => {
++    const session = new MockSession();
++    const adapter = new SdkCopilotAdapter(new MockClient(session));
++    const events: AgentEvent[] = [];
++
++    const runPromise = adapter.run({
++      prompt: '  hello  ',
++      timeout: 123,
++      onEvent: (event) => events.push(event),
++    });
++
++    await waitFor(() => session.sendCalls.length === 1);
++    session.emit({
++      type: 'assistant.message',
++      data: { content: 'done', messageId: 'm1' },
++    });
++    session.emit({ type: 'session.idle', data: {} });
++
++    const result = await runPromise;
++
++    expect(result).toMatchObject({
++      output: 'done',
++      sessionId: 'mock-session',
++      status: 'completed',
++      exitCode: 0,
++    });
++    expect(session.sendCalls).toEqual([{ prompt: 'hello' }]);
++    expect(session.sendAndWaitCalls).toHaveLength(0);
++    expect(session.unsubscribeCalls).toBe(1);
++    expect(session.disconnectCalls).toBe(1);
++    expect(events.map((event) => event.type)).toEqual([
++      'session_start',
++      'message',
++      'session_idle',
++    ]);
++  });
++
++  it('emits every idle event but settles only once for queued flow', async () => {
++    const session = new MockSession();
++    const adapter = new SdkCopilotAdapter(new MockClient(session));
++    const events: AgentEvent[] = [];
++
++    const runPromise = adapter.run({
++      prompt: 'start',
++      onEvent: (event) => events.push(event),
++    });
++
++    await waitFor(() => session.sendCalls.length === 1);
++    session.emit({ type: 'session.idle', data: {} });
++    session.emit({ type: 'session.idle', data: {} });
++
++    const result = await runPromise;
++
++    expect(result.status).toBe('completed');
++    expect(
++      events.filter((event) => event.type === 'session_idle'),
++    ).toHaveLength(2);
++    expect(session.unsubscribeCalls).toBe(1);
++    expect(session.disconnectCalls).toBe(1);
++  });
++
++  it('returns failed status when session error fires before idle', async () => {
++    const session = new MockSession();
++    const adapter = new SdkCopilotAdapter(new MockClient(session));
++
++    const runPromise = adapter.run({ prompt: 'start' });
++
++    await waitFor(() => session.sendCalls.length === 1);
++    session.emit({
++      type: 'session.error',
++      data: { message: 'boom', errorType: 'SESSION_ERROR' },
++    });
++
++    const result = await runPromise;
++
++    expect(result.status).toBe('failed');
++    expect(result.output).toContain('boom');
++    expect(session.unsubscribeCalls).toBe(1);
++    expect(session.disconnectCalls).toBe(1);
++  });
++
++  it('invokes onSessionReady once with a working sender', async () => {
++    const session = new MockSession();
++    const adapter = new SdkCopilotAdapter(new MockClient(session));
++    let callbackCount = 0;
++
++    const runPromise = adapter.run({
++      prompt: 'start',
++      onSessionReady: (sender) => {
++        callbackCount++;
++        void sender.send('follow-up');
++      },
++    });
++
++    await waitFor(() => session.sendCalls.length === 2);
++    session.emit({ type: 'session.idle', data: {} });
++
++    const result = await runPromise;
++
++    expect(result.status).toBe('completed');
++    expect(callbackCount).toBe(1);
++    expect(session.sendCalls).toEqual([
++      { prompt: 'start' },
++      { prompt: 'follow-up' },
++    ]);
++  });
++});
+diff --git a/test/cli/all-existing-agents-pass-doctor.test.ts b/test/cli/all-existing-agents-pass-doctor.test.ts
+new file mode 100644
+index 0000000..369091e
+--- /dev/null
++++ b/test/cli/all-existing-agents-pass-doctor.test.ts
+@@ -0,0 +1,132 @@
++import { spawnSync } from 'node:child_process';
++import * as fs from 'node:fs';
++import * as path from 'node:path';
++import { describe, expect, it } from 'vitest';
++
++const regressionDescribe =
++  process.env.MINIH_REGRESSION === '1' ? describe : describe.skip;
++
++const repoRoot = path.resolve('.');
++const cliPath = path.join(repoRoot, 'dist/cli/index.js');
++const baselineDir = path.join(
++  repoRoot,
++  'docs/plans/007-backgrounding/tasks/phase-1-runner-foundations/baselines',
++);
++const ignoredKeys = new Set([
++  'timestamp',
++  'ts',
++  'runId',
++  'sessionId',
++  'duration',
++  'startedAt',
++  'completedAt',
++  'runDir',
++]);
++
++function stripTransientKeys(value: unknown): unknown {
++  if (Array.isArray(value)) {
++    return value.map(stripTransientKeys);
++  }
++  if (value && typeof value === 'object') {
++    const stripped: Record<string, unknown> = {};
++    for (const [key, nestedValue] of Object.entries(value)) {
++      if (!ignoredKeys.has(key)) {
++        stripped[key] = stripTransientKeys(nestedValue);
++      }
++    }
++    return stripped;
++  }
++  return value;
++}
++
++function firstDifferencePath(
++  expected: unknown,
++  actual: unknown,
++  currentPath = '$',
++): string | null {
++  if (Object.is(expected, actual)) {
++    return null;
++  }
++  if (Array.isArray(expected) || Array.isArray(actual)) {
++    if (!Array.isArray(expected) || !Array.isArray(actual)) {
++      return currentPath;
++    }
++    if (expected.length !== actual.length) {
++      return `${currentPath}.length`;
++    }
++    for (let index = 0; index < expected.length; index++) {
++      const child = firstDifferencePath(
++        expected[index],
++        actual[index],
++        `${currentPath}[${index}]`,
++      );
++      if (child) {
++        return child;
++      }
++    }
++    return null;
++  }
++  if (
++    expected &&
++    actual &&
++    typeof expected === 'object' &&
++    typeof actual === 'object'
++  ) {
++    const expectedKeys = Object.keys(expected).sort();
++    const actualKeys = Object.keys(actual).sort();
++    if (expectedKeys.join('\0') !== actualKeys.join('\0')) {
++      return `${currentPath}.{keys}`;
++    }
++    for (const key of expectedKeys) {
++      const child = firstDifferencePath(
++        (expected as Record<string, unknown>)[key],
++        (actual as Record<string, unknown>)[key],
++        `${currentPath}.${key}`,
++      );
++      if (child) {
++        return child;
++      }
++    }
++    return null;
++  }
++  return currentPath;
++}
++
++function runCli(command: 'doctor' | 'list'): unknown {
++  const result = spawnSync(process.execPath, [cliPath, command], {
++    cwd: repoRoot,
++    env: { ...process.env, NO_COLOR: '1' },
++    encoding: 'utf-8',
++  });
++
++  if (result.status !== 0) {
++    throw new Error(
++      `minih ${command} failed with exit ${result.status ?? 'null'}\nSTDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}`,
++    );
++  }
++  return JSON.parse(result.stdout);
++}
++
++function loadBaseline(command: 'doctor' | 'list'): unknown {
++  return JSON.parse(
++    fs.readFileSync(path.join(baselineDir, `${command}.json`), 'utf-8'),
++  );
++}
++
++regressionDescribe('existing agents backward compatibility', () => {
++  it.each([
++    'doctor',
++    'list',
++  ] as const)('matches the P1 %s baseline after stripping transient keys', (command) => {
++    const expected = stripTransientKeys(loadBaseline(command));
++    const actual = stripTransientKeys(runCli(command));
++    const firstDiff = firstDifferencePath(expected, actual);
++
++    expect(
++      actual,
++      firstDiff
++        ? `${command}.json differs from the P1 baseline at ${firstDiff}`
++        : undefined,
++    ).toEqual(expected);
++  });
++});
+diff --git a/test/runner/preamble-builder.test.ts b/test/runner/preamble-builder.test.ts
+new file mode 100644
+index 0000000..d40e9a4
+--- /dev/null
++++ b/test/runner/preamble-builder.test.ts
+@@ -0,0 +1,177 @@
++import { describe, expect, it } from 'vitest';
++import {
++  buildInsidePreamble,
++  type PreambleAssemblyInput,
++} from '../../src/runner/preamble-builder.js';
++import type { AgentDefinition } from '../../src/runner/types.js';
++
++function definition(overrides: Partial<AgentDefinition> = {}): AgentDefinition {
++  return {
++    slug: 'coord-agent',
++    description: 'Coordination agent',
++    tags: [],
++    dir: '/agents/coord-agent',
++    promptPath: '/agents/coord-agent/prompt.md',
++    schemaPath: null,
++    instructionsPath: null,
++    inputSchemaPath: null,
++    ...overrides,
++  };
++}
++
++function input(
++  overrides: Partial<PreambleAssemblyInput> = {},
++): PreambleAssemblyInput {
++  return {
++    definition: definition(),
++    runId: 'run-123',
++    preamble: 'UNIVERSAL PREAMBLE',
++    instructions: 'AGENT INSTRUCTIONS',
++    outputHint: 'Write your final JSON report to: /tmp/report.json',
++    paramsHint: '## Input Parameters\n\nfile_path: /src/main.ts',
++    userPrompt: '# Agent Body\n\nDo the thing.',
++    systemOutputInstructions: 'SYSTEM OUTPUT INSTRUCTIONS',
++    ...overrides,
++  };
++}
++
++describe('buildInsidePreamble', () => {
++  it('matches the existing inline assembly exactly when coordination is disabled', () => {
++    const assemblyInput = input({
++      definition: definition({ coordination: { enabled: false } }),
++    });
++
++    const expected = [
++      assemblyInput.preamble,
++      assemblyInput.instructions,
++      assemblyInput.outputHint,
++      assemblyInput.paramsHint,
++      assemblyInput.userPrompt,
++      assemblyInput.systemOutputInstructions,
++    ]
++      .filter(Boolean)
++      .join('\n\n---\n\n');
++
++    expect(buildInsidePreamble(assemblyInput)).toBe(expected);
++    expect(buildInsidePreamble(assemblyInput)).toMatchInlineSnapshot(`
++      "UNIVERSAL PREAMBLE
++
++      ---
++
++      AGENT INSTRUCTIONS
++
++      ---
++
++      Write your final JSON report to: /tmp/report.json
++
++      ---
++
++      ## Input Parameters
++
++      file_path: /src/main.ts
++
++      ---
++
++      # Agent Body
++
++      Do the thing.
++
++      ---
++
++      SYSTEM OUTPUT INSTRUCTIONS"
++    `);
++  });
++
++  it('defaults absent coordination to the disabled byte-equivalent path', () => {
++    const assemblyInput = input({ definition: definition() });
++
++    const expected = [
++      assemblyInput.preamble,
++      assemblyInput.instructions,
++      assemblyInput.outputHint,
++      assemblyInput.paramsHint,
++      assemblyInput.userPrompt,
++      assemblyInput.systemOutputInstructions,
++    ]
++      .filter(Boolean)
++      .join('\n\n---\n\n');
++
++    expect(buildInsidePreamble(assemblyInput)).toBe(expected);
++  });
++
++  it('renders identity and tools stubs for coordinated agents without outside.md', () => {
++    const prompt = buildInsidePreamble(
++      input({
++        definition: definition({ coordination: { enabled: true } }),
++      }),
++    );
++
++    expect(prompt).toContain('<!-- coordination.identity-block:stub -->');
++    expect(prompt).toContain('## Your Context (coordination)');
++    expect(prompt).toContain('<!-- coordination.tools-section:stub -->');
++    expect(prompt).toContain('## Coordination tools available to you');
++    expect(prompt).not.toContain('coordination.peer-contract:stub');
++    expect(prompt).toMatchInlineSnapshot(`
++      "UNIVERSAL PREAMBLE
++
++      ---
++
++      <!-- coordination.identity-block:stub -->
++
++      ## Your Context (coordination)
++
++      _(P6 wires identity content here.)_
++
++      ---
++
++      <!-- coordination.tools-section:stub -->
++
++      ## Coordination tools available to you
++
++      _(P6 wires workshop-005 tools section here.)_
++
++      ---
++
++      Write your final JSON report to: /tmp/report.json
++
++      ---
++
++      ## Input Parameters
++
++      file_path: /src/main.ts
++
++      ---
++
++      # Agent Body
++
++      Do the thing.
++
++      ---
++
++      AGENT INSTRUCTIONS
++
++      ---
++
++      SYSTEM OUTPUT INSTRUCTIONS"
++    `);
++  });
++
++  it('renders outside.md as a blockquote-framed peer contract when present', () => {
++    const prompt = buildInsidePreamble(
++      input({
++        definition: definition({
++          coordination: { enabled: true },
++          outsideContract: 'Outside line 1\nOutside line 2',
++        }),
++      }),
++    );
++
++    expect(prompt).toContain('<!-- coordination.peer-contract:stub -->');
++    expect(prompt).toContain("## Peer's Contract (from outside.md)");
++    expect(prompt).toContain('> Outside line 1\n> Outside line 2');
++  });
++
++  it('does not expose an isResume option because callers gate resume turns', () => {
++    expect('isResume' in input()).toBe(false);
++  });
++});
+diff --git a/test/runner/runner-event-driven.test.ts b/test/runner/runner-event-driven.test.ts
+new file mode 100644
+index 0000000..265bf70
+--- /dev/null
++++ b/test/runner/runner-event-driven.test.ts
+@@ -0,0 +1,148 @@
++import * as fs from 'node:fs';
++import * as os from 'node:os';
++import * as path from 'node:path';
++import { afterEach, beforeEach, describe, expect, it } from 'vitest';
++import {
++  type AgentEvent,
++  type AgentResult,
++  FakeAgentAdapter,
++} from '../../src/adapter/index.js';
++import { resolveAgent } from '../../src/runner/folder.js';
++import { awaitTerminalCondition, runAgent } from '../../src/runner/runner.js';
++import { validSystemOutput } from '../helpers/fixtures.js';
++
++let tmpDir: string;
++
++beforeEach(() => {
++  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'minih-runner-events-'));
++});
++
++afterEach(() => {
++  fs.rmSync(tmpDir, { recursive: true, force: true });
++});
++
++function createAgent(slug: string) {
++  const agentDir = path.join(tmpDir, slug);
++  fs.mkdirSync(agentDir, { recursive: true });
++  fs.writeFileSync(
++    path.join(agentDir, 'prompt.md'),
++    `---\ndescription: "Event-driven test agent"\n---\n\n# ${slug}\n\nDo the thing.`,
++  );
++
++  const definition = resolveAgent(slug, tmpDir);
++  if (!definition) {
++    throw new Error(`expected agent ${slug} to resolve`);
++  }
++  return definition;
++}
++
++function completedResult(): AgentResult {
++  return {
++    output: validSystemOutput(),
++    sessionId: 'session-1',
++    status: 'completed',
++    exitCode: 0,
++    tokens: null,
++  };
++}
++
++describe('awaitTerminalCondition', () => {
++  it('resolves immediately when the pending forwarder getter returns zero', async () => {
++    const result = completedResult();
++
++    await expect(awaitTerminalCondition(result, () => 0)).resolves.toBe(result);
++  });
++
++  it('uses a live pending forwarder getter until the count clears', async () => {
++    const result = completedResult();
++    let pendingForwarders = 1;
++    let settled = false;
++
++    const terminal = awaitTerminalCondition(result, () => pendingForwarders);
++    terminal.then(() => {
++      settled = true;
++    });
++
++    await new Promise((resolve) => setTimeout(resolve, 5));
++    expect(settled).toBe(false);
++
++    pendingForwarders = 0;
++    await expect(terminal).resolves.toBe(result);
++    expect(settled).toBe(true);
++  });
++});
++
++describe('runAgent event-driven terminal flow', () => {
++  it('records queued turn ordering with session idle boundaries', async () => {
++    const definition = createAgent('queued-events');
++    const fake = new FakeAgentAdapter({ output: validSystemOutput() });
++    fake.setQueuedRun([
++      [
++        {
++          type: 'thinking',
++          timestamp: '2026-01-01T00:00:00Z',
++          data: { content: 'first turn' },
++        },
++      ],
++      [
++        {
++          type: 'message',
++          timestamp: '2026-01-01T00:00:01Z',
++          data: { content: 'second turn' },
++        },
++      ],
++    ]);
++
++    const seenEvents: AgentEvent[] = [];
++    const result = await runAgent(
++      fake,
++      definition,
++      { slug: 'queued-events' },
++      (event) => seenEvents.push(event),
++      tmpDir,
++    );
++
++    expect(result.metadata.result).toBe('completed');
++    expect(seenEvents.map((event) => event.type)).toEqual([
++      'thinking',
++      'session_idle',
++      'message',
++      'session_idle',
++    ]);
++
++    const eventsPath = path.join(result.runDir, 'events.ndjson');
++    const persistedTypes = fs
++      .readFileSync(eventsPath, 'utf-8')
++      .trim()
++      .split('\n')
++      .map((line) => JSON.parse(line).type);
++    expect(persistedTypes).toEqual([
++      'thinking',
++      'session_idle',
++      'message',
++      'session_idle',
++    ]);
++  });
++
++  it('uses the runner timeout as the outer terminal guard', async () => {
++    const definition = createAgent('timeout-events');
++    const fake = new FakeAgentAdapter({
++      output: validSystemOutput(),
++      sessionId: 'slow-session',
++      runDuration: 500,
++    });
++
++    const result = await runAgent(
++      fake,
++      definition,
++      { slug: 'timeout-events', timeout: 0.01 },
++      undefined,
++      tmpDir,
++    );
++
++    expect(result.metadata.result).toBe('timeout');
++    expect(result.metadata.exitCode).toBe(124);
++    expect(fake.getRunHistory()).toHaveLength(1);
++    expect(fake.getTerminateHistory()).toHaveLength(1);
++  });
++});

@@ -38,6 +38,7 @@ export interface CopilotResumeSessionConfig {
 
 export interface ICopilotSession {
   readonly sessionId: string;
+  send(options: { prompt: string }): Promise<unknown>;
   sendAndWait(options: { prompt: string }, timeout?: number): Promise<unknown>;
   on(handler: (event: CopilotSessionEventLike) => void): () => void;
   abort(): Promise<void>;

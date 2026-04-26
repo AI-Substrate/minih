@@ -79,44 +79,74 @@ export class SdkCopilotAdapter implements IAgentAdapter {
     }
 
     let sessionDestroyed = false;
+    let unsubscribeRun: (() => void) | undefined;
 
     try {
       let output = '';
       let hasStreamedThinking = false;
       let hasStreamedText = false;
+      let idleSettled = false;
 
-      session.on((event: CopilotSessionEventLike) => {
-        // Suppress duplicate consolidated events.
-        // SDK emits deltas during streaming, then re-emits full consolidated
-        // content after the turn. We skip the duplicates.
-        if (event.type === 'assistant.reasoning_delta') {
-          hasStreamedThinking = true;
-        }
-        if (event.type === 'assistant.message_delta') {
-          hasStreamedText = true;
-        }
-        if (event.type === 'assistant.reasoning' && hasStreamedThinking) {
-          return;
-        }
-        if (event.type === 'assistant.message' && hasStreamedText) {
-          output = event.data?.content ?? '';
-          return;
-        }
+      const idlePromise = new Promise<void>((resolve, reject) => {
+        const unsubscribe = session.on((event: CopilotSessionEventLike) => {
+          // Suppress duplicate consolidated events.
+          // SDK emits deltas during streaming, then re-emits full consolidated
+          // content after the turn. We skip the duplicates.
+          if (event.type === 'assistant.reasoning_delta') {
+            hasStreamedThinking = true;
+          }
+          if (event.type === 'assistant.message_delta') {
+            hasStreamedText = true;
+          }
+          if (event.type === 'assistant.reasoning' && hasStreamedThinking) {
+            return;
+          }
+          if (event.type === 'assistant.message' && hasStreamedText) {
+            output = event.data?.content ?? '';
+            return;
+          }
 
-        const agentEvent = translateEvent(event);
-        if (agentEvent && onEvent) {
-          onEvent(agentEvent);
-        }
+          const agentEvent = translateEvent(event);
+          if (agentEvent && onEvent) {
+            onEvent(agentEvent);
+          }
 
-        if (event.type === 'assistant.message') {
-          output = event.data?.content ?? '';
-        }
+          if (event.type === 'assistant.message') {
+            output = event.data?.content ?? '';
+          }
+
+          if (isSessionIdleEvent(event)) {
+            hasStreamedThinking = false;
+            hasStreamedText = false;
+            if (!idleSettled) {
+              idleSettled = true;
+              resolve();
+            }
+          }
+          if (isSessionErrorEvent(event) && !idleSettled) {
+            idleSettled = true;
+            reject(new Error(sessionErrorMessage(event)));
+          }
+        });
+        unsubscribeRun = unsubscribe;
       });
 
-      await session.sendAndWait(
-        { prompt: prompt.trim() },
-        options.timeout ? options.timeout * 1000 : undefined,
-      );
+      const sender = {
+        send: async (nextPrompt: string): Promise<string> => {
+          await session.send({ prompt: nextPrompt });
+          return nextPrompt;
+        },
+      };
+
+      const initialSend = session.send({ prompt: prompt.trim() });
+      try {
+        options.onSessionReady?.(sender);
+      } catch (error) {
+        await initialSend;
+        throw error;
+      }
+      await initialSend;
+      await idlePromise;
 
       return {
         output,
@@ -149,6 +179,9 @@ export class SdkCopilotAdapter implements IAgentAdapter {
         tokens: null,
       };
     } finally {
+      if (unsubscribeRun) {
+        unsubscribeRun();
+      }
       if (!sessionDestroyed) {
         sessionDestroyed = true;
         // Disconnect but don't destroy — session state preserved for resumption
@@ -232,6 +265,18 @@ function validatePrompt(prompt: string): string | null {
   return null;
 }
 
+function isSessionIdleEvent(event: CopilotSessionEventLike): boolean {
+  return event.type === 'session.idle' || event.type === 'session_idle';
+}
+
+function isSessionErrorEvent(event: CopilotSessionEventLike): boolean {
+  return event.type === 'session.error' || event.type === 'session_error';
+}
+
+function sessionErrorMessage(event: CopilotSessionEventLike): string {
+  return event.data?.message ?? 'Session error';
+}
+
 function translateEvent(event: CopilotSessionEventLike): AgentEvent | null {
   const timestamp = new Date().toISOString();
 
@@ -267,6 +312,7 @@ function translateEvent(event: CopilotSessionEventLike): AgentEvent | null {
       };
 
     case 'session.idle':
+    case 'session_idle':
       return {
         type: 'session_idle',
         timestamp,
@@ -274,6 +320,7 @@ function translateEvent(event: CopilotSessionEventLike): AgentEvent | null {
       };
 
     case 'session.error':
+    case 'session_error':
       return null; // Handled in catch block
 
     case 'tool.execution_start':

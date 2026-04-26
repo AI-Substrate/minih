@@ -336,11 +336,11 @@ graph LR
 | 2.4 | Create `src/runner/preamble-builder.ts`: pure function that assembles the inside prompt from layered sources (universal preamble → identity block stub → workshop-005 tools-section stub → peer-contract stub → agent body → instructions → SYSTEM_OUTPUT_INSTRUCTIONS) | runner | `test/runner/preamble-builder.test.ts` passes snapshot tests for both `coordination: enabled` and disabled cases | Stubs: P6 wires actual content; P2 establishes the assembly skeleton |
 | 2.5 | Refactor `src/runner/runner.ts` to consume `preamble-builder` (replace inline assembly at lines 246-265) and use event-driven adapter contract | runner | Existing `test/runner/runner.test.ts` (or equivalent) passes unchanged; new `test/runner/runner-event-driven.test.ts` proves event-driven path | Per finding 05 |
 | 2.6 | Add terminal-condition machinery: runAgent declares "done" when (a) idle event received AND (b) no pending forwarders queued (placeholder for P3) | runner | New tests in `runner-event-driven.test.ts` cover idle-with-no-pending vs idle-with-pending cases | Workshop 007 §Terminal condition |
-| 2.7 | Backward-compat regression: implement `test/cli/all-existing-agents-pass-doctor.test.ts` — runs `minih check` + `minih doctor` against every agent in `agents/` and asserts no behavior change vs main | cli | All 9 existing agents pass; report.json shape stable on a representative `hello-world` snapshot | AC-BACKWARD-COMPAT; workshop 006 §Mapping Tests to ACs |
+| 2.7 | Backward-compat regression: implement `test/cli/all-existing-agents-pass-doctor.test.ts` — diffs `minih doctor` + `minih list` against the P1 baselines and drives a deterministic representative `hello-world` run-path with `FakeAgentAdapter` | cli | All 9 existing agents remain discovery/doctor-compatible; report.json shape stable on a representative `hello-world` snapshot | AC-BACKWARD-COMPAT; workshop 006 §Mapping Tests to ACs |
 
 **Acceptance Criteria (P2)**:
 - [ ] AC-RUN-AGENT-EVENT-DRIVEN (workshop 007) — `runAgent` uses `session.send` + idle subscription, NOT `sendAndWait`. Single-message and queued-message flows both reach completion.
-- [ ] AC-BACKWARD-COMPAT (continued) — existing 9 agents still produce identical `report.json` shapes (verified by `test/cli/all-existing-agents-pass-doctor.test.ts` from task 2.7 + snapshot test on a representative agent).
+- [ ] AC-BACKWARD-COMPAT (continued) — existing 9 agents still produce identical doctor/list discovery output, and representative `report.json` shape remains stable (verified by `test/cli/all-existing-agents-pass-doctor.test.ts` from task 2.7).
 
 ---
 

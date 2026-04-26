@@ -36,6 +36,8 @@ export {
   validateSlug,
   watermarkPath,
 } from './folder.js';
+export type { PreambleAssemblyInput } from './preamble-builder.js';
+export { buildInsidePreamble } from './preamble-builder.js';
 export { PrettyDisplay } from './pretty.js';
 export {
   computeVelocity,

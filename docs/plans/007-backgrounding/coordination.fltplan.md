@@ -5,7 +5,7 @@
 **Workshops**: 8 — [001-filesystem-layout](./workshops/001-filesystem-layout.md) · [002-state-machine](./workshops/002-state-machine.md) · [003-mcp-tool-surface](./workshops/003-mcp-tool-surface.md) · [004-spawn-config-injection](./workshops/004-spawn-config-injection.md) · [005-preamble-and-prompting](./workshops/005-preamble-and-prompting.md) · [006-test-fixtures](./workshops/006-test-fixtures.md) · [007-user-journey-coder-and-reviewer](./workshops/007-user-journey-coder-and-reviewer.md) · [008-inside-outside-prompting-and-retro](./workshops/008-inside-outside-prompting-and-retro.md)
 **Research**: [research-dossier.md](./research-dossier.md) + [external-research/](./external-research/) (5 files)
 **Generated**: 2026-04-26 (plan-1b initial; revised after workshop 007 daemon-light pivot; plan-3 generated 2026-04-26)
-**Status**: **Phase 1 LANDED** — coordination foundations shipped. 4 JSON schemas + 4 new runner modules (`state.ts`, `context.ts`, `atomic-write.ts`, `ulid.ts`) + extensions to `folder.ts`, `types.ts`, `index.ts`. 230/230 tests pass; pre-vs-post-P1 baseline diff exit=0 across 10 files; zero behavior change to existing 9 agents. `RetrospectiveCoordination` and `MagicWandTarget` widening explicitly deferred to P6 (no type-vs-validator drift). **P2 unlocked.**
+**Status**: **Phase 2 LANDED** — `runAgent` is event-driven (`session.send` + `session_idle`), `preamble-builder.ts` owns full fresh-run prompt assembly with coordination stubs, adapter/fake seams are ready for P3 forwarders, doctor/list baselines remain byte-equivalent for all 9 existing agents, and a deterministic representative `hello-world` run-path keeps the report shape covered. Default and `MINIH_REGRESSION=1` quality gates pass with zero audit findings. **P3 unlocked.**
 
 Phase 0 LANDED 2026-04-26 — all 4 scratch tests executed; FULL GO memo at [prework-results.md](./prework-results.md); spec polished to 37 ACs.
 
@@ -151,8 +151,8 @@ graph LR
     P0[P0 scratch tests + memo<br/>✓ FULL GO 2026-04-26]:::done
     SP[Spec polish: 37 ACs<br/>✓ merged 2026-04-26]:::done
     P1[P1 Runner Foundations<br/>✓ LANDED 2026-04-26]:::done
-    P2[P2 runAgent event-driven]:::next
-    Phases[P3-P7 implementation]:::pending
+    P2[P2 runAgent event-driven<br/>✓ LANDED 2026-04-26]:::done
+    Phases[P3-P7 implementation]:::next
     Done[37 ACs verified]:::pending
 
     Spec --> WS
@@ -178,8 +178,10 @@ graph LR
 3. ~~Spec polish (20 ACs)~~ ✓ done — `coordination-spec.md` now has 37 ACs
 4. ~~`/plan-5-v2-phase-tasks-and-brief` for P1~~ ✓ done — dossier + flight plan generated, validated (4-agent broad sweep)
 5. ~~`/plan-6-v2-implement-phase` for P1~~ ✓ done — 230/230 tests, baseline diff exit=0, zero regressions
-6. **`/plan-7-v2-code-review --phase "Phase 1: Runner Foundations" --plan "docs/plans/007-backgrounding/coordination-plan.md"`** — formal phase review (recommended next)
-7. Then `/plan-5-v2-phase-tasks-and-brief --phase "Phase 2: runAgent Event-Driven Refactor + Preamble Builder"` to start P2
+6. ~~`/plan-7-v2-code-review --phase "Phase 1: Runner Foundations" --plan "docs/plans/007-backgrounding/coordination-plan.md"`~~ ✓ deferred in favor of P2 implementation per user direction
+7. ~~`/plan-5-v2-phase-tasks-and-brief --phase "Phase 2: runAgent Event-Driven Refactor + Preamble Builder"`~~ ✓ done — dossier + flight plan generated and validated
+8. ~~`/plan-6-v2-implement-phase` for P2~~ ✓ done — event-driven runner/adapter seam landed, default + regression gates green, baseline diff exit=0
+9. **Run minih code review command for P2 and apply fixes** — requested follow-up before moving to P3
 
 ---
 
@@ -195,3 +197,4 @@ graph LR
 | 2026-04-26 | Spec polish (20 ACs) | done | Spec now has 37 ACs total; AC-STATE-TRANSITION-GATED removed inline |
 | 2026-04-26 | Phase 1 dossier (plan-5) | done | 10 tasks expanded from plan-3 1.1-1.10; reordered for dependency correctness; broad 4-agent validation surfaced 27 issues, 9 HIGH fixed inline pre-implementation |
 | 2026-04-26 | Phase 1 implementation (plan-6) | LANDED | 4 schemas + 4 new modules + 3 modified + 5 new test files + 2 baseline scripts; 230/230 tests pass; baseline diff exit=0 across 10 files; zero behavior change to existing 9 agents; `MagicWandTarget`/`RetrospectiveCoordination` correctly deferred to P6 (no type-vs-validator drift); ajv-formats added for live `format: date-time` validation |
+| 2026-04-26 | Phase 2 implementation (plan-6) | LANDED | Event-driven `runAgent`/adapter contract; preamble builder with coordination stubs; fake queued-run/session sender helpers; gated doctor/list + representative run-path regression; default + `MINIH_REGRESSION=1` `just fft` pass; baseline diff exit=0 across 2 files; zero audit findings after lockfile update |

@@ -13,10 +13,23 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { AgentEvent, AgentResult } from '../adapter/events.js';
+import type {
+  AgentEvent,
+  AgentResult,
+  SessionSender,
+} from '../adapter/events.js';
 import type { IAgentAdapter } from '../adapter/interface.js';
 import { createRunFolder, parseFrontmatter } from './folder.js';
+import {
+  createInboxForwarder,
+  type InboxForwarder,
+} from './inbox-forwarder.js';
 import { buildInsidePreamble } from './preamble-builder.js';
+import { acquireRunLock, type RunLock } from './run-lock.js';
+import {
+  createStateForwarder,
+  type StateForwarder,
+} from './state-forwarder.js';
 import type {
   AgentDefinition,
   AgentRunConfig,
@@ -363,6 +376,50 @@ export async function runAgent(
   let timedOut = false;
   const timeoutMs = (config.timeout ?? 300) * 1000;
 
+  const coordinationEnabled = definition.coordination?.enabled === true;
+  let runLock: RunLock | null = null;
+  let inboxForwarder: InboxForwarder | null = null;
+  let stateForwarder: StateForwarder | null = null;
+  const forwarderErrors: Error[] = [];
+  const pendingForwarderCount = (): number =>
+    (inboxForwarder?.pendingCount() ?? 0) +
+    (stateForwarder?.pendingCount() ?? 0);
+  const closeForwarders = (): void => {
+    inboxForwarder?.close();
+    stateForwarder?.close();
+    inboxForwarder = null;
+    stateForwarder = null;
+    runLock?.release();
+    runLock = null;
+  };
+  const handleForwarderError = (error: Error): void => {
+    forwarderErrors.push(error);
+    closeForwarders();
+  };
+  const startForwarders = (sender: SessionSender): void => {
+    if (!coordinationEnabled || !agentsDir) return;
+    runLock = acquireRunLock({
+      slug: definition.slug,
+      agentsDir,
+    });
+    const forwarderOptions = {
+      slug: definition.slug,
+      agentsDir,
+      sender,
+      commitProgress: 'manual' as const,
+      onError: handleForwarderError,
+    };
+    inboxForwarder = createInboxForwarder(forwarderOptions);
+    stateForwarder = createStateForwarder(forwarderOptions);
+    void Promise.all([inboxForwarder.start(), stateForwarder.start()]).catch(
+      (error: unknown) => {
+        handleForwarderError(
+          error instanceof Error ? error : new Error(String(error)),
+        );
+      },
+    );
+  };
+
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
   try {
     // MCP config resolution:
@@ -396,7 +453,6 @@ export async function runAgent(
       }
     }
 
-    const pendingForwarderCount = (): number => 0;
     const runPromise = adapter
       .run({
         prompt: finalPrompt,
@@ -405,11 +461,23 @@ export async function runAgent(
         reasoningEffort: config.reasoningEffort,
         cwd: runDir, // SDK isolated to run folder (Workshop 005)
         onEvent: handleEvent,
-        onSessionReady: () => {},
+        onSessionReady: startForwarders,
         configDir: config.configDir ?? config.cwd,
         ...(mcpServers && { mcpServers }),
       })
-      .then((result) => awaitTerminalCondition(result, pendingForwarderCount));
+      .then(async (result) => {
+        const terminal = await awaitTerminalCondition(
+          result,
+          pendingForwarderCount,
+        );
+        if (forwarderErrors.length > 0) throw forwarderErrors[0];
+        if (terminal.status === 'completed') {
+          inboxForwarder?.commit();
+          stateForwarder?.commit();
+        }
+        return terminal;
+      })
+      .finally(closeForwarders);
     const timeoutPromise = new Promise<never>((_, reject) => {
       timeoutHandle = setTimeout(() => {
         timedOut = true;
@@ -444,6 +512,7 @@ export async function runAgent(
     }
   } finally {
     if (timeoutHandle) clearTimeout(timeoutHandle);
+    closeForwarders();
   }
 
   const completedAt = new Date();

@@ -5,7 +5,7 @@
 **Workshops**: 8 — [001-filesystem-layout](./workshops/001-filesystem-layout.md) · [002-state-machine](./workshops/002-state-machine.md) · [003-mcp-tool-surface](./workshops/003-mcp-tool-surface.md) · [004-spawn-config-injection](./workshops/004-spawn-config-injection.md) · [005-preamble-and-prompting](./workshops/005-preamble-and-prompting.md) · [006-test-fixtures](./workshops/006-test-fixtures.md) · [007-user-journey-coder-and-reviewer](./workshops/007-user-journey-coder-and-reviewer.md) · [008-inside-outside-prompting-and-retro](./workshops/008-inside-outside-prompting-and-retro.md)
 **Research**: [research-dossier.md](./research-dossier.md) + [external-research/](./external-research/) (5 files)
 **Generated**: 2026-04-26 (plan-1b initial; revised after workshop 007 daemon-light pivot; plan-3 generated 2026-04-26)
-**Status**: **Phase 2 LANDED** — `runAgent` is event-driven (`session.send` + `session_idle`), `preamble-builder.ts` owns full fresh-run prompt assembly with coordination stubs, adapter/fake seams are ready for P3 forwarders, doctor/list baselines remain byte-equivalent for all 9 existing agents, and a deterministic representative `hello-world` run-path keeps the report shape covered. Default and `MINIH_REGRESSION=1` quality gates pass with zero audit findings. **P3 unlocked.**
+**Status**: **Phase 3 LANDED + CODE REVIEW FIXED** — runner-owned daemon-light forwarders now cold-drain per-agent inbox/state files, watch cross-process updates, deliver changes through the live `SessionSender`, wait for pending/debounced forwarder work before terminal completion, commit watermarks only after completed terminal runs, and reject simultaneous coordinated runs with a typed `RunLockHeldError`. Default `just fft` and the opt-in `MINIH_E2E=1` daemon-light gate pass after code-review fixes. **P6 unlocked on the critical path.**
 
 Phase 0 LANDED 2026-04-26 — all 4 scratch tests executed; FULL GO memo at [prework-results.md](./prework-results.md); spec polished to 37 ACs.
 
@@ -77,7 +77,7 @@ graph LR
     P0[P0 Pre-work + gate ✓ FULL GO]:::done
     P1[P1 Foundations]
     P2[P2 runAgent refactor]:::critical
-    P3[P3 fs.watch + forwarders]
+    P3[P3 fs.watch + forwarders]:::done
     P4[P4 MCP domain NEW]
     P5[P5 Outside CLI]
     P6[P6 Agent integration]
@@ -152,7 +152,8 @@ graph LR
     SP[Spec polish: 37 ACs<br/>✓ merged 2026-04-26]:::done
     P1[P1 Runner Foundations<br/>✓ LANDED 2026-04-26]:::done
     P2[P2 runAgent event-driven<br/>✓ LANDED 2026-04-26]:::done
-    Phases[P3-P7 implementation]:::next
+    P3L[P3 fs.watch + forwarders<br/>✓ LANDED 2026-04-26]:::done
+    Remaining[P4-P7 implementation]:::next
     Done[37 ACs verified]:::pending
 
     Spec --> WS
@@ -161,8 +162,9 @@ graph LR
     P0 --> SP
     SP --> P1
     P1 --> P2
-    P2 --> Phases
-    Phases --> Done
+    P2 --> P3L
+    P3L --> Remaining
+    Remaining --> Done
 
     classDef done fill:#9f9,color:#000
     classDef next fill:#ff9,color:#000
@@ -181,7 +183,10 @@ graph LR
 6. ~~`/plan-7-v2-code-review --phase "Phase 1: Runner Foundations" --plan "docs/plans/007-backgrounding/coordination-plan.md"`~~ ✓ deferred in favor of P2 implementation per user direction
 7. ~~`/plan-5-v2-phase-tasks-and-brief --phase "Phase 2: runAgent Event-Driven Refactor + Preamble Builder"`~~ ✓ done — dossier + flight plan generated and validated
 8. ~~`/plan-6-v2-implement-phase` for P2~~ ✓ done — event-driven runner/adapter seam landed, default + regression gates green, baseline diff exit=0
-9. **Run minih code review command for P2 and apply fixes** — requested follow-up before moving to P3
+9. ~~Run minih code review command for P2 and apply fixes~~ ✓ done before P3
+10. ~~`/plan-5-v2-phase-tasks-and-brief --phase 3`~~ ✓ done — dossier + flight plan generated and validated
+11. ~~`/plan-6-v2-implement-phase` for P3~~ ✓ done — daemon-light forwarders landed, `just fft` + opt-in e2e green
+12. ~~Run minih code review command for P3 and apply fixes~~ ✓ done — 2 HIGH findings fixed; `just fft` + opt-in e2e green after fixes
 
 ---
 
@@ -198,3 +203,5 @@ graph LR
 | 2026-04-26 | Phase 1 dossier (plan-5) | done | 10 tasks expanded from plan-3 1.1-1.10; reordered for dependency correctness; broad 4-agent validation surfaced 27 issues, 9 HIGH fixed inline pre-implementation |
 | 2026-04-26 | Phase 1 implementation (plan-6) | LANDED | 4 schemas + 4 new modules + 3 modified + 5 new test files + 2 baseline scripts; 230/230 tests pass; baseline diff exit=0 across 10 files; zero behavior change to existing 9 agents; `MagicWandTarget`/`RetrospectiveCoordination` correctly deferred to P6 (no type-vs-validator drift); ajv-formats added for live `format: date-time` validation |
 | 2026-04-26 | Phase 2 implementation (plan-6) | LANDED | Event-driven `runAgent`/adapter contract; preamble builder with coordination stubs; fake queued-run/session sender helpers; gated doctor/list + representative run-path regression; default + `MINIH_REGRESSION=1` `just fft` pass; baseline diff exit=0 across 2 files; zero audit findings after lockfile update |
+| 2026-04-26 | Phase 3 implementation (plan-6) | LANDED | Debounced native file watcher; private SDK watermark; outside inbox/state forwarders; cold-start drain + live watcher delivery through `SessionSender`; live pending-forwarder terminal condition; per-agent run lock with `RunLockHeldError`; opt-in daemon-light e2e; `just fft` pass and `MINIH_E2E=1` gate pass |
+| 2026-04-26 | Phase 3 minih code review | FIXED | `code-review` requested changes for timeout watermark durability and debounced watcher terminal-drain visibility; fixed with manual post-terminal watermark commits plus watcher pending-count accounting; post-fix `just fft` and opt-in daemon-light e2e pass |

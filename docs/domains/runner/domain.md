@@ -25,6 +25,11 @@
 | `src/runner/context.ts` | contract | `detectContext()` + coordination env-var contract (`MINIH_ENV_KEYS_COORDINATION`, `MINIH_ENV_KEYS_ALL`) (007 P1) |
 | `src/runner/atomic-write.ts` | internal | POSIX write-then-rename helper (sync + async) for state files (007 P1) |
 | `src/runner/ulid.ts` | internal | In-tree Crockford-base32 ULID with monotonicity guarantees (007 P1) |
+| `src/runner/file-watcher.ts` | internal | Debounced native `fs.watch` wrapper for single-file change hints, missing-file startup, watcher errors, and close semantics (007 P3) |
+| `src/runner/forwarder-watermark.ts` | internal | Private SDK forwarder progress in `state/sdk-watermark.json`; durable inbox byte offset + state fingerprint with symlink containment (007 P3) |
+| `src/runner/inbox-forwarder.ts` | internal | Outside inbox NDJSON drain + live watcher delivery into `SessionSender.send` (007 P3) |
+| `src/runner/state-forwarder.ts` | internal | Outside-state meaningful-change fingerprinting + live watcher delivery into `SessionSender.send` (007 P3) |
+| `src/runner/run-lock.ts` | contract | Per-agent live-run ownership guard; exports typed `RunLockHeldError`/`RUN_LOCK_HELD` for future CLI mapping (007 P3) |
 | `src/schemas/inbox-message.json` | contract | Inbox NDJSON envelope shape (007 P1) |
 | `src/schemas/outside-state.json` | contract | DEFAULT outside state shape (overridable per-agent in P6) |
 | `src/schemas/inside-state.json` | contract | DEFAULT inside state shape (overridable per-agent in P6) |
@@ -66,6 +71,7 @@
 | `writeFileAtomic` / `writeFileAtomicAsync` / `AtomicWriteCrossFsError` | Function/Class | mcp (P4 state writes), runner (P3 watermark fsync) |
 | `ulid()` | Function | mcp (P4 inbox.send), cli (P5 outside-send) |
 | `StateCorruptError` / `HistoryLineTooLargeError` / `InvalidSlugError` / `InvalidCoordinationFrontmatterError` / `OutsideAgentsDirError` | Error | mcp + cli (typed error handling) |
+| `RunLockHeldError` / `RUN_LOCK_HELD` | Error/Const | cli (future JSON envelope mapping for simultaneous coordinated runs) |
 | `AgentDefinition.outsideContract` / `AgentDefinition.coordination` | Type field | preamble-builder (P2 — peer contract injection), cli (P5 outside-context, init --coordinated) |
 | `inbox-message.json` / `outside-state.json` / `inside-state.json` / `state-history-entry.json` | JSON Schema | mcp (P4 AJV input/output validation), cli (P5 outside-send validation) |
 
@@ -77,7 +83,7 @@
 | Frozen inputs | Every run copies its inputs into the run folder for reproducibility. |
 | Degraded vs Failed | Invalid output = "degraded" (agent worked, schema didn't match), not hard failure. |
 | Prompt assembly | `buildInsidePreamble` preserves the legacy preamble → instructions → output hint → params → prompt join for non-coordinated agents, and inserts section-framed coordination stubs only when `coordination.enabled` is true. Frontmatter stripped. |
-| Event-driven terminal condition | `runAgent` relies on adapter idle completion, then waits for `awaitTerminalCondition(adapterResult, pendingForwarderCount)` so P3 can supply a live forwarder drain counter without changing the adapter contract. |
+| Event-driven terminal condition | `runAgent` relies on adapter idle completion, then waits for `awaitTerminalCondition(adapterResult, pendingForwarderCount)` with a live inbox/state forwarder drain counter so queued `session.send` work settles before the run completes. |
 | Magic wand | Every agent output MUST include retrospective with magicWand feedback. |
 | Velocity tracking | Per-agent velocity data computed at run end, stored in completed.json. Chains from prior runs for O(1) computation. |
 | Difficulty ledger | Agents report structured friction in `retrospective.difficulties`. Pipeline: agents report → `minih difficulties` aggregates → human curates preamble. |
@@ -90,6 +96,8 @@
 | Outside contract layer | `outside.md` (plain markdown, body only — no frontmatter parsing) carries the peer contract for coordinated agents. Loaded by `listAgents` into `AgentDefinition.outsideContract`. P2 preamble-builder injects under a Peer's Contract section in the inside prompt. |
 | ULID monotonicity contract | `ulid()` preserves lex-sort order under sub-millisecond bursts (increments randomness suffix) AND under clock rewind (NTP step-backward — reuses prior timestamp + increments). Crockford-base32 alphabet; 48-bit ms + 80-bit randomness. |
 | Session resume | Resume sends follow-up message directly — skips prompt assembly and system output validation. SDK conversation history provides context. |
+| Daemon-light forwarders | For `coordination: enabled` runs, runner-owned inbox/state forwarders cold-drain per-agent shared files, watch for cross-process updates, send rendered changes through the live `SessionSender`, and commit private watermarks only after successful sends. |
+| Single live-run ownership | Coordinated runs acquire a per-agent `state/run.lock` before watcher startup. A second live run fails with `RunLockHeldError` (`RUN_LOCK_HELD`) so only one process owns file watchers and watermark advancement for a slug at a time. |
 
 ## History
 
@@ -104,3 +112,4 @@
 | 006-compounding-value | Added `VelocityData`, `ParsedReport` types. `computeVelocity()` computes per-agent velocity at run end. Report.json parsed after run for envelope surfacing. `magicWandTarget` + `difficulties` added to retro/system-output schemas. SYSTEM_OUTPUT_INSTRUCTIONS updated with difficulty reporting guidance. |
 | 007/P2 (2026-04-26) | Added `preamble-builder.ts`; switched `runAgent` prompt assembly to the builder; added event-driven terminal-condition helper and gated doctor/list baseline regression. |
 | 007-backgrounding P1 | Coordination foundations (pure addition). NEW: `state.ts` (pure helpers, no rule engine), `context.ts` (`detectContext` + composed env-key array), `atomic-write.ts` (POSIX write-then-rename + typed errors), `ulid.ts` (in-tree, monotonic). 4 NEW JSON schemas: inbox-message, default outside-state, default inside-state, state-history-entry. EXTENDED `folder.ts`: 6 path helpers (all absolute, slug-validated), outside.md discovery (truncate at 16KB, symlink-out-of-tree guard), `parseFrontmatter` recognizes `coordination` field (3 valid forms, 4 typed-error cases). EXTENDED `AgentDefinition` with `outsideContract` + `coordination`. EXPORTED `MINIH_ENV_KEYS` from runner.ts. Added `ajv-formats@^3.0.1` (decision logged — needed for live `format: date-time` validation). 230/230 tests pass; baseline diff against pre-P1 dist exit=0; zero behavior change to existing 9 agents. P2 unlocked. |
+| 007-backgrounding P3 | Added daemon-light file watcher and forwarders in runner: debounced `fs.watch`, private SDK watermark, outside inbox/state forwarders, live pending-drain terminal condition, per-agent run lock, opt-in cross-process e2e gate, and `RunLockHeldError` export. |

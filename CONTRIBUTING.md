@@ -82,6 +82,14 @@ npm test          # vitest run
 npm run clean     # remove dist/
 ```
 
+#### Optional daemon-light e2e gate
+
+Phase 007 includes an opt-in cross-process coordination test that exercises native file watching plus live inbox/state forwarding. It is skipped by default; run it explicitly when touching runner coordination lifecycle code:
+
+```bash
+MINIH_E2E=1 npx vitest run test/e2e/daemon-light.test.ts
+```
+
 ### Project Structure
 
 ```

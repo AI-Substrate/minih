@@ -5,10 +5,15 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   type AgentEvent,
   type AgentResult,
+  type AgentRunOptions,
   FakeAgentAdapter,
+  type IAgentAdapter,
 } from '../../src/adapter/index.js';
-import { resolveAgent } from '../../src/runner/folder.js';
+import { inboxLanePath, resolveAgent } from '../../src/runner/folder.js';
+import { readForwarderWatermark } from '../../src/runner/forwarder-watermark.js';
 import { awaitTerminalCondition, runAgent } from '../../src/runner/runner.js';
+import { writeState } from '../../src/runner/state.js';
+import type { OutsideState } from '../../src/runner/types.js';
 import { validSystemOutput } from '../helpers/fixtures.js';
 
 let tmpDir: string;
@@ -21,12 +26,12 @@ afterEach(() => {
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
-function createAgent(slug: string) {
+function createAgent(slug: string, options: { coordination?: boolean } = {}) {
   const agentDir = path.join(tmpDir, slug);
   fs.mkdirSync(agentDir, { recursive: true });
   fs.writeFileSync(
     path.join(agentDir, 'prompt.md'),
-    `---\ndescription: "Event-driven test agent"\n---\n\n# ${slug}\n\nDo the thing.`,
+    `---\ndescription: "Event-driven test agent"\n${options.coordination ? 'coordination: enabled\n' : ''}---\n\n# ${slug}\n\nDo the thing.`,
   );
 
   const definition = resolveAgent(slug, tmpDir);
@@ -34,6 +39,32 @@ function createAgent(slug: string) {
     throw new Error(`expected agent ${slug} to resolve`);
   }
   return definition;
+}
+
+function writeOutsideInbox(slug: string, subject: string): void {
+  const target = inboxLanePath(slug, tmpDir, 'outside');
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(
+    target,
+    `${JSON.stringify({
+      id: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+      sender: 'outside',
+      type: 'note',
+      subject,
+      body: 'Please review this update.',
+      ts: '2026-04-26T00:00:00Z',
+    })}\n`,
+  );
+}
+
+function writeOutsideState(slug: string): void {
+  const state: OutsideState = {
+    status: 'in-progress',
+    data: { milestone: 2 },
+    updatedAt: '2026-04-26T00:00:00Z',
+    updatedBy: 'outside',
+  };
+  writeState('outside', slug, tmpDir, state);
 }
 
 function completedResult(): AgentResult {
@@ -44,6 +75,104 @@ function completedResult(): AgentResult {
     exitCode: 0,
     tokens: null,
   };
+}
+
+class PendingSendAdapter implements IAgentAdapter {
+  prompts: string[] = [];
+  terminateHistory: string[] = [];
+  private releaseSend: (() => void) | undefined;
+
+  constructor(private readonly releaseAutomatically = false) {}
+
+  async run(options: AgentRunOptions): Promise<AgentResult> {
+    options.onEvent?.({
+      type: 'session_start',
+      timestamp: '2026-01-01T00:00:00Z',
+      data: { sessionId: 'pending-session' },
+    });
+    options.onSessionReady?.({
+      send: async (prompt: string): Promise<string> => {
+        this.prompts.push(prompt);
+        if (this.releaseAutomatically) return 'ok';
+        return new Promise<string>((resolve) => {
+          this.releaseSend = () => resolve('ok');
+        });
+      },
+    });
+    options.onEvent?.({
+      type: 'session_idle',
+      timestamp: '2026-01-01T00:00:01Z',
+      data: { sessionId: 'pending-session' },
+    });
+    return completedResult();
+  }
+
+  async compact(sessionId: string): Promise<AgentResult> {
+    return {
+      output: '',
+      sessionId,
+      status: 'completed',
+      exitCode: 0,
+      tokens: null,
+    };
+  }
+
+  async terminate(sessionId: string): Promise<AgentResult> {
+    this.terminateHistory.push(sessionId);
+    return {
+      output: '',
+      sessionId,
+      status: 'killed',
+      exitCode: 143,
+      tokens: null,
+    };
+  }
+
+  release(): void {
+    this.releaseSend?.();
+  }
+}
+
+class TimeoutAfterSendAdapter implements IAgentAdapter {
+  prompts: string[] = [];
+  terminateHistory: string[] = [];
+
+  async run(options: AgentRunOptions): Promise<AgentResult> {
+    options.onEvent?.({
+      type: 'session_start',
+      timestamp: '2026-01-01T00:00:00Z',
+      data: { sessionId: 'timeout-after-send-session' },
+    });
+    options.onSessionReady?.({
+      send: async (prompt: string): Promise<string> => {
+        this.prompts.push(prompt);
+        return 'queued';
+      },
+    });
+    await new Promise(() => {});
+    return completedResult();
+  }
+
+  async compact(sessionId: string): Promise<AgentResult> {
+    return {
+      output: '',
+      sessionId,
+      status: 'completed',
+      exitCode: 0,
+      tokens: null,
+    };
+  }
+
+  async terminate(sessionId: string): Promise<AgentResult> {
+    this.terminateHistory.push(sessionId);
+    return {
+      output: '',
+      sessionId,
+      status: 'killed',
+      exitCode: 143,
+      tokens: null,
+    };
+  }
 }
 
 describe('awaitTerminalCondition', () => {
@@ -144,5 +273,153 @@ describe('runAgent event-driven terminal flow', () => {
     expect(result.metadata.exitCode).toBe(124);
     expect(fake.getRunHistory()).toHaveLength(1);
     expect(fake.getTerminateHistory()).toHaveLength(1);
+  });
+
+  it('starts coordinated forwarders through onSessionReady and cold-drains inbox and state', async () => {
+    const definition = createAgent('coordinated-run', { coordination: true });
+    writeOutsideInbox('coordinated-run', 'Cold inbox');
+    writeOutsideState('coordinated-run');
+    const fake = new FakeAgentAdapter({ output: validSystemOutput() });
+
+    const result = await runAgent(
+      fake,
+      definition,
+      { slug: 'coordinated-run' },
+      undefined,
+      tmpDir,
+    );
+
+    expect(result.metadata.result).toBe('completed');
+    expect(fake.getSessionSendHistory()).toHaveLength(2);
+    expect(fake.getSessionSendHistory()[0]).toContain('Subject: Cold inbox');
+    expect(fake.getSessionSendHistory()[1]).toContain(
+      '## Outside state changed',
+    );
+    const watermark = readForwarderWatermark({
+      slug: 'coordinated-run',
+      agentsDir: tmpDir,
+    }).value;
+    expect(watermark.inbox.outsideOffset).toBeGreaterThan(0);
+    expect(watermark.state.outsideFingerprint).not.toBeNull();
+  });
+
+  it('does not produce spurious sends for coordinated agents with empty inbox and state', async () => {
+    const definition = createAgent('empty-coordination', {
+      coordination: true,
+    });
+    const fake = new FakeAgentAdapter({ output: validSystemOutput() });
+
+    const result = await runAgent(
+      fake,
+      definition,
+      { slug: 'empty-coordination' },
+      undefined,
+      tmpDir,
+    );
+
+    expect(result.metadata.result).toBe('completed');
+    expect(fake.getSessionSendHistory()).toEqual([]);
+  });
+
+  it('releases the coordinated run lock after timeout cleanup', async () => {
+    const definition = createAgent('timeout-coordination', {
+      coordination: true,
+    });
+    const slow = new FakeAgentAdapter({
+      output: validSystemOutput(),
+      sessionId: 'slow-session',
+      runDuration: 500,
+    });
+
+    const timedOut = await runAgent(
+      slow,
+      definition,
+      { slug: 'timeout-coordination', timeout: 0.01 },
+      undefined,
+      tmpDir,
+    );
+    expect(timedOut.metadata.result).toBe('timeout');
+
+    const next = new FakeAgentAdapter({ output: validSystemOutput() });
+    const recovered = await runAgent(
+      next,
+      definition,
+      { slug: 'timeout-coordination' },
+      undefined,
+      tmpDir,
+    );
+
+    expect(recovered.metadata.result).toBe('completed');
+  });
+
+  it('waits for pending forwarder sends after adapter idle before completing', async () => {
+    const definition = createAgent('terminal-drain', { coordination: true });
+    writeOutsideInbox('terminal-drain', 'Wait for me');
+    const adapter = new PendingSendAdapter();
+    let settled = false;
+
+    const run = runAgent(
+      adapter,
+      definition,
+      { slug: 'terminal-drain' },
+      undefined,
+      tmpDir,
+    ).then((result) => {
+      settled = true;
+      return result;
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(adapter.prompts).toHaveLength(1);
+    expect(settled).toBe(false);
+
+    adapter.release();
+    const result = await run;
+
+    expect(result.metadata.result).toBe('completed');
+    expect(settled).toBe(true);
+  });
+
+  it('times out and terminates when a pending forwarder send never drains', async () => {
+    const definition = createAgent('terminal-timeout', { coordination: true });
+    writeOutsideInbox('terminal-timeout', 'Never resolves');
+    const adapter = new PendingSendAdapter();
+
+    const result = await runAgent(
+      adapter,
+      definition,
+      { slug: 'terminal-timeout', timeout: 0.01 },
+      undefined,
+      tmpDir,
+    );
+
+    expect(result.metadata.result).toBe('timeout');
+    expect(adapter.terminateHistory).toEqual(['pending-session']);
+  });
+
+  it('does not commit forwarder watermarks when the coordinated run times out after send', async () => {
+    const definition = createAgent('timeout-after-send', {
+      coordination: true,
+    });
+    writeOutsideInbox('timeout-after-send', 'Do not commit');
+    const adapter = new TimeoutAfterSendAdapter();
+
+    const result = await runAgent(
+      adapter,
+      definition,
+      { slug: 'timeout-after-send', timeout: 0.01 },
+      undefined,
+      tmpDir,
+    );
+
+    expect(result.metadata.result).toBe('timeout');
+    expect(adapter.prompts).toHaveLength(1);
+    expect(adapter.terminateHistory).toEqual(['timeout-after-send-session']);
+    expect(
+      readForwarderWatermark({
+        slug: 'timeout-after-send',
+        agentsDir: tmpDir,
+      }).value.inbox.outsideOffset,
+    ).toBe(0);
   });
 });

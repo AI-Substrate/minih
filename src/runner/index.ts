@@ -39,6 +39,7 @@ export {
 export type { PreambleAssemblyInput } from './preamble-builder.js';
 export { buildInsidePreamble } from './preamble-builder.js';
 export { PrettyDisplay } from './pretty.js';
+export { RUN_LOCK_HELD, RunLockHeldError } from './run-lock.js';
 export {
   computeVelocity,
   MINIH_ENV_KEYS,

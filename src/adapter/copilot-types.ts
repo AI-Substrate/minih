@@ -45,11 +45,24 @@ export interface ICopilotSession {
   destroy(): Promise<void>;
 }
 
+/** Subset of the SDK's ModelInfo shape we use for capability pre-flight. */
+export interface CopilotModelInfo {
+  id: string;
+  capabilities?: {
+    supports?: {
+      reasoningEffort?: boolean;
+    };
+  };
+  supportedReasoningEfforts?: CopilotReasoningEffort[];
+}
+
 export interface ICopilotClient {
   createSession(config?: CopilotSessionConfig): Promise<ICopilotSession>;
   resumeSession(
     sessionId: string,
     config?: CopilotResumeSessionConfig,
   ): Promise<ICopilotSession>;
+  start?(): Promise<unknown>;
+  listModels?(): Promise<CopilotModelInfo[]>;
   stop(): Promise<unknown>;
 }

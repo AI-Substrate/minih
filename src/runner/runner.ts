@@ -418,8 +418,12 @@ export async function runAgent(
   const completedAt = new Date();
   const durationMs = completedAt.getTime() - startedAt.getTime();
 
-  // Write agent output as fallback (if agent didn't write via tool calls)
-  if (agentResult.output && !fs.existsSync(outputPath)) {
+  // Write agent output as fallback (only on completion). When the agent
+  // failed before producing output, agentResult.output holds the SDK error
+  // string — don't write it into output/report.json or downstream JSON
+  // validation will report the misleading "Output is not valid JSON" noise.
+  const agentSucceeded = agentResult.status === 'completed';
+  if (agentSucceeded && agentResult.output && !fs.existsSync(outputPath)) {
     fs.writeFileSync(outputPath, agentResult.output);
   }
 
@@ -427,17 +431,26 @@ export async function runAgent(
   if (agentResult.stderr) {
     stderrLines.push(agentResult.stderr);
   }
+  if (!agentSucceeded && agentResult.output) {
+    stderrLines.push(agentResult.output);
+  }
   if (stderrLines.length > 0) {
     fs.writeFileSync(stderrPath, stderrLines.join('\n'));
   }
 
-  // Two-stage validation: system fields first, then user schema
-  // Skip system validation for resumed runs — no summary/retrospective required
-  const systemValidation = isResume
-    ? { valid: true, errors: [] }
-    : validateSystemOutput(outputPath);
+  // Two-stage validation: system fields first, then user schema.
+  // Skip both when the agent failed (no output to validate) or when this is
+  // a resume (no summary/retrospective contract on follow-ups).
+  let systemValidation: ValidationResult;
   let userValidation: ValidationResult | null = null;
-  if (definition.schemaPath) {
+  if (!agentSucceeded) {
+    systemValidation = { valid: false, errors: [] };
+  } else if (isResume) {
+    systemValidation = { valid: true, errors: [] };
+  } else {
+    systemValidation = validateSystemOutput(outputPath);
+  }
+  if (agentSucceeded && definition.schemaPath) {
     userValidation = validateOutput(definition.schemaPath, outputPath);
   }
 
@@ -446,15 +459,16 @@ export async function runAgent(
     ...systemValidation.errors,
     ...(userValidation?.errors ?? []),
   ];
-  const validated =
-    systemValidation.valid && (userValidation ? userValidation.valid : true);
+  const validated = !agentSucceeded
+    ? null
+    : systemValidation.valid && (userValidation ? userValidation.valid : true);
 
   // Determine final result status
-  let resultStatus: CompletedMetadata['result'] =
-    agentResult.status === 'completed' ? 'completed' : 'failed';
+  let resultStatus: CompletedMetadata['result'] = agentSucceeded
+    ? 'completed'
+    : 'failed';
   if (timedOut) resultStatus = 'timeout';
-  if (agentResult.status === 'completed' && !validated)
-    resultStatus = 'degraded';
+  if (agentSucceeded && validated === false) resultStatus = 'degraded';
 
   const artifacts = listArtifacts(runDir);
 

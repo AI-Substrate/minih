@@ -48,6 +48,10 @@ export function registerRunCommand(program: Command): void {
       'Reasoning effort (low, medium, high, xhigh)',
     )
     .option(
+      '--no-reasoning',
+      "Clear any reasoning effort default from the agent's frontmatter (use when picking a model that doesn't support reasoning)",
+    )
+    .option(
       '-t, --timeout <seconds>',
       'Timeout in seconds (default: agent frontmatter or 900)',
     )
@@ -68,7 +72,8 @@ export function registerRunCommand(program: Command): void {
         slug: string,
         opts: {
           model?: string;
-          reasoning?: string;
+          /** string when --reasoning <effort>; false when --no-reasoning; undefined otherwise */
+          reasoning?: string | false;
           timeout?: string;
           param?: string[];
           dryRun?: boolean;
@@ -122,8 +127,15 @@ export function registerRunCommand(program: Command): void {
           definition.model ??
           process.env.MINIH_DEFAULT_MODEL ??
           DEFAULT_MODEL;
-        const reasoningEffort = (opts.reasoning ??
-          definition.reasoning) as AgentRunConfig['reasoningEffort'];
+        // Reasoning resolution:
+        //   --reasoning <effort>  → use it
+        //   --no-reasoning        → opts.reasoning === false → clear default
+        //   (neither)             → fall back to frontmatter
+        const reasoningEffort: AgentRunConfig['reasoningEffort'] | undefined =
+          opts.reasoning === false
+            ? undefined
+            : ((opts.reasoning ??
+                definition.reasoning) as AgentRunConfig['reasoningEffort']);
 
         const DEFAULT_TIMEOUT = 900; // 15 minutes
 
@@ -252,6 +264,26 @@ export function registerRunCommand(program: Command): void {
         }
 
         const runtime = await createSdkRuntime('run', () => pretty?.cleanup());
+
+        // Pre-flight: validate model + reasoning against copilot-sdk's
+        // model registry so unsupported combinations fail with a clear CLI
+        // error before we spin up a session and write a junk run folder.
+        const modelCheck = await runtime.validateModelConfig({
+          model,
+          reasoningEffort,
+        });
+        if (!modelCheck.ok) {
+          pretty?.cleanup();
+          runtime.cleanup();
+          exitWithEnvelope(
+            formatError(
+              'run',
+              ErrorCodes.AGENT_MODEL_INVALID,
+              modelCheck.message,
+              modelCheck.details,
+            ),
+          );
+        }
 
         try {
           const onEvent = pretty

@@ -19,13 +19,19 @@ import type {
   SessionSender,
 } from '../adapter/events.js';
 import type { IAgentAdapter } from '../adapter/interface.js';
-import { createRunFolder, parseFrontmatter } from './folder.js';
+import {
+  createRunFolder,
+  inboxLanePath,
+  parseFrontmatter,
+  stateFilePath,
+} from './folder.js';
 import {
   createInboxForwarder,
   type InboxForwarder,
 } from './inbox-forwarder.js';
 import { buildInsidePreamble } from './preamble-builder.js';
 import { acquireRunLock, type RunLock } from './run-lock.js';
+import { readStateLazy } from './state.js';
 import {
   createStateForwarder,
   type StateForwarder,
@@ -67,7 +73,13 @@ At minimum, your JSON must include these fields:
     "workedWell": "What about the tools, workflow, or environment was smooth? Be specific.",
     "confusing": "What was unclear, confusing, or required trial-and-error?",
     "magicWand": "If you could change ONE thing about this experience to make your job easier, what would it be? Be concrete — name a specific tool, command, flag, or workflow improvement.",
-    "magicWandTarget": "project or minih — which system does your magic wand target? 'project' = the codebase/tools you tested. 'minih' = the agent runner itself.",
+    "magicWandTarget": "project, minih, or coordination — which system does your magic wand target? 'coordination' = the outside/inside collaboration loop.",
+    "coordination": {
+      "peerUpdatesSent": 0,
+      "unresolvedPeerRequests": 0,
+      "statePublished": false,
+      "notes": "Optional coordination-specific feedback."
+    },
     "difficulties": [
       {
         "id": "MH-001",
@@ -86,6 +98,10 @@ At minimum, your JSON must include these fields:
 Your magicWand should specify which layer it targets:
 - **"project"** — the codebase, CLI tools, or developer experience you're testing/reviewing
 - **"minih"** — the agent runner, validation, prompt assembly, or conventions
+- **"coordination"** — the outside/inside inbox, state, MCP, and peer-contract workflow
+
+If coordination affected your run, optionally add retrospective.coordination with:
+peerUpdatesSent, unresolvedPeerRequests, statePublished, and notes.
 
 ### Reporting Difficulties
 
@@ -170,6 +186,13 @@ export const MINIH_ENV_KEYS = [
   'MINIH_PARAMS',
 ];
 
+const MINIH_RUNTIME_ENV_KEYS = [
+  ...MINIH_ENV_KEYS,
+  'MINIH_CONTEXT',
+  'MINIH_INBOX_DIR',
+  'MINIH_STATE_DIR',
+];
+
 const TERMINAL_CONDITION_POLL_MS = 10;
 
 function wait(ms: number): Promise<void> {
@@ -210,6 +233,7 @@ export async function runAgent(
 ): Promise<AgentRunResult> {
   const startedAt = new Date();
   const isResume = !!config.sessionId;
+  const coordinationEnabled = definition.coordination?.enabled === true;
 
   // Create run folder with frozen copies
   const { runDir, runId } = createRunFolder(definition);
@@ -326,6 +350,18 @@ export async function runAgent(
     ? 'true'
     : 'false';
   process.env.MINIH_PARAMS = JSON.stringify(config.params ?? {});
+  if (coordinationEnabled && agentsDir) {
+    const resolvedCoordinationAgentsDir = path.resolve(agentsDir);
+    process.env.MINIH_CONTEXT = 'inside';
+    process.env.MINIH_INBOX_DIR = path.dirname(
+      path.dirname(
+        inboxLanePath(definition.slug, resolvedCoordinationAgentsDir, 'inside'),
+      ),
+    );
+    process.env.MINIH_STATE_DIR = path.dirname(
+      stateFilePath(definition.slug, resolvedCoordinationAgentsDir, 'inside'),
+    );
+  }
 
   // Event tracking
   const stats: RunEventStats = {
@@ -376,7 +412,6 @@ export async function runAgent(
   let timedOut = false;
   const timeoutMs = (config.timeout ?? 300) * 1000;
 
-  const coordinationEnabled = definition.coordination?.enabled === true;
   let runLock: RunLock | null = null;
   let inboxForwarder: InboxForwarder | null = null;
   let stateForwarder: StateForwarder | null = null;
@@ -536,9 +571,25 @@ export async function runAgent(
   // failed before producing output, agentResult.output holds the SDK error
   // string — don't write it into output/report.json or downstream JSON
   // validation will report the misleading "Output is not valid JSON" noise.
-  const agentSucceeded = agentResult.status === 'completed';
+  let agentSucceeded = agentResult.status === 'completed';
   if (agentSucceeded && agentResult.output && !fs.existsSync(outputPath)) {
     fs.writeFileSync(outputPath, agentResult.output);
+  }
+
+  if (agentSucceeded && coordinationEnabled && agentsDir) {
+    try {
+      snapshotCoordinationFiles(definition.slug, agentsDir, runDir);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      agentResult = {
+        output: `Run finalization failed: ${message}`,
+        sessionId: agentResult.sessionId,
+        status: 'failed',
+        exitCode: 1,
+        tokens: agentResult.tokens,
+      };
+      agentSucceeded = false;
+    }
   }
 
   // Persist stderr
@@ -624,7 +675,7 @@ export async function runAgent(
   const parsedReport = parseReportJson(outputPath);
 
   // Clean up runtime environment (Workshop 007)
-  for (const key of MINIH_ENV_KEYS) {
+  for (const key of MINIH_RUNTIME_ENV_KEYS) {
     delete process.env[key];
   }
 
@@ -687,7 +738,9 @@ function validateReservedMcpToolPrefixes(
 
 function listArtifacts(dir: string, base?: string): string[] {
   const files: string[] = [];
-  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  const entries = fs
+    .readdirSync(dir, { withFileTypes: true })
+    .sort((a, b) => a.name.localeCompare(b.name));
   for (const entry of entries) {
     const rel = base ? path.join(base, entry.name) : entry.name;
     if (entry.isDirectory()) {
@@ -697,6 +750,41 @@ function listArtifacts(dir: string, base?: string): string[] {
     }
   }
   return files;
+}
+
+function snapshotCoordinationFiles(
+  slug: string,
+  agentsDir: string,
+  runDir: string,
+): void {
+  const resolvedAgentsDir = path.resolve(agentsDir);
+  const inboxSnapshotDir = path.join(runDir, 'inbox-snapshot');
+  fs.mkdirSync(inboxSnapshotDir, { recursive: true });
+
+  for (const lane of ['outside', 'inside'] as const) {
+    const source = inboxLanePath(slug, resolvedAgentsDir, lane);
+    const target = path.join(inboxSnapshotDir, `${lane}.ndjson`);
+    const content = fs.existsSync(source)
+      ? fs.readFileSync(source, 'utf8')
+      : '';
+    fs.writeFileSync(target, content);
+  }
+
+  const outside = readPresentState('outside', slug, resolvedAgentsDir);
+  const inside = readPresentState('inside', slug, resolvedAgentsDir);
+  fs.writeFileSync(
+    path.join(runDir, 'state-snapshot.json'),
+    JSON.stringify({ outside, inside }, null, 2),
+  );
+}
+
+function readPresentState(
+  side: 'outside' | 'inside',
+  slug: string,
+  agentsDir: string,
+): ReturnType<typeof readStateLazy> | null {
+  if (!fs.existsSync(stateFilePath(slug, agentsDir, side))) return null;
+  return readStateLazy(side, slug, agentsDir);
 }
 
 /**
@@ -825,6 +913,10 @@ function parseReportJson(outputPath: string): ParsedReport | null {
         retro && typeof retro.magicWandTarget === 'string'
           ? retro.magicWandTarget
           : null,
+      coordination:
+        retro && isRetrospectiveCoordination(retro.coordination)
+          ? retro.coordination
+          : null,
       difficulties:
         retro && Array.isArray(retro.difficulties)
           ? retro.difficulties.filter(
@@ -838,4 +930,13 @@ function parseReportJson(outputPath: string): ParsedReport | null {
   } catch {
     return null;
   }
+}
+
+function isRetrospectiveCoordination(
+  value: unknown,
+): ParsedReport['coordination'] {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return null;
+  }
+  return value as ParsedReport['coordination'];
 }

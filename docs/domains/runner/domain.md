@@ -4,7 +4,7 @@
 
 ## Boundary
 
-**Owns**: Agent discovery, prompt assembly, run folders, frozen inputs, NDJSON event streaming, output validation, completion metadata, magic wand feedback capture, frontmatter parsing
+**Owns**: Agent discovery, prompt assembly, run folders, frozen inputs, coordination snapshots, NDJSON event streaming, output validation, completion metadata, magic wand feedback capture, frontmatter parsing
 
 **Excludes**: SDK communication (adapter), CLI argument parsing (cli), SDK-specific event types (adapter)
 
@@ -17,10 +17,12 @@
 | `src/runner/validator.ts` | internal | AJV 2020-12 schema validation (Phase 2) |
 | `src/runner/display.ts` | internal | Verbose terminal output formatting (Phase 2) |
 | `src/runner/pretty.ts` | internal | Pretty streaming display — clean output with delta accumulation (002-pretty-mode) |
-| `src/runner/preamble-builder.ts` | contract | Pure inside-prompt assembly with coordination stub injection points (007/P2) |
+| `src/runner/preamble-builder.ts` | contract | Pure inside-prompt assembly with coordinated identity, MCP tools, checklist, and peer-contract injection (007/P2 + P6) |
 | `src/runner/runner.ts` | internal | Core orchestration (Phase 2) |
 | `src/runner/index.ts` | contract | Barrel export |
-| `src/schemas/retrospective.json` | contract | Reusable retrospective schema fragment (Phase 2) |
+| `src/schemas/retrospective.json` | contract | Reusable retrospective schema fragment; includes optional coordination feedback (Phase 2 + 007 P6) |
+| `src/schemas/system-output.json` | contract | Required system output schema; includes `magicWandTarget: coordination` and optional `retrospective.coordination` (007 P6) |
+| `src/templates/shared-preamble.md` | contract | Canonical scaffolded shared preamble copied to `dist/templates` for `init`/`quickstart` (007 P6) |
 | `src/runner/state.ts` | contract | Coordination state types + helpers (`readStateLazy`, `writeState`, `appendHistory`); pure data layer, no rule engine (007 P1) |
 | `src/runner/context.ts` | contract | `detectContext()` + coordination env-var contract (`MINIH_ENV_KEYS_COORDINATION`, `MINIH_ENV_KEYS_ALL`) (007 P1) |
 | `src/runner/atomic-write.ts` | internal | POSIX write-then-rename helper (sync + async) for state files (007 P1) |
@@ -44,11 +46,12 @@
 | `InsideMcpServerFactoryContext` | Type | cli/mcp composition seam (P4 inside MCP merge without runner importing mcp) |
 | `AgentRunResult` | Type | cli (result display) |
 | `CompletedMetadata` | Type | cli (history, validate) |
+| `MagicWandTarget` / `RetrospectiveCoordination` | Type | cli envelopes, agent schemas, retros aggregation |
 | `ValidationResult` | Type | cli (validation display) |
 | `listAgents(agentsDir)` | Function | cli (list, doctor) |
 | `resolveAgent(slug, agentsDir)` | Function | cli (run, validate, history) |
 | `runAgent(adapter, def, config, onEvent?, agentsDir?)` | Function | cli (run command) |
-| `buildInsidePreamble(input)` / `PreambleAssemblyInput` | Function/Type | runner (fresh-run prompt assembly), future coordinated-agent prompt wiring |
+| `buildInsidePreamble(input)` / `PreambleAssemblyInput` | Function/Type | runner (fresh-run prompt assembly), coordinated-agent prompt wiring |
 | `findRunSession(slug, agentsDir, runId?)` | Function | cli (resume, connect — session lookup from completed.json) |
 | `RunSession` | Type | cli (resume, connect — session lookup result) |
 | `validateInput(schemaPath, params)` | Function | cli (check --input), runner (pre-execution) |
@@ -60,12 +63,12 @@
 | `parseFrontmatter(content)` | Function | cli (doctor frontmatter checks) |
 | `retrospective.json` | JSON Schema | Agent output schemas (via $ref), cli (doctor checks) |
 | `VelocityData` | Type | cli (history trend display) |
-| `ParsedReport` | Type | cli (run envelope surfacing) |
+| `ParsedReport` | Type | cli (run envelope surfacing, including optional coordination retro block) |
 | `computeVelocity(durationMs, agentDir, runId)` | Function | runner (post-run velocity computation) |
 | `Side` / `InboxMessage` / `OutsideState` / `InsideState` / `SideState` / `StateHistoryEntry` | Type | mcp (P4 tools), cli (P5 outside surface), adapter (P2 events) |
 | `CoordinationFrontmatter` | Type | runner (`AgentDefinition.coordination`), preamble-builder (P2) |
 | `detectContext()` | Function | cli (P5 preAction context-block hook), preamble-builder (P2) |
-| `MINIH_ENV_KEYS_COORDINATION` / `MINIH_ENV_KEYS_ALL` | Const | mcp (P4 spawn config), runner (existing MINIH_ENV_KEYS still owns its 14 keys) |
+| `MINIH_ENV_KEYS_COORDINATION` / `MINIH_ENV_KEYS_ALL` | Const | mcp (P4 spawn config), runner env cleanup/coordination contract |
 | `getCoordinationEnv()` | Function | mcp (P4 server), cli (P5 inside-detection) |
 | `readStateLazy(side, slug, agentsDir)` / `writeState(...)` / `appendHistory(...)` | Function | mcp (P4 state.* tools), cli (P5 state subcommands), runner (P2 finalize snapshot) |
 | `inboxLanePath` / `stateFilePath` / `historyPath` / `watermarkPath` / `outsideMdPath` / `hasOutsideMd` | Function | cli (P5 outside-send), mcp (P4 inbox/state tools), runner (P3 file-watcher + forwarders) |
@@ -84,7 +87,7 @@
 | Folder convention | An agent IS a folder. prompt.md with frontmatter = agent exists. |
 | Frozen inputs | Every run copies its inputs into the run folder for reproducibility. |
 | Degraded vs Failed | Invalid output = "degraded" (agent worked, schema didn't match), not hard failure. |
-| Prompt assembly | `buildInsidePreamble` preserves the legacy preamble → instructions → output hint → params → prompt join for non-coordinated agents, and inserts section-framed coordination stubs only when `coordination.enabled` is true. Frontmatter stripped. |
+| Prompt assembly | `buildInsidePreamble` preserves the legacy preamble → instructions → output hint → params → prompt join for non-coordinated agents, and inserts real coordinated identity, tool, checklist, and peer-contract sections only when `coordination.enabled` is true. Frontmatter stripped. |
 | Event-driven terminal condition | `runAgent` relies on adapter idle completion, then waits for `awaitTerminalCondition(adapterResult, pendingForwarderCount)` with a live inbox/state forwarder drain counter so queued `session.send` work settles before the run completes. |
 | Magic wand | Every agent output MUST include retrospective with magicWand feedback. |
 | Velocity tracking | Per-agent velocity data computed at run end, stored in completed.json. Chains from prior runs for O(1) computation. |
@@ -101,6 +104,9 @@
 | Daemon-light forwarders | For `coordination: enabled` runs, runner-owned inbox/state forwarders cold-drain per-agent shared files, watch for cross-process updates, send rendered changes through the live `SessionSender`, and commit private watermarks only after successful sends. |
 | Single live-run ownership | Coordinated runs acquire a per-agent `state/run.lock` before watcher startup. A second live run fails with `RunLockHeldError` (`RUN_LOCK_HELD`) so only one process owns file watchers and watermark advancement for a slug at a time. |
 | Internal MCP merge seam | `runAgent` accepts a generic factory that can add per-run MCP servers after runId/runDir exist. The runner owns merging/collision checks but never imports the mcp domain. |
+| Run-folder coordination snapshots | Coordinated runs freeze shared `inbox` lanes and side states into `inbox-snapshot/{outside,inside}.ndjson` and `state-snapshot.json` before artifact enumeration. Missing lanes become empty files, missing states become `null`, malformed NDJSON is copied byte-for-byte, and corrupt present state files fail finalization. |
+| Coordination feedback | `magicWandTarget` now includes `"coordination"` and reports may include `retrospective.coordination` for peer updates, unresolved requests, state publication, and notes. Runtime system validation stays permissive; bundled schemas carry the canonical enum. |
+| Shared preamble template | The source-controlled default preamble lives in `src/templates/shared-preamble.md`; `agents/_shared/preamble.md` is the dogfood copy and scaffolded agents receive the built template asset. |
 
 ## History
 
@@ -117,3 +123,4 @@
 | 007-backgrounding P1 | Coordination foundations (pure addition). NEW: `state.ts` (pure helpers, no rule engine), `context.ts` (`detectContext` + composed env-key array), `atomic-write.ts` (POSIX write-then-rename + typed errors), `ulid.ts` (in-tree, monotonic). 4 NEW JSON schemas: inbox-message, default outside-state, default inside-state, state-history-entry. EXTENDED `folder.ts`: 6 path helpers (all absolute, slug-validated), outside.md discovery (truncate at 16KB, symlink-out-of-tree guard), `parseFrontmatter` recognizes `coordination` field (3 valid forms, 4 typed-error cases). EXTENDED `AgentDefinition` with `outsideContract` + `coordination`. EXPORTED `MINIH_ENV_KEYS` from runner.ts. Added `ajv-formats@^3.0.1` (decision logged — needed for live `format: date-time` validation). 230/230 tests pass; baseline diff against pre-P1 dist exit=0; zero behavior change to existing 9 agents. P2 unlocked. |
 | 007-backgrounding P3 | Added daemon-light file watcher and forwarders in runner: debounced `fs.watch`, private SDK watermark, outside inbox/state forwarders, live pending-drain terminal condition, per-agent run lock, opt-in cross-process e2e gate, and `RunLockHeldError` export. |
 | 007-backgrounding P4 | Added generic inside MCP merge seam (`insideMcpServerFactory`, reserved tool-prefix collision checks) so CLI can supply the mcp-domain server while runner remains mcp-independent. |
+| 007-backgrounding P6 | Replaced coordinated prompt stubs with real identity/tool/checklist/peer-contract sections; widened coordination feedback schemas/types; set coordinated run env vars; added run-folder coordination snapshots, canonical shared-preamble template asset, and the four-file `coordination-smoke-test` dogfood agent. |

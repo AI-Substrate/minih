@@ -11,9 +11,8 @@
  * is intentionally NOT extended here; instead we expose `MINIH_ENV_KEYS_ALL`
  * as the composed view so P4 spawn config has a single point of contact.
  *
- * The `MINIH_INBOX_DIR`/`MINIH_STATE_DIR` keys are NOT yet set anywhere in the
- * runner — that wiring lands when P3 forwarders or P4 MCP spawn first need
- * them (logged as Discovery debt 2026-04-26).
+ * The runner sets `MINIH_CONTEXT=inside`, `MINIH_INBOX_DIR`, and
+ * `MINIH_STATE_DIR` for coordinated runs, then clears them during run cleanup.
  */
 
 import { MINIH_ENV_KEYS } from './runner.js';
@@ -27,7 +26,7 @@ export const MINIH_ENV_KEYS_COORDINATION = [
 
 /**
  * Composed view: existing `MINIH_ENV_KEYS` (from runner.ts) PLUS the new
- * coordination keys. Use this in P4's spawn config so subprocesses see the
+ * coordination keys. Use this when subprocesses need the
  * full set without consumers needing to merge two arrays at the call-site.
  */
 export const MINIH_ENV_KEYS_ALL = [

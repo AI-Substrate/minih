@@ -32,12 +32,22 @@ import {
   formatError,
   formatSuccess,
 } from '../output.js';
+import { assertOutsideContext } from '../preaction-context.js';
 import { createSdkRuntime } from './sdk-runtime.js';
 
 export function registerResumeCommand(program: Command): void {
   program
     .command('resume <slug> [message]')
     .description('Send a follow-up message to a completed agent session')
+    .hook('preAction', () => {
+      assertOutsideContext({
+        commandName: 'resume',
+        alternatives: [
+          'Use the inbox/state MCP tools from inside the session.',
+          'From an outside shell, use `minih outside-send <slug>` to send a new message.',
+        ],
+      });
+    })
     .addHelpText(
       'after',
       '\nExamples:\n' +

@@ -16,3 +16,9 @@ for (const file of [
 ]) {
   copyFileSync(join(src, file), join(dest, file));
 }
+
+mkdirSync('dist/templates', { recursive: true });
+copyFileSync(
+  join('src/templates', 'shared-preamble.md'),
+  join('dist/templates', 'shared-preamble.md'),
+);

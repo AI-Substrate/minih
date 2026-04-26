@@ -14,11 +14,21 @@ import {
   resolveAgent,
   validateSlug,
 } from '../../runner/index.js';
+import { assertOutsideContext } from '../preaction-context.js';
 
 export function registerTailCommand(program: Command): void {
   program
     .command('tail <slug>')
     .description("Follow a running agent's event stream in real-time")
+    .hook('preAction', () => {
+      assertOutsideContext({
+        commandName: 'tail',
+        alternatives: [
+          'Use the current session transcript or MCP tool results from inside the session.',
+          'Run `minih status <slug>` or `minih tail <slug>` from an outside shell.',
+        ],
+      });
+    })
     .option('--run <runId>', 'Specific run ID (default: latest)')
     .action((slug: string, opts: { run?: string }) => {
       const agentsDir = program.opts().agentsDir ?? 'agents';

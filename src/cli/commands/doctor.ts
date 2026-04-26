@@ -8,7 +8,12 @@ import { fileURLToPath } from 'node:url';
 import Ajv2020 from 'ajv/dist/2020.js';
 import chalk from 'chalk';
 import type { Command } from 'commander';
-import { parseFrontmatter } from '../../runner/index.js';
+import {
+  hasOutsideMd,
+  OutsideAgentsDirError,
+  outsideMdPath,
+  parseFrontmatter,
+} from '../../runner/index.js';
 import {
   ErrorCodes,
   exitWithEnvelope,
@@ -67,7 +72,7 @@ export function registerDoctorCommand(program: Command): void {
 
         // Check frontmatter
         const content = fs.readFileSync(promptPath, 'utf-8');
-        const { description } = parseFrontmatter(content);
+        const { description, coordination } = parseFrontmatter(content);
         if (!description.trim()) {
           checks.push({
             check: 'frontmatter',
@@ -141,6 +146,15 @@ export function registerDoctorCommand(program: Command): void {
         if (fs.existsSync(instrPath)) {
           checks.push({ check: 'instructions', status: 'pass' });
         }
+
+        checks.push(
+          ...checkOutsideContract(
+            entry.name,
+            resolvedDir,
+            promptPath,
+            coordination.enabled,
+          ),
+        );
 
         agentResults.push({ slug: entry.name, checks });
       }
@@ -248,6 +262,61 @@ export function registerDoctorCommand(program: Command): void {
         );
       }
     });
+}
+
+function checkOutsideContract(
+  slug: string,
+  agentsDir: string,
+  promptPath: string,
+  coordinationEnabled: boolean,
+): CheckResult[] {
+  if (!coordinationEnabled) return [];
+
+  let exists: boolean;
+  try {
+    exists = hasOutsideMd(slug, agentsDir);
+  } catch (error) {
+    if (error instanceof OutsideAgentsDirError) {
+      return [
+        {
+          check: 'outside.md',
+          status: 'fail',
+          message: error.message,
+        },
+      ];
+    }
+    throw error;
+  }
+  if (!exists) return [];
+
+  const outsidePath = outsideMdPath(slug, agentsDir);
+  const outsideStats = fs.statSync(outsidePath);
+  const promptStats = fs.statSync(promptPath);
+  const results: CheckResult[] = [{ check: 'outside.md', status: 'pass' }];
+
+  if (outsideStats.mtimeMs < promptStats.mtimeMs) {
+    results.push({
+      check: 'outside.md-drift',
+      status: 'warning',
+      message: 'outside.md is older than prompt.md; review the peer contract.',
+    });
+  }
+
+  if (outsideStats.size > 8 * 1024) {
+    results.push({
+      check: 'outside.md-size',
+      status: 'fail',
+      message: `outside.md is ${outsideStats.size} bytes (> 8192 byte limit).`,
+    });
+  } else if (outsideStats.size > 4 * 1024) {
+    results.push({
+      check: 'outside.md-size',
+      status: 'warning',
+      message: `outside.md is ${outsideStats.size} bytes (> 4096 byte warning threshold).`,
+    });
+  }
+
+  return results;
 }
 
 /** Create an AJV instance pre-loaded with minih's published schemas for $ref support. */

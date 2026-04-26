@@ -4,6 +4,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import { validateSlug } from '../../runner/index.js';
@@ -13,11 +14,12 @@ import {
   formatError,
   formatSuccess,
 } from '../output.js';
+import { assertOutsideContext } from '../preaction-context.js';
 
-const PROMPT_TEMPLATE = (slug: string) => `---
+const PROMPT_TEMPLATE = (slug: string, coordinated = false) => `---
 description: "TODO: describe what this agent does"
 tags: []
----
+${coordinated ? 'coordination: enabled\n' : ''}---
 
 # ${slug}
 
@@ -35,6 +37,21 @@ Describe the first step the agent should take.
 
 Write your structured JSON report to $MINIH_OUTPUT_PATH.
 After writing, validate with: minih check
+`;
+
+const OUTSIDE_TEMPLATE = (slug: string) => `# ${slug} outside contract
+
+Use this contract when coordinating with the inside minih agent.
+
+## How to drive this agent
+
+1. Send requests with \`minih outside-send ${slug} --subject "..." --body "..."\`.
+2. Track outside progress with \`minih state set ${slug} --side outside --status in-progress\`.
+3. Read inside replies with \`minih outside-inbox-list ${slug}\`.
+
+## Expected completion signal
+
+The inside agent should send a final inbox message and publish inside state before writing its report.
 `;
 
 const INSTRUCTIONS_TEMPLATE = (slug: string) => `# ${slug}
@@ -94,33 +111,57 @@ const INPUT_SCHEMA_TEMPLATE = () =>
     2,
   );
 
-const PREAMBLE_TEMPLATE = () => `# Agent Preamble
+const INSIDE_STATE_SCHEMA_TEMPLATE = () =>
+  JSON.stringify(
+    {
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      title: 'Inside State',
+      type: 'object',
+      required: ['status', 'data', 'updatedAt', 'updatedBy'],
+      additionalProperties: false,
+      properties: {
+        status: {
+          type: 'string',
+          enum: ['idle', 'working', 'reviewing', 'complete', 'blocked'],
+        },
+        data: { type: 'object' },
+        updatedAt: { type: 'string', format: 'date-time' },
+        updatedBy: { const: 'inside' },
+      },
+    },
+    null,
+    2,
+  );
 
-**FIRST**: Run \`cd {{REPO_ROOT}}\` — your session starts in a run folder, not the project root.
+const OUTSIDE_STATE_SCHEMA_TEMPLATE = () =>
+  JSON.stringify(
+    {
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      title: 'Outside State',
+      type: 'object',
+      required: ['status', 'data', 'updatedAt', 'updatedBy'],
+      additionalProperties: false,
+      properties: {
+        status: {
+          type: 'string',
+          enum: ['idle', 'in-progress', 'review-requested', 'done', 'blocked'],
+        },
+        data: { type: 'object' },
+        updatedAt: { type: 'string', format: 'date-time' },
+        updatedBy: { const: 'outside' },
+      },
+    },
+    null,
+    2,
+  );
 
-## Feedback — The Self-Improving Loop
+const DEFAULT_SHARED_PREAMBLE_PATH = fileURLToPath(
+  new URL('../../templates/shared-preamble.md', import.meta.url),
+);
 
-You are not just running a task. You are helping build a better system.
-Every time you run, you have two responsibilities:
-
-1. Complete your task well
-2. Feed back honestly on the experience of doing it
-
-Your output MUST include a \`retrospective\` with a required \`magicWand\` field.
-
-**What makes good feedback:**
-
-Bad: "Everything was fine."
-Good: "The input params were validated before execution, which saved me from
-discovering the wrong file_path halfway through a 5-minute run."
-
-**The retrospective fields:**
-
-- **workedWell**: What about the tools, workflow, or environment was smooth?
-- **confusing**: What required trial-and-error? What information was hard to find?
-- **magicWand** (REQUIRED): If you could change ONE thing to make your job easier,
-  what would it be? Be concrete.
-`;
+function readDefaultSharedPreamble(): string {
+  return fs.readFileSync(DEFAULT_SHARED_PREAMBLE_PATH, 'utf-8');
+}
 
 /**
  * Ensure _shared/preamble.md exists in the agents directory.
@@ -131,7 +172,7 @@ export function ensurePreamble(agentsDir: string): boolean {
   const preamblePath = path.join(preambleDir, 'preamble.md');
   if (fs.existsSync(preamblePath)) return false;
   fs.mkdirSync(preambleDir, { recursive: true });
-  fs.writeFileSync(preamblePath, PREAMBLE_TEMPLATE());
+  fs.writeFileSync(preamblePath, readDefaultSharedPreamble());
   return true;
 }
 
@@ -139,13 +180,28 @@ export function registerInitCommand(program: Command): void {
   program
     .command('init <slug>')
     .description('Scaffold a new agent folder')
+    .hook('preAction', () => {
+      assertOutsideContext({
+        commandName: 'init',
+        alternatives: [
+          'Create or edit agent files from the outside project shell.',
+          'Use `minih outside-context <slug>` to inspect an existing coordination contract.',
+        ],
+      });
+    })
     .option('--with-input', 'Also create input-schema.json')
+    .option('--coordinated', 'Scaffold outside contract and state schemas')
     .option('--no-output', 'Skip output-schema.json')
     .option('--no-instructions', 'Skip instructions.md')
     .action(
       (
         slug: string,
-        opts: { withInput?: boolean; output?: boolean; instructions?: boolean },
+        opts: {
+          withInput?: boolean;
+          coordinated?: boolean;
+          output?: boolean;
+          instructions?: boolean;
+        },
       ) => {
         const agentsDir = program.opts().agentsDir ?? 'agents';
         const resolvedDir = path.resolve(agentsDir);
@@ -178,9 +234,27 @@ export function registerInitCommand(program: Command): void {
         // prompt.md (always)
         fs.writeFileSync(
           path.join(agentDir, 'prompt.md'),
-          PROMPT_TEMPLATE(slug),
+          PROMPT_TEMPLATE(slug, opts.coordinated === true),
         );
         files.push('prompt.md');
+
+        if (opts.coordinated === true) {
+          fs.writeFileSync(
+            path.join(agentDir, 'outside.md'),
+            OUTSIDE_TEMPLATE(slug),
+          );
+          files.push('outside.md');
+          fs.writeFileSync(
+            path.join(agentDir, 'inside-state.schema.json'),
+            INSIDE_STATE_SCHEMA_TEMPLATE(),
+          );
+          files.push('inside-state.schema.json');
+          fs.writeFileSync(
+            path.join(agentDir, 'outside-state.schema.json'),
+            OUTSIDE_STATE_SCHEMA_TEMPLATE(),
+          );
+          files.push('outside-state.schema.json');
+        }
 
         // output-schema.json (default: yes)
         if (opts.output !== false) {

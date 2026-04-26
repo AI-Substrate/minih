@@ -20,6 +20,7 @@ import {
   runAgent,
 } from '../../runner/index.js';
 import { exitWithEnvelope, formatError, formatSuccess } from '../output.js';
+import { assertOutsideContext } from '../preaction-context.js';
 import { ensurePreamble } from './init.js';
 import { createSdkRuntime } from './sdk-runtime.js';
 
@@ -44,6 +45,15 @@ export function registerQuickstartCommand(program: Command): void {
   program
     .command('quickstart')
     .description('Create and run your first agent in one command')
+    .hook('preAction', () => {
+      assertOutsideContext({
+        commandName: 'quickstart',
+        alternatives: [
+          'Use the inbox/state MCP tools from inside the session.',
+          'Run `minih quickstart` from an outside shell.',
+        ],
+      });
+    })
     .addHelpText('after', '\nExample:\n  minih quickstart\n')
     .action(async () => {
       const agentsDir = path.resolve(program.opts().agentsDir ?? 'agents');

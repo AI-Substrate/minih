@@ -98,13 +98,23 @@ export interface VelocityData {
 export interface ParsedReport {
   summary: string | null;
   magicWand: string | null;
-  magicWandTarget: string | null;
+  magicWandTarget: MagicWandTarget | string | null;
+  coordination: RetrospectiveCoordination | null;
   difficulties: Array<{
     category: string;
     description: string;
     workaround: string | null;
     severity: string;
   }> | null;
+}
+
+export type MagicWandTarget = 'project' | 'minih' | 'coordination';
+
+export interface RetrospectiveCoordination {
+  peerUpdatesSent?: number;
+  unresolvedPeerRequests?: number;
+  statePublished?: boolean;
+  notes?: string;
 }
 
 /** Metadata written to completed.json after each run. */
@@ -157,11 +167,6 @@ export interface RunEventStats {
 //
 // Mirror the JSON schemas under src/schemas/. Drift here cascades to every
 // downstream phase — keep types and schemas in lockstep.
-//
-// `RetrospectiveCoordination` and the `MagicWandTarget` widening to include
-// 'coordination' are intentionally NOT defined in P1 — they belong to P6
-// alongside the matching schema widening (system-output.json + retrospective.json).
-// Defining them in P1 would create type-vs-validator drift.
 //
 // `Status` is intentionally NOT introduced as a type alias — runtime validation
 // (per-agent inside-state.schema.json enum at MCP `state.transition` time, P4)

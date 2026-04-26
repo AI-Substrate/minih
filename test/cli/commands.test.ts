@@ -15,11 +15,14 @@ afterEach(() => {
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
-function run(args: string): { stdout: string; exitCode: number } {
+function run(
+  args: string,
+  env: Record<string, string | undefined> = {},
+): { stdout: string; exitCode: number } {
   try {
     const stdout = execSync(`node ${cliPath} ${args}`, {
       cwd: tmpDir,
-      env: { ...process.env, NO_COLOR: '1' },
+      env: { ...process.env, NO_COLOR: '1', ...env },
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
     });
@@ -31,6 +34,26 @@ function run(args: string): { stdout: string; exitCode: number } {
 }
 
 describe('CLI commands', () => {
+  it('root help lists outside coordination commands', () => {
+    const help = execSync(`node ${cliPath} --help`, {
+      cwd: tmpDir,
+      env: { ...process.env, NO_COLOR: '1' },
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    for (const command of [
+      'outside-send',
+      'outside-inbox-list',
+      'state',
+      'outside-context',
+      'outside-retro',
+      'retros',
+    ]) {
+      expect(help).toContain(command);
+    }
+  });
+
   it('init scaffolds files and preamble', () => {
     const { stdout, exitCode } = run(`init demo --agents-dir ${tmpDir}`);
     expect(exitCode).toBe(0);
@@ -50,6 +73,18 @@ describe('CLI commands', () => {
     expect(fs.existsSync(path.join(tmpDir, '_shared', 'preamble.md'))).toBe(
       true,
     );
+    const scaffoldedPreamble = fs.readFileSync(
+      path.join(tmpDir, '_shared', 'preamble.md'),
+      'utf-8',
+    );
+    const canonicalPreamble = fs.readFileSync(
+      path.resolve('src/templates/shared-preamble.md'),
+      'utf-8',
+    );
+    expect(scaffoldedPreamble).toBe(canonicalPreamble);
+    expect(
+      fs.readFileSync(path.resolve('agents/_shared/preamble.md'), 'utf-8'),
+    ).toBe(canonicalPreamble);
 
     // Verify frontmatter in prompt
     const prompt = fs.readFileSync(
@@ -57,6 +92,11 @@ describe('CLI commands', () => {
       'utf-8',
     );
     expect(prompt).toContain('description:');
+    expect(prompt).not.toContain('coordination: enabled');
+    expect(env.data.files).not.toContain('outside.md');
+    expect(
+      fs.existsSync(path.join(tmpDir, 'demo', 'inside-state.schema.json')),
+    ).toBe(false);
   });
 
   it('init rejects existing agent', () => {
@@ -110,6 +150,40 @@ describe('CLI commands', () => {
     expect(env.data.systemValid).toBe(true);
   });
 
+  it('check accepts coordination retrospective fields', () => {
+    run(`init checker-coordination --agents-dir ${tmpDir}`);
+    const outputDir = path.join(tmpDir, 'checker-coordination', 'test-output');
+    fs.mkdirSync(outputDir, { recursive: true });
+    const outputFile = path.join(outputDir, 'report.json');
+    fs.writeFileSync(
+      outputFile,
+      JSON.stringify({
+        result: {},
+        summary:
+          'This is a valid coordinated test summary that is long enough.',
+        retrospective: {
+          workedWell: 'The coordination fields were accepted by check.',
+          confusing: 'Nothing was confusing in this test.',
+          magicWand: 'Make coordination feedback easier to inspect in history.',
+          magicWandTarget: 'coordination',
+          coordination: {
+            peerUpdatesSent: 1,
+            unresolvedPeerRequests: 0,
+            statePublished: true,
+          },
+        },
+      }),
+    );
+
+    const { stdout, exitCode } = run(
+      `check checker-coordination --file ${outputFile} --agents-dir ${tmpDir}`,
+    );
+    expect(exitCode).toBe(0);
+    const env = JSON.parse(stdout);
+    expect(env.data.valid).toBe(true);
+    expect(env.data.systemValid).toBe(true);
+  });
+
   it('check --input does not apply system validation', () => {
     run(`init inputtest --with-input --agents-dir ${tmpDir}`);
     const inputFile = path.join(tmpDir, 'input.json');
@@ -153,7 +227,27 @@ describe('CLI commands', () => {
     const env = JSON.parse(result);
     expect(env.status).toBe('ok');
     expect(env.data.dryRun).toBe(true);
+    expect(env.data.prompt).toContain('## Required Output Format');
     expect(env.data.parts).toContain('SYSTEM REQUIREMENTS');
     expect(env.data.parts).toContain('PROMPT');
+  });
+
+  it.each([
+    ['run', 'run demo'],
+    ['resume', 'resume demo "hello"'],
+    ['quickstart', 'quickstart'],
+    ['tail', 'tail demo'],
+    ['init', 'init demo'],
+  ])('%s is blocked inside a minih session', (command, args) => {
+    const { stdout, exitCode } = run(`${args} --agents-dir ${tmpDir}`, {
+      MINIH: '1',
+    });
+
+    expect(exitCode).toBe(1);
+    const env = JSON.parse(stdout);
+    expect(env.command).toBe(command);
+    expect(env.status).toBe('error');
+    expect(env.error.code).toBe('E128');
+    expect(env.error.details.context).toBe('inside');
   });
 });

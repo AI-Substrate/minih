@@ -239,6 +239,20 @@ export function validateSystemOutput(outputPath: string): ValidationResult {
           workedWell: { type: 'string', minLength: 10 },
           confusing: { type: 'string', minLength: 10 },
           magicWand: { type: 'string', minLength: 20 },
+          // System validation is deliberately permissive: bundled schemas carry
+          // the canonical enum, while this runtime gate keeps older/experimental
+          // reports from failing when the required self-improvement fields exist.
+          magicWandTarget: { type: 'string' },
+          coordination: {
+            type: 'object',
+            additionalProperties: true,
+            properties: {
+              peerUpdatesSent: { type: 'integer', minimum: 0 },
+              unresolvedPeerRequests: { type: 'integer', minimum: 0 },
+              statePublished: { type: 'boolean' },
+              notes: { type: 'string', minLength: 1 },
+            },
+          },
         },
       },
     },

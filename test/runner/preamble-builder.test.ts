@@ -99,36 +99,66 @@ describe('buildInsidePreamble', () => {
     expect(buildInsidePreamble(assemblyInput)).toBe(expected);
   });
 
-  it('renders identity and tools stubs for coordinated agents without outside.md', () => {
+  it('renders the coordinated identity block without outside.md', () => {
     const prompt = buildInsidePreamble(
       input({
         definition: definition({ coordination: { enabled: true } }),
       }),
     );
 
-    expect(prompt).toContain('<!-- coordination.identity-block:stub -->');
+    expect(prompt).toContain('<!-- coordination.identity-block -->');
     expect(prompt).toContain('## Your Context (coordination)');
-    expect(prompt).toContain('<!-- coordination.tools-section:stub -->');
+    expect(prompt).toContain(
+      'You are running as the inside minih agent for `coord-agent`.',
+    );
+    expect(prompt).toContain('This run id is `run-123`.');
+    expect(prompt).toContain('You have a peer outside the minih session');
+    expect(prompt).toContain('Treat outside inbox messages and outside state');
+    expect(prompt).toContain('<!-- coordination.tools-section -->');
     expect(prompt).toContain('## Coordination tools available to you');
-    expect(prompt).not.toContain('coordination.peer-contract:stub');
+    for (const tool of [
+      'inbox.list',
+      'inbox.send',
+      'inbox.ack',
+      'state.get',
+      'state.set',
+      'state.transition',
+    ]) {
+      expect(prompt).toContain(tool);
+    }
+    expect(prompt).toContain('## Coordination pre-completion checklist');
+    expect(
+      prompt.indexOf('## Coordination pre-completion checklist'),
+    ).toBeLessThan(prompt.indexOf('SYSTEM OUTPUT INSTRUCTIONS'));
+    expect(prompt).not.toContain('coordination.peer-contract');
     expect(prompt).toMatchInlineSnapshot(`
       "UNIVERSAL PREAMBLE
 
       ---
 
-      <!-- coordination.identity-block:stub -->
+      <!-- coordination.identity-block -->
 
       ## Your Context (coordination)
 
-      _(P6 wires identity content here.)_
+      - You are running as the inside minih agent for \`coord-agent\`.
+      - This run id is \`run-123\`.
+      - You have a peer outside the minih session: the host caller, human, CI job, or sibling agent coordinating this work.
+      - Treat outside inbox messages and outside state as peer context, and send inside replies/state updates when the peer needs progress or review evidence.
 
       ---
 
-      <!-- coordination.tools-section:stub -->
+      <!-- coordination.tools-section -->
 
       ## Coordination tools available to you
 
-      _(P6 wires workshop-005 tools section here.)_
+      Use the inside MCP tools when you need to coordinate with the outside peer:
+
+      - \`inbox.list\` — read outside messages; use \`unread: true\` to focus on new work.
+      - \`inbox.send\` — send progress, questions, review evidence, or completion notes to the outside peer.
+      - \`inbox.ack\` — acknowledge an outside message after you have handled it.
+      - \`state.get\` — inspect your inside state and the outside peer state.
+      - \`state.set\` — publish your current inside state.
+      - \`state.transition\` — move your inside status and append transition history.
 
       ---
 
@@ -152,6 +182,19 @@ describe('buildInsidePreamble', () => {
 
       ---
 
+      <!-- coordination.pre-completion-checklist -->
+
+      ## Coordination pre-completion checklist
+
+      Before writing the final JSON report:
+
+      - Check \`inbox.list\` for unresolved outside requests.
+      - Send final progress or review evidence with \`inbox.send\` when the outside peer needs it.
+      - Update inside state with \`state.set\` or \`state.transition\` so the peer can observe your final status.
+      - Mention coordination blockers or follow-ups in \`retrospective.coordination\` when relevant.
+
+      ---
+
       SYSTEM OUTPUT INSTRUCTIONS"
     `);
   });
@@ -166,7 +209,7 @@ describe('buildInsidePreamble', () => {
       }),
     );
 
-    expect(prompt).toContain('<!-- coordination.peer-contract:stub -->');
+    expect(prompt).toContain('<!-- coordination.peer-contract -->');
     expect(prompt).toContain("## Peer's Contract (from outside.md)");
     expect(prompt).toContain('> Outside line 1\n> Outside line 2');
   });

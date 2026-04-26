@@ -15,6 +15,7 @@ import type { Command } from 'commander';
 import { buildInsideMcpServerConfig } from '../../mcp/index.js';
 import type { AgentRunConfig } from '../../runner/index.js';
 import {
+  buildInsidePreamble,
   displayEvent,
   displayHeader,
   displayPreflight,
@@ -34,12 +35,22 @@ import {
   formatError,
   formatSuccess,
 } from '../output.js';
+import { assertOutsideContext } from '../preaction-context.js';
 import { createSdkRuntime } from './sdk-runtime.js';
 
 export function registerRunCommand(program: Command): void {
   program
     .command('run <slug>')
     .description('Execute an agent')
+    .hook('preAction', () => {
+      assertOutsideContext({
+        commandName: 'run',
+        alternatives: [
+          'Use the inbox/state MCP tools from inside the session.',
+          'From an outside shell, use `minih outside-send <slug>` to communicate with the running agent.',
+        ],
+      });
+    })
     .option(
       '-m, --model <model>',
       'Model to use (e.g., gpt-5.4, claude-sonnet-4)',
@@ -68,6 +79,10 @@ export function registerRunCommand(program: Command): void {
     .option('--dry-run', 'Preview assembled prompt without executing')
     .option('--verbose', 'Show all events with timestamps (verbose mode)')
     .option('--mcp-config <path>', 'MCP config file with mcpServers (JSON)')
+    .addHelpText(
+      'after',
+      '\nTip: For coordinated agents, run `minih outside-context <slug>` first to read the outside-side contract.\n',
+    )
     .action(
       async (
         slug: string,
@@ -213,48 +228,44 @@ export function registerRunCommand(program: Command): void {
               .replaceAll('{{REPO_ROOT}}', process.cwd());
           }
 
-          const parts = [
-            preambleContent && { label: 'PREAMBLE', content: preambleContent },
-            instructions && { label: 'INSTRUCTIONS', content: instructions },
-            {
-              label: 'OUTPUT HINT',
-              content: `Write your final JSON report to: <run-dir>/output/report.json`,
-            },
-            config.params && {
-              label: 'INPUT PARAMS',
-              content: Object.entries(config.params)
+          const outputHint =
+            'Write your final JSON report to: <run-dir>/output/report.json';
+          const paramsHint = config.params
+            ? `## Input Parameters\n\n${Object.entries(config.params)
                 .map(([k, v]) => `${k}: ${v}`)
-                .join('\n'),
-            },
-            { label: 'PROMPT', content: promptBody },
-            {
-              label: 'SYSTEM REQUIREMENTS',
-              content: SYSTEM_OUTPUT_INSTRUCTIONS,
-            },
-          ].filter(Boolean) as Array<{ label: string; content: string }>;
-
-          const totalLength = parts.reduce(
-            (sum, p) => sum + p.content.length,
-            0,
-          );
+                .join('\n')}`
+            : null;
+          const assembledPrompt = buildInsidePreamble({
+            definition,
+            runId: '(dry-run)',
+            preamble: preambleContent,
+            instructions,
+            outputHint,
+            paramsHint,
+            userPrompt: promptBody,
+            systemOutputInstructions: SYSTEM_OUTPUT_INSTRUCTIONS,
+          });
+          const parts = [
+            preambleContent && 'PREAMBLE',
+            definition.coordination?.enabled && 'COORDINATION',
+            'OUTPUT HINT',
+            paramsHint && 'INPUT PARAMS',
+            'PROMPT',
+            instructions && 'INSTRUCTIONS',
+            'SYSTEM REQUIREMENTS',
+          ].filter(Boolean) as string[];
+          const totalLength = assembledPrompt.length;
 
           process.stderr.write(
             `\n${chalk.bold('─── Assembled Prompt Preview ───')}\n\n`,
           );
-          for (const part of parts) {
-            process.stderr.write(
-              `${chalk.cyan(`[${part.label}]`)} ${chalk.dim(`(${part.content.length} chars)`)}\n`,
-            );
-            process.stderr.write(
-              `${chalk.dim(part.content.slice(0, 200))}${part.content.length > 200 ? chalk.dim('...') : ''}\n\n`,
-            );
-          }
+          process.stderr.write(`${assembledPrompt}\n\n`);
           process.stderr.write(`${chalk.bold('─── Stats ───')}\n`);
           process.stderr.write(
             `  Total length: ${totalLength.toLocaleString()} chars\n`,
           );
           process.stderr.write(
-            `  Parts: ${parts.map((p) => p.label.toLowerCase()).join(' + ')}\n`,
+            `  Parts: ${parts.map((p) => p.toLowerCase()).join(' + ')}\n`,
           );
           process.stderr.write(`  Model: ${model}\n`);
           process.stderr.write(`  Timeout: ${config.timeout}s\n\n`);
@@ -263,8 +274,9 @@ export function registerRunCommand(program: Command): void {
             formatSuccess('run', {
               slug,
               dryRun: true,
+              prompt: assembledPrompt,
               totalLength,
-              parts: parts.map((p) => p.label),
+              parts,
               model,
               timeout: config.timeout,
             }),

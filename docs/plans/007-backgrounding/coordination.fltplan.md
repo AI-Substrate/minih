@@ -5,7 +5,7 @@
 **Workshops**: 8 — [001-filesystem-layout](./workshops/001-filesystem-layout.md) · [002-state-machine](./workshops/002-state-machine.md) · [003-mcp-tool-surface](./workshops/003-mcp-tool-surface.md) · [004-spawn-config-injection](./workshops/004-spawn-config-injection.md) · [005-preamble-and-prompting](./workshops/005-preamble-and-prompting.md) · [006-test-fixtures](./workshops/006-test-fixtures.md) · [007-user-journey-coder-and-reviewer](./workshops/007-user-journey-coder-and-reviewer.md) · [008-inside-outside-prompting-and-retro](./workshops/008-inside-outside-prompting-and-retro.md)
 **Research**: [research-dossier.md](./research-dossier.md) + [external-research/](./external-research/) (5 files)
 **Generated**: 2026-04-26 (plan-1b initial; revised after workshop 007 daemon-light pivot; plan-3 generated 2026-04-26)
-**Status**: **Phase 4 LANDED** — new `mcp` domain provides the inside-only `minih-coordination` stdio MCP server with six inbox/state tools, redacted hidden-context validation, install-safe spawn config, coordinated run/resume merge seam, real MCP JSON-RPC coverage, opt-in `MINIH_PGREP=1` process-marker leak regression, and domain registration. `just fft` passes; minih code review is running next.
+**Status**: **Phase 6 LANDED** — coordinated agents now get real inside prompt identity/tools/checklist/peer-contract guidance, widened coordination retrospectives, coordinated `init` scaffolds, `doctor` outside-contract checks, run-folder inbox/state snapshots, a four-file `coordination-smoke-test` dogfood agent, and an opt-in two-agent e2e.
 
 Phase 0 LANDED 2026-04-26 — all 4 scratch tests executed; FULL GO memo at [prework-results.md](./prework-results.md); spec polished to 37 ACs.
 
@@ -66,8 +66,8 @@ S=2, I=1, D=2, N=2, F=1, T=2 · Confidence: 0.70 (down from 0.80 after the runAg
 | 2 | runAgent Event-Driven Refactor + Preamble Builder | runner + adapter | CS-4 | P0, P1 |
 | 3 | File Watcher + Daemon-Light Forwarders | runner | CS-3 | P2 |
 | 4 | MCP Domain (NEW) — six tools + spawn + leak regression | mcp | CS-3 | P1 |
-| 5 | Outside CLI Surface — 6 new commands + preAction context block | cli | CS-3 | P1 |
-| 6 | Agent Integration & Prompting (workshops 005 + 008) | runner + cli | CS-3 | P2, P4, P5 |
+| 5 | Outside CLI Surface — 6 new commands + preAction context block | cli | CS-3 | P1 ✅ |
+| 6 | Agent Integration & Prompting (workshops 005 + 008) | runner + cli | CS-3 | P2, P4, P5 ✅ |
 | 7 | Polish & Docs — `mcp/domain.md`, registry, domain-map, READMEs | docs | CS-2 | P6 |
 
 **Critical path**: P0 → P1 → P2 → P3 → P6 → P7. P4 and P5 can be parallelized after P1.
@@ -75,13 +75,13 @@ S=2, I=1, D=2, N=2, F=1, T=2 · Confidence: 0.70 (down from 0.80 after the runAg
 ```mermaid
 graph LR
     P0[P0 Pre-work + gate ✓ FULL GO]:::done
-    P1[P1 Foundations]
-    P2[P2 runAgent refactor]:::critical
+    P1[P1 Foundations]:::done
+    P2[P2 runAgent refactor]:::done
     P3[P3 fs.watch + forwarders]:::done
-    P4[P4 MCP domain NEW]
-    P5[P5 Outside CLI]
-    P6[P6 Agent integration]
-    P7[P7 Polish + docs]
+    P4[P4 MCP domain NEW]:::done
+    P5[P5 Outside CLI]:::done
+    P6[P6 Agent integration]:::done
+    P7[P7 Polish + docs]:::gate
 
     P0 --> P1
     P1 --> P2
@@ -154,7 +154,9 @@ graph LR
     P2[P2 runAgent event-driven<br/>✓ LANDED 2026-04-26]:::done
     P3L[P3 fs.watch + forwarders<br/>✓ LANDED 2026-04-26]:::done
     P4[P4 MCP domain<br/>✓ IMPLEMENTED 2026-04-26]:::done
-    Remaining[P5-P7 implementation]:::next
+    P5L[P5 Outside CLI<br/>✓ LANDED 2026-04-26]:::done
+    P6L[P6 Agent integration<br/>✓ LANDED 2026-04-26]:::done
+    P7N[P7 Polish + docs]:::next
     Done[37 ACs verified]:::pending
 
     Spec --> WS
@@ -165,8 +167,10 @@ graph LR
     P1 --> P2
     P2 --> P3L
     P3L --> P4
-    P4 --> Remaining
-    Remaining --> Done
+    P4 --> P5L
+    P5L --> P6L
+    P6L --> P7N
+    P7N --> Done
 
     classDef done fill:#9f9,color:#000
     classDef next fill:#ff9,color:#000
@@ -189,6 +193,10 @@ graph LR
 10. ~~`/plan-5-v2-phase-tasks-and-brief --phase 3`~~ ✓ done — dossier + flight plan generated and validated
 11. ~~`/plan-6-v2-implement-phase` for P3~~ ✓ done — daemon-light forwarders landed, `just fft` + opt-in e2e green
 12. ~~Run minih code review command for P3 and apply fixes~~ ✓ done — 2 HIGH findings fixed; `just fft` + opt-in e2e green after fixes
+13. ~~`/plan-6-v2-implement-phase` for P4~~ ✓ done — MCP domain landed
+14. ~~`/plan-6-v2-implement-phase` for P5~~ ✓ done — outside CLI surface landed
+15. ~~`/plan-6-v2-implement-phase` for P6~~ ✓ done — agent integration, prompt guidance, snapshots, smoke agent, and opt-in e2e landed
+16. Next: `/plan-5-v2-phase-tasks-and-brief --phase 7`
 
 ---
 
@@ -208,3 +216,6 @@ graph LR
 | 2026-04-26 | Phase 3 implementation (plan-6) | LANDED | Debounced native file watcher; private SDK watermark; outside inbox/state forwarders; cold-start drain + live watcher delivery through `SessionSender`; live pending-forwarder terminal condition; per-agent run lock with `RunLockHeldError`; opt-in daemon-light e2e; `just fft` pass and `MINIH_E2E=1` gate pass |
 | 2026-04-26 | Phase 3 minih code review | FIXED | `code-review` requested changes for timeout watermark durability and debounced watcher terminal-drain visibility; fixed with manual post-terminal watermark commits plus watcher pending-count accounting; post-fix `just fft` and opt-in daemon-light e2e pass |
 | 2026-04-26 | Phase 4 implementation (plan-6) | LANDED | New mcp domain with six inside tools, hidden context validation, stdio server, spawn config, runner/CLI merge seam, coexistence tests, real MCP JSON-RPC tests, opt-in leak regression, and domain docs; `just fft` passes |
+| 2026-04-26 | Phase 5 implementation (plan-6) | LANDED | Outside CLI surface landed: context block, outside-send/list, outside state commands, outside-context, outside-retro, retros aggregation, command discovery, and run help tip; focused built-CLI tests pass |
+| 2026-04-26 | Phase 6 implementation (plan-6) | LANDED | Real coordinated prompt sections, widened coordination feedback schemas, runner env vars, coordinated init, doctor outside.md checks, run-folder snapshots, four-file coordination smoke agent, and opt-in two-agent e2e; focused tests and opt-in e2e pass |
+| 2026-04-26 | Phase 6 code-review follow-up | LANDED | Minih code-review run approved with 3 medium follow-ups; fixed canonical preamble scaffolding, dry-run prompt parity, and smoke-agent evidence wording; final `just fft` passes |

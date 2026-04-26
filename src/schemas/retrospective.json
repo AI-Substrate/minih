@@ -24,8 +24,34 @@
     },
     "magicWandTarget": {
       "type": "string",
-      "enum": ["project", "minih"],
-      "description": "Which system does the magic wand target — the project being tested or minih itself?"
+      "enum": ["project", "minih", "coordination"],
+      "description": "Which system does the magic wand target — the project being tested, minih itself, or the outside/inside coordination loop?"
+    },
+    "coordination": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "peerUpdatesSent": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "How many progress/review messages were sent to the outside peer."
+        },
+        "unresolvedPeerRequests": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "How many outside requests remain unresolved at final output time."
+        },
+        "statePublished": {
+          "type": "boolean",
+          "description": "Whether inside state was published or transitioned during the run."
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Short coordination-specific retrospective notes."
+        }
+      },
+      "description": "Optional feedback about the outside/inside coordination experience."
     },
     "improvementSuggestions": {
       "type": "array",

@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Coordination Smoke Test Report",
+  "type": "object",
+  "required": ["summary", "toolChecks", "verdict", "retrospective"],
+  "additionalProperties": true,
+  "properties": {
+    "summary": {
+      "type": "string",
+      "minLength": 20
+    },
+    "toolChecks": {
+      "type": "array",
+      "minItems": 6,
+      "items": {
+        "type": "object",
+        "required": ["tool", "status"],
+        "additionalProperties": true,
+        "properties": {
+          "tool": {
+            "type": "string",
+            "enum": [
+              "inbox.list",
+              "inbox.send",
+              "inbox.ack",
+              "state.get",
+              "state.set",
+              "state.transition"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pass", "fail", "skip"]
+          },
+          "evidence": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["all-pass", "partial", "fail"]
+    },
+    "retrospective": {
+      "type": "object",
+      "required": ["workedWell", "confusing", "magicWand"],
+      "additionalProperties": true,
+      "properties": {
+        "workedWell": {
+          "type": "string",
+          "minLength": 10
+        },
+        "confusing": {
+          "type": "string",
+          "minLength": 10
+        },
+        "magicWand": {
+          "type": "string",
+          "minLength": 20
+        },
+        "magicWandTarget": {
+          "type": "string",
+          "enum": ["project", "minih", "coordination"]
+        },
+        "coordination": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    }
+  }
+}

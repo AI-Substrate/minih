@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://minih.dev/schemas/outside-state.json",
+  "type": "object",
+  "required": ["status", "data", "updatedAt", "updatedBy"],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["idle", "in-progress", "paused", "done", "error"]
+    },
+    "data": { "type": "object" },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "updatedBy": { "const": "outside" }
+  },
+  "additionalProperties": false
+}

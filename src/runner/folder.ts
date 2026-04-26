@@ -11,7 +11,14 @@
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { AgentDefinition } from './types.js';
+import type {
+  AgentDefinition,
+  CoordinationFrontmatter,
+  Side,
+} from './types.js';
+
+/** Hard ceiling on `outside.md` body — prompt-blowup guard. */
+const OUTSIDE_MD_MAX_BYTES = 16 * 1024;
 
 const SLUG_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
 
@@ -31,6 +38,146 @@ export function validateSlug(slug: string): string | null {
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// Coordination path helpers (P1 / Phase 007)
+//
+// Every helper:
+// 1. Validates `slug` via `validateSlug` (path-traversal guard).
+// 2. Returns an absolute path (resolves `agentsDir` first) so P3 forwarders,
+//    P4 spawn config, and P5 CLI can use the result without re-resolving.
+//
+// Path constants live here; downstream owners hold the file format + write
+// logic. For example, P3 owns `sdk-watermark.json`'s schema and writes; P1
+// just exports `watermarkPath()`.
+// ---------------------------------------------------------------------------
+
+export class InvalidCoordinationFrontmatterError extends Error {
+  constructor(message: string) {
+    super(`invalid coordination frontmatter: ${message}`);
+    this.name = 'InvalidCoordinationFrontmatterError';
+  }
+}
+
+export class InvalidSlugError extends Error {
+  constructor(slug: string, reason: string) {
+    super(`invalid agent slug "${slug}": ${reason}`);
+    this.name = 'InvalidSlugError';
+  }
+}
+
+export class OutsideAgentsDirError extends Error {
+  constructor(target: string, agentsDir: string) {
+    super(
+      `${target} resolves outside agentsDir ${agentsDir} — refusing to follow symlink (path traversal guard)`,
+    );
+    this.name = 'OutsideAgentsDirError';
+  }
+}
+
+function ensureValidSlug(slug: string): void {
+  const err = validateSlug(slug);
+  if (err !== null) throw new InvalidSlugError(slug, err);
+}
+
+function resolveAbs(agentsDir: string): string {
+  return path.resolve(agentsDir);
+}
+
+/** Absolute path to `agents/<slug>/inbox/<lane>/messages.ndjson`. */
+export function inboxLanePath(
+  slug: string,
+  agentsDir: string,
+  lane: Side,
+): string {
+  ensureValidSlug(slug);
+  return path.join(
+    resolveAbs(agentsDir),
+    slug,
+    'inbox',
+    lane,
+    'messages.ndjson',
+  );
+}
+
+/** Absolute path to `agents/<slug>/state/<side>.json`. */
+export function stateFilePath(
+  slug: string,
+  agentsDir: string,
+  side: Side,
+): string {
+  ensureValidSlug(slug);
+  return path.join(resolveAbs(agentsDir), slug, 'state', `${side}.json`);
+}
+
+/** Absolute path to `agents/<slug>/state/history.ndjson`. */
+export function historyPath(slug: string, agentsDir: string): string {
+  ensureValidSlug(slug);
+  return path.join(resolveAbs(agentsDir), slug, 'state', 'history.ndjson');
+}
+
+/**
+ * Absolute path to the SDK forwarder's per-agent watermark file.
+ * P3 owns the file format + write logic; P1 only owns the path constant
+ * (so it lives alongside the other coordination paths).
+ */
+export function watermarkPath(slug: string, agentsDir: string): string {
+  ensureValidSlug(slug);
+  return path.join(resolveAbs(agentsDir), slug, 'state', 'sdk-watermark.json');
+}
+
+/** Absolute path to `agents/<slug>/outside.md`. */
+export function outsideMdPath(slug: string, agentsDir: string): string {
+  ensureValidSlug(slug);
+  return path.join(resolveAbs(agentsDir), slug, 'outside.md');
+}
+
+/**
+ * Whether `outside.md` exists for `slug`. Symlinks are followed; a symlink
+ * resolving outside `agentsDir` throws `OutsideAgentsDirError`.
+ */
+export function hasOutsideMd(slug: string, agentsDir: string): boolean {
+  ensureValidSlug(slug);
+  const target = outsideMdPath(slug, agentsDir);
+  if (!fs.existsSync(target)) return false;
+  // Follow symlinks via realpathSync; ensure the resolved path is still inside
+  // agentsDir to prevent symlink-based path traversal.
+  const realDir = fs.realpathSync(resolveAbs(agentsDir));
+  const realTarget = fs.realpathSync(target);
+  if (!realTarget.startsWith(realDir + path.sep) && realTarget !== realDir) {
+    throw new OutsideAgentsDirError(realTarget, realDir);
+  }
+  return fs.statSync(target).isFile();
+}
+
+/**
+ * Read `outside.md` body if present. Returns:
+ * - `undefined` when the file is absent
+ * - `''` for present-but-empty (lets consumers distinguish absent vs empty)
+ * - body string truncated to 16KB with a `console.warn` if larger
+ */
+function readOutsideContract(
+  slug: string,
+  agentsDir: string,
+): string | undefined {
+  if (!hasOutsideMd(slug, agentsDir)) return undefined;
+  const target = outsideMdPath(slug, agentsDir);
+  const stats = fs.statSync(target);
+  if (stats.size > OUTSIDE_MD_MAX_BYTES) {
+    console.warn(
+      `outside.md for ${slug} is ${stats.size} bytes; truncating to ${OUTSIDE_MD_MAX_BYTES} (P6 doctor will surface 4KB warn / 8KB error)`,
+    );
+    const fd = fs.openSync(target, 'r');
+    try {
+      const buf = Buffer.alloc(OUTSIDE_MD_MAX_BYTES);
+      const bytesRead = fs.readSync(fd, buf, 0, OUTSIDE_MD_MAX_BYTES, 0);
+      return buf.slice(0, bytesRead).toString('utf8');
+    } finally {
+      fs.closeSync(fd);
+    }
+  }
+  return fs.readFileSync(target, 'utf8');
+}
+
 /**
  * Parse YAML frontmatter from markdown content.
  *
@@ -46,11 +193,18 @@ export function parseFrontmatter(content: string): {
   model?: string;
   reasoning?: string;
   timeout?: number;
+  /** Always populated (workshop 005:95) — `{enabled:false}` when absent or `disabled`. */
+  coordination: CoordinationFrontmatter;
   body: string;
 } {
   content = content.replace(/\r\n/g, '\n');
   if (!content.startsWith('---\n')) {
-    return { description: '', tags: [], body: content };
+    return {
+      description: '',
+      tags: [],
+      coordination: { enabled: false },
+      body: content,
+    };
   }
 
   // Search for closing \n---\n starting after the opening ---\n
@@ -61,15 +215,22 @@ export function parseFrontmatter(content: string): {
     if (content.endsWith('\n---')) {
       const yamlBlock = content.slice(4, content.length - 4);
       const parsed = parseYamlSimple(yamlBlock);
-      return { ...parsed, body: '' };
+      const coordination = parseCoordinationField(yamlBlock);
+      return { ...parsed, coordination, body: '' };
     }
-    return { description: '', tags: [], body: content };
+    return {
+      description: '',
+      tags: [],
+      coordination: { enabled: false },
+      body: content,
+    };
   }
 
   const yamlBlock = content.slice(4, endIndex);
   const body = content.slice(endIndex + 5); // skip \n---\n
   const parsed = parseYamlSimple(yamlBlock);
-  return { ...parsed, body };
+  const coordination = parseCoordinationField(yamlBlock);
+  return { ...parsed, coordination, body };
 }
 
 /** Minimal YAML parser for frontmatter. */
@@ -127,6 +288,92 @@ function parseYamlSimple(yaml: string): {
 }
 
 /**
+ * Parse the optional `coordination` frontmatter field. Always returns a
+ * normalized `{enabled: boolean, outside?, inside?}` shape (workshop 005:95).
+ *
+ * Accepted forms:
+ *   `coordination: enabled`         → `{enabled: true}`
+ *   `coordination: disabled`        → `{enabled: false}`
+ *   `coordination:`
+ *     `  enabled: true`
+ *     `  outside: ...`              → `{enabled: true, outside: {...}}`
+ *
+ * Absent → `{enabled: false}`. Unknown string values, missing-`enabled`
+ * object form, etc., throw `InvalidCoordinationFrontmatterError`.
+ */
+function parseCoordinationField(yaml: string): CoordinationFrontmatter {
+  const lines = yaml.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const m = line.match(/^coordination:\s*(.*)$/);
+    if (!m) continue;
+
+    const value = m[1].trim();
+
+    // String form: `coordination: enabled` / `coordination: disabled`
+    if (value === 'enabled') return { enabled: true };
+    if (value === 'disabled') return { enabled: false };
+
+    // Empty value → object form follows on indented lines
+    if (value === '') {
+      const result: CoordinationFrontmatter = { enabled: false };
+      let sawEnabled = false;
+      for (let j = i + 1; j < lines.length; j++) {
+        const sub = lines[j];
+        // Stop at first non-indented line (next top-level key)
+        if (!sub.match(/^\s/) && sub.trim() !== '') break;
+        const enabledM = sub.match(/^\s+enabled:\s*(true|false)\s*$/);
+        if (enabledM) {
+          result.enabled = enabledM[1] === 'true';
+          sawEnabled = true;
+          continue;
+        }
+        // `outside` / `inside` accept inline JSON object literals (e.g.,
+        // `outside: {"audience":"ci"}`). Parse strictly via JSON.parse —
+        // empty `{}` is also a valid (empty) shape. Anything that isn't
+        // valid JSON throws so authors get a clear error instead of
+        // silently losing the payload (per code-review F001 2026-04-26).
+        const subKeyM = sub.match(/^\s+(outside|inside):\s*(.+)$/);
+        if (subKeyM) {
+          const key = subKeyM[1] as 'outside' | 'inside';
+          const rawValue = subKeyM[2].trim();
+          try {
+            const parsed = JSON.parse(rawValue);
+            if (
+              parsed === null ||
+              typeof parsed !== 'object' ||
+              Array.isArray(parsed)
+            ) {
+              throw new InvalidCoordinationFrontmatterError(
+                `${key}: must be a JSON object literal, got ${rawValue}`,
+              );
+            }
+            result[key] = parsed as Record<string, unknown>;
+          } catch (err) {
+            if (err instanceof InvalidCoordinationFrontmatterError) throw err;
+            throw new InvalidCoordinationFrontmatterError(
+              `${key}: invalid JSON value "${rawValue}" (${(err as Error).message})`,
+            );
+          }
+        }
+      }
+      if (!sawEnabled) {
+        throw new InvalidCoordinationFrontmatterError(
+          'object form requires `enabled: true|false` field',
+        );
+      }
+      return result;
+    }
+
+    // Anything else is invalid.
+    throw new InvalidCoordinationFrontmatterError(
+      `unknown value "${value}"; expected one of: enabled, disabled, or an object form with \`enabled: true|false\``,
+    );
+  }
+  return { enabled: false };
+}
+
+/**
  * List all available agent definitions by scanning for prompt.md files.
  * Skips underscore-prefixed folders (_shared, _templates, etc.).
  */
@@ -155,7 +402,7 @@ export function listAgents(agentsDir: string): AgentDefinition[] {
 
     // Parse frontmatter for description and tags
     const promptContent = fs.readFileSync(promptPath, 'utf-8');
-    const { description, tags, model, reasoning, timeout } =
+    const { description, tags, model, reasoning, timeout, coordination } =
       parseFrontmatter(promptContent);
 
     // Require frontmatter with description (per spec clarification)
@@ -175,6 +422,8 @@ export function listAgents(agentsDir: string): AgentDefinition[] {
         ? instructionsPath
         : null,
       inputSchemaPath: fs.existsSync(inputSchemaPath) ? inputSchemaPath : null,
+      outsideContract: readOutsideContract(entry.name, agentsDir),
+      coordination,
     });
   }
 

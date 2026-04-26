@@ -41,7 +41,9 @@ function ts() {
 }
 
 function log(label, data) {
-  process.stderr.write(`[${ts()}] [${label}] ${JSON.stringify(data).slice(0, 240)}\n`);
+  process.stderr.write(
+    `[${ts()}] [${label}] ${JSON.stringify(data).slice(0, 240)}\n`,
+  );
 }
 
 /**
@@ -63,13 +65,13 @@ function subscribeUntilIdle(session, label = 'evt') {
     events.push({ ts: ts(), type: evt.type, data: evt.data });
 
     // Capture assistant messages
-    if (
-      evt.type === 'message' ||
-      evt.type === 'assistant.message'
-    ) {
+    if (evt.type === 'message' || evt.type === 'assistant.message') {
       const content = evt.data?.content || evt.data?.text || '';
       messages.push(content);
-      log(label, { t: evt.type, preview: content.slice(0, 80).replace(/\n/g, ' ') });
+      log(label, {
+        t: evt.type,
+        preview: content.slice(0, 80).replace(/\n/g, ' '),
+      });
     }
 
     // Resolve on idle
@@ -103,36 +105,45 @@ async function main() {
   });
   log('boot', { call: 'createSession ok', sessionId: session.sessionId });
 
-  const { idlePromise, events, messages, unsubscribe } = subscribeUntilIdle(session, 'evt');
+  const { idlePromise, events, messages, unsubscribe } = subscribeUntilIdle(
+    session,
+    'evt',
+  );
 
   // Race against timeout so we report cleanly instead of hanging
   const timeoutPromise = new Promise((_, rej) =>
-    setTimeout(() => rej(new Error(`TIMEOUT after ${TIMEOUT_MS}ms`)), TIMEOUT_MS),
+    setTimeout(
+      () => rej(new Error(`TIMEOUT after ${TIMEOUT_MS}ms`)),
+      TIMEOUT_MS,
+    ),
   );
 
   let pass = false;
   let failureReason = null;
   let firstIdleAt = null;
-  let queuedAt = null;
+  let _queuedAt = null;
 
   try {
     if (SCENARIO === 'single') {
       log('action', { call: 'session.send (single message)' });
-      await session.send({ prompt: 'Reply with the single word: ALPHA. Nothing else.' });
+      await session.send({
+        prompt: 'Reply with the single word: ALPHA. Nothing else.',
+      });
       log('action', { call: 'session.send returned (queued)' });
 
       await Promise.race([idlePromise, timeoutPromise]);
       firstIdleAt = Date.now();
 
       pass = messages.length > 0;
-      if (!pass) failureReason = 'reached idle but no assistant message captured';
+      if (!pass)
+        failureReason = 'reached idle but no assistant message captured';
     } else if (SCENARIO === 'queued') {
       // Prove that two session.send calls in flight both land — workshop 007 cross-process push pattern
       log('action', { call: 'session.send #1' });
       await session.send({ prompt: 'Reply with: STAGE-ONE-DONE' });
       log('action', { call: 'session.send #2 (queued behind #1)' });
       await session.send({ prompt: 'Now reply with: STAGE-TWO-DONE' });
-      queuedAt = Date.now();
+      _queuedAt = Date.now();
 
       await Promise.race([idlePromise, timeoutPromise]);
       firstIdleAt = Date.now();
@@ -144,7 +155,9 @@ async function main() {
         failureReason = `queued messages incomplete: STAGE-ONE-DONE=${sawStageOne}, STAGE-TWO-DONE=${sawStageTwo}`;
       }
     } else {
-      throw new Error(`Unknown scenario: ${SCENARIO}. Use 'single' or 'queued'.`);
+      throw new Error(
+        `Unknown scenario: ${SCENARIO}. Use 'single' or 'queued'.`,
+      );
     }
   } catch (err) {
     failureReason = String(err?.message || err);
@@ -161,7 +174,7 @@ async function main() {
   // Structured summary on stderr — easy to grep for the prework-results.md memo
   process.stderr.write('\n=== T001 SUMMARY ===\n');
   process.stderr.write(
-    JSON.stringify(
+    `${JSON.stringify(
       {
         test: 'T001-runagent-eventdriven',
         scenario: SCENARIO,
@@ -172,12 +185,14 @@ async function main() {
         sentAndWaitUsed: false, // by construction
         eventCount: events.length,
         messageCount: messages.length,
-        messagesPreview: messages.map((m) => m.slice(0, 80).replace(/\n/g, ' ')),
+        messagesPreview: messages.map((m) =>
+          m.slice(0, 80).replace(/\n/g, ' '),
+        ),
         targetMaxMs: TIMEOUT_MS,
       },
       null,
       2,
-    ) + '\n',
+    )}\n`,
   );
 
   // Exit cleanly so the parent shell can run pgrep / ps to verify cleanup

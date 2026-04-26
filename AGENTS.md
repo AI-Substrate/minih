@@ -12,6 +12,12 @@ npx biome check .           # Lint + format check
 npx biome check --write .   # Auto-fix lint/format issues
 ```
 
+### Pre-commit / pre-push gate
+
+**ALWAYS run `just fft` before `git commit` and before `git push`.** The pipeline is the contract — lint, format, build, typecheck, test, audit. If any step fails, fix it before committing.
+
+**Own every finding.** Anything `fft` surfaces is ours, regardless of which file it lives in. Don't dismiss a lint warning, type error, or test failure as "pre-existing" or "unrelated to my change" — if our pipeline turns it up, our PR fixes it. If the noise is genuinely out-of-scope for the current change, raise it explicitly with the user before deciding to defer; never commit past it silently. Audit findings (transitive deps) follow the same rule: surface and decide, don't ignore.
+
 ## Architecture
 
 Three domains with strict import direction: `cli → runner → adapter` (never upward).

@@ -78,7 +78,7 @@ export async function createSdkRuntime(
       try {
         const projectRoot = process.cwd();
         const { createRequire } = await import('node:module');
-        const require = createRequire(projectRoot + '/');
+        const require = createRequire(`${projectRoot}/`);
         const sdkPath = require.resolve('@github/copilot-sdk');
         const sdk = await import(sdkPath);
         CopilotClient = sdk.CopilotClient;

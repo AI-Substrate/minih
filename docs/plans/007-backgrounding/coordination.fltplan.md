@@ -5,7 +5,9 @@
 **Workshops**: 8 — [001-filesystem-layout](./workshops/001-filesystem-layout.md) · [002-state-machine](./workshops/002-state-machine.md) · [003-mcp-tool-surface](./workshops/003-mcp-tool-surface.md) · [004-spawn-config-injection](./workshops/004-spawn-config-injection.md) · [005-preamble-and-prompting](./workshops/005-preamble-and-prompting.md) · [006-test-fixtures](./workshops/006-test-fixtures.md) · [007-user-journey-coder-and-reviewer](./workshops/007-user-journey-coder-and-reviewer.md) · [008-inside-outside-prompting-and-retro](./workshops/008-inside-outside-prompting-and-retro.md)
 **Research**: [research-dossier.md](./research-dossier.md) + [external-research/](./external-research/) (5 files)
 **Generated**: 2026-04-26 (plan-1b initial; revised after workshop 007 daemon-light pivot; plan-3 generated 2026-04-26)
-**Status**: **Phase 0 LANDED** — all 4 scratch tests executed (T001+T002+T004 full PASS; T003 mechanical PASS with documented agent-latency caveat per workshop 007 §Failure-mode fallback). Decision memo at [prework-results.md](./prework-results.md) records FULL GO. Spec polished with 20 net-new ACs (now 37 total). **P1 unlocked.**
+**Status**: **Phase 1 LANDED** — coordination foundations shipped. 4 JSON schemas + 4 new runner modules (`state.ts`, `context.ts`, `atomic-write.ts`, `ulid.ts`) + extensions to `folder.ts`, `types.ts`, `index.ts`. 230/230 tests pass; pre-vs-post-P1 baseline diff exit=0 across 10 files; zero behavior change to existing 9 agents. `RetrospectiveCoordination` and `MagicWandTarget` widening explicitly deferred to P6 (no type-vs-validator drift). **P2 unlocked.**
+
+Phase 0 LANDED 2026-04-26 — all 4 scratch tests executed; FULL GO memo at [prework-results.md](./prework-results.md); spec polished to 37 ACs.
 
 ---
 
@@ -148,8 +150,9 @@ graph LR
     Plan[Plan generated 2026-04-26]:::done
     P0[P0 scratch tests + memo<br/>✓ FULL GO 2026-04-26]:::done
     SP[Spec polish: 37 ACs<br/>✓ merged 2026-04-26]:::done
-    P1[P1 Runner Foundations]:::next
-    Phases[P2-P7 implementation]:::pending
+    P1[P1 Runner Foundations<br/>✓ LANDED 2026-04-26]:::done
+    P2[P2 runAgent event-driven]:::next
+    Phases[P3-P7 implementation]:::pending
     Done[37 ACs verified]:::pending
 
     Spec --> WS
@@ -157,7 +160,8 @@ graph LR
     Plan --> P0
     P0 --> SP
     SP --> P1
-    P1 --> Phases
+    P1 --> P2
+    P2 --> Phases
     Phases --> Done
 
     classDef done fill:#9f9,color:#000
@@ -172,8 +176,10 @@ graph LR
 1. ~~`/plan-4-complete-the-plan`~~ ✓ done (verdict: READY, 0 HIGH/MEDIUM after cleanup pass)
 2. ~~Execute P0 scratch tests~~ ✓ done — all 4 executed, FULL GO with latency caveat
 3. ~~Spec polish (20 ACs)~~ ✓ done — `coordination-spec.md` now has 37 ACs
-4. **`/plan-5-v2-phase-tasks-and-brief --phase "Phase 1: Runner Foundations" --plan "docs/plans/007-backgrounding/coordination-plan.md"`** — generate the implementation brief for P1 (foundations)
-5. Then `/plan-6-v2-implement-phase --phase "Phase 1: Runner Foundations" --plan "..."`
+4. ~~`/plan-5-v2-phase-tasks-and-brief` for P1~~ ✓ done — dossier + flight plan generated, validated (4-agent broad sweep)
+5. ~~`/plan-6-v2-implement-phase` for P1~~ ✓ done — 230/230 tests, baseline diff exit=0, zero regressions
+6. **`/plan-7-v2-code-review --phase "Phase 1: Runner Foundations" --plan "docs/plans/007-backgrounding/coordination-plan.md"`** — formal phase review (recommended next)
+7. Then `/plan-5-v2-phase-tasks-and-brief --phase "Phase 2: runAgent Event-Driven Refactor + Preamble Builder"` to start P2
 
 ---
 
@@ -187,3 +193,5 @@ graph LR
 | 2026-04-26 | plan-4 validation | READY | 0 HIGH after cleanup pass |
 | 2026-04-26 | Phase 0 scratch tests | FULL GO with caveat | T001+T002+T004 full PASS; T003 mechanical PASS / agent-latency caveat per ws007 fallback |
 | 2026-04-26 | Spec polish (20 ACs) | done | Spec now has 37 ACs total; AC-STATE-TRANSITION-GATED removed inline |
+| 2026-04-26 | Phase 1 dossier (plan-5) | done | 10 tasks expanded from plan-3 1.1-1.10; reordered for dependency correctness; broad 4-agent validation surfaced 27 issues, 9 HIGH fixed inline pre-implementation |
+| 2026-04-26 | Phase 1 implementation (plan-6) | LANDED | 4 schemas + 4 new modules + 3 modified + 5 new test files + 2 baseline scripts; 230/230 tests pass; baseline diff exit=0 across 10 files; zero behavior change to existing 9 agents; `MagicWandTarget`/`RetrospectiveCoordination` correctly deferred to P6 (no type-vs-validator drift); ajv-formats added for live `format: date-time` validation |

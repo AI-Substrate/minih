@@ -34,7 +34,9 @@ function ts() {
 }
 
 function logEvent(label, data) {
-  process.stderr.write(`[${ts()}] [${label}] ${JSON.stringify(data).slice(0, 240)}\n`);
+  process.stderr.write(
+    `[${ts()}] [${label}] ${JSON.stringify(data).slice(0, 240)}\n`,
+  );
 }
 
 async function main() {
@@ -48,7 +50,9 @@ async function main() {
     streaming: true,
   });
 
-  process.stderr.write(`\n=== SCENARIO ${SCENARIO} === sessionId=${session.sessionId}\n\n`);
+  process.stderr.write(
+    `\n=== SCENARIO ${SCENARIO} === sessionId=${session.sessionId}\n\n`,
+  );
 
   const events = [];
   const unsub = session.on((evt) => {
@@ -90,12 +94,24 @@ async function main() {
   try {
     if (SCENARIO === 'A') {
       logEvent('action', { call: 'sendAndWait#1' });
-      const r1 = await session.sendAndWait({ prompt: 'Say hello briefly.' }, 30000);
-      logEvent('action', { call: 'sendAndWait#1 returned', preview: (r1?.data?.content || '').slice(0, 80) });
+      const r1 = await session.sendAndWait(
+        { prompt: 'Say hello briefly.' },
+        30000,
+      );
+      logEvent('action', {
+        call: 'sendAndWait#1 returned',
+        preview: (r1?.data?.content || '').slice(0, 80),
+      });
 
       logEvent('action', { call: 'sendAndWait#2' });
-      const r2 = await session.sendAndWait({ prompt: 'Say goodbye briefly.' }, 30000);
-      logEvent('action', { call: 'sendAndWait#2 returned', preview: (r2?.data?.content || '').slice(0, 80) });
+      const r2 = await session.sendAndWait(
+        { prompt: 'Say goodbye briefly.' },
+        30000,
+      );
+      logEvent('action', {
+        call: 'sendAndWait#2 returned',
+        preview: (r2?.data?.content || '').slice(0, 80),
+      });
     }
 
     if (SCENARIO === 'B') {
@@ -107,7 +123,10 @@ async function main() {
       logEvent('action', { call: 'mid-turn session.send(inject)' });
       try {
         const injectId = await session.send({ prompt: INJECT_PROMPT });
-        logEvent('action', { call: 'session.send returned', injectMessageId: injectId });
+        logEvent('action', {
+          call: 'session.send returned',
+          injectMessageId: injectId,
+        });
       } catch (err) {
         logEvent('action', { call: 'session.send THREW', err: String(err) });
       }
@@ -122,21 +141,30 @@ async function main() {
 
     if (SCENARIO === 'C') {
       logEvent('action', { call: 'session.send #1 (no await)' });
-      const id1Promise = session.send({ prompt: 'Step A: respond with the word ALPHA' });
+      const id1Promise = session.send({
+        prompt: 'Step A: respond with the word ALPHA',
+      });
       logEvent('action', { call: 'session.send #2 immediately' });
-      const id2Promise = session.send({ prompt: 'Step B: respond with the word BETA' });
+      const id2Promise = session.send({
+        prompt: 'Step B: respond with the word BETA',
+      });
 
       try {
         const [id1, id2] = await Promise.all([id1Promise, id2Promise]);
-        logEvent('action', { call: 'both sends resolved', id1, id2, sameId: id1 === id2 });
+        logEvent('action', {
+          call: 'both sends resolved',
+          id1,
+          id2,
+          sameId: id1 === id2,
+        });
       } catch (err) {
         logEvent('action', { call: 'sends THREW', err: String(err) });
       }
 
       // Give the session time to chew on either/both messages
       await new Promise((r) => setTimeout(r, 30000));
-      const messages = events.filter((e) =>
-        e.type === 'message' || e.type === 'assistant.message',
+      const messages = events.filter(
+        (e) => e.type === 'message' || e.type === 'assistant.message',
       );
       logEvent('summary', {
         totalEvents: events.length,

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 /**
  * Pre-Work Test #3 (workshop 007 § Pre-Work Required) — Plan 007-backgrounding
  *
@@ -29,11 +30,11 @@
  *   Optional message count: GH_TOKEN=<…> node …/test.mjs 5
  */
 
+import { spawn } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { CopilotClient } from '/Users/jordanknight/substrate/minih/node_modules/@github/copilot-sdk/dist/index.js';
 
@@ -52,7 +53,9 @@ function ts() {
 }
 
 function log(label, data) {
-  process.stderr.write(`[${ts()}] [${label}] ${JSON.stringify(data).slice(0, 220)}\n`);
+  process.stderr.write(
+    `[${ts()}] [${label}] ${JSON.stringify(data).slice(0, 220)}\n`,
+  );
 }
 
 /**
@@ -65,7 +68,11 @@ function log(label, data) {
 async function readNewMessages(inboxPath, watermarkBytes) {
   const buf = await fsp.readFile(inboxPath);
   if (buf.length <= watermarkBytes) {
-    return { newMessages: [], newWatermark: watermarkBytes, parseFailed: false };
+    return {
+      newMessages: [],
+      newWatermark: watermarkBytes,
+      parseFailed: false,
+    };
   }
   const slice = buf.subarray(watermarkBytes).toString('utf-8');
   // Split on \n; the last element is the partial-line tail (possibly empty)
@@ -104,7 +111,9 @@ async function readNewMessages(inboxPath, watermarkBytes) {
 
 async function main() {
   const t0 = Date.now();
-  const workDir = await fsp.mkdtemp(path.join(os.tmpdir(), 't003-daemon-light-'));
+  const workDir = await fsp.mkdtemp(
+    path.join(os.tmpdir(), 't003-daemon-light-'),
+  );
   const inboxPath = path.join(workDir, 'inbox.ndjson');
   const markerPath = path.join(workDir, 'writes.markers.ndjson');
   await fsp.writeFile(inboxPath, '');
@@ -167,7 +176,10 @@ async function main() {
           break;
         }
         for (const msg of result.newMessages) {
-          log('forwarder', { send: msg.id, preview: (msg.body || '').slice(0, 60) });
+          log('forwarder', {
+            send: msg.id,
+            preview: (msg.body || '').slice(0, 60),
+          });
           await session.send({
             prompt: `📬 Inbox message id=${msg.id} body="${msg.body}". Acknowledge by replying ACK-${msg.id} on its own line.`,
           });
@@ -175,7 +187,11 @@ async function main() {
         }
         if (result.parseFailed) {
           forwarderState.parseFailures++;
-          log('forwarder', { parseFail: result.failureLine, watermark: watermark, action: 'NOT advancing watermark; awaiting next event' });
+          log('forwarder', {
+            parseFail: result.failureLine,
+            watermark: watermark,
+            action: 'NOT advancing watermark; awaiting next event',
+          });
           watermark = result.newWatermark; // up to but not past the bad line
           break; // exit drain loop; next fs.watch event will retry
         }
@@ -195,12 +211,14 @@ async function main() {
   // Debounce: wrap fs.watch callback so multiple events within DEBOUNCE_MS
   // coalesce into one drain call (per workshop 007 §Debounce + atomic-rename)
   let debounceTimer = null;
-  const watcher = fs.watch(workDir, (eventType, filename) => {
+  const watcher = fs.watch(workDir, (_eventType, filename) => {
     if (filename !== 'inbox.ndjson') return;
     if (debounceTimer) clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
       debounceTimer = null;
-      drainForward().catch((err) => log('forwarder-error', { err: String(err) }));
+      drainForward().catch((err) =>
+        log('forwarder-error', { err: String(err) }),
+      );
     }, DEBOUNCE_MS);
   });
 
@@ -238,17 +256,26 @@ async function main() {
   `;
 
   log('action', { call: 'spawn outside writer', expectedMessages: MSG_COUNT });
-  const child = spawn(process.execPath, ['--input-type=module', '-e', childCode], {
-    stdio: ['ignore', 'inherit', 'inherit'],
-  });
+  const child = spawn(
+    process.execPath,
+    ['--input-type=module', '-e', childCode],
+    {
+      stdio: ['ignore', 'inherit', 'inherit'],
+    },
+  );
   await new Promise((res, rej) => {
-    child.on('exit', (code) => (code === 0 ? res() : rej(new Error('child exit ' + code))));
+    child.on('exit', (code) =>
+      code === 0 ? res() : rej(new Error(`child exit ${code}`)),
+    );
     child.on('error', rej);
   });
 
   // ========== WAIT FOR SDK IDLE ==========
   const timeoutPromise = new Promise((_, rej) =>
-    setTimeout(() => rej(new Error(`OVERALL TIMEOUT ${OVERALL_TIMEOUT_MS}ms`)), OVERALL_TIMEOUT_MS),
+    setTimeout(
+      () => rej(new Error(`OVERALL TIMEOUT ${OVERALL_TIMEOUT_MS}ms`)),
+      OVERALL_TIMEOUT_MS,
+    ),
   );
 
   let pass = false;
@@ -266,7 +293,8 @@ async function main() {
     for (const m of markers) {
       const ackPattern = new RegExp(`ACK-${m.id}\\b`);
       const ackMsg = messages.find((mm) => ackPattern.test(mm.content));
-      if (ackMsg) roundTrips.push({ id: m.id, latencyMs: ackMsg.at - m.wroteAt });
+      if (ackMsg)
+        roundTrips.push({ id: m.id, latencyMs: ackMsg.at - m.wroteAt });
     }
 
     pass =
@@ -274,44 +302,50 @@ async function main() {
       roundTrips.every((rt) => rt.latencyMs <= ROUND_TRIP_TARGET_MS);
 
     if (!pass) {
-      const missing = markers.filter((m) => !roundTrips.find((rt) => rt.id === m.id));
+      const missing = markers.filter(
+        (m) => !roundTrips.find((rt) => rt.id === m.id),
+      );
       failureReason = missing.length
         ? `missing acks for: ${missing.map((m) => m.id).join(', ')}`
         : `slow round-trip: ${JSON.stringify(roundTrips)}`;
     }
 
     process.stderr.write('\n=== T003 SUMMARY ===\n');
-    process.stderr.write(JSON.stringify(
-      {
-        test: 'T003-daemon-light-prototype',
-        msgCount: MSG_COUNT,
-        pass,
-        failureReason,
-        roundTripsMs: roundTrips,
-        forwarderState,
-        eventsTotal: events.length,
-        agentMessageCount: messages.length,
-        targetMaxRoundTripMs: ROUND_TRIP_TARGET_MS,
-        elapsedMs: Date.now() - t0,
-      },
-      null,
-      2,
-    ) + '\n');
+    process.stderr.write(
+      `${JSON.stringify(
+        {
+          test: 'T003-daemon-light-prototype',
+          msgCount: MSG_COUNT,
+          pass,
+          failureReason,
+          roundTripsMs: roundTrips,
+          forwarderState,
+          eventsTotal: events.length,
+          agentMessageCount: messages.length,
+          targetMaxRoundTripMs: ROUND_TRIP_TARGET_MS,
+          elapsedMs: Date.now() - t0,
+        },
+        null,
+        2,
+      )}\n`,
+    );
   } catch (err) {
     failureReason = String(err?.message || err);
     pass = false;
     process.stderr.write('\n=== T003 SUMMARY (FAILED) ===\n');
-    process.stderr.write(JSON.stringify(
-      {
-        test: 'T003-daemon-light-prototype',
-        pass: false,
-        failureReason,
-        forwarderState,
-        elapsedMs: Date.now() - t0,
-      },
-      null,
-      2,
-    ) + '\n');
+    process.stderr.write(
+      `${JSON.stringify(
+        {
+          test: 'T003-daemon-light-prototype',
+          pass: false,
+          failureReason,
+          forwarderState,
+          elapsedMs: Date.now() - t0,
+        },
+        null,
+        2,
+      )}\n`,
+    );
   } finally {
     if (debounceTimer) clearTimeout(debounceTimer);
     watcher.close();

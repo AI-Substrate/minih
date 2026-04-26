@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://minih.dev/schemas/state-history-entry.json",
+  "type": "object",
+  "required": ["ts", "side", "from", "to", "reason", "peerStateAtTime"],
+  "properties": {
+    "ts": { "type": "string", "format": "date-time" },
+    "side": { "type": "string", "enum": ["outside", "inside"] },
+    "from": { "type": "string", "minLength": 1 },
+    "to": { "type": "string", "minLength": 1 },
+    "reason": { "type": ["string", "null"] },
+    "peerStateAtTime": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": { "type": "string" }
+      }
+    }
+  },
+  "additionalProperties": false
+}

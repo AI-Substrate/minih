@@ -68,7 +68,9 @@ function createAgent(
     fs.writeFileSync(path.join(sharedDir, 'preamble.md'), opts.preamble);
   }
 
-  return resolveAgent(slug, tmpDir)!;
+  const def = resolveAgent(slug, tmpDir);
+  if (def === null) throw new Error(`expected agent ${slug} to resolve`);
+  return def;
 }
 
 describe('runAgent', () => {

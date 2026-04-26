@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://minih.dev/schemas/inbox-message.json",
+  "type": "object",
+  "required": ["id", "sender", "type", "subject", "body", "ts"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$" },
+    "sender": { "type": "string", "enum": ["outside", "inside"] },
+    "type": { "type": "string", "minLength": 1, "maxLength": 50 },
+    "subject": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "body": { "type": "string", "minLength": 0, "maxLength": 10000 },
+    "ts": { "type": "string", "format": "date-time" },
+    "ackOf": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$" },
+    "meta": { "type": "object" }
+  },
+  "additionalProperties": false
+}

@@ -20,6 +20,14 @@
 | `src/runner/runner.ts` | internal | Core orchestration (Phase 2) |
 | `src/runner/index.ts` | contract | Barrel export |
 | `src/schemas/retrospective.json` | contract | Reusable retrospective schema fragment (Phase 2) |
+| `src/runner/state.ts` | contract | Coordination state types + helpers (`readStateLazy`, `writeState`, `appendHistory`); pure data layer, no rule engine (007 P1) |
+| `src/runner/context.ts` | contract | `detectContext()` + coordination env-var contract (`MINIH_ENV_KEYS_COORDINATION`, `MINIH_ENV_KEYS_ALL`) (007 P1) |
+| `src/runner/atomic-write.ts` | internal | POSIX write-then-rename helper (sync + async) for state files (007 P1) |
+| `src/runner/ulid.ts` | internal | In-tree Crockford-base32 ULID with monotonicity guarantees (007 P1) |
+| `src/schemas/inbox-message.json` | contract | Inbox NDJSON envelope shape (007 P1) |
+| `src/schemas/outside-state.json` | contract | DEFAULT outside state shape (overridable per-agent in P6) |
+| `src/schemas/inside-state.json` | contract | DEFAULT inside state shape (overridable per-agent in P6) |
+| `src/schemas/state-history-entry.json` | contract | Append-only history NDJSON entry (007 P1) |
 
 ## Contracts
 
@@ -46,6 +54,18 @@
 | `VelocityData` | Type | cli (history trend display) |
 | `ParsedReport` | Type | cli (run envelope surfacing) |
 | `computeVelocity(durationMs, agentDir, runId)` | Function | runner (post-run velocity computation) |
+| `Side` / `InboxMessage` / `OutsideState` / `InsideState` / `SideState` / `StateHistoryEntry` | Type | mcp (P4 tools), cli (P5 outside surface), adapter (P2 events) |
+| `CoordinationFrontmatter` | Type | runner (`AgentDefinition.coordination`), preamble-builder (P2) |
+| `detectContext()` | Function | cli (P5 preAction context-block hook), preamble-builder (P2) |
+| `MINIH_ENV_KEYS_COORDINATION` / `MINIH_ENV_KEYS_ALL` | Const | mcp (P4 spawn config), runner (existing MINIH_ENV_KEYS still owns its 14 keys) |
+| `getCoordinationEnv()` | Function | mcp (P4 server), cli (P5 inside-detection) |
+| `readStateLazy(side, slug, agentsDir)` / `writeState(...)` / `appendHistory(...)` | Function | mcp (P4 state.* tools), cli (P5 state subcommands), runner (P2 finalize snapshot) |
+| `inboxLanePath` / `stateFilePath` / `historyPath` / `watermarkPath` / `outsideMdPath` / `hasOutsideMd` | Function | cli (P5 outside-send), mcp (P4 inbox/state tools), runner (P3 file-watcher + forwarders) |
+| `writeFileAtomic` / `writeFileAtomicAsync` / `AtomicWriteCrossFsError` | Function/Class | mcp (P4 state writes), runner (P3 watermark fsync) |
+| `ulid()` | Function | mcp (P4 inbox.send), cli (P5 outside-send) |
+| `StateCorruptError` / `HistoryLineTooLargeError` / `InvalidSlugError` / `InvalidCoordinationFrontmatterError` / `OutsideAgentsDirError` | Error | mcp + cli (typed error handling) |
+| `AgentDefinition.outsideContract` / `AgentDefinition.coordination` | Type field | preamble-builder (P2 — peer contract injection), cli (P5 outside-context, init --coordinated) |
+| `inbox-message.json` / `outside-state.json` / `inside-state.json` / `state-history-entry.json` | JSON Schema | mcp (P4 AJV input/output validation), cli (P5 outside-send validation) |
 
 ## Concepts
 
@@ -59,6 +79,13 @@
 | Velocity tracking | Per-agent velocity data computed at run end, stored in completed.json. Chains from prior runs for O(1) computation. |
 | Difficulty ledger | Agents report structured friction in `retrospective.difficulties`. Pipeline: agents report → `minih difficulties` aggregates → human curates preamble. |
 | Parsed report surfacing | Runner parses report.json after run to extract summary/magicWand/difficulties for CLI envelope. |
+| Outside / inside contexts | `detectContext()` reads `MINIH=1` (strict equality). Coordination is opt-in per agent via `coordination:` frontmatter. |
+| Per-agent shared state | Inbox + state files live at `agents/<slug>/{inbox,state}/`, NOT per-run isolation. Cross-run continuity by design (workshop 001). Atomic writes via `writeFileAtomic` (POSIX rename); concurrent writers exhibit last-write-wins, no corruption. |
+| State as data, not rules | `state.ts` is pure helpers — no rule engine, no transition gates. Per-agent enums (P6) provide constraint at MCP `state.transition` time; outside negotiates via inbox if it disagrees (workshop 002 + didyouknow #2). |
+| Lazy state default | `readStateLazy` returns synthetic `{status: 'idle', ...}` when file absent — never persisted. Corruption (invalid JSON, missing fields) throws `StateCorruptError` — never silently masked as a default. |
+| Append-only history | `appendHistory` enforces line ≤ PIPE_BUF (4096 bytes) so single-call POSIX `appendFile` is atomic against concurrent appenders. Auto-populates `peerStateAtTime` from peer side's lazy-read state when caller omits it. |
+| Outside contract layer | `outside.md` (plain markdown, body only — no frontmatter parsing) carries the peer contract for coordinated agents. Loaded by `listAgents` into `AgentDefinition.outsideContract`. P2 preamble-builder injects under a Peer's Contract section in the inside prompt. |
+| ULID monotonicity contract | `ulid()` preserves lex-sort order under sub-millisecond bursts (increments randomness suffix) AND under clock rewind (NTP step-backward — reuses prior timestamp + increments). Crockford-base32 alphabet; 48-bit ms + 80-bit randomness. |
 | Session resume | Resume sends follow-up message directly — skips prompt assembly and system output validation. SDK conversation history provides context. |
 
 ## History
@@ -72,3 +99,4 @@
 | FX002-agent-ux | Added tool elapsed timer to pretty mode. Added fuzzy property name suggestions to validator error messages (substring + Levenshtein matching). |
 | 003-resume-prompt | Added `sessionId`, `resumedFromRunId`, `promptOverride` to `AgentRunConfig`. Added `resumedFromRunId` to `CompletedMetadata`. Added `findRunSession()` helper. Resume path in `runAgent()` skips system validation and sends follow-up message directly. |
 | 006-compounding-value | Added `VelocityData`, `ParsedReport` types. `computeVelocity()` computes per-agent velocity at run end. Report.json parsed after run for envelope surfacing. `magicWandTarget` + `difficulties` added to retro/system-output schemas. SYSTEM_OUTPUT_INSTRUCTIONS updated with difficulty reporting guidance. |
+| 007-backgrounding P1 | Coordination foundations (pure addition). NEW: `state.ts` (pure helpers, no rule engine), `context.ts` (`detectContext` + composed env-key array), `atomic-write.ts` (POSIX write-then-rename + typed errors), `ulid.ts` (in-tree, monotonic). 4 NEW JSON schemas: inbox-message, default outside-state, default inside-state, state-history-entry. EXTENDED `folder.ts`: 6 path helpers (all absolute, slug-validated), outside.md discovery (truncate at 16KB, symlink-out-of-tree guard), `parseFrontmatter` recognizes `coordination` field (3 valid forms, 4 typed-error cases). EXTENDED `AgentDefinition` with `outsideContract` + `coordination`. EXPORTED `MINIH_ENV_KEYS` from runner.ts. Added `ajv-formats@^3.0.1` (decision logged — needed for live `format: date-time` validation). 230/230 tests pass; baseline diff against pre-P1 dist exit=0; zero behavior change to existing 9 agents. P2 unlocked. |

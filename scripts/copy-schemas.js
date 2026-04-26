@@ -6,6 +6,13 @@ const dest = 'dist/schemas';
 
 mkdirSync(dest, { recursive: true });
 
-for (const file of ['system-output.json', 'retrospective.json']) {
+for (const file of [
+  'system-output.json',
+  'retrospective.json',
+  'inbox-message.json',
+  'outside-state.json',
+  'inside-state.json',
+  'state-history-entry.json',
+]) {
   copyFileSync(join(src, file), join(dest, file));
 }

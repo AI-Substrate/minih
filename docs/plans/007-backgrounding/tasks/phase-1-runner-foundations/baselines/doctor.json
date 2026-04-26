@@ -1,0 +1,143 @@
+{
+  "command": "doctor",
+  "status": "ok",
+  "timestamp": "2026-04-26T06:07:20.820Z",
+  "data": {
+    "agents": [
+      {
+        "slug": "code-review",
+        "checks": [
+          { "check": "prompt.md", "status": "pass" },
+          {
+            "check": "frontmatter",
+            "status": "pass",
+            "message": "Read-only code review with domain compliance, anti-reinvention check, and structured findings."
+          },
+          { "check": "output-schema", "status": "pass" },
+          { "check": "retrospective", "status": "pass" },
+          { "check": "input-schema", "status": "pass" },
+          { "check": "instructions", "status": "pass" }
+        ]
+      },
+      {
+        "slug": "convention-check",
+        "checks": [
+          { "check": "prompt.md", "status": "pass" },
+          {
+            "check": "frontmatter",
+            "status": "pass",
+            "message": "Validate all minih agents follow folder conventions, frontmatter, and schema rules"
+          },
+          { "check": "output-schema", "status": "pass" },
+          { "check": "retrospective", "status": "pass" },
+          { "check": "instructions", "status": "pass" }
+        ]
+      },
+      {
+        "slug": "feedback-digest",
+        "checks": [
+          { "check": "prompt.md", "status": "pass" },
+          {
+            "check": "frontmatter",
+            "status": "pass",
+            "message": "Aggregate magic wand feedback from all agents' recent runs into a prioritized improvement digest"
+          },
+          { "check": "output-schema", "status": "pass" },
+          { "check": "retrospective", "status": "pass" }
+        ]
+      },
+      {
+        "slug": "first-time-experience",
+        "checks": [
+          { "check": "prompt.md", "status": "pass" },
+          {
+            "check": "frontmatter",
+            "status": "pass",
+            "message": "Simulate a brand-new user's first time using minih — create, run, and review an agent via npx."
+          },
+          { "check": "output-schema", "status": "pass" },
+          { "check": "retrospective", "status": "pass" },
+          { "check": "input-schema", "status": "pass" },
+          { "check": "instructions", "status": "pass" }
+        ]
+      },
+      {
+        "slug": "hello-world",
+        "checks": [
+          { "check": "prompt.md", "status": "pass" },
+          {
+            "check": "frontmatter",
+            "status": "pass",
+            "message": "Confirm minih is working by reporting your environment and capabilities"
+          },
+          {
+            "check": "output-schema",
+            "status": "skip",
+            "message": "No output-schema.json"
+          }
+        ]
+      },
+      {
+        "slug": "mcp-smoke-test",
+        "checks": [
+          { "check": "prompt.md", "status": "pass" },
+          {
+            "check": "frontmatter",
+            "status": "pass",
+            "message": "Validate MCP tools are available in minih agent sessions"
+          },
+          { "check": "output-schema", "status": "pass" },
+          { "check": "retrospective", "status": "pass" }
+        ]
+      },
+      {
+        "slug": "prompt-review",
+        "checks": [
+          { "check": "prompt.md", "status": "pass" },
+          {
+            "check": "frontmatter",
+            "status": "pass",
+            "message": "Review another agent's prompt.md for clarity, completeness, and minih conventions"
+          },
+          { "check": "output-schema", "status": "pass" },
+          { "check": "retrospective", "status": "pass" },
+          { "check": "input-schema", "status": "pass" },
+          { "check": "instructions", "status": "pass" }
+        ]
+      },
+      {
+        "slug": "self-review",
+        "checks": [
+          { "check": "prompt.md", "status": "pass" },
+          {
+            "check": "frontmatter",
+            "status": "pass",
+            "message": "Review a source file for code quality, patterns, and minih conventions"
+          },
+          { "check": "output-schema", "status": "pass" },
+          { "check": "retrospective", "status": "pass" },
+          { "check": "input-schema", "status": "pass" },
+          { "check": "instructions", "status": "pass" }
+        ]
+      },
+      {
+        "slug": "smoke-test",
+        "checks": [
+          { "check": "prompt.md", "status": "pass" },
+          {
+            "check": "frontmatter",
+            "status": "pass",
+            "message": "End-to-end smoke test of all minih CLI commands and the full agent lifecycle"
+          },
+          { "check": "output-schema", "status": "pass" },
+          { "check": "retrospective", "status": "pass" }
+        ]
+      }
+    ],
+    "preamble": {
+      "exists": true,
+      "path": "/Users/jordanknight/substrate/minih/agents/_shared/preamble.md"
+    },
+    "summary": { "total": 9, "healthy": 9, "warnings": 0, "errors": 0 }
+  }
+}

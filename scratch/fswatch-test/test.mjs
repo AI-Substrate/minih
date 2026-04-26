@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 /**
  * Pre-Work Test #2 (workshop 007 § Pre-Work Required) — Plan 007-backgrounding
  *
@@ -31,11 +32,11 @@
  * NO GH_TOKEN REQUIRED — pure Node + child_process + fs.
  */
 
+import { spawn } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 const SCENARIO = process.argv[2] || 'all';
@@ -48,7 +49,9 @@ function ts() {
 }
 
 function log(label, data) {
-  process.stderr.write(`[${ts()}] [${label}] ${JSON.stringify(data).slice(0, 220)}\n`);
+  process.stderr.write(
+    `[${ts()}] [${label}] ${JSON.stringify(data).slice(0, 220)}\n`,
+  );
 }
 
 function quantile(sortedArr, q) {
@@ -110,12 +113,18 @@ async function scenarioLatency(workDir) {
     process.stderr.write('child-done\\n');
   `;
 
-  const child = spawn(process.execPath, ['--input-type=module', '-e', childCode], {
-    stdio: ['ignore', 'inherit', 'inherit'],
-  });
+  const child = spawn(
+    process.execPath,
+    ['--input-type=module', '-e', childCode],
+    {
+      stdio: ['ignore', 'inherit', 'inherit'],
+    },
+  );
 
   await new Promise((res, rej) => {
-    child.on('exit', (code) => (code === 0 ? res() : rej(new Error('child exit ' + code))));
+    child.on('exit', (code) =>
+      code === 0 ? res() : rej(new Error(`child exit ${code}`)),
+    );
     child.on('error', rej);
   });
 
@@ -154,8 +163,11 @@ async function scenarioLatency(workDir) {
     pairing: 'greedy: each write paired with first event ≥ wroteAt',
     note: 'fs.watch may coalesce events under burst — missed = unpaired writes (a single event covered multiple writes)',
     latencyStats: summaryStats(latencies),
-    pass: detectedCount > writes.length * 0.5 && (summaryStats(latencies)?.meanMs ?? Infinity) < 500,
-    explainer: 'Per-event detection isn\'t per-write because fs.watch coalesces. Pass = ≥50% detected AND mean ≤ 500ms; tight per-write detection isn\'t the goal — every-modification-eventually is.',
+    pass:
+      detectedCount > writes.length * 0.5 &&
+      (summaryStats(latencies)?.meanMs ?? Infinity) < 500,
+    explainer:
+      "Per-event detection isn't per-write because fs.watch coalesces. Pass = ≥50% detected AND mean ≤ 500ms; tight per-write detection isn't the goal — every-modification-eventually is.",
   };
 }
 
@@ -164,7 +176,7 @@ async function scenarioLatency(workDir) {
 // =====================================================================
 async function scenarioRename(workDir) {
   const target = path.join(workDir, 'state.json');
-  const tmp = path.join(workDir, 'state.json.tmp.' + process.pid);
+  const tmp = path.join(workDir, `state.json.tmp.${process.pid}`);
   await fsp.writeFile(target, JSON.stringify({ status: 'idle' }));
 
   const events = [];
@@ -187,7 +199,7 @@ async function scenarioRename(workDir) {
 
   // Categorize observed events
   const onTarget = events.filter((e) => e.filename === 'state.json');
-  const onTmp = events.filter((e) => e.filename && e.filename.startsWith('state.json.tmp.'));
+  const onTmp = events.filter((e) => e.filename?.startsWith('state.json.tmp.'));
 
   return {
     name: 'atomic-rename',
@@ -195,10 +207,12 @@ async function scenarioRename(workDir) {
     rawEvents: events.length,
     eventsOnTarget: onTarget.map((e) => e.eventType),
     eventsOnTmp: onTmp.map((e) => e.eventType),
-    expected: 'On macOS: rename event for tmp + rename event for target. On Linux: similar but watcher may also emit "change" for target.',
-    interpretation: onTarget.length === 0
-      ? 'NO EVENTS ON TARGET — fs.watch on the parent dir missed the rename to target. Bad.'
-      : `${onTarget.length} event(s) on target — atomic rename is observable.`,
+    expected:
+      'On macOS: rename event for tmp + rename event for target. On Linux: similar but watcher may also emit "change" for target.',
+    interpretation:
+      onTarget.length === 0
+        ? 'NO EVENTS ON TARGET — fs.watch on the parent dir missed the rename to target. Bad.'
+        : `${onTarget.length} event(s) on target — atomic rename is observable.`,
     pass: onTarget.length >= 1,
   };
 }
@@ -219,7 +233,7 @@ async function scenarioBurst(workDir) {
   // Burst from this process directly (no child subprocess overhead)
   const t0 = Date.now();
   for (let i = 0; i < BURST_WRITE_COUNT; i++) {
-    fs.appendFileSync(target, JSON.stringify({ i, t: Date.now() }) + '\n');
+    fs.appendFileSync(target, `${JSON.stringify({ i, t: Date.now() })}\n`);
   }
   const t1 = Date.now();
 
@@ -273,18 +287,20 @@ async function main() {
   }
 
   process.stderr.write('\n=== T002 SUMMARY ===\n');
-  process.stderr.write(JSON.stringify(
-    {
-      test: 'T002-fswatch-test',
-      scenario: SCENARIO,
-      platform: `${process.platform} ${os.release()}`,
-      nodeVersion: process.version,
-      results,
-      overallPass: results.every((r) => r.pass),
-    },
-    null,
-    2,
-  ) + '\n');
+  process.stderr.write(
+    `${JSON.stringify(
+      {
+        test: 'T002-fswatch-test',
+        scenario: SCENARIO,
+        platform: `${process.platform} ${os.release()}`,
+        nodeVersion: process.version,
+        results,
+        overallPass: results.every((r) => r.pass),
+      },
+      null,
+      2,
+    )}\n`,
+  );
 
   process.exit(results.every((r) => r.pass) ? 0 : 1);
 }

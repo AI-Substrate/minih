@@ -1,4 +1,16 @@
 export {
+  AtomicWriteCrossFsError,
+  writeFileAtomic,
+  writeFileAtomicAsync,
+} from './atomic-write.js';
+export type { CoordinationEnv } from './context.js';
+export {
+  detectContext,
+  getCoordinationEnv,
+  MINIH_ENV_KEYS_ALL,
+  MINIH_ENV_KEYS_COORDINATION,
+} from './context.js';
+export {
   displayEvent,
   displayHeader,
   displayPreflight,
@@ -9,28 +21,53 @@ export type { RunSession } from './folder.js';
 export {
   createRunFolder,
   findRunSession,
+  hasOutsideMd,
+  historyPath,
+  InvalidCoordinationFrontmatterError,
+  InvalidSlugError,
+  inboxLanePath,
   listAgents,
   loadMcpConfig,
+  OutsideAgentsDirError,
+  outsideMdPath,
   parseFrontmatter,
   resolveAgent,
+  stateFilePath,
   validateSlug,
+  watermarkPath,
 } from './folder.js';
 export { PrettyDisplay } from './pretty.js';
 export {
   computeVelocity,
+  MINIH_ENV_KEYS,
   runAgent,
   SYSTEM_OUTPUT_INSTRUCTIONS,
 } from './runner.js';
+export {
+  appendHistory,
+  HistoryLineTooLargeError,
+  readStateLazy,
+  StateCorruptError,
+  writeState,
+} from './state.js';
 export type {
   AgentDefinition,
   AgentRunConfig,
   AgentRunResult,
   CompletedMetadata,
+  CoordinationFrontmatter,
+  InboxMessage,
+  InsideState,
+  OutsideState,
   ParsedReport,
   RunEventStats,
+  Side,
+  SideState,
+  StateHistoryEntry,
   ValidationResult,
   VelocityData,
 } from './types.js';
+export { ulid } from './ulid.js';
 export {
   validateInput,
   validateOutput,

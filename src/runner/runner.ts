@@ -133,8 +133,13 @@ gh issue create --repo AI-Substrate/minih --title "bug: <title>" --body "<detail
 Only file for blocking issues, crashes, or missing capabilities — not minor nits.
 Your magicWand feedback is always captured; issues are for things that need immediate attention.`;
 
-/** All MINIH_* env var keys set during a run. */
-const MINIH_ENV_KEYS = [
+/**
+ * All MINIH_* env var keys set during a run.
+ *
+ * Exported (P1 / Phase 007) so `context.ts` can compose `MINIH_ENV_KEYS_ALL`
+ * for downstream consumers (P3 forwarders, P4 MCP spawn config).
+ */
+export const MINIH_ENV_KEYS = [
   'MINIH',
   'MINIH_AGENT_SLUG',
   'MINIH_RUN_ID',

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 /**
  * Pre-Work Test #4 (workshop 007 § Pre-Work test #4 + Critical Insights #1) — Plan 007-backgrounding
  *
@@ -42,11 +43,10 @@
  * NO GH_TOKEN REQUIRED.
  */
 
-import * as fs from 'node:fs';
+import { spawn } from 'node:child_process';
 import * as fsp from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 const SCENARIO = process.argv[2] || 'all';
@@ -58,7 +58,9 @@ function ts() {
 }
 
 function log(label, data) {
-  process.stderr.write(`[${ts()}] [${label}] ${JSON.stringify(data).slice(0, 220)}\n`);
+  process.stderr.write(
+    `[${ts()}] [${label}] ${JSON.stringify(data).slice(0, 220)}\n`,
+  );
 }
 
 /**
@@ -72,7 +74,11 @@ function log(label, data) {
 async function readNewMessages(inboxPath, watermarkBytes) {
   const buf = await fsp.readFile(inboxPath);
   if (buf.length <= watermarkBytes) {
-    return { newMessages: [], newWatermark: watermarkBytes, parseFailed: false };
+    return {
+      newMessages: [],
+      newWatermark: watermarkBytes,
+      parseFailed: false,
+    };
   }
   const slice = buf.subarray(watermarkBytes).toString('utf-8');
   const parts = slice.split('\n');
@@ -139,7 +145,9 @@ async function scenarioMultiWriter(workDir) {
     children.map(
       (c) =>
         new Promise((res, rej) => {
-          c.on('exit', (code) => (code === 0 ? res() : rej(new Error('child exit ' + code))));
+          c.on('exit', (code) =>
+            code === 0 ? res() : rej(new Error(`child exit ${code}`)),
+          );
           c.on('error', rej);
         }),
     ),
@@ -191,7 +199,7 @@ async function scenarioTornLine(workDir) {
   await fsp.writeFile(inboxPath, '');
 
   // Step 1: writer appends a complete line atomically
-  const completeLine1 = JSON.stringify({ id: 'msg-1', body: 'first complete' }) + '\n';
+  const completeLine1 = `${JSON.stringify({ id: 'msg-1', body: 'first complete' })}\n`;
   await fsp.appendFile(inboxPath, completeLine1);
 
   // Step 2: simulate a TORN write — open the file and write only PART of a JSON
@@ -235,7 +243,10 @@ async function scenarioTornLine(workDir) {
   //   - watermark stays at the start of the bad line
   //   - so the next legit line is NEVER processed unless we manually
   //     skip the bad one.
-  await fsp.appendFile(inboxPath, JSON.stringify({ id: 'msg-3', body: 'after garbage' }) + '\n');
+  await fsp.appendFile(
+    inboxPath,
+    `${JSON.stringify({ id: 'msg-3', body: 'after garbage' })}\n`,
+  );
   const pass4 = await readNewMessages(inboxPath, watermark);
 
   return {
@@ -246,7 +257,8 @@ async function scenarioTornLine(workDir) {
       parseFailed: pass1.parseFailed,
       newWatermark: pass1.newWatermark,
       incompleteTailBytes: pass1.incompleteTailBytes,
-      expected: 'messageIds=["msg-1"], parseFailed=false, incompleteTailBytes>0',
+      expected:
+        'messageIds=["msg-1"], parseFailed=false, incompleteTailBytes>0',
       ok:
         pass1.newMessages.length === 1 &&
         pass1.newMessages[0]?.id === 'msg-1' &&
@@ -257,8 +269,12 @@ async function scenarioTornLine(workDir) {
       messageCount: pass2.newMessages.length,
       messageIds: pass2.newMessages.map((m) => m.id),
       parseFailed: pass2.parseFailed,
-      expected: 'messageIds=["msg-2"], parseFailed=false (partial completed; forwarder picked it up)',
-      ok: pass2.newMessages.length === 1 && pass2.newMessages[0]?.id === 'msg-2' && !pass2.parseFailed,
+      expected:
+        'messageIds=["msg-2"], parseFailed=false (partial completed; forwarder picked it up)',
+      ok:
+        pass2.newMessages.length === 1 &&
+        pass2.newMessages[0]?.id === 'msg-2' &&
+        !pass2.parseFailed,
     },
     pass3_garbageLine: {
       messageCount: pass3.newMessages.length,
@@ -270,9 +286,11 @@ async function scenarioTornLine(workDir) {
     pass4_garbageBlocksFollowing: {
       messageCount: pass4.newMessages.length,
       parseFailed: pass4.parseFailed,
-      expected: 'parseFailed=true again — the garbage line BLOCKS forward progress until manually recovered. This is INTENTIONAL safety: better to halt than to skip silently.',
+      expected:
+        'parseFailed=true again — the garbage line BLOCKS forward progress until manually recovered. This is INTENTIONAL safety: better to halt than to skip silently.',
       ok: pass4.parseFailed === true,
-      caveat: 'This documents a known design tradeoff: the forwarder is conservative. A persistent garbage line (e.g., file corruption, hand-edit) requires operator intervention. For v1 this is acceptable; future enhancement: configurable max-skip-attempts before logging + skipping.',
+      caveat:
+        'This documents a known design tradeoff: the forwarder is conservative. A persistent garbage line (e.g., file corruption, hand-edit) requires operator intervention. For v1 this is acceptable; future enhancement: configurable max-skip-attempts before logging + skipping.',
     },
     pass:
       pass1.newMessages.length === 1 &&
@@ -286,7 +304,9 @@ async function scenarioTornLine(workDir) {
 
 // =====================================================================
 async function main() {
-  const workDir = await fsp.mkdtemp(path.join(os.tmpdir(), 't004-multi-watch-'));
+  const workDir = await fsp.mkdtemp(
+    path.join(os.tmpdir(), 't004-multi-watch-'),
+  );
   log('boot', { workDir, scenario: SCENARIO });
 
   const results = [];
@@ -302,18 +322,20 @@ async function main() {
   }
 
   process.stderr.write('\n=== T004 SUMMARY ===\n');
-  process.stderr.write(JSON.stringify(
-    {
-      test: 'T004-multi-process-watch',
-      platform: `${process.platform} ${os.release()}`,
-      nodeVersion: process.version,
-      scenario: SCENARIO,
-      results,
-      overallPass: results.every((r) => r.pass),
-    },
-    null,
-    2,
-  ) + '\n');
+  process.stderr.write(
+    `${JSON.stringify(
+      {
+        test: 'T004-multi-process-watch',
+        platform: `${process.platform} ${os.release()}`,
+        nodeVersion: process.version,
+        scenario: SCENARIO,
+        results,
+        overallPass: results.every((r) => r.pass),
+      },
+      null,
+      2,
+    )}\n`,
+  );
 
   process.exit(results.every((r) => r.pass) ? 0 : 1);
 }

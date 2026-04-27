@@ -1,7 +1,11 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { inboxLanePath, stateFilePath } from '../runner/folder.js';
+import {
+  coordinationRunLocation,
+  inboxLanePath,
+  stateFilePath,
+} from '../runner/folder.js';
 import { MCP_ENV_KEYS } from './context.js';
 import { MINIH_COORDINATION_SERVER_NAME } from './types.js';
 
@@ -35,12 +39,15 @@ export function buildInsideMcpServerConfig(
 
   const agentsDir = path.resolve(options.agentsDir);
   const runDir = path.resolve(options.runDir);
+  const location = coordinationRunLocation(
+    options.agentSlug,
+    agentsDir,
+    options.runId,
+  );
   const inboxDir = path.dirname(
-    path.dirname(inboxLanePath(options.agentSlug, agentsDir, 'inside')),
+    path.dirname(inboxLanePath(location, 'inside')),
   );
-  const stateDir = path.dirname(
-    stateFilePath(options.agentSlug, agentsDir, 'inside'),
-  );
+  const stateDir = path.dirname(stateFilePath(location, 'inside'));
 
   return {
     [MINIH_COORDINATION_SERVER_NAME]: {

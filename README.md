@@ -6,6 +6,8 @@
 
 Define AI agents as folders containing `prompt.md` + optional schemas + instructions, then run them against `@github/copilot-sdk`. Every agent produces structured retrospective feedback — what worked, what was confusing, and a **magic wand** wish for what should change. This feedback loop makes both the agents and the harness better over time.
 
+For long-running or multi-agent workflows, minih also supports **coordination-aware agents**: opt-in agents with an outside peer contract, run-scoped inbox/state files, outside CLI commands, and inside MCP tools for progress handoffs. Start with [`AGENTS_README.md#coordination-aware-agents`](AGENTS_README.md#coordination-aware-agents), then use [`docs/how/coordination-loop-validator.md`](docs/how/coordination-loop-validator.md) for the canonical rich worked example.
+
 ## Quick Start
 
 ### The Fast Way
@@ -202,6 +204,7 @@ Scaffold a new agent folder with templates.
 ```bash
 minih init my-agent                # prompt + output-schema + instructions
 minih init my-agent --with-input   # Also create input-schema.json
+minih init my-agent --coordinated  # Also create outside.md + state schemas
 minih init my-agent --no-output    # Skip output-schema.json
 ```
 
@@ -293,6 +296,8 @@ minih uses agents to test and improve itself. These are the best examples of how
 | [`convention-check`](agents/convention-check/) | Basic | Output schema, instructions, `$ref` to retrospective, CLI invocation |
 | [`prompt-review`](agents/prompt-review/) | Intermediate | Input params (`--param`), cross-agent file reading |
 | [`smoke-test`](agents/smoke-test/) | Advanced | Full CLI lifecycle test (init, doctor, check, dry-run) |
+| [`coordination-smoke-test`](agents/coordination-smoke-test/) | Advanced | Minimal primitive check for the outside/inside coordination surface |
+| [`coordination-loop-validator`](agents/coordination-loop-validator/) | Advanced | Rich worked example for the three-milestone outside/inside conversation loop |
 | [`feedback-digest`](agents/feedback-digest/) | Advanced | Cross-agent aggregation, feedback loop |
 | [`self-review`](agents/self-review/) | Complete | Production-grade code review with complex schema |
 

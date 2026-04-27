@@ -3,12 +3,17 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { inboxLanePath } from '../../src/runner/folder.js';
+import {
+  coordinationRunLocation,
+  inboxLanePath,
+} from '../../src/runner/folder.js';
 import type { InboxMessage } from '../../src/runner/types.js';
 
 let tmpDir: string;
 let agentsDir: string;
 const cliPath = path.resolve('dist/cli/index.js');
+const runId = 'run-123';
+const otherRunId = 'run-456';
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'minih-outside-send-'));
@@ -51,11 +56,18 @@ tags: []
 # ${slug}
 `,
   );
+  fs.mkdirSync(path.join(dir, 'runs', runId), { recursive: true });
 }
 
-function readOutsideLane(): InboxMessage[] {
+function readOutsideLane(targetRunId = runId): InboxMessage[] {
   return fs
-    .readFileSync(inboxLanePath('demo', agentsDir, 'outside'), 'utf8')
+    .readFileSync(
+      inboxLanePath(
+        coordinationRunLocation('demo', agentsDir, targetRunId),
+        'outside',
+      ),
+      'utf8',
+    )
     .trimEnd()
     .split('\n')
     .map((line) => JSON.parse(line) as InboxMessage);
@@ -74,6 +86,8 @@ describe('outside-send', () => {
       'Please begin.',
       '--agents-dir',
       agentsDir,
+      '--run',
+      runId,
     ]);
 
     expect(exitCode).toBe(0);
@@ -95,6 +109,50 @@ describe('outside-send', () => {
     ]);
   });
 
+  it('keeps outside messages isolated between runs of the same agent', () => {
+    fs.mkdirSync(path.join(agentsDir, 'demo', 'runs', otherRunId), {
+      recursive: true,
+    });
+
+    const first = run([
+      'outside-send',
+      'demo',
+      '--type',
+      'note',
+      '--subject',
+      'Run one',
+      '--body',
+      'First run.',
+      '--agents-dir',
+      agentsDir,
+      '--run',
+      runId,
+    ]);
+    const second = run([
+      'outside-send',
+      'demo',
+      '--type',
+      'note',
+      '--subject',
+      'Run two',
+      '--body',
+      'Second run.',
+      '--agents-dir',
+      agentsDir,
+      '--run',
+      otherRunId,
+    ]);
+
+    expect(first.exitCode).toBe(0);
+    expect(second.exitCode).toBe(0);
+    expect(readOutsideLane(runId)).toEqual([
+      expect.objectContaining({ subject: 'Run one' }),
+    ]);
+    expect(readOutsideLane(otherRunId)).toEqual([
+      expect.objectContaining({ subject: 'Run two' }),
+    ]);
+  });
+
   it('requires and persists --ack-of for ack messages', () => {
     const missing = run([
       'outside-send',
@@ -107,6 +165,8 @@ describe('outside-send', () => {
       'Acked',
       '--agents-dir',
       agentsDir,
+      '--run',
+      runId,
     ]);
     expect(missing.exitCode).toBe(1);
     expect(JSON.parse(missing.stdout).error.code).toBe('E108');
@@ -125,6 +185,8 @@ describe('outside-send', () => {
       ackOf,
       '--agents-dir',
       agentsDir,
+      '--run',
+      runId,
     ]);
 
     expect(sent.exitCode).toBe(0);
@@ -145,6 +207,8 @@ describe('outside-send', () => {
       'Body',
       '--agents-dir',
       agentsDir,
+      '--run',
+      runId,
     ]);
     expect(missing.exitCode).toBe(1);
     expect(JSON.parse(missing.stdout).error.code).toBe('E121');
@@ -160,6 +224,8 @@ describe('outside-send', () => {
       'Body',
       '--agents-dir',
       agentsDir,
+      '--run',
+      runId,
     ]);
     expect(badSlug.exitCode).toBe(1);
     expect(JSON.parse(badSlug.stdout).error.code).toBe('E108');
@@ -177,6 +243,8 @@ describe('outside-send', () => {
       'x'.repeat(10001),
       '--agents-dir',
       agentsDir,
+      '--run',
+      runId,
     ]);
 
     expect(result.exitCode).toBe(1);

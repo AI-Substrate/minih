@@ -120,7 +120,7 @@ describe('init --coordinated', () => {
 
     const envelope = JSON.parse(stdout);
     expect(envelope.data.prompt).toContain('## Your Context (coordination)');
-    expect(envelope.data.prompt).toContain('inbox.list');
+    expect(envelope.data.prompt).toContain('inbox_list');
     expect(envelope.data.prompt).toContain(
       "## Peer's Contract (from outside.md)",
     );

@@ -20,6 +20,7 @@ import type {
 } from '../adapter/events.js';
 import type { IAgentAdapter } from '../adapter/interface.js';
 import {
+  coordinationRunLocation,
   createRunFolder,
   inboxLanePath,
   parseFrontmatter,
@@ -30,7 +31,6 @@ import {
   type InboxForwarder,
 } from './inbox-forwarder.js';
 import { buildInsidePreamble } from './preamble-builder.js';
-import { acquireRunLock, type RunLock } from './run-lock.js';
 import { readStateLazy } from './state.js';
 import {
   createStateForwarder,
@@ -352,14 +352,17 @@ export async function runAgent(
   process.env.MINIH_PARAMS = JSON.stringify(config.params ?? {});
   if (coordinationEnabled && agentsDir) {
     const resolvedCoordinationAgentsDir = path.resolve(agentsDir);
+    const coordinationLocation = coordinationRunLocation(
+      definition.slug,
+      resolvedCoordinationAgentsDir,
+      runId,
+    );
     process.env.MINIH_CONTEXT = 'inside';
     process.env.MINIH_INBOX_DIR = path.dirname(
-      path.dirname(
-        inboxLanePath(definition.slug, resolvedCoordinationAgentsDir, 'inside'),
-      ),
+      path.dirname(inboxLanePath(coordinationLocation, 'inside')),
     );
     process.env.MINIH_STATE_DIR = path.dirname(
-      stateFilePath(definition.slug, resolvedCoordinationAgentsDir, 'inside'),
+      stateFilePath(coordinationLocation, 'inside'),
     );
   }
 
@@ -412,7 +415,6 @@ export async function runAgent(
   let timedOut = false;
   const timeoutMs = (config.timeout ?? 300) * 1000;
 
-  let runLock: RunLock | null = null;
   let inboxForwarder: InboxForwarder | null = null;
   let stateForwarder: StateForwarder | null = null;
   const forwarderErrors: Error[] = [];
@@ -424,8 +426,6 @@ export async function runAgent(
     stateForwarder?.close();
     inboxForwarder = null;
     stateForwarder = null;
-    runLock?.release();
-    runLock = null;
   };
   const handleForwarderError = (error: Error): void => {
     forwarderErrors.push(error);
@@ -433,13 +433,10 @@ export async function runAgent(
   };
   const startForwarders = (sender: SessionSender): void => {
     if (!coordinationEnabled || !agentsDir) return;
-    runLock = acquireRunLock({
-      slug: definition.slug,
-      agentsDir,
-    });
     const forwarderOptions = {
       slug: definition.slug,
       agentsDir,
+      runId,
       sender,
       commitProgress: 'manual' as const,
       onError: handleForwarderError,
@@ -578,7 +575,7 @@ export async function runAgent(
 
   if (agentSucceeded && coordinationEnabled && agentsDir) {
     try {
-      snapshotCoordinationFiles(definition.slug, agentsDir, runDir);
+      snapshotCoordinationFiles(definition.slug, agentsDir, runId, runDir);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       agentResult = {
@@ -755,14 +752,16 @@ function listArtifacts(dir: string, base?: string): string[] {
 function snapshotCoordinationFiles(
   slug: string,
   agentsDir: string,
+  runId: string,
   runDir: string,
 ): void {
   const resolvedAgentsDir = path.resolve(agentsDir);
+  const location = coordinationRunLocation(slug, resolvedAgentsDir, runId);
   const inboxSnapshotDir = path.join(runDir, 'inbox-snapshot');
   fs.mkdirSync(inboxSnapshotDir, { recursive: true });
 
   for (const lane of ['outside', 'inside'] as const) {
-    const source = inboxLanePath(slug, resolvedAgentsDir, lane);
+    const source = inboxLanePath(location, lane);
     const target = path.join(inboxSnapshotDir, `${lane}.ndjson`);
     const content = fs.existsSync(source)
       ? fs.readFileSync(source, 'utf8')
@@ -770,8 +769,8 @@ function snapshotCoordinationFiles(
     fs.writeFileSync(target, content);
   }
 
-  const outside = readPresentState('outside', slug, resolvedAgentsDir);
-  const inside = readPresentState('inside', slug, resolvedAgentsDir);
+  const outside = readPresentState(location, 'outside');
+  const inside = readPresentState(location, 'inside');
   fs.writeFileSync(
     path.join(runDir, 'state-snapshot.json'),
     JSON.stringify({ outside, inside }, null, 2),
@@ -779,12 +778,11 @@ function snapshotCoordinationFiles(
 }
 
 function readPresentState(
+  location: ReturnType<typeof coordinationRunLocation>,
   side: 'outside' | 'inside',
-  slug: string,
-  agentsDir: string,
 ): ReturnType<typeof readStateLazy> | null {
-  if (!fs.existsSync(stateFilePath(slug, agentsDir, side))) return null;
-  return readStateLazy(side, slug, agentsDir);
+  if (!fs.existsSync(stateFilePath(location, side))) return null;
+  return readStateLazy(location, side);
 }
 
 /**

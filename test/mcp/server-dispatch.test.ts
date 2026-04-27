@@ -11,7 +11,10 @@ import {
   listMinihMcpTools,
 } from '../../src/mcp/server.js';
 import { MCP_TOOL_NAMES } from '../../src/mcp/types.js';
-import { inboxLanePath } from '../../src/runner/folder.js';
+import {
+  coordinationRunLocation,
+  inboxLanePath,
+} from '../../src/runner/folder.js';
 import type { InboxMessage } from '../../src/runner/types.js';
 
 let tmpDir: string;
@@ -32,8 +35,8 @@ beforeEach(() => {
     agentSlug,
     agentsDir,
     agentDir,
-    inboxDir: path.join(agentDir, 'inbox'),
-    stateDir: path.join(agentDir, 'state'),
+    inboxDir: path.join(agentDir, 'runs', 'run-123', 'inbox'),
+    stateDir: path.join(agentDir, 'runs', 'run-123', 'state'),
     processMarker: 'minih-mcp-run-123',
   };
   fs.mkdirSync(context.runDir, { recursive: true });
@@ -54,7 +57,7 @@ describe('MCP server dispatcher', () => {
   });
 
   it('dispatches successful tool calls', () => {
-    const result = dispatchToolCall(context, 'inbox.send', {
+    const result = dispatchToolCall(context, 'inbox_send', {
       subject: 'Hello',
       body: 'World',
     });
@@ -66,10 +69,22 @@ describe('MCP server dispatcher', () => {
   });
 
   it('dispatches typed tool errors through _meta.code', () => {
-    const result = dispatchToolCall(context, 'inbox.ack', { msgId: 'missing' });
+    const result = dispatchToolCall(context, 'inbox_ack', { msgId: 'missing' });
 
     expect(result.isError).toBe(true);
     expect(result._meta?.code).toBe('MCP_NOT_FOUND');
+  });
+
+  it('accepts legacy dotted tool names without exposing them in the manifest', () => {
+    const result = dispatchToolCall(context, 'inbox.send', {
+      subject: 'Hello',
+      body: 'World',
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(result.structuredContent).toMatchObject({
+      message: { sender: 'inside', subject: 'Hello', body: 'World' },
+    });
   });
 
   it('rejects unknown tools without throwing', () => {
@@ -127,8 +142,11 @@ function writePeerMessage(): void {
     ts: '2026-04-26T00:00:00Z',
   };
   const filePath = inboxLanePath(
-    context.agentSlug,
-    context.agentsDir,
+    coordinationRunLocation(
+      context.agentSlug,
+      context.agentsDir,
+      context.runId,
+    ),
     'outside',
   );
   fs.mkdirSync(path.dirname(filePath), { recursive: true });

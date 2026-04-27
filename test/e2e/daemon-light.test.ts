@@ -9,6 +9,7 @@ import type {
   IAgentAdapter,
 } from '../../src/adapter/index.js';
 import {
+  coordinationRunLocation,
   inboxLanePath,
   resolveAgent,
   stateFilePath,
@@ -32,7 +33,9 @@ afterEach(() => {
 class LiveForwarderAdapter implements IAgentAdapter {
   readonly prompts: string[] = [];
 
-  constructor(private readonly writeFromSibling: () => Promise<void>) {}
+  constructor(
+    private readonly writeFromSibling: (runDir: string) => Promise<void>,
+  ) {}
 
   async run(options: AgentRunOptions): Promise<AgentResult> {
     options.onEvent?.({
@@ -47,7 +50,8 @@ class LiveForwarderAdapter implements IAgentAdapter {
       },
     });
 
-    await this.writeFromSibling();
+    if (!options.cwd) throw new Error('expected run cwd');
+    await this.writeFromSibling(options.cwd);
     await waitFor(
       () =>
         this.prompts.some((prompt) =>
@@ -107,10 +111,17 @@ describeE2e('daemon-light coordination e2e', () => {
     const definition = resolveAgent(slug, tmpDir);
     if (!definition) throw new Error('expected daemon-light agent to resolve');
 
-    const inboxPath = inboxLanePath(slug, tmpDir, 'outside');
-    const outsideStatePath = stateFilePath(slug, tmpDir, 'outside');
-    const adapter = new LiveForwarderAdapter(() =>
-      writeCoordinationFilesFromSibling(inboxPath, outsideStatePath),
+    const adapter = new LiveForwarderAdapter((runDir) =>
+      writeCoordinationFilesFromSibling(
+        inboxLanePath(
+          coordinationRunLocation(slug, tmpDir, path.basename(runDir)),
+          'outside',
+        ),
+        stateFilePath(
+          coordinationRunLocation(slug, tmpDir, path.basename(runDir)),
+          'outside',
+        ),
+      ),
     );
 
     const result = await runAgent(

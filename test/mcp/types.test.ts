@@ -30,18 +30,22 @@ afterEach(() => {
 describe('MCP tool contracts', () => {
   it('defines exactly the six inside coordination tools', () => {
     expect(MCP_TOOL_NAMES).toEqual([
-      'inbox.list',
-      'inbox.send',
-      'inbox.ack',
-      'state.get',
-      'state.set',
-      'state.transition',
+      'inbox_list',
+      'inbox_send',
+      'inbox_ack',
+      'state_get',
+      'state_set',
+      'state_transition',
     ]);
     expect(TOOL_CONTRACTS.map((tool) => tool.name)).toEqual(MCP_TOOL_NAMES);
+    expect(MCP_TOOL_NAMES.every((name) => /^[a-zA-Z0-9_-]+$/.test(name))).toBe(
+      true,
+    );
   });
 
   it('identifies supported tool names', () => {
-    expect(isMcpToolName('inbox.list')).toBe(true);
+    expect(isMcpToolName('inbox_list')).toBe(true);
+    expect(isMcpToolName('inbox.list')).toBe(false);
     expect(isMcpToolName('outside.list')).toBe(false);
   });
 
@@ -132,8 +136,8 @@ function makeEnv(): Record<string, string> {
   const agentSlug = 'code-review';
   const agentDir = path.join(agentsDir, agentSlug);
   const runDir = path.join(agentDir, 'runs', 'run-123');
-  const inboxDir = path.join(agentDir, 'inbox');
-  const stateDir = path.join(agentDir, 'state');
+  const inboxDir = path.join(runDir, 'inbox');
+  const stateDir = path.join(runDir, 'state');
   for (const dir of [runDir, inboxDir, stateDir]) {
     fs.mkdirSync(dir, { recursive: true });
   }

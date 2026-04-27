@@ -8,6 +8,7 @@ import type {
   IAgentAdapter,
 } from '../../src/adapter/index.js';
 import {
+  coordinationRunLocation,
   inboxLanePath,
   resolveAgent,
   stateFilePath,
@@ -28,7 +29,10 @@ afterEach(() => {
 });
 
 class NoSessionReadyAdapter implements IAgentAdapter {
-  async run(_options: AgentRunOptions): Promise<AgentResult> {
+  constructor(private readonly setup?: (options: AgentRunOptions) => void) {}
+
+  async run(options: AgentRunOptions): Promise<AgentResult> {
+    this.setup?.(options);
     return {
       output: validSystemOutput(),
       sessionId: 'snapshot-session',
@@ -108,9 +112,6 @@ describe('run-folder coordination snapshots', () => {
 
   it('copies inbox lanes byte-for-byte and snapshots present side states', async () => {
     const definition = createCoordinatedAgent('filled-snapshot');
-    const outsideLane = inboxLanePath('filled-snapshot', tmpDir, 'outside');
-    fs.mkdirSync(path.dirname(outsideLane), { recursive: true });
-    fs.writeFileSync(outsideLane, 'not-json-but-preserved\n');
     const insideState: InsideState = {
       status: 'reviewing',
       data: { phase: 6 },
@@ -123,11 +124,21 @@ describe('run-folder coordination snapshots', () => {
       updatedAt: '2026-04-26T00:00:01Z',
       updatedBy: 'outside',
     };
-    writeState('inside', 'filled-snapshot', tmpDir, insideState);
-    writeState('outside', 'filled-snapshot', tmpDir, outsideState);
 
     const result = await runAgent(
-      new NoSessionReadyAdapter(),
+      new NoSessionReadyAdapter((options) => {
+        if (!options.cwd) throw new Error('expected run cwd');
+        const location = coordinationRunLocation(
+          'filled-snapshot',
+          tmpDir,
+          path.basename(options.cwd),
+        );
+        const outsideLane = inboxLanePath(location, 'outside');
+        fs.mkdirSync(path.dirname(outsideLane), { recursive: true });
+        fs.writeFileSync(outsideLane, 'not-json-but-preserved\n');
+        writeState(location, 'inside', insideState);
+        writeState(location, 'outside', outsideState);
+      }),
       definition,
       { slug: 'filled-snapshot' },
       undefined,
@@ -151,22 +162,32 @@ describe('run-folder coordination snapshots', () => {
     ).toEqual({ outside: outsideState, inside: insideState });
     expect(result.metadata.artifacts).toEqual([
       'events.ndjson',
+      'inbox/outside/messages.ndjson',
       'inbox-snapshot/inside.ndjson',
       'inbox-snapshot/outside.ndjson',
       'output/report.json',
       'prompt.md',
+      'state/inside.json',
+      'state/outside.json',
       'state-snapshot.json',
     ]);
   });
 
   it('fails finalization actionably for corrupt present state files', async () => {
     const definition = createCoordinatedAgent('corrupt-state');
-    const outsideState = stateFilePath('corrupt-state', tmpDir, 'outside');
-    fs.mkdirSync(path.dirname(outsideState), { recursive: true });
-    fs.writeFileSync(outsideState, '{bad json');
 
     const result = await runAgent(
-      new NoSessionReadyAdapter(),
+      new NoSessionReadyAdapter((options) => {
+        if (!options.cwd) throw new Error('expected run cwd');
+        const location = coordinationRunLocation(
+          'corrupt-state',
+          tmpDir,
+          path.basename(options.cwd),
+        );
+        const outsideState = stateFilePath(location, 'outside');
+        fs.mkdirSync(path.dirname(outsideState), { recursive: true });
+        fs.writeFileSync(outsideState, '{bad json');
+      }),
       definition,
       { slug: 'corrupt-state' },
       undefined,

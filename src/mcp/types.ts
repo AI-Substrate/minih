@@ -3,15 +3,24 @@ import type { Side } from '../runner/types.js';
 export const MINIH_COORDINATION_SERVER_NAME = 'minih-coordination';
 
 export const MCP_TOOL_NAMES = [
-  'inbox.list',
-  'inbox.send',
-  'inbox.ack',
-  'state.get',
-  'state.set',
-  'state.transition',
+  'inbox_list',
+  'inbox_send',
+  'inbox_ack',
+  'state_get',
+  'state_set',
+  'state_transition',
 ] as const;
 
 export type McpToolName = (typeof MCP_TOOL_NAMES)[number];
+
+const LEGACY_MCP_TOOL_ALIASES = {
+  'inbox.list': 'inbox_list',
+  'inbox.send': 'inbox_send',
+  'inbox.ack': 'inbox_ack',
+  'state.get': 'state_get',
+  'state.set': 'state_set',
+  'state.transition': 'state_transition',
+} as const satisfies Record<string, McpToolName>;
 
 export type McpErrorCode =
   | 'MCP_CONTEXT_INVALID'
@@ -143,7 +152,7 @@ const sideSchema: JsonSchema = {
 
 export const TOOL_CONTRACTS: readonly ToolContract[] = [
   {
-    name: 'inbox.list',
+    name: 'inbox_list',
     description: 'List messages visible to the inside agent.',
     inputSchema: {
       type: 'object',
@@ -175,7 +184,7 @@ export const TOOL_CONTRACTS: readonly ToolContract[] = [
     },
   },
   {
-    name: 'inbox.send',
+    name: 'inbox_send',
     description: 'Send an append-only inbox message from the inside side.',
     inputSchema: {
       type: 'object',
@@ -195,7 +204,7 @@ export const TOOL_CONTRACTS: readonly ToolContract[] = [
     },
   },
   {
-    name: 'inbox.ack',
+    name: 'inbox_ack',
     description: 'Acknowledge a peer inbox message by id.',
     inputSchema: {
       type: 'object',
@@ -207,7 +216,7 @@ export const TOOL_CONTRACTS: readonly ToolContract[] = [
     },
   },
   {
-    name: 'state.get',
+    name: 'state_get',
     description: 'Read inside or outside state.',
     inputSchema: {
       type: 'object',
@@ -224,7 +233,7 @@ export const TOOL_CONTRACTS: readonly ToolContract[] = [
     },
   },
   {
-    name: 'state.set',
+    name: 'state_set',
     description: 'Set the inside state data and status.',
     inputSchema: {
       type: 'object',
@@ -237,7 +246,7 @@ export const TOOL_CONTRACTS: readonly ToolContract[] = [
     },
   },
   {
-    name: 'state.transition',
+    name: 'state_transition',
     description: 'Transition inside state status and append history.',
     inputSchema: {
       type: 'object',
@@ -254,4 +263,14 @@ export const TOOL_CONTRACTS: readonly ToolContract[] = [
 
 export function isMcpToolName(name: string): name is McpToolName {
   return (MCP_TOOL_NAMES as readonly string[]).includes(name);
+}
+
+export function normalizeMcpToolName(name: string): McpToolName | null {
+  if (isMcpToolName(name)) return name;
+  if (Object.hasOwn(LEGACY_MCP_TOOL_ALIASES, name)) {
+    return LEGACY_MCP_TOOL_ALIASES[
+      name as keyof typeof LEGACY_MCP_TOOL_ALIASES
+    ];
+  }
+  return null;
 }

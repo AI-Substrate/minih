@@ -3,6 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  coordinationRunLocation,
   createRunFolder,
   hasOutsideMd,
   historyPath,
@@ -295,13 +296,17 @@ describe('createRunFolder', () => {
 // ---------------------------------------------------------------------------
 
 describe('coordination path helpers (T007)', () => {
+  const location = () => coordinationRunLocation('hello', tmpDir, 'run-123');
+
   it('inboxLanePath returns absolute path with the correct lane', () => {
-    const p = inboxLanePath('hello', tmpDir, 'outside');
+    const p = inboxLanePath(location(), 'outside');
     expect(path.isAbsolute(p)).toBe(true);
     expect(p).toBe(
       path.join(
         path.resolve(tmpDir),
         'hello',
+        'runs',
+        'run-123',
         'inbox',
         'outside',
         'messages.ndjson',
@@ -310,21 +315,21 @@ describe('coordination path helpers (T007)', () => {
   });
 
   it('stateFilePath returns absolute path per side', () => {
-    const o = stateFilePath('hello', tmpDir, 'outside');
-    const i = stateFilePath('hello', tmpDir, 'inside');
+    const o = stateFilePath(location(), 'outside');
+    const i = stateFilePath(location(), 'inside');
     expect(path.isAbsolute(o) && path.isAbsolute(i)).toBe(true);
     expect(o).toMatch(/state\/outside\.json$/);
     expect(i).toMatch(/state\/inside\.json$/);
   });
 
   it('historyPath returns absolute path to history.ndjson', () => {
-    const p = historyPath('hello', tmpDir);
+    const p = historyPath(location());
     expect(path.isAbsolute(p)).toBe(true);
     expect(p).toMatch(/state\/history\.ndjson$/);
   });
 
   it('watermarkPath returns absolute path to sdk-watermark.json', () => {
-    const p = watermarkPath('hello', tmpDir);
+    const p = watermarkPath(location());
     expect(path.isAbsolute(p)).toBe(true);
     expect(p).toMatch(/state\/sdk-watermark\.json$/);
   });
@@ -341,14 +346,24 @@ describe('coordination path helpers (T007)', () => {
     ['x\\y', 'backslash'],
     ['', 'empty'],
   ])('all helpers throw InvalidSlugError for slug %j (%s)', (badSlug) => {
-    expect(() => inboxLanePath(badSlug, tmpDir, 'outside')).toThrow(
-      InvalidSlugError,
-    );
-    expect(() => stateFilePath(badSlug, tmpDir, 'outside')).toThrow(
-      InvalidSlugError,
-    );
-    expect(() => historyPath(badSlug, tmpDir)).toThrow(InvalidSlugError);
-    expect(() => watermarkPath(badSlug, tmpDir)).toThrow(InvalidSlugError);
+    expect(() =>
+      inboxLanePath(
+        coordinationRunLocation(badSlug, tmpDir, 'run-123'),
+        'outside',
+      ),
+    ).toThrow(InvalidSlugError);
+    expect(() =>
+      stateFilePath(
+        coordinationRunLocation(badSlug, tmpDir, 'run-123'),
+        'outside',
+      ),
+    ).toThrow(InvalidSlugError);
+    expect(() =>
+      historyPath(coordinationRunLocation(badSlug, tmpDir, 'run-123')),
+    ).toThrow(InvalidSlugError);
+    expect(() =>
+      watermarkPath(coordinationRunLocation(badSlug, tmpDir, 'run-123')),
+    ).toThrow(InvalidSlugError);
     expect(() => outsideMdPath(badSlug, tmpDir)).toThrow(InvalidSlugError);
     expect(() => hasOutsideMd(badSlug, tmpDir)).toThrow(InvalidSlugError);
   });

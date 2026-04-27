@@ -5,7 +5,7 @@
 **Workshops**: 8 — [001-filesystem-layout](./workshops/001-filesystem-layout.md) · [002-state-machine](./workshops/002-state-machine.md) · [003-mcp-tool-surface](./workshops/003-mcp-tool-surface.md) · [004-spawn-config-injection](./workshops/004-spawn-config-injection.md) · [005-preamble-and-prompting](./workshops/005-preamble-and-prompting.md) · [006-test-fixtures](./workshops/006-test-fixtures.md) · [007-user-journey-coder-and-reviewer](./workshops/007-user-journey-coder-and-reviewer.md) · [008-inside-outside-prompting-and-retro](./workshops/008-inside-outside-prompting-and-retro.md)
 **Research**: [research-dossier.md](./research-dossier.md) + [external-research/](./external-research/) (5 files)
 **Generated**: 2026-04-26 (plan-1b initial; revised after workshop 007 daemon-light pivot; plan-3 generated 2026-04-26)
-**Status**: **Phase 6 LANDED** — coordinated agents now get real inside prompt identity/tools/checklist/peer-contract guidance, widened coordination retrospectives, coordinated `init` scaffolds, `doctor` outside-contract checks, run-folder inbox/state snapshots, a four-file `coordination-smoke-test` dogfood agent, and an opt-in two-agent e2e.
+**Status**: **Phase 7 LANDED** — outside/inside coordination is implemented and documented across domain docs, README, agent authoring guide, contributor testing guidance, and repository agent instructions.
 
 Phase 0 LANDED 2026-04-26 — all 4 scratch tests executed; FULL GO memo at [prework-results.md](./prework-results.md); spec polished to 37 ACs.
 
@@ -156,8 +156,8 @@ graph LR
     P4[P4 MCP domain<br/>✓ IMPLEMENTED 2026-04-26]:::done
     P5L[P5 Outside CLI<br/>✓ LANDED 2026-04-26]:::done
     P6L[P6 Agent integration<br/>✓ LANDED 2026-04-26]:::done
-    P7N[P7 Polish + docs]:::next
-    Done[37 ACs verified]:::pending
+    P7N[P7 Polish + docs<br/>✓ LANDED 2026-04-27]:::done
+    Done[Coordination feature documented]:::done
 
     Spec --> WS
     WS --> Plan
@@ -196,7 +196,8 @@ graph LR
 13. ~~`/plan-6-v2-implement-phase` for P4~~ ✓ done — MCP domain landed
 14. ~~`/plan-6-v2-implement-phase` for P5~~ ✓ done — outside CLI surface landed
 15. ~~`/plan-6-v2-implement-phase` for P6~~ ✓ done — agent integration, prompt guidance, snapshots, smoke agent, and opt-in e2e landed
-16. Next: `/plan-5-v2-phase-tasks-and-brief --phase 7`
+16. ~~`/plan-5-v2-phase-tasks-and-brief --phase 7`~~ ✓ done — Phase 7 dossier + flight plan generated and validated
+17. ~~`/plan-6-v2-implement-phase` for P7~~ ✓ done — coordination docs finalized across domain docs, README, AGENTS_README, CONTRIBUTING, and AGENTS.md
 
 ---
 
@@ -219,3 +220,4 @@ graph LR
 | 2026-04-26 | Phase 5 implementation (plan-6) | LANDED | Outside CLI surface landed: context block, outside-send/list, outside state commands, outside-context, outside-retro, retros aggregation, command discovery, and run help tip; focused built-CLI tests pass |
 | 2026-04-26 | Phase 6 implementation (plan-6) | LANDED | Real coordinated prompt sections, widened coordination feedback schemas, runner env vars, coordinated init, doctor outside.md checks, run-folder snapshots, four-file coordination smoke agent, and opt-in two-agent e2e; focused tests and opt-in e2e pass |
 | 2026-04-26 | Phase 6 code-review follow-up | LANDED | Minih code-review run approved with 3 medium follow-ups; fixed canonical preamble scaffolding, dry-run prompt parity, and smoke-agent evidence wording; final `just fft` passes |
+| 2026-04-27 | Phase 7 implementation (plan-6) | LANDED | Finalized MCP/runner/CLI/adapter domain docs, registry, domain map, README discovery, coordination-aware author guide, contributor test matrix, and repository agent instructions; no source-code behavior changes |

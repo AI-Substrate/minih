@@ -251,6 +251,9 @@ agents/
 │   ├── output-schema.json       # JSON Schema for structured output (optional)
 │   ├── instructions.md          # Agent identity and rules (optional)
 │   ├── input-schema.json        # Input parameter validation (optional)
+│   ├── outside.md               # Outside peer contract for coordinated agents (optional)
+│   ├── inside-state.schema.json # Per-agent inside state enum/schema (optional)
+│   ├── outside-state.schema.json # Per-agent outside state enum/schema (optional)
 │   └── runs/                    # Auto-created — run artifacts (gitignored)
 │       └── 2026-04-06T.../
 │           ├── prompt.md        # Frozen copy of prompt at run time
@@ -355,6 +358,105 @@ Injected into every agent before their specific prompt. This is your agent onboa
 
 ---
 
+## Coordination-aware agents
+
+Coordinated agents have a two-sided workflow:
+
+- The **outside peer** is a human, CI job, host agent, or sibling process driving work from the project shell.
+- The **inside agent** is the minih run. It receives peer context in its prompt and can use inside MCP inbox/state tools while it works.
+
+Use coordination when the outside peer needs durable progress signals, review handoffs, or run-scoped inbox/state lanes for a long-running run. It is still one minih agent run, not a server-side rule engine.
+
+### Scaffold a coordinated agent
+
+```bash
+minih init coordination-smoke-test --coordinated
+```
+
+This creates:
+
+```text
+agents/coordination-smoke-test/
+├── prompt.md                  # includes coordination: enabled
+├── outside.md                 # outside peer contract
+├── inside-state.schema.json   # inside state enum/schema
+├── outside-state.schema.json  # outside state enum/schema
+├── instructions.md
+└── output-schema.json
+```
+
+The required switch is frontmatter on `prompt.md`:
+
+```yaml
+---
+description: "Dogfood the outside/inside coordination loop"
+coordination: enabled
+---
+```
+
+With coordination enabled, fresh runs get extra prompt sections for identity, available inside MCP tools, the peer contract from `outside.md`, and a pre-completion checklist. Non-coordinated agents keep the legacy prompt shape.
+
+### outside.md behavior
+
+`outside.md` is plain markdown for the outside peer. It is optional, but minih distinguishes three slug-specific states:
+
+| State | What it means | Inside prompt behavior |
+|-------|---------------|------------------------|
+| `absent` | No `outside.md` file exists | No peer-contract section is injected |
+| `empty` | The file exists but has no non-whitespace body | A present but empty peer-contract section is injected |
+| `present` | The file has content | The markdown is quoted under `## Peer's Contract (from outside.md)` |
+
+Run:
+
+```bash
+minih outside-context coordination-smoke-test
+```
+
+With no slug, `minih outside-context` returns system-only coordination guidance. With a slug, the JSON envelope includes `contractStatus` and `hasOutsideContract`.
+
+`minih doctor` checks coordinated `outside.md` files when present: it warns when the contract is older than `prompt.md`, warns above 4KB, fails above 8KB, and rejects symlink escapes through runner path guards. It leaves non-coordinated and absent outside contracts alone.
+
+### Driving the outside side
+
+The outside peer uses CLI commands from the project shell:
+
+```bash
+minih run coordination-smoke-test          # Start in another terminal/background shell
+RUN_ID=$(minih status coordination-smoke-test 2>/dev/null | jq -r '.data.runId')
+
+minih outside-send coordination-smoke-test \
+  --run "$RUN_ID" \
+  --subject "Smoke test request" \
+  --body "Please acknowledge this, publish state, and report back."
+
+minih state set coordination-smoke-test \
+  --run "$RUN_ID" \
+  --side outside \
+  --status in-progress \
+  --data-json '{"driver":"outside smoke test"}'
+minih outside-inbox-list coordination-smoke-test --run "$RUN_ID"
+minih state get coordination-smoke-test --run "$RUN_ID"
+minih retros --agent coordination-smoke-test --run "$RUN_ID"
+```
+
+The inside agent can use six MCP tools during the run: `inbox_list`, `inbox_send`, `inbox_ack`, `state_get`, `state_set`, and `state_transition`. Outside CLI commands do not call those tools directly; they read and write runner-managed inbox/state files under the selected run folder. Pass `--run <runId>` when multiple runs exist; minih only defaults when the target run is unambiguous.
+
+### Minimal vs rich coordination examples
+
+Use [`agents/coordination-smoke-test/`](./agents/coordination-smoke-test/) for the minimal primitive check: one coordinated run that exercises the inbox, state, and retrospective tools.
+
+Use [`agents/coordination-loop-validator/`](./agents/coordination-loop-validator/) for the richer canonical worked example: the outside side starts or attaches to an inside validator, watches with `minih status` and `minih tail`, sends exactly three manual milestone events, reads feedback, and validates final evidence. The full runbook lives in [`docs/how/coordination-loop-validator.md`](./docs/how/coordination-loop-validator.md).
+
+### State schemas and retrospectives
+
+Per-agent state schemas let you constrain status values for each side. The default coordinated scaffold uses simple inside statuses (`idle`, `working`, `reviewing`, `complete`, `blocked`) and outside statuses (`idle`, `in-progress`, `review-requested`, `done`, `blocked`); edit the schemas to match your workflow.
+
+Agent reports may include `retrospective.coordination` for unresolved peer requests, state publication notes, and coordination-specific blockers. Set `retrospective.magicWandTarget` to `"coordination"` when the feedback is about the outside/inside loop.
+
+See [`agents/coordination-smoke-test/`](./agents/coordination-smoke-test/) for the minimal dogfood example, including [`outside.md`](./agents/coordination-smoke-test/outside.md). See [`agents/coordination-loop-validator/`](./agents/coordination-loop-validator/) plus [`docs/how/coordination-loop-validator.md`](./docs/how/coordination-loop-validator.md) for the richer canonical loop worked example.
+
+---
+
 ## The Output Contract
 
 Every agent must produce a JSON object written to `$MINIH_OUTPUT_PATH` with at minimum:
@@ -452,6 +554,8 @@ Agents are high-frequency dev-loop tools — think CI checks, code reviews, test
 | [**first-time-experience**](https://github.com/AI-Substrate/minih/tree/main/agents/first-time-experience) | Simulates a new user's first time using minih via npx | Yes | default | After UX changes |
 | [**self-review**](https://github.com/AI-Substrate/minih/tree/main/agents/self-review) | Meta — reviews minih's own code and conventions | No | default | After minih changes |
 | [**mcp-smoke-test**](https://github.com/AI-Substrate/minih/tree/main/agents/mcp-smoke-test) | Validates MCP tools are available and callable in agent sessions | No | default | After MCP changes |
+| [**coordination-smoke-test**](https://github.com/AI-Substrate/minih/tree/main/agents/coordination-smoke-test) | Minimal primitive check for outside/inside inbox, state, and retro coordination | No | default | After coordination CLI/MCP changes |
+| [**coordination-loop-validator**](https://github.com/AI-Substrate/minih/tree/main/agents/coordination-loop-validator) | Rich worked example for a three-milestone outside/inside conversation loop | No | default | When validating coordination UX end to end |
 
 ---
 
@@ -582,6 +686,7 @@ minih connect my-agent --list    # Show all sessions with timestamps
 minih quickstart                          # Scaffold + run hello-world in one command
 minih init <slug>                         # Create agent folder with templates
 minih init <slug> --with-input            # Also create input-schema.json
+minih init <slug> --coordinated           # Also create outside.md + state schemas
 
 # Validation & inspection
 minih doctor                              # Check all agents for convention compliance
@@ -610,6 +715,15 @@ minih history <slug>                      # Past runs with status, duration, vel
 minih last-run <slug>                     # Latest run directory and report path
 minih difficulties                        # Aggregate difficulty reports across all agents
 minih difficulties --agent <slug>         # Filter to a specific agent
+
+# Outside/inside coordination
+minih outside-context [slug]              # Show system guidance or a slug's outside contract
+minih outside-send <slug> --run <runId> --subject ... --body ...
+minih outside-inbox-list <slug> --run <runId> # Read inside replies from the outside lane
+minih state get <slug> --run <runId>      # Read inside/outside state
+minih state set <slug> --run <runId> --side outside --status in-progress
+minih outside-retro <slug> --run <runId> --target coordination --body ...
+minih retros --agent <slug> --run <runId> # Aggregate inside + outside retrospectives
 
 # Session management
 minih resume <slug> "follow-up message"   # Send follow-up to last completed session

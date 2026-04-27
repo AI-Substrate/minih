@@ -74,25 +74,71 @@ export class OutsideAgentsDirError extends Error {
   }
 }
 
+export interface CoordinationRunLocation {
+  slug: string;
+  agentsDir: string;
+  runId: string;
+}
+
 function ensureValidSlug(slug: string): void {
   const err = validateSlug(slug);
   if (err !== null) throw new InvalidSlugError(slug, err);
+}
+
+function ensureValidRunId(runId: string): void {
+  if (!runId) throw new InvalidSlugError(runId, 'Run ID cannot be empty');
+  if (runId.includes('..')) {
+    throw new InvalidSlugError(runId, 'Run ID cannot contain ".."');
+  }
+  if (runId.includes('/')) {
+    throw new InvalidSlugError(runId, 'Run ID cannot contain "/"');
+  }
+  if (runId.includes('\\')) {
+    throw new InvalidSlugError(runId, 'Run ID cannot contain "\\"');
+  }
+  if (runId.includes('\0')) {
+    throw new InvalidSlugError(runId, 'Run ID cannot contain null bytes');
+  }
+  if (!/^[a-zA-Z0-9_.:-]{1,160}$/.test(runId)) {
+    throw new InvalidSlugError(
+      runId,
+      `Run ID must match [a-zA-Z0-9_.:-]{1,160}, got: "${runId}"`,
+    );
+  }
 }
 
 function resolveAbs(agentsDir: string): string {
   return path.resolve(agentsDir);
 }
 
-/** Absolute path to `agents/<slug>/inbox/<lane>/messages.ndjson`. */
-export function inboxLanePath(
+export function coordinationRunLocation(
   slug: string,
   agentsDir: string,
+  runId: string,
+): CoordinationRunLocation {
+  ensureValidSlug(slug);
+  ensureValidRunId(runId);
+  return { slug, agentsDir: resolveAbs(agentsDir), runId };
+}
+
+export function coordinationRunDir(location: CoordinationRunLocation): string {
+  ensureValidSlug(location.slug);
+  ensureValidRunId(location.runId);
+  return path.join(
+    resolveAbs(location.agentsDir),
+    location.slug,
+    'runs',
+    location.runId,
+  );
+}
+
+/** Absolute path to `agents/<slug>/inbox/<lane>/messages.ndjson`. */
+export function inboxLanePath(
+  location: CoordinationRunLocation,
   lane: Side,
 ): string {
-  ensureValidSlug(slug);
   return path.join(
-    resolveAbs(agentsDir),
-    slug,
+    coordinationRunDir(location),
     'inbox',
     lane,
     'messages.ndjson',
@@ -101,28 +147,24 @@ export function inboxLanePath(
 
 /** Absolute path to `agents/<slug>/state/<side>.json`. */
 export function stateFilePath(
-  slug: string,
-  agentsDir: string,
+  location: CoordinationRunLocation,
   side: Side,
 ): string {
-  ensureValidSlug(slug);
-  return path.join(resolveAbs(agentsDir), slug, 'state', `${side}.json`);
+  return path.join(coordinationRunDir(location), 'state', `${side}.json`);
 }
 
 /** Absolute path to `agents/<slug>/state/history.ndjson`. */
-export function historyPath(slug: string, agentsDir: string): string {
-  ensureValidSlug(slug);
-  return path.join(resolveAbs(agentsDir), slug, 'state', 'history.ndjson');
+export function historyPath(location: CoordinationRunLocation): string {
+  return path.join(coordinationRunDir(location), 'state', 'history.ndjson');
 }
 
 /**
- * Absolute path to the SDK forwarder's per-agent watermark file.
+ * Absolute path to the SDK forwarder's per-run watermark file.
  * P3 owns the file format + write logic; P1 only owns the path constant
  * (so it lives alongside the other coordination paths).
  */
-export function watermarkPath(slug: string, agentsDir: string): string {
-  ensureValidSlug(slug);
-  return path.join(resolveAbs(agentsDir), slug, 'state', 'sdk-watermark.json');
+export function watermarkPath(location: CoordinationRunLocation): string {
+  return path.join(coordinationRunDir(location), 'state', 'sdk-watermark.json');
 }
 
 /** Absolute path to `agents/<slug>/outside.md`. */

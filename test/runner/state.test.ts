@@ -8,6 +8,12 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  type CoordinationRunLocation,
+  coordinationRunLocation,
+  historyPath,
+  stateFilePath,
+} from '../../src/runner/folder.js';
+import {
   appendHistory,
   HistoryLineTooLargeError,
   InvalidSlugError,
@@ -19,10 +25,13 @@ import type { InsideState, OutsideState } from '../../src/runner/types.js';
 
 let agentsDir: string;
 const SLUG = 'fixture-agent';
+const RUN_ID = 'run-123';
+let location: CoordinationRunLocation;
 
 beforeEach(() => {
   agentsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'minih-state-'));
   fs.mkdirSync(path.join(agentsDir, SLUG), { recursive: true });
+  location = coordinationRunLocation(SLUG, agentsDir, RUN_ID);
 });
 
 afterEach(() => {
@@ -31,13 +40,17 @@ afterEach(() => {
 
 describe('readStateLazy()', () => {
   it('returns a synthetic default when file is absent (does not write)', () => {
-    const before = fs.existsSync(path.join(agentsDir, SLUG, 'state'));
-    const result = readStateLazy('outside', SLUG, agentsDir);
+    const before = fs.existsSync(
+      path.join(agentsDir, SLUG, 'runs', RUN_ID, 'state'),
+    );
+    const result = readStateLazy(location, 'outside');
     expect(result.status).toBe('idle');
     expect(result.data).toEqual({});
     expect(result.updatedBy).toBe('outside');
     // Lazy default is never persisted — directory should still not exist.
-    expect(fs.existsSync(path.join(agentsDir, SLUG, 'state'))).toBe(before);
+    expect(
+      fs.existsSync(path.join(agentsDir, SLUG, 'runs', RUN_ID, 'state')),
+    ).toBe(before);
   });
 
   it('round-trips a written state', () => {
@@ -47,33 +60,31 @@ describe('readStateLazy()', () => {
       updatedAt: '2026-04-26T05:00:00.000Z',
       updatedBy: 'outside',
     };
-    writeState('outside', SLUG, agentsDir, state);
-    expect(readStateLazy('outside', SLUG, agentsDir)).toEqual(state);
+    writeState(location, 'outside', state);
+    expect(readStateLazy(location, 'outside')).toEqual(state);
   });
 
   it('throws StateCorruptError on invalid JSON', () => {
-    const file = path.join(agentsDir, SLUG, 'state', 'outside.json');
+    const file = stateFilePath(location, 'outside');
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, '{not valid json');
-    expect(() => readStateLazy('outside', SLUG, agentsDir)).toThrow(
-      StateCorruptError,
-    );
+    expect(() => readStateLazy(location, 'outside')).toThrow(StateCorruptError);
   });
 
   it('throws StateCorruptError when required field is missing', () => {
-    const file = path.join(agentsDir, SLUG, 'state', 'outside.json');
+    const file = stateFilePath(location, 'outside');
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(
       file,
       JSON.stringify({ status: 'idle', updatedBy: 'outside' }),
     ); // missing data + updatedAt
-    expect(() => readStateLazy('outside', SLUG, agentsDir)).toThrow(
+    expect(() => readStateLazy(location, 'outside')).toThrow(
       /missing required field/,
     );
   });
 
   it('throws StateCorruptError on updatedBy mismatch', () => {
-    const file = path.join(agentsDir, SLUG, 'state', 'outside.json');
+    const file = stateFilePath(location, 'outside');
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(
       file,
@@ -84,23 +95,21 @@ describe('readStateLazy()', () => {
         updatedBy: 'inside', // wrong side
       }),
     );
-    expect(() => readStateLazy('outside', SLUG, agentsDir)).toThrow(
+    expect(() => readStateLazy(location, 'outside')).toThrow(
       /updatedBy mismatch/,
     );
   });
 
   it('throws StateCorruptError when file content is not an object', () => {
-    const file = path.join(agentsDir, SLUG, 'state', 'outside.json');
+    const file = stateFilePath(location, 'outside');
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, '[]');
-    expect(() => readStateLazy('outside', SLUG, agentsDir)).toThrow(
-      StateCorruptError,
-    );
+    expect(() => readStateLazy(location, 'outside')).toThrow(StateCorruptError);
   });
 
   // F002: type-check field values, not just key presence.
   it('throws StateCorruptError when status is not a string (F002)', () => {
-    const file = path.join(agentsDir, SLUG, 'state', 'outside.json');
+    const file = stateFilePath(location, 'outside');
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(
       file,
@@ -111,13 +120,13 @@ describe('readStateLazy()', () => {
         updatedBy: 'outside',
       }),
     );
-    expect(() => readStateLazy('outside', SLUG, agentsDir)).toThrow(
+    expect(() => readStateLazy(location, 'outside')).toThrow(
       /'status' must be a non-empty string/,
     );
   });
 
   it('throws StateCorruptError when data is not an object (F002)', () => {
-    const file = path.join(agentsDir, SLUG, 'state', 'outside.json');
+    const file = stateFilePath(location, 'outside');
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(
       file,
@@ -128,13 +137,13 @@ describe('readStateLazy()', () => {
         updatedBy: 'outside',
       }),
     );
-    expect(() => readStateLazy('outside', SLUG, agentsDir)).toThrow(
+    expect(() => readStateLazy(location, 'outside')).toThrow(
       /'data' must be a JSON object/,
     );
   });
 
   it('throws StateCorruptError when updatedAt is not a parseable date-time (F002)', () => {
-    const file = path.join(agentsDir, SLUG, 'state', 'outside.json');
+    const file = stateFilePath(location, 'outside');
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(
       file,
@@ -145,18 +154,24 @@ describe('readStateLazy()', () => {
         updatedBy: 'outside',
       }),
     );
-    expect(() => readStateLazy('outside', SLUG, agentsDir)).toThrow(
+    expect(() => readStateLazy(location, 'outside')).toThrow(
       /not a parseable date-time/,
     );
   });
 
   it('throws InvalidSlugError on bad slug', () => {
-    expect(() => readStateLazy('outside', '..', agentsDir)).toThrow(
-      InvalidSlugError,
-    );
-    expect(() => readStateLazy('outside', 'a/b', agentsDir)).toThrow(
-      InvalidSlugError,
-    );
+    expect(() =>
+      readStateLazy(
+        coordinationRunLocation('..', agentsDir, RUN_ID),
+        'outside',
+      ),
+    ).toThrow(InvalidSlugError);
+    expect(() =>
+      readStateLazy(
+        coordinationRunLocation('a/b', agentsDir, RUN_ID),
+        'outside',
+      ),
+    ).toThrow(InvalidSlugError);
   });
 });
 
@@ -168,8 +183,8 @@ describe('writeState()', () => {
       updatedAt: '2026-04-26T05:00:00.000Z',
       updatedBy: 'inside',
     };
-    writeState('inside', SLUG, agentsDir, state);
-    const file = path.join(agentsDir, SLUG, 'state', 'inside.json');
+    writeState(location, 'inside', state);
+    const file = stateFilePath(location, 'inside');
     expect(fs.existsSync(file)).toBe(true);
   });
 
@@ -185,10 +200,10 @@ describe('writeState()', () => {
     );
     await Promise.all(
       candidates.map((c) =>
-        Promise.resolve().then(() => writeState('inside', SLUG, agentsDir, c)),
+        Promise.resolve().then(() => writeState(location, 'inside', c)),
       ),
     );
-    const final = readStateLazy('inside', SLUG, agentsDir);
+    const final = readStateLazy(location, 'inside');
     expect(candidates.map((c) => c.data.i)).toContain(final.data.i);
   });
 
@@ -199,15 +214,19 @@ describe('writeState()', () => {
       updatedAt: '2026-04-26T05:00:00.000Z',
       updatedBy: 'outside',
     };
-    expect(() => writeState('outside', '../etc', agentsDir, state)).toThrow(
-      InvalidSlugError,
-    );
+    expect(() =>
+      writeState(
+        coordinationRunLocation('../etc', agentsDir, RUN_ID),
+        'outside',
+        state,
+      ),
+    ).toThrow(InvalidSlugError);
   });
 });
 
 describe('appendHistory()', () => {
   it('appends a single line and round-trips via NDJSON parse', () => {
-    appendHistory(SLUG, agentsDir, {
+    appendHistory(location, {
       ts: '2026-04-26T05:00:00.000Z',
       side: 'outside',
       from: 'idle',
@@ -215,7 +234,7 @@ describe('appendHistory()', () => {
       reason: null,
       peerStateAtTime: { status: 'idle' },
     });
-    const file = path.join(agentsDir, SLUG, 'state', 'history.ndjson');
+    const file = historyPath(location);
     const content = fs.readFileSync(file, 'utf8');
     const lines = content.trim().split('\n');
     expect(lines).toHaveLength(1);
@@ -228,14 +247,14 @@ describe('appendHistory()', () => {
 
   it('auto-populates peerStateAtTime from the peer side when omitted', () => {
     // Seed inside state so peer snapshot is non-default.
-    writeState('inside', SLUG, agentsDir, {
+    writeState(location, 'inside', {
       status: 'reviewing',
       data: {},
       updatedAt: '2026-04-26T05:00:00.000Z',
       updatedBy: 'inside',
     });
 
-    appendHistory(SLUG, agentsDir, {
+    appendHistory(location, {
       ts: '2026-04-26T05:00:01.000Z',
       side: 'outside',
       from: 'idle',
@@ -244,13 +263,13 @@ describe('appendHistory()', () => {
       // peerStateAtTime intentionally omitted
     });
 
-    const file = path.join(agentsDir, SLUG, 'state', 'history.ndjson');
+    const file = historyPath(location);
     const entry = JSON.parse(fs.readFileSync(file, 'utf8').trim());
     expect(entry.peerStateAtTime).toEqual({ status: 'reviewing' });
   });
 
   it('records peerStateAtTime: idle for first-ever transition (no peer file)', () => {
-    appendHistory(SLUG, agentsDir, {
+    appendHistory(location, {
       ts: '2026-04-26T05:00:00.000Z',
       side: 'outside',
       from: 'idle',
@@ -258,14 +277,14 @@ describe('appendHistory()', () => {
       reason: null,
       // peerStateAtTime omitted; inside.json does not exist
     });
-    const file = path.join(agentsDir, SLUG, 'state', 'history.ndjson');
+    const file = historyPath(location);
     const entry = JSON.parse(fs.readFileSync(file, 'utf8').trim());
     expect(entry.peerStateAtTime).toEqual({ status: 'idle' });
   });
 
   it('rejects oversize history line (> PIPE_BUF)', () => {
     expect(() =>
-      appendHistory(SLUG, agentsDir, {
+      appendHistory(location, {
         ts: '2026-04-26T05:00:00.000Z',
         side: 'outside',
         from: 'idle',
@@ -279,7 +298,7 @@ describe('appendHistory()', () => {
   it('survives 100 parallel appends — exactly 100 lines, all valid JSON', async () => {
     await Promise.all(
       Array.from({ length: 100 }, async (_, i) => {
-        appendHistory(SLUG, agentsDir, {
+        appendHistory(location, {
           ts: `2026-04-26T05:00:00.${String(i).padStart(3, '0')}Z`,
           side: 'outside',
           from: 'idle',
@@ -289,7 +308,7 @@ describe('appendHistory()', () => {
         });
       }),
     );
-    const file = path.join(agentsDir, SLUG, 'state', 'history.ndjson');
+    const file = historyPath(location);
     const content = await fsp.readFile(file, 'utf8');
     const lines = content.trim().split('\n');
     expect(lines).toHaveLength(100);
@@ -300,7 +319,7 @@ describe('appendHistory()', () => {
 
   it('throws InvalidSlugError on bad slug', () => {
     expect(() =>
-      appendHistory('..', agentsDir, {
+      appendHistory(coordinationRunLocation('..', agentsDir, RUN_ID), {
         ts: '2026-04-26T05:00:00.000Z',
         side: 'outside',
         from: 'idle',

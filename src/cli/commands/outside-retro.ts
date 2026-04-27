@@ -3,7 +3,7 @@ import type { Command } from 'commander';
 import {
   invalidArgs,
   requireNonEmptyOption,
-  resolveAgentOrExit,
+  resolveCoordinationRunOrExit,
 } from '../coordination.js';
 import { exitWithEnvelope, formatSuccess } from '../output.js';
 import { appendOutsideMessage, buildOutsideMessage } from './outside-send.js';
@@ -22,36 +22,48 @@ export function registerOutsideRetroCommand(program: Command): void {
       'project, minih, or coordination',
       'coordination',
     )
-    .action((slug: string, opts: { body?: string; target?: string }) => {
-      const agentsDir = program.opts().agentsDir ?? 'agents';
-      resolveAgentOrExit(COMMAND, slug, agentsDir);
-      const body = requireNonEmptyOption(COMMAND, opts.body, '--body');
-      const target = parseTarget(opts.target ?? 'coordination');
-
-      const message = buildOutsideMessage({
-        type: 'retro',
-        subject: 'outside session retro',
-        body,
-        meta: { magicWandTarget: target },
-      });
-      appendOutsideMessage(slug, agentsDir, message, COMMAND);
-
-      if (process.stderr.isTTY) {
-        process.stderr.write(
-          `\n  ${chalk.green('✓')} Recorded outside retro for ${chalk.cyan(slug)} (${target})\n\n`,
-        );
-      }
-
-      exitWithEnvelope(
-        formatSuccess(COMMAND, {
+    .option('--run <runId>', 'Target run ID (default: only active run)')
+    .action(
+      (
+        slug: string,
+        opts: { body?: string; target?: string; run?: string },
+      ) => {
+        const agentsDir = program.opts().agentsDir ?? 'agents';
+        const runTarget = resolveCoordinationRunOrExit(
+          COMMAND,
           slug,
-          messageId: message.id,
-          target: 'inside',
-          timestamp: message.ts,
-          message,
-        }),
-      );
-    });
+          agentsDir,
+          opts.run,
+        );
+        const body = requireNonEmptyOption(COMMAND, opts.body, '--body');
+        const target = parseTarget(opts.target ?? 'coordination');
+
+        const message = buildOutsideMessage({
+          type: 'retro',
+          subject: 'outside session retro',
+          body,
+          meta: { magicWandTarget: target },
+        });
+        appendOutsideMessage(runTarget, message, COMMAND);
+
+        if (process.stderr.isTTY) {
+          process.stderr.write(
+            `\n  ${chalk.green('✓')} Recorded outside retro for ${chalk.cyan(slug)} (${target})\n\n`,
+          );
+        }
+
+        exitWithEnvelope(
+          formatSuccess(COMMAND, {
+            slug,
+            runId: runTarget.runId,
+            messageId: message.id,
+            target: 'inside',
+            timestamp: message.ts,
+            message,
+          }),
+        );
+      },
+    );
 }
 
 function parseTarget(value: string): MagicWandTarget {

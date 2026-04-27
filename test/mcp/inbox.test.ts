@@ -5,7 +5,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { McpServerContext } from '../../src/mcp/context.js';
 import { inboxAck, inboxList, inboxSend } from '../../src/mcp/tools/inbox.js';
 import { McpToolError } from '../../src/mcp/types.js';
-import { inboxLanePath } from '../../src/runner/folder.js';
+import {
+  coordinationRunLocation,
+  inboxLanePath,
+} from '../../src/runner/folder.js';
 import type { InboxMessage, Side } from '../../src/runner/types.js';
 
 let tmpDir: string;
@@ -24,8 +27,8 @@ beforeEach(() => {
     agentSlug,
     agentsDir,
     agentDir,
-    inboxDir: path.join(agentDir, 'inbox'),
-    stateDir: path.join(agentDir, 'state'),
+    inboxDir: path.join(agentDir, 'runs', 'run-123', 'inbox'),
+    stateDir: path.join(agentDir, 'runs', 'run-123', 'state'),
     processMarker: 'minih-mcp-run-123',
   };
   fs.mkdirSync(context.runDir, { recursive: true });
@@ -148,10 +151,7 @@ describe('inboxSend', () => {
     );
 
     const lines = fs
-      .readFileSync(
-        inboxLanePath(context.agentSlug, context.agentsDir, 'inside'),
-        'utf8',
-      )
+      .readFileSync(inboxLanePath(location(), 'inside'), 'utf8')
       .trimEnd()
       .split('\n');
     expect(lines).toHaveLength(20);
@@ -216,17 +216,25 @@ function writeMessage(lane: Side, message: InboxMessage): void {
 }
 
 function writeRaw(lane: Side, content: string, append = false): void {
-  const filePath = inboxLanePath(context.agentSlug, context.agentsDir, lane);
+  const filePath = inboxLanePath(location(), lane);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   if (append) fs.appendFileSync(filePath, content);
   else fs.writeFileSync(filePath, content);
 }
 
 function readLane(lane: Side): InboxMessage[] {
-  const filePath = inboxLanePath(context.agentSlug, context.agentsDir, lane);
+  const filePath = inboxLanePath(location(), lane);
   return fs
     .readFileSync(filePath, 'utf8')
     .trimEnd()
     .split('\n')
     .map((line) => JSON.parse(line) as InboxMessage);
+}
+
+function location() {
+  return coordinationRunLocation(
+    context.agentSlug,
+    context.agentsDir,
+    context.runId,
+  );
 }

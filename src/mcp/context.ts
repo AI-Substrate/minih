@@ -100,9 +100,9 @@ export function loadMcpContext(env: Env = process.env): McpServerContext {
   );
   assertExactPath(
     inboxDir,
-    path.join(agentDir, 'inbox'),
+    path.join(runDir, 'inbox'),
     'MINIH_INBOX_DIR',
-    'agent inbox directory',
+    'run inbox directory',
   );
 
   const stateDir = canonicalPath(
@@ -111,9 +111,9 @@ export function loadMcpContext(env: Env = process.env): McpServerContext {
   );
   assertExactPath(
     stateDir,
-    path.join(agentDir, 'state'),
+    path.join(runDir, 'state'),
     'MINIH_STATE_DIR',
-    'agent state directory',
+    'run state directory',
   );
 
   return {

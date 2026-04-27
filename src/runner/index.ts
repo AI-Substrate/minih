@@ -17,8 +17,10 @@ export {
   displaySummary,
   formatEvent,
 } from './display.js';
-export type { RunSession } from './folder.js';
+export type { CoordinationRunLocation, RunSession } from './folder.js';
 export {
+  coordinationRunDir,
+  coordinationRunLocation,
   createRunFolder,
   findRunSession,
   hasOutsideMd,

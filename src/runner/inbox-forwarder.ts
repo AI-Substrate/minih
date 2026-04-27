@@ -18,6 +18,7 @@ import type { InboxMessage } from './types.js';
 export interface InboxForwarderOptions {
   slug: string;
   agentsDir: string;
+  runId: string;
   sender: SessionSender;
   commitProgress?: 'immediate' | 'manual';
   debounceMs?: number;
@@ -105,11 +106,7 @@ export function createInboxForwarder(
       const coldDrain = await drain();
       if (closed) return coldDrain;
 
-      const inboxPath = inboxLanePath(
-        options.slug,
-        options.agentsDir,
-        'outside',
-      );
+      const inboxPath = inboxLanePath(options, 'outside');
       assertPathInsideAgentsDir(inboxPath, options.agentsDir);
       watcher = watchFileChanges(
         inboxPath,
@@ -170,7 +167,7 @@ async function drainOnce(
   startOffset: number,
   onProgress: (offset: number) => void,
 ): Promise<InboxDrainResult> {
-  const inboxPath = inboxLanePath(options.slug, options.agentsDir, 'outside');
+  const inboxPath = inboxLanePath(options, 'outside');
   assertPathInsideAgentsDir(inboxPath, options.agentsDir);
 
   if (!fs.existsSync(inboxPath)) return emptyResult(startOffset);

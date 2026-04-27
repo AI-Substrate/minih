@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
+import { coordinationRunLocation } from '../../runner/folder.js';
 import {
   appendHistory,
   HistoryLineTooLargeError,
@@ -44,16 +45,9 @@ export function stateGet(
   return withStateErrors(() => {
     const selection = parseOptionalStateSelection(input.side);
     const key = parseOptionalKey(input.key);
-    const inside = readStateLazy(
-      'inside',
-      context.agentSlug,
-      context.agentsDir,
-    );
-    const outside = readStateLazy(
-      'outside',
-      context.agentSlug,
-      context.agentsDir,
-    );
+    const location = coordinationRunLocationFromContext(context);
+    const inside = readStateLazy(location, 'inside');
+    const outside = readStateLazy(location, 'outside');
 
     if (selection === 'both') {
       if (key !== undefined) {
@@ -85,7 +79,7 @@ export function stateSet(
   return withStateErrors(() => {
     const state = buildInsideState(input.status, input.data);
     validateInsideState(context, state);
-    writeState('inside', context.agentSlug, context.agentsDir, state);
+    writeState(coordinationRunLocationFromContext(context), 'inside', state);
     return jsonResult({ state });
   });
 }
@@ -96,11 +90,8 @@ export function stateTransition(
 ): McpToolResult<StateTransitionOutput> {
   return withStateErrors(() => {
     const to = requireNonEmptyString(input.to, 'to');
-    const current = readStateLazy(
-      'inside',
-      context.agentSlug,
-      context.agentsDir,
-    ) as InsideState;
+    const location = coordinationRunLocationFromContext(context);
+    const current = readStateLazy(location, 'inside') as InsideState;
     const data =
       input.data === undefined
         ? current.data
@@ -117,14 +108,14 @@ export function stateTransition(
       });
     }
 
-    appendHistory(context.agentSlug, context.agentsDir, {
+    appendHistory(location, {
       ts: next.updatedAt,
       side: 'inside',
       from: current.status,
       to: next.status,
       reason: parseOptionalReason(input.reason),
     });
-    writeState('inside', context.agentSlug, context.agentsDir, next);
+    writeState(location, 'inside', next);
 
     return jsonResult({
       state: next,
@@ -280,3 +271,11 @@ function stableStringify(value: unknown): string {
 }
 
 export type { Side };
+
+function coordinationRunLocationFromContext(context: McpServerContext) {
+  return coordinationRunLocation(
+    context.agentSlug,
+    context.agentsDir,
+    context.runId,
+  );
+}

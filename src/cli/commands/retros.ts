@@ -8,7 +8,11 @@ import type {
   InboxMessage,
   Side,
 } from '../../runner/index.js';
-import { listAgents, validateSlug } from '../../runner/index.js';
+import {
+  coordinationRunLocation,
+  listAgents,
+  validateSlug,
+} from '../../runner/index.js';
 import {
   invalidArgs,
   readInboxLaneOrExit,
@@ -40,6 +44,7 @@ interface RetroFilters {
   agent?: string;
   side?: RetroSide;
   target?: MagicWandTarget;
+  runId?: string;
 }
 
 export function registerRetrosCommand(program: Command): void {
@@ -49,34 +54,44 @@ export function registerRetrosCommand(program: Command): void {
     .option('--agent <slug>', 'Filter to a specific agent')
     .option('--side <side>', 'inside or outside')
     .option('--target <target>', 'project, minih, or coordination')
-    .action((opts: { agent?: string; side?: string; target?: string }) => {
-      const agentsDir = program.opts().agentsDir ?? 'agents';
-      const filters = parseFilters(opts);
-      const agents = selectAgents(agentsDir, filters.agent);
-      const entries = collectRetros(agentsDir, agents, filters);
+    .option('--run <runId>', 'Filter to a specific run ID')
+    .action(
+      (opts: {
+        agent?: string;
+        side?: string;
+        target?: string;
+        run?: string;
+      }) => {
+        const agentsDir = program.opts().agentsDir ?? 'agents';
+        const filters = parseFilters(opts);
+        const agents = selectAgents(agentsDir, filters.agent);
+        const entries = collectRetros(agentsDir, agents, filters);
 
-      if (process.stderr.isTTY) {
-        renderRetrosTable(entries);
-      }
+        if (process.stderr.isTTY) {
+          renderRetrosTable(entries);
+        }
 
-      exitWithEnvelope(
-        formatSuccess(COMMAND, {
-          entries,
-          count: entries.length,
-          filters: {
-            agent: filters.agent ?? null,
-            side: filters.side ?? null,
-            target: filters.target ?? null,
-          },
-        }),
-      );
-    });
+        exitWithEnvelope(
+          formatSuccess(COMMAND, {
+            entries,
+            count: entries.length,
+            filters: {
+              agent: filters.agent ?? null,
+              side: filters.side ?? null,
+              target: filters.target ?? null,
+              runId: filters.runId ?? null,
+            },
+          }),
+        );
+      },
+    );
 }
 
 function parseFilters(opts: {
   agent?: string;
   side?: string;
   target?: string;
+  run?: string;
 }): RetroFilters {
   if (opts.agent) {
     const slugError = validateSlug(opts.agent);
@@ -110,6 +125,7 @@ function parseFilters(opts: {
     ...(opts.agent && { agent: opts.agent }),
     ...(side && { side }),
     ...(target && { target }),
+    ...(opts.run && { runId: opts.run }),
   };
 }
 
@@ -154,6 +170,7 @@ function collectInsideRetros(
 
   const entries: RetroEntry[] = [];
   for (const runDir of runDirs) {
+    if (filters.runId !== undefined && runDir.name !== filters.runId) continue;
     if (!isCompletedRun(path.join(runsDir, runDir.name))) continue;
     const report = readJsonFile(
       path.join(runsDir, runDir.name, 'output', 'report.json'),
@@ -194,14 +211,36 @@ function collectOutsideRetros(
   agent: AgentDefinition,
   filters: RetroFilters,
 ): RetroEntry[] {
-  return readInboxLaneOrExit(COMMAND, agent.slug, agentsDir, 'outside')
-    .filter((message) => message.type === 'retro')
-    .map((message) => outsideMessageToRetro(agent.slug, message))
-    .filter((entry) => passesTarget(entry.target, filters.target));
+  const runsDir = path.join(agent.dir, 'runs');
+  if (!fs.existsSync(runsDir)) return [];
+
+  const entries: RetroEntry[] = [];
+  const runDirs = fs
+    .readdirSync(runsDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .sort((a, b) => b.name.localeCompare(a.name));
+  for (const runDir of runDirs) {
+    if (filters.runId !== undefined && runDir.name !== filters.runId) continue;
+    const location = coordinationRunLocation(
+      agent.slug,
+      agentsDir,
+      runDir.name,
+    );
+    entries.push(
+      ...readInboxLaneOrExit(COMMAND, location, 'outside')
+        .filter((message) => message.type === 'retro')
+        .map((message) =>
+          outsideMessageToRetro(agent.slug, runDir.name, message),
+        )
+        .filter((entry) => passesTarget(entry.target, filters.target)),
+    );
+  }
+  return entries;
 }
 
 function outsideMessageToRetro(
   agentSlug: string,
+  runId: string,
   message: InboxMessage,
 ): RetroEntry {
   return {
@@ -213,6 +252,7 @@ function outsideMessageToRetro(
       : null,
     body: message.body,
     magicWand: message.body,
+    runId,
     messageId: message.id,
     timestamp: message.ts,
   };

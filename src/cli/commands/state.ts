@@ -6,6 +6,7 @@ import type { Command } from 'commander';
 import {
   type AgentDefinition,
   appendHistory,
+  type CoordinationRunLocation,
   HistoryLineTooLargeError,
   type OutsideState,
   readStateLazy,
@@ -17,7 +18,7 @@ import {
 import {
   invalidArgs,
   requireNonEmptyOption,
-  resolveAgentOrExit,
+  resolveCoordinationRunOrExit,
   validateJsonSchema,
 } from '../coordination.js';
 import {
@@ -40,6 +41,7 @@ interface StateSetOptions {
   key?: string;
   value?: string;
   valueJson?: string;
+  run?: string;
 }
 
 export function registerStateCommand(program: Command): void {
@@ -52,18 +54,32 @@ export function registerStateCommand(program: Command): void {
     .description('Read outside, inside, or both coordination states')
     .option('--side <side>', 'outside, inside, or both', 'both')
     .option('--key <dotPath>', 'Optional dot-path to read')
-    .action((slug: string, opts: { side?: string; key?: string }) => {
-      const commandName = 'state.get';
-      const agentsDir = program.opts().agentsDir ?? 'agents';
-      resolveAgentOrExit(commandName, slug, agentsDir);
-      const side = parseStateSide(commandName, opts.side);
-      const key = parseOptionalKey(commandName, opts.key);
+    .option('--run <runId>', 'Target run ID (default: only active run)')
+    .action(
+      (slug: string, opts: { side?: string; key?: string; run?: string }) => {
+        const commandName = 'state.get';
+        const agentsDir = program.opts().agentsDir ?? 'agents';
+        const target = resolveCoordinationRunOrExit(
+          commandName,
+          slug,
+          agentsDir,
+          opts.run,
+        );
+        const side = parseStateSide(commandName, opts.side);
+        const key = parseOptionalKey(commandName, opts.key);
 
-      withStateErrors(commandName, () => {
-        const payload = readStatePayload(side, slug, agentsDir, key);
-        exitWithEnvelope(formatSuccess(commandName, { slug, ...payload }));
-      });
-    });
+        withStateErrors(commandName, () => {
+          const payload = readStatePayload(side, target.location, key);
+          exitWithEnvelope(
+            formatSuccess(commandName, {
+              slug,
+              runId: target.runId,
+              ...payload,
+            }),
+          );
+        });
+      },
+    );
 
   state
     .command('set <slug>')
@@ -74,10 +90,17 @@ export function registerStateCommand(program: Command): void {
     .option('--key <dotPath>', 'State key to set: status, data, or data.<path>')
     .option('--value <value>', 'String value for --key')
     .option('--value-json <json>', 'JSON value for --key')
+    .option('--run <runId>', 'Target run ID (default: only active run)')
     .action((slug: string, opts: StateSetOptions) => {
       const commandName = 'state.set';
       const agentsDir = program.opts().agentsDir ?? 'agents';
-      const definition = resolveAgentOrExit(commandName, slug, agentsDir);
+      const target = resolveCoordinationRunOrExit(
+        commandName,
+        slug,
+        agentsDir,
+        opts.run,
+      );
+      const definition = target.definition;
       if (opts.side !== 'outside') {
         exitWithEnvelope(
           invalidArgs(commandName, 'state set only supports --side outside'),
@@ -86,13 +109,12 @@ export function registerStateCommand(program: Command): void {
 
       withStateErrors(commandName, () => {
         const current = readStateLazy(
+          target.location,
           'outside',
-          slug,
-          agentsDir,
         ) as OutsideState;
         const next = buildSetState(commandName, current, opts);
         validateOutsideStateOrExit(commandName, definition, next);
-        writeOutsideState(slug, agentsDir, current, next, null);
+        writeOutsideState(target.location, current, next, null);
 
         if (process.stderr.isTTY) {
           process.stderr.write(
@@ -100,7 +122,13 @@ export function registerStateCommand(program: Command): void {
           );
         }
 
-        exitWithEnvelope(formatSuccess(commandName, { slug, state: next }));
+        exitWithEnvelope(
+          formatSuccess(commandName, {
+            slug,
+            runId: target.runId,
+            state: next,
+          }),
+        );
       });
     });
 
@@ -110,21 +138,27 @@ export function registerStateCommand(program: Command): void {
     .option('--to <status>', 'Target outside status')
     .option('--reason <text>', 'Optional transition reason')
     .option('--data-json <json>', 'Replacement outside data object')
+    .option('--run <runId>', 'Target run ID (default: only active run)')
     .action(
       (
         slug: string,
-        opts: { to?: string; reason?: string; dataJson?: string },
+        opts: { to?: string; reason?: string; dataJson?: string; run?: string },
       ) => {
         const commandName = 'state.transition';
         const agentsDir = program.opts().agentsDir ?? 'agents';
-        const definition = resolveAgentOrExit(commandName, slug, agentsDir);
+        const target = resolveCoordinationRunOrExit(
+          commandName,
+          slug,
+          agentsDir,
+          opts.run,
+        );
+        const definition = target.definition;
         const to = requireNonEmptyOption(commandName, opts.to, '--to');
 
         withStateErrors(commandName, () => {
           const current = readStateLazy(
+            target.location,
             'outside',
-            slug,
-            agentsDir,
           ) as OutsideState;
           const data =
             opts.dataJson === undefined
@@ -137,6 +171,7 @@ export function registerStateCommand(program: Command): void {
             exitWithEnvelope(
               formatSuccess(commandName, {
                 slug,
+                runId: target.runId,
                 state: current,
                 transitioned: false,
                 from: current.status,
@@ -146,8 +181,7 @@ export function registerStateCommand(program: Command): void {
           }
 
           writeOutsideState(
-            slug,
-            agentsDir,
+            target.location,
             current,
             next,
             opts.reason ?? null,
@@ -162,6 +196,7 @@ export function registerStateCommand(program: Command): void {
           exitWithEnvelope(
             formatSuccess(commandName, {
               slug,
+              runId: target.runId,
               state: next,
               transitioned: true,
               from: current.status,
@@ -175,13 +210,12 @@ export function registerStateCommand(program: Command): void {
 
 function readStatePayload(
   side: StateSideSelection,
-  slug: string,
-  agentsDir: string,
+  location: CoordinationRunLocation,
   key: string | undefined,
 ): Record<string, unknown> {
   if (side === 'both') {
-    const outside = readStateLazy('outside', slug, agentsDir);
-    const inside = readStateLazy('inside', slug, agentsDir);
+    const outside = readStateLazy(location, 'outside');
+    const inside = readStateLazy(location, 'inside');
     if (key !== undefined) {
       return {
         side,
@@ -193,7 +227,7 @@ function readStatePayload(
     return { side, outside, inside };
   }
 
-  const state = readStateLazy(side, slug, agentsDir);
+  const state = readStateLazy(location, side);
   if (key !== undefined) {
     return { side, key, value: readStateKey(state, key) };
   }
@@ -271,20 +305,19 @@ function buildOutsideState(
 }
 
 function writeOutsideState(
-  slug: string,
-  agentsDir: string,
+  location: CoordinationRunLocation,
   current: OutsideState,
   next: OutsideState,
   reason: string | null,
 ): void {
-  appendHistory(slug, agentsDir, {
+  appendHistory(location, {
     ts: next.updatedAt,
     side: 'outside',
     from: current.status,
     to: next.status,
     reason,
   });
-  writeState('outside', slug, agentsDir, next);
+  writeState(location, 'outside', next);
 }
 
 function validateOutsideStateOrExit(

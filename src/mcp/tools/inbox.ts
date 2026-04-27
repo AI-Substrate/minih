@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { inboxLanePath } from '../../runner/folder.js';
+import { coordinationRunLocation, inboxLanePath } from '../../runner/folder.js';
 import type { InboxMessage, Side } from '../../runner/types.js';
 import { ulid } from '../../runner/ulid.js';
 import type { McpServerContext } from '../context.js';
@@ -198,7 +198,15 @@ function appendMessage(filePath: string, message: InboxMessage): void {
 }
 
 function lanePath(context: McpServerContext, lane: Side): string {
-  return inboxLanePath(context.agentSlug, context.agentsDir, lane);
+  return inboxLanePath(coordinationRunLocationFromContext(context), lane);
+}
+
+function coordinationRunLocationFromContext(context: McpServerContext) {
+  return coordinationRunLocation(
+    context.agentSlug,
+    context.agentsDir,
+    context.runId,
+  );
 }
 
 function normalizeLimit(limit: number | undefined): number {

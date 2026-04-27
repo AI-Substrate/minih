@@ -37,8 +37,22 @@ describe('buildInsideMcpServerConfig', () => {
     expect(entry.env).toEqual({
       MINIH: '1',
       MINIH_CONTEXT: 'inside',
-      MINIH_INBOX_DIR: path.join(tmpDir, 'agents', 'code-review', 'inbox'),
-      MINIH_STATE_DIR: path.join(tmpDir, 'agents', 'code-review', 'state'),
+      MINIH_INBOX_DIR: path.join(
+        tmpDir,
+        'agents',
+        'code-review',
+        'runs',
+        'run-123',
+        'inbox',
+      ),
+      MINIH_STATE_DIR: path.join(
+        tmpDir,
+        'agents',
+        'code-review',
+        'runs',
+        'run-123',
+        'state',
+      ),
       NODE_NO_WARNINGS: '1',
       MINIH_MCP_RUN_ID: 'run-123',
       MINIH_MCP_RUN_DIR: path.join(

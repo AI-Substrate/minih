@@ -39,7 +39,7 @@ describe('inside MCP coexistence', () => {
             env: { MINIH_MCP_RUN_ID: runId },
           },
         }),
-        reservedMcpToolPrefixes: ['inbox.', 'state.'],
+        reservedMcpToolPrefixes: ['inbox_', 'state_'],
       },
       undefined,
       tmpDir,
@@ -115,12 +115,12 @@ describe('inside MCP coexistence', () => {
       {
         slug: 'code-review',
         mcpServers: {
-          custom: { command: 'node', tools: ['inbox.list'] },
+          custom: { command: 'node', tools: ['inbox_list'] },
         },
         insideMcpServerFactory: () => ({
           'minih-coordination': { command: 'node', tools: ['*'] },
         }),
-        reservedMcpToolPrefixes: ['inbox.', 'state.'],
+        reservedMcpToolPrefixes: ['inbox_', 'state_'],
       },
       undefined,
       tmpDir,
@@ -128,7 +128,7 @@ describe('inside MCP coexistence', () => {
 
     expect(result.agentResult.status).toBe('failed');
     expect(result.agentResult.output).toContain(
-      'reserved tool namespace "inbox.*"',
+      'reserved tool namespace "inbox_*"',
     );
     expect(adapter.getRunHistory()).toHaveLength(0);
   });

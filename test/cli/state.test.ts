@@ -3,12 +3,18 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { historyPath, stateFilePath } from '../../src/runner/folder.js';
+import {
+  coordinationRunLocation,
+  historyPath,
+  stateFilePath,
+} from '../../src/runner/folder.js';
 import type { OutsideState } from '../../src/runner/types.js';
 
 let tmpDir: string;
 let agentsDir: string;
 const cliPath = path.resolve('dist/cli/index.js');
+const runId = 'run-123';
+const otherRunId = 'run-456';
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'minih-state-cli-'));
@@ -48,20 +54,25 @@ tags: []
 # ${slug}
 `,
   );
+  fs.mkdirSync(path.join(dir, 'runs', runId), { recursive: true });
 }
 
-function readOutsideState(): OutsideState {
+function readOutsideState(targetRunId = runId): OutsideState {
   return JSON.parse(
-    fs.readFileSync(stateFilePath('demo', agentsDir, 'outside'), 'utf8'),
+    fs.readFileSync(stateFilePath(location(targetRunId), 'outside'), 'utf8'),
   ) as OutsideState;
 }
 
 function readHistory(): Array<Record<string, unknown>> {
   return fs
-    .readFileSync(historyPath('demo', agentsDir), 'utf8')
+    .readFileSync(historyPath(location()), 'utf8')
     .trimEnd()
     .split('\n')
     .map((line) => JSON.parse(line) as Record<string, unknown>);
+}
+
+function location(targetRunId = runId) {
+  return coordinationRunLocation('demo', agentsDir, targetRunId);
 }
 
 describe('state CLI', () => {
@@ -84,9 +95,7 @@ describe('state CLI', () => {
       outside: null,
       inside: null,
     });
-    expect(fs.existsSync(stateFilePath('demo', agentsDir, 'outside'))).toBe(
-      false,
-    );
+    expect(fs.existsSync(stateFilePath(location(), 'outside'))).toBe(false);
   });
 
   it('sets outside status, validates schema, and appends history before write', () => {
@@ -239,7 +248,7 @@ describe('state CLI', () => {
     });
 
     const previous = fs.readFileSync(
-      stateFilePath('demo', agentsDir, 'outside'),
+      stateFilePath(location(), 'outside'),
       'utf8',
     );
     const tooLarge = run([
@@ -255,9 +264,9 @@ describe('state CLI', () => {
     ]);
     expect(tooLarge.exitCode).toBe(1);
     expect(JSON.parse(tooLarge.stdout).error.code).toBe('E124');
-    expect(
-      fs.readFileSync(stateFilePath('demo', agentsDir, 'outside'), 'utf8'),
-    ).toBe(previous);
+    expect(fs.readFileSync(stateFilePath(location(), 'outside'), 'utf8')).toBe(
+      previous,
+    );
 
     const sameStatusTooLarge = run([
       'state',
@@ -274,9 +283,9 @@ describe('state CLI', () => {
     ]);
     expect(sameStatusTooLarge.exitCode).toBe(1);
     expect(JSON.parse(sameStatusTooLarge.stdout).error.code).toBe('E124');
-    expect(
-      fs.readFileSync(stateFilePath('demo', agentsDir, 'outside'), 'utf8'),
-    ).toBe(previous);
+    expect(fs.readFileSync(stateFilePath(location(), 'outside'), 'utf8')).toBe(
+      previous,
+    );
   });
 
   it('prefers an agent-local outside-state schema', () => {
@@ -318,5 +327,53 @@ describe('state CLI', () => {
     ]);
     expect(done.exitCode).toBe(1);
     expect(JSON.parse(done.stdout).error.code).toBe('E108');
+  });
+
+  it('keeps outside state isolated between runs of the same agent', () => {
+    fs.mkdirSync(path.join(agentsDir, 'demo', 'runs', otherRunId), {
+      recursive: true,
+    });
+
+    const first = run([
+      'state',
+      'set',
+      'demo',
+      '--side',
+      'outside',
+      '--status',
+      'in-progress',
+      '--data-json',
+      '{"run":"one"}',
+      '--agents-dir',
+      agentsDir,
+      '--run',
+      runId,
+    ]);
+    const second = run([
+      'state',
+      'set',
+      'demo',
+      '--side',
+      'outside',
+      '--status',
+      'done',
+      '--data-json',
+      '{"run":"two"}',
+      '--agents-dir',
+      agentsDir,
+      '--run',
+      otherRunId,
+    ]);
+
+    expect(first.exitCode).toBe(0);
+    expect(second.exitCode).toBe(0);
+    expect(readOutsideState(runId)).toMatchObject({
+      status: 'in-progress',
+      data: { run: 'one' },
+    });
+    expect(readOutsideState(otherRunId)).toMatchObject({
+      status: 'done',
+      data: { run: 'two' },
+    });
   });
 });

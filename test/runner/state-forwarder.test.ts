@@ -7,7 +7,10 @@ import type {
   NativeWatcher,
   WatchEventType,
 } from '../../src/runner/file-watcher.js';
-import { stateFilePath } from '../../src/runner/folder.js';
+import {
+  coordinationRunLocation,
+  stateFilePath,
+} from '../../src/runner/folder.js';
 import {
   defaultForwarderWatermark,
   readForwarderWatermark,
@@ -23,6 +26,8 @@ import type { OutsideState } from '../../src/runner/types.js';
 
 let tmpDir: string;
 let agentsDir: string;
+const slug = 'code-review';
+const runId = 'run-123';
 
 class FakeNativeWatcher implements NativeWatcher {
   closeCalls = 0;
@@ -90,13 +95,14 @@ function state(overrides: Partial<OutsideState> = {}): OutsideState {
 }
 
 function writeOutsideState(value: OutsideState): void {
-  writeState('outside', 'code-review', agentsDir, value);
+  writeState(coordinationRunLocation(slug, agentsDir, runId), 'outside', value);
 }
 
 function forwarder(testSender = sender()) {
   return createStateForwarder({
-    slug: 'code-review',
+    slug,
     agentsDir,
+    runId,
     sender: testSender,
   });
 }
@@ -109,9 +115,9 @@ describe('state forwarder', () => {
 
     expect(result).toEqual({ sent: false, fingerprint: null });
     expect(testSender.prompts).toEqual([]);
-    expect(
-      readForwarderWatermark({ slug: 'code-review', agentsDir }).value,
-    ).toEqual(defaultForwarderWatermark());
+    expect(readForwarderWatermark({ slug, agentsDir, runId }).value).toEqual(
+      defaultForwarderWatermark(),
+    );
   });
 
   it('forwards the first seen outside state and persists its fingerprint', async () => {
@@ -129,7 +135,7 @@ describe('state forwarder', () => {
     expect(testSender.prompts[0]).toContain('Status: in-progress');
     expect(testSender.prompts[0]).toContain('"milestone":2');
     expect(
-      readForwarderWatermark({ slug: 'code-review', agentsDir }).value.state
+      readForwarderWatermark({ slug, agentsDir, runId }).value.state
         .outsideFingerprint,
     ).toBe(fingerprintOutsideState(current));
   });
@@ -138,7 +144,7 @@ describe('state forwarder', () => {
     const current = state();
     writeOutsideState(current);
     writeForwarderWatermark(
-      { slug: 'code-review', agentsDir },
+      { slug, agentsDir, runId },
       withStateFingerprint(
         defaultForwarderWatermark(),
         fingerprintOutsideState(current),
@@ -157,7 +163,7 @@ describe('state forwarder', () => {
     const touched = state({ updatedAt: '2026-04-26T00:01:00Z' });
     writeOutsideState(touched);
     writeForwarderWatermark(
-      { slug: 'code-review', agentsDir },
+      { slug, agentsDir, runId },
       withStateFingerprint(
         defaultForwarderWatermark(),
         fingerprintOutsideState(current),
@@ -176,7 +182,7 @@ describe('state forwarder', () => {
     const next = state({ status: 'done', data: { milestone: 3 } });
     writeOutsideState(next);
     writeForwarderWatermark(
-      { slug: 'code-review', agentsDir },
+      { slug, agentsDir, runId },
       withStateFingerprint(
         defaultForwarderWatermark(),
         fingerprintOutsideState(previous),
@@ -189,7 +195,7 @@ describe('state forwarder', () => {
     expect(result.sent).toBe(true);
     expect(testSender.prompts[0]).toContain('Status: done');
     expect(
-      readForwarderWatermark({ slug: 'code-review', agentsDir }).value.state
+      readForwarderWatermark({ slug, agentsDir, runId }).value.state
         .outsideFingerprint,
     ).toBe(fingerprintOutsideState(next));
   });
@@ -204,13 +210,16 @@ describe('state forwarder', () => {
     );
 
     expect(
-      readForwarderWatermark({ slug: 'code-review', agentsDir }).value.state
+      readForwarderWatermark({ slug, agentsDir, runId }).value.state
         .outsideFingerprint,
     ).toBeNull();
   });
 
   it('surfaces corrupt outside state and leaves progress unchanged', async () => {
-    const target = stateFilePath('code-review', agentsDir, 'outside');
+    const target = stateFilePath(
+      coordinationRunLocation(slug, agentsDir, runId),
+      'outside',
+    );
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.writeFileSync(target, '{bad-json');
 
@@ -218,7 +227,7 @@ describe('state forwarder', () => {
       StateCorruptError,
     );
     expect(
-      readForwarderWatermark({ slug: 'code-review', agentsDir }).value.state
+      readForwarderWatermark({ slug, agentsDir, runId }).value.state
         .outsideFingerprint,
     ).toBeNull();
   });
@@ -227,7 +236,7 @@ describe('state forwarder', () => {
     const escaped = path.join(tmpDir, 'escaped');
     fs.mkdirSync(escaped);
     const stateDir = path.dirname(
-      stateFilePath('code-review', agentsDir, 'outside'),
+      stateFilePath(coordinationRunLocation(slug, agentsDir, runId), 'outside'),
     );
     fs.mkdirSync(path.dirname(stateDir), { recursive: true });
     fs.symlinkSync(escaped, stateDir);
@@ -272,8 +281,9 @@ describe('state forwarder', () => {
       },
     };
     const stateForwarder = createStateForwarder({
-      slug: 'code-review',
+      slug,
       agentsDir,
+      runId,
       sender: testSender,
       debounceMs: 1,
       watchFactory: (_filename, listener) => {

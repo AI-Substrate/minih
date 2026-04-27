@@ -9,7 +9,11 @@ import {
   stateTransition,
 } from '../../src/mcp/tools/state.js';
 import { McpToolError } from '../../src/mcp/types.js';
-import { historyPath, stateFilePath } from '../../src/runner/folder.js';
+import {
+  coordinationRunLocation,
+  historyPath,
+  stateFilePath,
+} from '../../src/runner/folder.js';
 import { writeState } from '../../src/runner/state.js';
 
 let tmpDir: string;
@@ -28,8 +32,8 @@ beforeEach(() => {
     agentSlug,
     agentsDir,
     agentDir,
-    inboxDir: path.join(agentDir, 'inbox'),
-    stateDir: path.join(agentDir, 'state'),
+    inboxDir: path.join(agentDir, 'runs', 'run-123', 'inbox'),
+    stateDir: path.join(agentDir, 'runs', 'run-123', 'state'),
     processMarker: 'minih-mcp-run-123',
   };
   fs.mkdirSync(context.runDir, { recursive: true });
@@ -53,15 +57,11 @@ describe('stateGet', () => {
       data: {},
       updatedBy: 'outside',
     });
-    expect(
-      fs.existsSync(
-        stateFilePath(context.agentSlug, context.agentsDir, 'inside'),
-      ),
-    ).toBe(false);
+    expect(fs.existsSync(stateFilePath(location(), 'inside'))).toBe(false);
   });
 
   it('reads peer outside state', () => {
-    writeState('outside', context.agentSlug, context.agentsDir, {
+    writeState(location(), 'outside', {
       status: 'in-progress',
       data: { phase: 4 },
       updatedAt: '2026-04-26T00:00:00.000Z',
@@ -79,7 +79,7 @@ describe('stateGet', () => {
 
   it('supports peer/self aliases and keyed reads', () => {
     stateSet(context, { status: 'reviewing', data: { phase: 4 } });
-    writeState('outside', context.agentSlug, context.agentsDir, {
+    writeState(location(), 'outside', {
       status: 'done',
       data: { phase: 3 },
       updatedAt: '2026-04-26T00:00:00.000Z',
@@ -100,11 +100,7 @@ describe('stateGet', () => {
   });
 
   it('maps corrupt state files to typed MCP errors', () => {
-    const filePath = stateFilePath(
-      context.agentSlug,
-      context.agentsDir,
-      'inside',
-    );
+    const filePath = stateFilePath(location(), 'inside');
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, '{not json');
 
@@ -154,7 +150,7 @@ describe('stateSet', () => {
 
 describe('stateTransition', () => {
   it('validates, appends history, and writes the next state', () => {
-    writeState('outside', context.agentSlug, context.agentsDir, {
+    writeState(location(), 'outside', {
       status: 'in-progress',
       data: {},
       updatedAt: '2026-04-26T00:00:00.000Z',
@@ -174,10 +170,7 @@ describe('stateTransition', () => {
       state: { status: 'reviewing', data: { pr: 42 } },
     });
     const history = JSON.parse(
-      fs.readFileSync(
-        historyPath(context.agentSlug, context.agentsDir),
-        'utf8',
-      ),
+      fs.readFileSync(historyPath(location()), 'utf8'),
     );
     expect(history).toMatchObject({
       side: 'inside',
@@ -201,9 +194,7 @@ describe('stateTransition', () => {
       from: 'reviewing',
       to: 'reviewing',
     });
-    expect(
-      fs.existsSync(historyPath(context.agentSlug, context.agentsDir)),
-    ).toBe(false);
+    expect(fs.existsSync(historyPath(location()))).toBe(false);
   });
 
   it('treats data with different object key order as a no-op transition', () => {
@@ -215,9 +206,7 @@ describe('stateTransition', () => {
     }).structuredContent;
 
     expect(result?.transitioned).toBe(false);
-    expect(
-      fs.existsSync(historyPath(context.agentSlug, context.agentsDir)),
-    ).toBe(false);
+    expect(fs.existsSync(historyPath(location()))).toBe(false);
   });
 
   it('maps history overflow to a typed MCP error without changing state', () => {
@@ -236,9 +225,14 @@ describe('stateTransition', () => {
 });
 
 function readStateFile(side: 'inside' | 'outside'): string {
-  return fs.readFileSync(
-    stateFilePath(context.agentSlug, context.agentsDir, side),
-    'utf8',
+  return fs.readFileSync(stateFilePath(location(), side), 'utf8');
+}
+
+function location() {
+  return coordinationRunLocation(
+    context.agentSlug,
+    context.agentsDir,
+    context.runId,
   );
 }
 

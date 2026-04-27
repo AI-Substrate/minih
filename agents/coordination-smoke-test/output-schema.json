@@ -20,12 +20,12 @@
           "tool": {
             "type": "string",
             "enum": [
-              "inbox.list",
-              "inbox.send",
-              "inbox.ack",
-              "state.get",
-              "state.set",
-              "state.transition"
+              "inbox_list",
+              "inbox_send",
+              "inbox_ack",
+              "state_get",
+              "state_set",
+              "state_transition"
             ]
           },
           "status": {

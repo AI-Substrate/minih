@@ -9,7 +9,11 @@ import {
   FakeAgentAdapter,
   type IAgentAdapter,
 } from '../../src/adapter/index.js';
-import { inboxLanePath, resolveAgent } from '../../src/runner/folder.js';
+import {
+  coordinationRunLocation,
+  inboxLanePath,
+  resolveAgent,
+} from '../../src/runner/folder.js';
 import { readForwarderWatermark } from '../../src/runner/forwarder-watermark.js';
 import { awaitTerminalCondition, runAgent } from '../../src/runner/runner.js';
 import { writeState } from '../../src/runner/state.js';
@@ -41,8 +45,12 @@ function createAgent(slug: string, options: { coordination?: boolean } = {}) {
   return definition;
 }
 
-function writeOutsideInbox(slug: string, subject: string): void {
-  const target = inboxLanePath(slug, tmpDir, 'outside');
+function writeOutsideInbox(
+  slug: string,
+  runDir: string,
+  subject: string,
+): void {
+  const target = inboxLanePath(locationForRun(slug, runDir), 'outside');
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.writeFileSync(
     target,
@@ -57,14 +65,33 @@ function writeOutsideInbox(slug: string, subject: string): void {
   );
 }
 
-function writeOutsideState(slug: string): void {
+function writeOutsideState(slug: string, runDir: string): void {
   const state: OutsideState = {
     status: 'in-progress',
     data: { milestone: 2 },
     updatedAt: '2026-04-26T00:00:00Z',
     updatedBy: 'outside',
   };
-  writeState('outside', slug, tmpDir, state);
+  writeState(locationForRun(slug, runDir), 'outside', state);
+}
+
+function locationForRun(slug: string, runDir: string) {
+  return coordinationRunLocation(slug, tmpDir, path.basename(runDir));
+}
+
+class SeededFakeAgentAdapter extends FakeAgentAdapter {
+  constructor(
+    options: ConstructorParameters<typeof FakeAgentAdapter>[0],
+    private readonly seed: (runDir: string) => void,
+  ) {
+    super(options);
+  }
+
+  override async run(options: AgentRunOptions): Promise<AgentResult> {
+    if (!options.cwd) throw new Error('expected run cwd');
+    this.seed(options.cwd);
+    return super.run(options);
+  }
 }
 
 function completedResult(): AgentResult {
@@ -82,9 +109,16 @@ class PendingSendAdapter implements IAgentAdapter {
   terminateHistory: string[] = [];
   private releaseSend: (() => void) | undefined;
 
-  constructor(private readonly releaseAutomatically = false) {}
+  constructor(
+    private readonly releaseAutomatically = false,
+    private readonly seed?: (runDir: string) => void,
+  ) {}
 
   async run(options: AgentRunOptions): Promise<AgentResult> {
+    if (this.seed) {
+      if (!options.cwd) throw new Error('expected run cwd');
+      this.seed(options.cwd);
+    }
     options.onEvent?.({
       type: 'session_start',
       timestamp: '2026-01-01T00:00:00Z',
@@ -137,7 +171,13 @@ class TimeoutAfterSendAdapter implements IAgentAdapter {
   prompts: string[] = [];
   terminateHistory: string[] = [];
 
+  constructor(private readonly seed?: (runDir: string) => void) {}
+
   async run(options: AgentRunOptions): Promise<AgentResult> {
+    if (this.seed) {
+      if (!options.cwd) throw new Error('expected run cwd');
+      this.seed(options.cwd);
+    }
     options.onEvent?.({
       type: 'session_start',
       timestamp: '2026-01-01T00:00:00Z',
@@ -277,9 +317,13 @@ describe('runAgent event-driven terminal flow', () => {
 
   it('starts coordinated forwarders through onSessionReady and cold-drains inbox and state', async () => {
     const definition = createAgent('coordinated-run', { coordination: true });
-    writeOutsideInbox('coordinated-run', 'Cold inbox');
-    writeOutsideState('coordinated-run');
-    const fake = new FakeAgentAdapter({ output: validSystemOutput() });
+    const fake = new SeededFakeAgentAdapter(
+      { output: validSystemOutput() },
+      (runDir) => {
+        writeOutsideInbox('coordinated-run', runDir, 'Cold inbox');
+        writeOutsideState('coordinated-run', runDir);
+      },
+    );
 
     const result = await runAgent(
       fake,
@@ -298,6 +342,7 @@ describe('runAgent event-driven terminal flow', () => {
     const watermark = readForwarderWatermark({
       slug: 'coordinated-run',
       agentsDir: tmpDir,
+      runId: path.basename(result.runDir),
     }).value;
     expect(watermark.inbox.outsideOffset).toBeGreaterThan(0);
     expect(watermark.state.outsideFingerprint).not.toBeNull();
@@ -354,8 +399,9 @@ describe('runAgent event-driven terminal flow', () => {
 
   it('waits for pending forwarder sends after adapter idle before completing', async () => {
     const definition = createAgent('terminal-drain', { coordination: true });
-    writeOutsideInbox('terminal-drain', 'Wait for me');
-    const adapter = new PendingSendAdapter();
+    const adapter = new PendingSendAdapter(false, (runDir) =>
+      writeOutsideInbox('terminal-drain', runDir, 'Wait for me'),
+    );
     let settled = false;
 
     const run = runAgent(
@@ -382,8 +428,9 @@ describe('runAgent event-driven terminal flow', () => {
 
   it('times out and terminates when a pending forwarder send never drains', async () => {
     const definition = createAgent('terminal-timeout', { coordination: true });
-    writeOutsideInbox('terminal-timeout', 'Never resolves');
-    const adapter = new PendingSendAdapter();
+    const adapter = new PendingSendAdapter(false, (runDir) =>
+      writeOutsideInbox('terminal-timeout', runDir, 'Never resolves'),
+    );
 
     const result = await runAgent(
       adapter,
@@ -401,8 +448,9 @@ describe('runAgent event-driven terminal flow', () => {
     const definition = createAgent('timeout-after-send', {
       coordination: true,
     });
-    writeOutsideInbox('timeout-after-send', 'Do not commit');
-    const adapter = new TimeoutAfterSendAdapter();
+    const adapter = new TimeoutAfterSendAdapter((runDir) =>
+      writeOutsideInbox('timeout-after-send', runDir, 'Do not commit'),
+    );
 
     const result = await runAgent(
       adapter,
@@ -419,6 +467,7 @@ describe('runAgent event-driven terminal flow', () => {
       readForwarderWatermark({
         slug: 'timeout-after-send',
         agentsDir: tmpDir,
+        runId: path.basename(result.runDir),
       }).value.inbox.outsideOffset,
     ).toBe(0);
   });

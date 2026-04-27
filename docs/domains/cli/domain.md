@@ -4,7 +4,7 @@
 
 ## Boundary
 
-**Owns**: Command definitions (init, run, resume, connect, list, doctor, check, history, validate, tail, last-run, outside coordination commands), argument parsing, JSON output envelope, SDK client instantiation (composition root), agent scaffolding (init), SDK runtime helper (shared by run + resume), cross-domain composition wiring, inside-context command blocking
+**Owns**: Command definitions (quickstart, init, run, resume, connect, list, doctor, check, validate, history, tail, last-run, status, inspect, difficulties, outside coordination commands), argument parsing, JSON output envelope, SDK client instantiation (composition root), agent scaffolding (init), SDK runtime helper (shared by run + resume), cross-domain composition wiring, inside-context command blocking
 
 **Excludes**: Execution logic (runner), SDK communication (adapter), schema validation (runner), MCP tool implementation (mcp)
 
@@ -28,8 +28,10 @@
 | `src/cli/commands/last-run.ts` | internal | Latest run info (Phase 4) |
 | `src/cli/commands/tail.ts` | internal | Follow event stream (Phase 4) |
 | `src/cli/commands/difficulties.ts` | internal | Aggregate difficulty reports across all agents (006-compounding-value) |
+| `src/cli/commands/status.ts` | internal | Latest run status summary |
+| `src/cli/commands/inspect.ts` | internal | Prompt/config inspection |
 | `src/cli/preaction-context.ts` | internal | Reusable inside-context block for outside-only shell commands (007-backgrounding P5) |
-| `src/cli/coordination.ts` | internal | Shared outside coordination CLI helpers: agent resolution, schema validation, inbox lane parsing/appending (007-backgrounding P5) |
+| `src/cli/coordination.ts` | internal | Shared outside coordination CLI helpers: agent/run resolution, schema validation, inbox lane parsing/appending (007-backgrounding P5 + FX001) |
 | `src/cli/commands/outside-send.ts` | contract | Append outside-lane inbox messages, including ack records (007-backgrounding P5) |
 | `src/cli/commands/outside-inbox-list.ts` | contract | Read/filter inside-lane replies for outside callers (007-backgrounding P5) |
 | `src/cli/commands/state.ts` | contract | Outside state get/set/transition subcommands (007-backgrounding P5) |
@@ -47,6 +49,7 @@
 | Inside-context block | CLI guard | Outside-only commands invoked from inside a minih session |
 | `init --coordinated` | CLI | Agent authors creating two-sided coordinated agents |
 | `doctor` outside-contract checks | CLI | Agent authors keeping `outside.md` current and bounded |
+| `run --dry-run` | CLI | Agent authors inspecting the exact coordinated inside prompt without launching the SDK |
 
 ## Concepts
 
@@ -56,12 +59,23 @@
 | Inside MCP wiring | `run.ts` and `resume.ts` import `mcp` spawn config and pass a generic factory to runner only at the CLI composition boundary. |
 | stdout = machine | JSON envelope on stdout. Human formatting on stderr. TTY-detected. |
 | Three consumers | Agent inside minih, external coding agents, humans/CI. |
-| Outside commander surface | Humans, CI, and host agents coordinate with an inside session through `outside-send`, `outside-inbox-list`, `state`, `outside-context`, `outside-retro`, and `retros`. |
+| Outside commander surface | Humans, CI, and host agents coordinate with an inside session through `outside-send`, `outside-inbox-list`, `state get`, `state set`, `outside-context`, `outside-retro`, and `retros`. Mutable commands target a run explicitly with `--run <runId>` or resolve only when unambiguous; they read/write runner coordination files and do not invoke inside MCP tools directly. |
 | Context block | `run`, `resume`, `quickstart`, `tail`, and `init` fail with `E128 INVALID_CONTEXT` under strict `MINIH=1`, while normal outside behavior is unchanged. |
 | Cross-side retros | Inside managed `report.json.retrospective` entries and outside-lane `retro` messages flow into the same `retros` aggregation surface. |
-| Coordinated scaffold | `init --coordinated` writes `coordination: enabled`, `outside.md`, and per-agent inside/outside state schemas without changing default init output. |
-| Outside contract health | `doctor` warns when coordinated `outside.md` is stale or over 4KB and fails over 8KB after preserving realpath containment checks. |
+| Coordinated scaffold | `init --coordinated` writes `coordination: enabled`, `outside.md`, `inside-state.schema.json`, and `outside-state.schema.json` without changing default init output. |
+| Outside context preview | `outside-context` with no slug returns system-only guidance. With a slug, `contractStatus` is `absent`, `empty`, or `present`, and `hasOutsideContract` distinguishes no file from an empty file. |
+| Outside contract health | `doctor` warns when coordinated `outside.md` is older than `prompt.md` or over 4KB, fails over 8KB, ignores absent/non-coordinated outside contracts, and preserves realpath containment checks. |
 | Dry-run prompt parity | `run --dry-run` uses `buildInsidePreamble()` and returns the assembled prompt in the JSON envelope, so coordinated previews include the same identity/tool/peer/checklist sections as real runs. |
+
+## Tests & Validation
+
+| Area | Tests |
+|------|-------|
+| Outside context statuses | `test/cli/outside-context.test.ts` |
+| Outside inbox/state/retro commands | `test/cli/outside-send.test.ts`, `test/cli/outside-inbox-list.test.ts`, `test/cli/outside-retro.test.ts`, `test/cli/state.test.ts`, `test/cli/retros.test.ts` |
+| Coordinated scaffold and dry-run parity | `test/cli/init-coordinated.test.ts` |
+| Doctor outside-contract checks | `test/cli/doctor-outside-md.test.ts` |
+| MCP composition wiring from CLI | `test/mcp/spawn.test.ts`, `test/mcp/leak-regression.test.ts` |
 
 ## History
 
@@ -78,3 +92,6 @@
 | 007-backgrounding P4 | Wired coordinated `run` and `resume` sessions to supply the inside MCP spawn config factory and reserved inbox/state tool namespace checks. |
 | 007-backgrounding P5 | Added outside coordination CLI surface: context block guard, outside inbox send/list, outside state get/set/transition, outside-context, outside-retro, retros aggregation, command discovery, and run help guidance. |
 | 007-backgrounding P6 | Extended `init` with `--coordinated` scaffolding and canonical shared-preamble creation, `doctor` with coordinated `outside.md` drift/size checks, and `run --dry-run` prompt preview parity while preserving default init and non-coordinated doctor behavior. |
+| 007-backgrounding P7 | Finalized CLI documentation for the complete command surface, outside-context contract statuses, coordinated scaffold files, doctor outside-contract checks, dry-run parity, and MCP composition-root boundary. |
+| 008-canonical-coordination-loop | Updated coordinated `run`/`resume` reserved MCP namespace checks from dotted `inbox.*`/`state.*` prefixes to backend-safe `inbox_`/`state_` prefixes and added the rich `coordination-loop-validator` worked-example docs/tests. |
+| 008 FX001 | Outside coordination commands now resolve a run target, include `runId` in envelopes, and keep same-agent concurrent runs isolated across inbox/state/retros. |

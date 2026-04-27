@@ -505,7 +505,7 @@ describe('runAgent', () => {
       ],
     });
 
-    await runAgent(
+    const result = await runAgent(
       fake,
       def,
       { slug: 'coord-env-test' },
@@ -521,8 +521,8 @@ describe('runAgent', () => {
 
     expect(capturedEnv).toEqual({
       MINIH_CONTEXT: 'inside',
-      MINIH_INBOX_DIR: path.join(tmpDir, 'coord-env-test', 'inbox'),
-      MINIH_STATE_DIR: path.join(tmpDir, 'coord-env-test', 'state'),
+      MINIH_INBOX_DIR: path.join(result.runDir, 'inbox'),
+      MINIH_STATE_DIR: path.join(result.runDir, 'state'),
     });
     expect(process.env.MINIH_CONTEXT).toBeUndefined();
     expect(process.env.MINIH_INBOX_DIR).toBeUndefined();

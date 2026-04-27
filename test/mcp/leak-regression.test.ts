@@ -96,7 +96,7 @@ async function runCoordinatedLeakScenario(
           agentsDir,
         });
       },
-      reservedMcpToolPrefixes: ['inbox.', 'state.'],
+      reservedMcpToolPrefixes: ['inbox_', 'state_'],
     },
     undefined,
     agentsDir,

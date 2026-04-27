@@ -2,7 +2,10 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { watermarkPath } from '../../src/runner/folder.js';
+import {
+  coordinationRunLocation,
+  watermarkPath,
+} from '../../src/runner/folder.js';
 import {
   assertPathInsideAgentsDir,
   CoordinationPathEscapeError,
@@ -17,6 +20,8 @@ import {
 
 let tmpDir: string;
 let agentsDir: string;
+const slug = 'code-review';
+const runId = 'run-123';
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'minih-watermark-'));
@@ -29,7 +34,7 @@ afterEach(() => {
 });
 
 function location() {
-  return { slug: 'code-review', agentsDir };
+  return coordinationRunLocation(slug, agentsDir, runId);
 }
 
 describe('forwarder watermark', () => {
@@ -38,7 +43,7 @@ describe('forwarder watermark', () => {
 
     expect(loaded.value).toEqual(defaultForwarderWatermark());
     expect(loaded.recoveredFromCorruption).toBe(false);
-    expect(loaded.path).toBe(watermarkPath('code-review', agentsDir));
+    expect(loaded.path).toBe(watermarkPath(location()));
   });
 
   it('writes normalized progress with atomic writer semantics', () => {
@@ -50,7 +55,7 @@ describe('forwarder watermark', () => {
       ),
     );
 
-    const target = watermarkPath('code-review', agentsDir);
+    const target = watermarkPath(location());
     expect(fs.readdirSync(path.dirname(target))).toEqual([
       'sdk-watermark.json',
     ]);
@@ -78,8 +83,27 @@ describe('forwarder watermark', () => {
     });
   });
 
+  it('keeps progress isolated between runs of the same agent', () => {
+    const otherLocation = coordinationRunLocation(slug, agentsDir, 'run-456');
+    writeForwarderWatermark(
+      location(),
+      withInboxOffset(defaultForwarderWatermark(), 5),
+    );
+    writeForwarderWatermark(
+      otherLocation,
+      withInboxOffset(defaultForwarderWatermark(), 10),
+    );
+
+    expect(readForwarderWatermark(location()).value.inbox.outsideOffset).toBe(
+      5,
+    );
+    expect(
+      readForwarderWatermark(otherLocation).value.inbox.outsideOffset,
+    ).toBe(10);
+  });
+
   it('recovers corrupt data as empty progress and reports the reason', () => {
-    const target = watermarkPath('code-review', agentsDir);
+    const target = watermarkPath(location());
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.writeFileSync(target, '{not-json');
 
@@ -106,9 +130,9 @@ describe('forwarder watermark', () => {
   it('rejects watermark parent symlink escapes', () => {
     const escaped = path.join(tmpDir, 'escaped');
     fs.mkdirSync(escaped);
-    const agentDir = path.join(agentsDir, 'code-review');
-    fs.mkdirSync(agentDir);
-    fs.symlinkSync(escaped, path.join(agentDir, 'state'));
+    const runDir = path.join(agentsDir, slug, 'runs', runId);
+    fs.mkdirSync(runDir, { recursive: true });
+    fs.symlinkSync(escaped, path.join(runDir, 'state'));
 
     expect(() =>
       writeForwarderWatermark(location(), defaultForwarderWatermark()),
@@ -124,9 +148,9 @@ describe('forwarder watermark', () => {
       JSON.stringify(defaultForwarderWatermark()),
     );
 
-    const stateDir = path.dirname(watermarkPath('code-review', agentsDir));
+    const stateDir = path.dirname(watermarkPath(location()));
     fs.mkdirSync(stateDir, { recursive: true });
-    fs.symlinkSync(externalWatermark, watermarkPath('code-review', agentsDir));
+    fs.symlinkSync(externalWatermark, watermarkPath(location()));
 
     expect(() => readForwarderWatermark(location())).toThrow(
       CoordinationPathEscapeError,
@@ -134,7 +158,7 @@ describe('forwarder watermark', () => {
   });
 
   it('allows contained paths and rejects lexical escapes', () => {
-    const target = watermarkPath('code-review', agentsDir);
+    const target = watermarkPath(location());
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.writeFileSync(target, JSON.stringify(defaultForwarderWatermark()));
 

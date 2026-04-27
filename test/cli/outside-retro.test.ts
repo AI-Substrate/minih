@@ -3,12 +3,16 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { inboxLanePath } from '../../src/runner/folder.js';
+import {
+  coordinationRunLocation,
+  inboxLanePath,
+} from '../../src/runner/folder.js';
 import type { InboxMessage } from '../../src/runner/types.js';
 
 let tmpDir: string;
 let agentsDir: string;
 const cliPath = path.resolve('dist/cli/index.js');
+const runId = 'run-123';
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'minih-outside-retro-'));
@@ -48,11 +52,18 @@ tags: []
 # ${slug}
 `,
   );
+  fs.mkdirSync(path.join(dir, 'runs', runId), { recursive: true });
 }
 
 function readOutsideLane(): InboxMessage[] {
   return fs
-    .readFileSync(inboxLanePath('demo', agentsDir, 'outside'), 'utf8')
+    .readFileSync(
+      inboxLanePath(
+        coordinationRunLocation('demo', agentsDir, runId),
+        'outside',
+      ),
+      'utf8',
+    )
     .trimEnd()
     .split('\n')
     .map((line) => JSON.parse(line) as InboxMessage);
@@ -67,6 +78,8 @@ describe('outside-retro', () => {
       'Worked well. Magic wand: clearer peer status.',
       '--agents-dir',
       agentsDir,
+      '--run',
+      runId,
     ]);
 
     expect(exitCode).toBe(0);
@@ -96,6 +109,8 @@ describe('outside-retro', () => {
       'project',
       '--agents-dir',
       agentsDir,
+      '--run',
+      runId,
     ]);
     expect(explicit.exitCode).toBe(0);
     expect(readOutsideLane()[0]?.meta).toEqual({ magicWandTarget: 'project' });
@@ -109,6 +124,8 @@ describe('outside-retro', () => {
       'other',
       '--agents-dir',
       agentsDir,
+      '--run',
+      runId,
     ]);
     expect(invalid.exitCode).toBe(1);
     expect(JSON.parse(invalid.stdout).error.code).toBe('E108');

@@ -1,14 +1,12 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { writeFileAtomic } from './atomic-write.js';
+import type { CoordinationRunLocation } from './folder.js';
 import { watermarkPath } from './folder.js';
 
 const WATERMARK_VERSION = 1;
 
-export interface ForwarderWatermarkLocation {
-  slug: string;
-  agentsDir: string;
-}
+export type ForwarderWatermarkLocation = CoordinationRunLocation;
 
 export interface ForwarderWatermark {
   version: 1;
@@ -155,7 +153,7 @@ export function assertPathInsideAgentsDir(
 }
 
 function resolveWatermarkPath(location: ForwarderWatermarkLocation): string {
-  return watermarkPath(location.slug, location.agentsDir);
+  return watermarkPath(location);
 }
 
 function parseForwarderWatermark(value: unknown): ForwarderWatermark {

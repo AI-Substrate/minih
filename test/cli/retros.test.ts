@@ -3,7 +3,10 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { inboxLanePath } from '../../src/runner/folder.js';
+import {
+  coordinationRunLocation,
+  inboxLanePath,
+} from '../../src/runner/folder.js';
 import type { InboxMessage } from '../../src/runner/types.js';
 
 let tmpDir: string;
@@ -68,8 +71,15 @@ function writeCompletedReport(
   );
 }
 
-function writeOutsideMessage(slug: string, message: InboxMessage): void {
-  const filePath = inboxLanePath(slug, agentsDir, 'outside');
+function writeOutsideMessage(
+  slug: string,
+  runId: string,
+  message: InboxMessage,
+): void {
+  const filePath = inboxLanePath(
+    coordinationRunLocation(slug, agentsDir, runId),
+    'outside',
+  );
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.appendFileSync(filePath, `${JSON.stringify(message)}\n`);
 }
@@ -100,6 +110,7 @@ describe('retros', () => {
     });
     writeOutsideMessage(
       'demo',
+      'run-1',
       retroMessage(
         '01ARZ3NDEKTSV4RRFFQ69G5FAV',
         'Outside wants clearer state.',
@@ -137,6 +148,7 @@ describe('retros', () => {
     });
     writeOutsideMessage(
       'demo',
+      'run-1',
       retroMessage(
         '01ARZ3NDEKTSV4RRFFQ69G5FAW',
         'Project outside feedback.',
@@ -145,6 +157,7 @@ describe('retros', () => {
     );
     writeOutsideMessage(
       'other',
+      'run-1',
       retroMessage(
         '01ARZ3NDEKTSV4RRFFQ69G5FAX',
         'Other coordination feedback.',
@@ -188,7 +201,10 @@ describe('retros', () => {
   });
 
   it('fails on corrupt outside retro lanes instead of swallowing them', () => {
-    const filePath = inboxLanePath('demo', agentsDir, 'outside');
+    const filePath = inboxLanePath(
+      coordinationRunLocation('demo', agentsDir, 'run-1'),
+      'outside',
+    );
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, '{"id":');
 

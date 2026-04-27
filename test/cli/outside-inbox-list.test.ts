@@ -3,7 +3,10 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { inboxLanePath } from '../../src/runner/folder.js';
+import {
+  coordinationRunLocation,
+  inboxLanePath,
+} from '../../src/runner/folder.js';
 import type { InboxMessage, Side } from '../../src/runner/types.js';
 
 let tmpDir: string;
@@ -12,6 +15,7 @@ const cliPath = path.resolve('dist/cli/index.js');
 const msg1 = '01ARZ3NDEKTSV4RRFFQ69G5FAV';
 const msg2 = '01ARZ3NDEKTSV4RRFFQ69G5FAW';
 const ack1 = '01ARZ3NDEKTSV4RRFFQ69G5FAX';
+const runId = 'run-123';
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'minih-outside-list-'));
@@ -51,10 +55,14 @@ tags: []
 # ${slug}
 `,
   );
+  fs.mkdirSync(path.join(dir, 'runs', runId), { recursive: true });
 }
 
 function writeMessage(lane: Side, message: InboxMessage): void {
-  const filePath = inboxLanePath('demo', agentsDir, lane);
+  const filePath = inboxLanePath(
+    coordinationRunLocation('demo', agentsDir, runId),
+    lane,
+  );
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.appendFileSync(filePath, `${JSON.stringify(message)}\n`);
 }
@@ -77,6 +85,8 @@ describe('outside-inbox-list', () => {
       'demo',
       '--agents-dir',
       agentsDir,
+      '--run',
+      runId,
     ]);
 
     expect(exitCode).toBe(0);
@@ -106,6 +116,8 @@ describe('outside-inbox-list', () => {
       '--unread',
       '--agents-dir',
       agentsDir,
+      '--run',
+      runId,
     ]);
     expect(JSON.parse(unread.stdout).data.messages).toEqual([
       expect.objectContaining({ id: msg2 }),
@@ -119,6 +131,8 @@ describe('outside-inbox-list', () => {
       '--unread',
       '--agents-dir',
       agentsDir,
+      '--run',
+      runId,
     ]);
     expect(JSON.parse(typed.stdout).data.messages).toEqual([
       expect.objectContaining({ id: msg2, type: 'status' }),
@@ -126,11 +140,21 @@ describe('outside-inbox-list', () => {
   });
 
   it('fails loudly for torn and corrupt inbox lanes', () => {
-    const insidePath = inboxLanePath('demo', agentsDir, 'inside');
+    const insidePath = inboxLanePath(
+      coordinationRunLocation('demo', agentsDir, runId),
+      'inside',
+    );
     fs.mkdirSync(path.dirname(insidePath), { recursive: true });
     fs.writeFileSync(insidePath, '{"id":');
 
-    const torn = run(['outside-inbox-list', 'demo', '--agents-dir', agentsDir]);
+    const torn = run([
+      'outside-inbox-list',
+      'demo',
+      '--agents-dir',
+      agentsDir,
+      '--run',
+      runId,
+    ]);
     expect(torn.exitCode).toBe(1);
     expect(JSON.parse(torn.stdout).error.code).toBe('E124');
 
@@ -140,6 +164,8 @@ describe('outside-inbox-list', () => {
       'demo',
       '--agents-dir',
       agentsDir,
+      '--run',
+      runId,
     ]);
     expect(malformed.exitCode).toBe(1);
     expect(JSON.parse(malformed.stdout).error.message).toContain(

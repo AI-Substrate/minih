@@ -169,7 +169,7 @@ export interface RunEventStats {
 // downstream phase — keep types and schemas in lockstep.
 //
 // `Status` is intentionally NOT introduced as a type alias — runtime validation
-// (per-agent inside-state.schema.json enum at MCP `state.transition` time, P4)
+// (per-agent inside-state.schema.json enum at MCP `state_transition` time, P4)
 // is the source of truth. A discriminated union here would re-introduce the
 // rule engine workshop 002 down-scoped.
 // ---------------------------------------------------------------------------

@@ -9,7 +9,11 @@ import type {
   IAgentAdapter,
   SessionSender,
 } from '../../src/adapter/index.js';
-import { inboxLanePath, resolveAgent } from '../../src/runner/folder.js';
+import {
+  coordinationRunLocation,
+  inboxLanePath,
+  resolveAgent,
+} from '../../src/runner/folder.js';
 import { runAgent } from '../../src/runner/runner.js';
 import { writeState } from '../../src/runner/state.js';
 import type { InboxMessage, InsideState } from '../../src/runner/types.js';
@@ -38,8 +42,11 @@ afterEach(() => {
 
 class CoordinatedSmokeAdapter implements IAgentAdapter {
   readonly forwardedPrompts: string[] = [];
+  runId: string | null = null;
 
   async run(options: AgentRunOptions): Promise<AgentResult> {
+    if (!options.cwd) throw new Error('expected run cwd');
+    this.runId = path.basename(options.cwd);
     const sender: SessionSender = {
       send: async (prompt: string): Promise<string> => {
         this.forwardedPrompts.push(prompt);
@@ -59,7 +66,7 @@ class CoordinatedSmokeAdapter implements IAgentAdapter {
       5000,
     );
 
-    appendInsideMessage({
+    appendInsideMessage(this.runId, {
       id: '01ARZ3NDEKTSV4RRFFQ69G5FAA',
       sender: 'inside',
       type: 'note',
@@ -73,7 +80,11 @@ class CoordinatedSmokeAdapter implements IAgentAdapter {
       updatedAt: '2026-04-26T00:00:03Z',
       updatedBy: 'inside',
     };
-    writeState('inside', slug, agentsDir, insideState);
+    writeState(
+      coordinationRunLocation(slug, agentsDir, this.runId),
+      'inside',
+      insideState,
+    );
 
     return {
       output: JSON.stringify({
@@ -81,32 +92,32 @@ class CoordinatedSmokeAdapter implements IAgentAdapter {
           'The two-agent coordination smoke path observed outside input, sent inside evidence, and wrote final state.',
         toolChecks: [
           {
-            tool: 'inbox.list',
+            tool: 'inbox_list',
             status: 'pass',
             evidence: 'outside request forwarded',
           },
           {
-            tool: 'inbox.ack',
+            tool: 'inbox_ack',
             status: 'pass',
             evidence: 'request acknowledged in simulated turn',
           },
           {
-            tool: 'inbox.send',
+            tool: 'inbox_send',
             status: 'pass',
             evidence: 'inside reply appended',
           },
           {
-            tool: 'state.get',
+            tool: 'state_get',
             status: 'pass',
             evidence: 'outside state forwarded',
           },
           {
-            tool: 'state.set',
+            tool: 'state_set',
             status: 'pass',
             evidence: 'inside state written',
           },
           {
-            tool: 'state.transition',
+            tool: 'state_transition',
             status: 'pass',
             evidence: 'inside status complete',
           },
@@ -156,6 +167,18 @@ class CoordinatedSmokeAdapter implements IAgentAdapter {
 
 describeE2e('two-agent coordination e2e', () => {
   it('drives the smoke-test agent through outside writes and verifies inside evidence', async () => {
+    const definition = resolveAgent(slug, agentsDir);
+    if (!definition) throw new Error('expected coordination smoke agent');
+    const adapter = new CoordinatedSmokeAdapter();
+    const resultPromise = runAgent(
+      adapter,
+      definition,
+      { slug, timeout: 10, cwd: repoRoot },
+      undefined,
+      agentsDir,
+    );
+    const runId = await waitForRunId(slug);
+
     runCli([
       'outside-send',
       slug,
@@ -167,6 +190,8 @@ describeE2e('two-agent coordination e2e', () => {
       'Please verify coordination.',
       '--agents-dir',
       agentsDir,
+      '--run',
+      runId,
     ]);
     runCli([
       'state',
@@ -180,18 +205,11 @@ describeE2e('two-agent coordination e2e', () => {
       '{"driver":"outside e2e"}',
       '--agents-dir',
       agentsDir,
+      '--run',
+      runId,
     ]);
 
-    const definition = resolveAgent(slug, agentsDir);
-    if (!definition) throw new Error('expected coordination smoke agent');
-    const adapter = new CoordinatedSmokeAdapter();
-    const result = await runAgent(
-      adapter,
-      definition,
-      { slug, timeout: 10, cwd: repoRoot },
-      undefined,
-      agentsDir,
-    );
+    const result = await resultPromise;
 
     expect(result.metadata.result).toBe('completed');
     expect(result.metadata.validated).toBe(true);
@@ -203,7 +221,14 @@ describeE2e('two-agent coordination e2e', () => {
     );
 
     const replies = JSON.parse(
-      runCli(['outside-inbox-list', slug, '--agents-dir', agentsDir]),
+      runCli([
+        'outside-inbox-list',
+        slug,
+        '--agents-dir',
+        agentsDir,
+        '--run',
+        runId,
+      ]),
     );
     expect(replies.data.messages).toEqual([
       expect.objectContaining({
@@ -213,7 +238,7 @@ describeE2e('two-agent coordination e2e', () => {
     ]);
 
     const state = JSON.parse(
-      runCli(['state', 'get', slug, '--agents-dir', agentsDir]),
+      runCli(['state', 'get', slug, '--agents-dir', agentsDir, '--run', runId]),
     );
     expect(state.data.inside.status).toBe('complete');
     expect(state.data.outside.status).toBe('in-progress');
@@ -228,12 +253,12 @@ describeE2e('two-agent coordination e2e', () => {
     expect(
       report.toolChecks.map((check: { tool: string }) => check.tool),
     ).toEqual([
-      'inbox.list',
-      'inbox.ack',
-      'inbox.send',
-      'state.get',
-      'state.set',
-      'state.transition',
+      'inbox_list',
+      'inbox_ack',
+      'inbox_send',
+      'state_get',
+      'state_set',
+      'state_transition',
     ]);
     expect(result.metadata.artifacts).toContain('state-snapshot.json');
     expect(result.metadata.artifacts).toContain('inbox-snapshot/inside.ndjson');
@@ -249,8 +274,28 @@ function runCli(args: string[]): string {
   });
 }
 
-function appendInsideMessage(message: InboxMessage): void {
-  const target = inboxLanePath(slug, agentsDir, 'inside');
+async function waitForRunId(agentSlug: string): Promise<string> {
+  let discovered: string | null = null;
+  await waitFor(() => {
+    const runsDir = path.join(agentsDir, agentSlug, 'runs');
+    if (!fs.existsSync(runsDir)) return false;
+    const runs = fs
+      .readdirSync(runsDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name);
+    if (runs.length !== 1) return false;
+    discovered = runs[0];
+    return true;
+  }, 5000);
+  if (discovered === null) throw new Error('run id was not discovered');
+  return discovered;
+}
+
+function appendInsideMessage(runId: string, message: InboxMessage): void {
+  const target = inboxLanePath(
+    coordinationRunLocation(slug, agentsDir, runId),
+    'inside',
+  );
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.appendFileSync(target, `${JSON.stringify(message)}\n`);
 }

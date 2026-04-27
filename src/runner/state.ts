@@ -4,7 +4,7 @@
  * Workshop 002 + didyouknow #2: minih is an enabler, not an orchestrator.
  * This module is **types + pure helpers only**. NO rule engine, NO transition
  * predicates, NO `requiresPeer` enforcement. Per-agent state schemas (P6)
- * provide the constraint at MCP `state.transition` time; outside negotiates
+ * provide the constraint at MCP `state_transition` time; outside negotiates
  * via inbox messages if it disagrees.
  *
  * Workshop 001 §Initial State Behavior: when the side state file is absent,
@@ -22,7 +22,13 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { writeFileAtomic } from './atomic-write.js';
-import { validateSlug } from './folder.js';
+import type { CoordinationRunLocation } from './folder.js';
+import {
+  historyPath,
+  InvalidSlugError,
+  stateFilePath,
+  validateSlug,
+} from './folder.js';
 import type {
   InsideState,
   OutsideState,
@@ -49,24 +55,11 @@ export class HistoryLineTooLargeError extends Error {
   }
 }
 
-export class InvalidSlugError extends Error {
-  constructor(slug: string, reason: string) {
-    super(`invalid agent slug "${slug}": ${reason}`);
-    this.name = 'InvalidSlugError';
-  }
-}
+export { InvalidSlugError } from './folder.js';
 
 function ensureValidSlug(slug: string): void {
   const err = validateSlug(slug);
   if (err !== null) throw new InvalidSlugError(slug, err);
-}
-
-function stateFilePath(slug: string, agentsDir: string, side: Side): string {
-  return path.join(path.resolve(agentsDir), slug, 'state', `${side}.json`);
-}
-
-function historyFilePath(slug: string, agentsDir: string): string {
-  return path.join(path.resolve(agentsDir), slug, 'state', 'history.ndjson');
 }
 
 function syntheticDefault(side: Side): SideState {
@@ -87,12 +80,11 @@ function syntheticDefault(side: Side): SideState {
  * minimum required fields.
  */
 export function readStateLazy(
+  location: CoordinationRunLocation,
   side: Side,
-  slug: string,
-  agentsDir: string,
 ): SideState {
-  ensureValidSlug(slug);
-  const file = stateFilePath(slug, agentsDir, side);
+  ensureValidSlug(location.slug);
+  const file = stateFilePath(location, side);
   if (!fs.existsSync(file)) return syntheticDefault(side);
 
   let raw: string;
@@ -171,13 +163,12 @@ export function readStateLazy(
  * last-write-wins on the file (workshop 001 §Concurrent-Access Semantics).
  */
 export function writeState(
+  location: CoordinationRunLocation,
   side: Side,
-  slug: string,
-  agentsDir: string,
   state: SideState,
 ): void {
-  ensureValidSlug(slug);
-  const file = stateFilePath(slug, agentsDir, side);
+  ensureValidSlug(location.slug);
+  const file = stateFilePath(location, side);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   writeFileAtomic(file, JSON.stringify(state));
 }
@@ -191,13 +182,12 @@ export function writeState(
  * single `appendFileSync` call is atomic against concurrent appenders.
  */
 export function appendHistory(
-  slug: string,
-  agentsDir: string,
+  location: CoordinationRunLocation,
   entry: Omit<StateHistoryEntry, 'peerStateAtTime'> &
     Partial<Pick<StateHistoryEntry, 'peerStateAtTime'>>,
 ): void {
-  ensureValidSlug(slug);
-  const file = historyFilePath(slug, agentsDir);
+  ensureValidSlug(location.slug);
+  const file = historyPath(location);
   fs.mkdirSync(path.dirname(file), { recursive: true });
 
   // Auto-populate peerStateAtTime if absent: snapshot the OTHER side now.
@@ -205,7 +195,7 @@ export function appendHistory(
     entry.peerStateAtTime ??
     (() => {
       const otherSide: Side = entry.side === 'outside' ? 'inside' : 'outside';
-      const peer = readStateLazy(otherSide, slug, agentsDir);
+      const peer = readStateLazy(location, otherSide);
       return { status: peer.status };
     })();
 

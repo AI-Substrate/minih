@@ -8,12 +8,12 @@ const COORDINATION_TOOLS_SECTION = `<!-- coordination.tools-section -->
 
 Use the inside MCP tools when you need to coordinate with the outside peer:
 
-- \`inbox.list\` — read outside messages; use \`unread: true\` to focus on new work.
-- \`inbox.send\` — send progress, questions, review evidence, or completion notes to the outside peer.
-- \`inbox.ack\` — acknowledge an outside message after you have handled it.
-- \`state.get\` — inspect your inside state and the outside peer state.
-- \`state.set\` — publish your current inside state.
-- \`state.transition\` — move your inside status and append transition history.`;
+- \`inbox_list\` — read outside messages; use \`unread: true\` to focus on new work.
+- \`inbox_send\` — send progress, questions, review evidence, or completion notes to the outside peer.
+- \`inbox_ack\` — acknowledge an outside message after you have handled it.
+- \`state_get\` — inspect your inside state and the outside peer state.
+- \`state_set\` — publish your current inside state.
+- \`state_transition\` — move your inside status and append transition history.`;
 
 const COORDINATION_PRE_COMPLETION_CHECKLIST = `<!-- coordination.pre-completion-checklist -->
 
@@ -21,9 +21,9 @@ const COORDINATION_PRE_COMPLETION_CHECKLIST = `<!-- coordination.pre-completion-
 
 Before writing the final JSON report:
 
-- Check \`inbox.list\` for unresolved outside requests.
-- Send final progress or review evidence with \`inbox.send\` when the outside peer needs it.
-- Update inside state with \`state.set\` or \`state.transition\` so the peer can observe your final status.
+- Check \`inbox_list\` for unresolved outside requests.
+- Send final progress or review evidence with \`inbox_send\` when the outside peer needs it.
+- Update inside state with \`state_set\` or \`state_transition\` so the peer can observe your final status.
 - Mention coordination blockers or follow-ups in \`retrospective.coordination\` when relevant.`;
 
 export interface PreambleAssemblyInput {

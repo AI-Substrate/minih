@@ -6,7 +6,7 @@
 
 **Owns**: Agent discovery, prompt assembly, run folders, frozen inputs, coordination snapshots, NDJSON event streaming, output validation, completion metadata, magic wand feedback capture, frontmatter parsing
 
-**Excludes**: SDK communication (adapter), CLI argument parsing (cli), SDK-specific event types (adapter)
+**Excludes**: SDK communication (adapter), CLI argument parsing and JSON envelopes (cli), SDK-specific event types (adapter), MCP server/tool implementation (mcp), peer policy/rule-engine orchestration
 
 ## Composition
 
@@ -28,10 +28,10 @@
 | `src/runner/atomic-write.ts` | internal | POSIX write-then-rename helper (sync + async) for state files (007 P1) |
 | `src/runner/ulid.ts` | internal | In-tree Crockford-base32 ULID with monotonicity guarantees (007 P1) |
 | `src/runner/file-watcher.ts` | internal | Debounced native `fs.watch` wrapper for single-file change hints, missing-file startup, watcher errors, and close semantics (007 P3) |
-| `src/runner/forwarder-watermark.ts` | internal | Private SDK forwarder progress in `state/sdk-watermark.json`; durable inbox byte offset + state fingerprint with symlink containment (007 P3) |
+| `src/runner/forwarder-watermark.ts` | internal | Private SDK forwarder progress in `runs/<runId>/state/sdk-watermark.json`; durable inbox byte offset + state fingerprint with symlink containment (007 P3 + FX001) |
 | `src/runner/inbox-forwarder.ts` | internal | Outside inbox NDJSON drain + live watcher delivery into `SessionSender.send` (007 P3) |
 | `src/runner/state-forwarder.ts` | internal | Outside-state meaningful-change fingerprinting + live watcher delivery into `SessionSender.send` (007 P3) |
-| `src/runner/run-lock.ts` | contract | Per-agent live-run ownership guard; exports typed `RunLockHeldError`/`RUN_LOCK_HELD` for future CLI mapping (007 P3) |
+| `src/runner/run-lock.ts` | legacy contract | Per-agent live-run ownership guard retained for compatibility; active coordinated runs now rely on run-scoped isolation instead of blocking overlapping same-agent runs (FX001) |
 | `src/schemas/inbox-message.json` | contract | Inbox NDJSON envelope shape (007 P1) |
 | `src/schemas/outside-state.json` | contract | DEFAULT outside state shape (overridable per-agent in P6) |
 | `src/schemas/inside-state.json` | contract | DEFAULT inside state shape (overridable per-agent in P6) |
@@ -70,12 +70,13 @@
 | `detectContext()` | Function | cli (P5 preAction context-block hook), preamble-builder (P2) |
 | `MINIH_ENV_KEYS_COORDINATION` / `MINIH_ENV_KEYS_ALL` | Const | mcp (P4 spawn config), runner env cleanup/coordination contract |
 | `getCoordinationEnv()` | Function | mcp (P4 server), cli (P5 inside-detection) |
-| `readStateLazy(side, slug, agentsDir)` / `writeState(...)` / `appendHistory(...)` | Function | mcp (P4 state.* tools), cli (P5 state subcommands), runner (P2 finalize snapshot) |
-| `inboxLanePath` / `stateFilePath` / `historyPath` / `watermarkPath` / `outsideMdPath` / `hasOutsideMd` | Function | cli (P5 outside-send), mcp (P4 inbox/state tools), runner (P3 file-watcher + forwarders) |
+| `CoordinationRunLocation` / `coordinationRunLocation(slug, agentsDir, runId)` / `coordinationRunDir(...)` | Type/Function | cli/mcp/runner shared run-scoped coordination path contract |
+| `readStateLazy(location, side)` / `writeState(location, side, state)` / `appendHistory(location, entry)` | Function | mcp (P4 state_* tools), cli (P5 state subcommands), runner (P2 finalize snapshot) |
+| `inboxLanePath(location, side)` / `stateFilePath(location, side)` / `historyPath(location)` / `watermarkPath(location)` / `outsideMdPath` / `hasOutsideMd` | Function | cli (P5 outside-send), mcp (P4 inbox/state tools), runner (P3 file-watcher + forwarders) |
 | `writeFileAtomic` / `writeFileAtomicAsync` / `AtomicWriteCrossFsError` | Function/Class | mcp (P4 state writes), runner (P3 watermark fsync) |
-| `ulid()` | Function | mcp (P4 inbox.send), cli (P5 outside-send) |
+| `ulid()` | Function | mcp (P4 inbox_send), cli (P5 outside-send) |
 | `StateCorruptError` / `HistoryLineTooLargeError` / `InvalidSlugError` / `InvalidCoordinationFrontmatterError` / `OutsideAgentsDirError` | Error | mcp + cli (typed error handling) |
-| `RunLockHeldError` / `RUN_LOCK_HELD` | Error/Const | cli (future JSON envelope mapping for simultaneous coordinated runs) |
+| `RunLockHeldError` / `RUN_LOCK_HELD` | Error/Const | legacy compatibility; not used to prevent overlapping run-scoped coordination |
 | `AgentRunConfig.insideMcpServerFactory` / `reservedMcpToolPrefixes` | Config seam | cli supplies mcp-domain spawn config; runner merges user/internal MCP servers and detects reserved collisions |
 | `AgentDefinition.outsideContract` / `AgentDefinition.coordination` | Type field | preamble-builder (P2 — peer contract injection), cli (P5 outside-context, init --coordinated) |
 | `inbox-message.json` / `outside-state.json` / `inside-state.json` / `state-history-entry.json` | JSON Schema | mcp (P4 AJV input/output validation), cli (P5 outside-send validation) |
@@ -88,25 +89,38 @@
 | Frozen inputs | Every run copies its inputs into the run folder for reproducibility. |
 | Degraded vs Failed | Invalid output = "degraded" (agent worked, schema didn't match), not hard failure. |
 | Prompt assembly | `buildInsidePreamble` preserves the legacy preamble → instructions → output hint → params → prompt join for non-coordinated agents, and inserts real coordinated identity, tool, checklist, and peer-contract sections only when `coordination.enabled` is true. Frontmatter stripped. |
+| Coordination identity block | `buildInsidePreamble` injects `<!-- coordination.identity-block -->` with the agent slug, run id, and outside-peer framing for coordinated fresh runs only. Resume turns skip prompt assembly. |
+| Peer contract framing | `outside.md` content is quoted under `<!-- coordination.peer-contract -->` / `## Peer's Contract (from outside.md)`. Optional absence means no peer-contract section; an empty file is still a present empty contract. |
 | Event-driven terminal condition | `runAgent` relies on adapter idle completion, then waits for `awaitTerminalCondition(adapterResult, pendingForwarderCount)` with a live inbox/state forwarder drain counter so queued `session.send` work settles before the run completes. |
 | Magic wand | Every agent output MUST include retrospective with magicWand feedback. |
 | Velocity tracking | Per-agent velocity data computed at run end, stored in completed.json. Chains from prior runs for O(1) computation. |
 | Difficulty ledger | Agents report structured friction in `retrospective.difficulties`. Pipeline: agents report → `minih difficulties` aggregates → human curates preamble. |
 | Parsed report surfacing | Runner parses report.json after run to extract summary/magicWand/difficulties for CLI envelope. |
 | Outside / inside contexts | `detectContext()` reads `MINIH=1` (strict equality). Coordination is opt-in per agent via `coordination:` frontmatter. |
-| Per-agent shared state | Inbox + state files live at `agents/<slug>/{inbox,state}/`, NOT per-run isolation. Cross-run continuity by design (workshop 001). Atomic writes via `writeFileAtomic` (POSIX rename); concurrent writers exhibit last-write-wins, no corruption. |
-| State as data, not rules | `state.ts` is pure helpers — no rule engine, no transition gates. Per-agent enums (P6) provide constraint at MCP `state.transition` time; outside negotiates via inbox if it disagrees (workshop 002 + didyouknow #2). |
+| Run-scoped coordination state | Mutable inbox, state, history, and forwarder watermark files live at `agents/<slug>/runs/<runId>/{inbox,state}/`. Agent-level files are definitions/defaults only. Atomic writes via `writeFileAtomic` (POSIX rename); overlapping same-agent runs stay isolated by run id. |
+| Atomic state writes | `writeFileAtomic` / `writeFileAtomicAsync` write temp files, fsync, then rename on the same filesystem; `EXDEV` becomes a typed `AtomicWriteCrossFsError` instead of falling back to non-atomic writes. |
+| State as data, not rules | `state.ts` is pure helpers — no rule engine, no transition gates. Per-agent enums (P6) provide constraint at MCP `state_transition` time; outside negotiates via inbox if it disagrees (workshop 002 + didyouknow #2). |
 | Lazy state default | `readStateLazy` returns synthetic `{status: 'idle', ...}` when file absent — never persisted. Corruption (invalid JSON, missing fields) throws `StateCorruptError` — never silently masked as a default. |
 | Append-only history | `appendHistory` enforces line ≤ PIPE_BUF (4096 bytes) so single-call POSIX `appendFile` is atomic against concurrent appenders. Auto-populates `peerStateAtTime` from peer side's lazy-read state when caller omits it. |
 | Outside contract layer | `outside.md` (plain markdown, body only — no frontmatter parsing) carries the peer contract for coordinated agents. Loaded by `listAgents` into `AgentDefinition.outsideContract`. P2 preamble-builder injects under a Peer's Contract section in the inside prompt. |
 | ULID monotonicity contract | `ulid()` preserves lex-sort order under sub-millisecond bursts (increments randomness suffix) AND under clock rewind (NTP step-backward — reuses prior timestamp + increments). Crockford-base32 alphabet; 48-bit ms + 80-bit randomness. |
 | Session resume | Resume sends follow-up message directly — skips prompt assembly and system output validation. SDK conversation history provides context. |
-| Daemon-light forwarders | For `coordination: enabled` runs, runner-owned inbox/state forwarders cold-drain per-agent shared files, watch for cross-process updates, send rendered changes through the live `SessionSender`, and commit private watermarks only after successful sends. |
-| Single live-run ownership | Coordinated runs acquire a per-agent `state/run.lock` before watcher startup. A second live run fails with `RunLockHeldError` (`RUN_LOCK_HELD`) so only one process owns file watchers and watermark advancement for a slug at a time. |
+| Daemon-light forwarders | For `coordination: enabled` runs, runner-owned inbox/state forwarders cold-drain the active run's files, watch for cross-process updates, send rendered changes through the live `SessionSender`, and commit private run-scoped watermarks only after successful sends. |
+| Overlapping run isolation | Coordinated runs no longer acquire per-agent live-run ownership. Multiple runs of the same slug can overlap because each run owns its own inbox, state, history, and watermark files. |
 | Internal MCP merge seam | `runAgent` accepts a generic factory that can add per-run MCP servers after runId/runDir exist. The runner owns merging/collision checks but never imports the mcp domain. |
-| Run-folder coordination snapshots | Coordinated runs freeze shared `inbox` lanes and side states into `inbox-snapshot/{outside,inside}.ndjson` and `state-snapshot.json` before artifact enumeration. Missing lanes become empty files, missing states become `null`, malformed NDJSON is copied byte-for-byte, and corrupt present state files fail finalization. |
+| Run-folder coordination snapshots | Coordinated runs freeze run-scoped `inbox` lanes and side states into `inbox-snapshot/{outside,inside}.ndjson` and `state-snapshot.json` before artifact enumeration. Missing lanes become empty files, missing states become `null`, malformed NDJSON is copied byte-for-byte, and corrupt present state files fail finalization. |
 | Coordination feedback | `magicWandTarget` now includes `"coordination"` and reports may include `retrospective.coordination` for peer updates, unresolved requests, state publication, and notes. Runtime system validation stays permissive; bundled schemas carry the canonical enum. |
 | Shared preamble template | The source-controlled default preamble lives in `src/templates/shared-preamble.md`; `agents/_shared/preamble.md` is the dogfood copy and scaffolded agents receive the built template asset. |
+
+## Tests & Validation
+
+| Area | Tests |
+|------|-------|
+| Agent discovery, frontmatter, outside contracts | `test/runner/folder.test.ts`, `test/cli/doctor-outside-md.test.ts`, `test/cli/outside-context.test.ts` |
+| Coordination data primitives | `test/runner/state.test.ts`, `test/runner/atomic-write.test.ts`, `test/runner/ulid.test.ts`, `test/runner/context.test.ts`, `test/runner/schemas.test.ts` |
+| Event-driven run and MCP merge seam | `test/runner/runner-event-driven.test.ts`, `test/runner/mcp.test.ts`, `test/runner/run-folder-snapshot.test.ts` |
+| File watchers and daemon-light forwarders | `test/runner/file-watcher.test.ts`, `test/runner/forwarder-watermark.test.ts`, `test/runner/inbox-forwarder.test.ts`, `test/runner/state-forwarder.test.ts`, `test/e2e/daemon-light.test.ts` |
+| Prompt assembly and coordination feedback | `test/runner/preamble-builder.test.ts`, `test/runner/schema-compat.test.ts`, `test/e2e/two-agent-coordination.test.ts` |
 
 ## History
 
@@ -124,3 +138,6 @@
 | 007-backgrounding P3 | Added daemon-light file watcher and forwarders in runner: debounced `fs.watch`, private SDK watermark, outside inbox/state forwarders, live pending-drain terminal condition, per-agent run lock, opt-in cross-process e2e gate, and `RunLockHeldError` export. |
 | 007-backgrounding P4 | Added generic inside MCP merge seam (`insideMcpServerFactory`, reserved tool-prefix collision checks) so CLI can supply the mcp-domain server while runner remains mcp-independent. |
 | 007-backgrounding P6 | Replaced coordinated prompt stubs with real identity/tool/checklist/peer-contract sections; widened coordination feedback schemas/types; set coordinated run env vars; added run-folder coordination snapshots, canonical shared-preamble template asset, and the four-file `coordination-smoke-test` dogfood agent. |
+| 007-backgrounding P7 | Finalized runner documentation for coordinated identity/peer-contract framing, atomic write semantics, test provenance, and the explicit no-MCP/no-rule-engine boundary. |
+| 008-canonical-coordination-loop | Updated coordinated prompt guidance to teach inside agents the backend-safe underscore MCP tool names and documented the live `coordination-loop-validator` evidence path. |
+| 008 FX001 | Moved mutable coordination state from agent-scoped folders to `agents/<slug>/runs/<runId>/{inbox,state}`; runner/MCP/CLI now share `CoordinationRunLocation` and overlapping same-agent runs are isolated by run id. |

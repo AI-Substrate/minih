@@ -7,7 +7,10 @@ import type {
   NativeWatcher,
   WatchEventType,
 } from '../../src/runner/file-watcher.js';
-import { inboxLanePath } from '../../src/runner/folder.js';
+import {
+  coordinationRunLocation,
+  inboxLanePath,
+} from '../../src/runner/folder.js';
 import {
   defaultForwarderWatermark,
   readForwarderWatermark,
@@ -21,6 +24,8 @@ import {
 
 let tmpDir: string;
 let agentsDir: string;
+const slug = 'code-review';
+const runId = 'run-123';
 
 class FakeNativeWatcher implements NativeWatcher {
   closeCalls = 0;
@@ -78,7 +83,10 @@ function sender(responses: Array<'ok' | Error> = []): SessionSender & {
 }
 
 function writeInbox(lines: string[]): string {
-  const target = inboxLanePath('code-review', agentsDir, 'outside');
+  const target = inboxLanePath(
+    coordinationRunLocation(slug, agentsDir, runId),
+    'outside',
+  );
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.writeFileSync(target, lines.join(''));
   return target;
@@ -97,8 +105,9 @@ function message(id: string, subject: string, body = 'Body text') {
 
 function forwarder(testSender = sender()) {
   return createInboxForwarder({
-    slug: 'code-review',
+    slug,
     agentsDir,
+    runId,
     sender: testSender,
   });
 }
@@ -115,9 +124,9 @@ describe('inbox forwarder', () => {
       stoppedOnTornLine: false,
     });
     expect(testSender.prompts).toEqual([]);
-    expect(
-      readForwarderWatermark({ slug: 'code-review', agentsDir }).value,
-    ).toEqual(defaultForwarderWatermark());
+    expect(readForwarderWatermark({ slug, agentsDir, runId }).value).toEqual(
+      defaultForwarderWatermark(),
+    );
   });
 
   it('forwards complete outside inbox messages in order and advances byte offset', async () => {
@@ -142,7 +151,7 @@ describe('inbox forwarder', () => {
     expect(testSender.prompts[0]).toContain('Subject: First');
     expect(testSender.prompts[1]).toContain('Second body');
     expect(
-      readForwarderWatermark({ slug: 'code-review', agentsDir }).value.inbox
+      readForwarderWatermark({ slug, agentsDir, runId }).value.inbox
         .outsideOffset,
     ).toBe(fs.statSync(inboxPath).size);
   });
@@ -152,7 +161,7 @@ describe('inbox forwarder', () => {
       message('01ARZ3NDEKTSV4RRFFQ69G5FAV', 'Already sent'),
     ]);
     writeForwarderWatermark(
-      { slug: 'code-review', agentsDir },
+      { slug, agentsDir, runId },
       withInboxOffset(defaultForwarderWatermark(), fs.statSync(inboxPath).size),
     );
     const testSender = sender();
@@ -171,7 +180,7 @@ describe('inbox forwarder', () => {
       'session send failed',
     );
     expect(
-      readForwarderWatermark({ slug: 'code-review', agentsDir }).value.inbox
+      readForwarderWatermark({ slug, agentsDir, runId }).value.inbox
         .outsideOffset,
     ).toBe(0);
   });
@@ -187,7 +196,7 @@ describe('inbox forwarder', () => {
     );
 
     expect(
-      readForwarderWatermark({ slug: 'code-review', agentsDir }).value.inbox
+      readForwarderWatermark({ slug, agentsDir, runId }).value.inbox
         .outsideOffset,
     ).toBe(Buffer.byteLength(first));
   });
@@ -202,7 +211,7 @@ describe('inbox forwarder', () => {
     );
     expect(testSender.prompts).toHaveLength(1);
     expect(
-      readForwarderWatermark({ slug: 'code-review', agentsDir }).value.inbox
+      readForwarderWatermark({ slug, agentsDir, runId }).value.inbox
         .outsideOffset,
     ).toBe(Buffer.byteLength(first));
   });
@@ -224,7 +233,7 @@ describe('inbox forwarder', () => {
     expect(first.sent).toBe(0);
     expect(first.stoppedOnTornLine).toBe(true);
     expect(
-      readForwarderWatermark({ slug: 'code-review', agentsDir }).value.inbox
+      readForwarderWatermark({ slug, agentsDir, runId }).value.inbox
         .outsideOffset,
     ).toBe(0);
 
@@ -239,7 +248,7 @@ describe('inbox forwarder', () => {
     const escaped = path.join(tmpDir, 'escaped');
     fs.mkdirSync(escaped);
     const inboxDir = path.dirname(
-      inboxLanePath('code-review', agentsDir, 'outside'),
+      inboxLanePath(coordinationRunLocation(slug, agentsDir, runId), 'outside'),
     );
     fs.mkdirSync(path.dirname(inboxDir), { recursive: true });
     fs.symlinkSync(escaped, inboxDir);
@@ -285,8 +294,9 @@ describe('inbox forwarder', () => {
       },
     };
     const inboxForwarder = createInboxForwarder({
-      slug: 'code-review',
+      slug,
       agentsDir,
+      runId,
       sender: testSender,
       debounceMs: 1,
       watchFactory: (_filename, listener) => {
@@ -317,8 +327,9 @@ describe('inbox forwarder', () => {
     let fake: FakeNativeWatcher | undefined;
     const testSender = sender();
     const inboxForwarder = createInboxForwarder({
-      slug: 'code-review',
+      slug,
       agentsDir,
+      runId,
       sender: testSender,
       debounceMs: 50,
       watchFactory: (_filename, listener) => {

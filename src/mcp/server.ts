@@ -13,10 +13,10 @@ import { inboxAck, inboxList, inboxSend } from './tools/inbox.js';
 import { stateGet, stateSet, stateTransition } from './tools/state.js';
 import {
   errorResult,
-  isMcpToolName,
   McpToolError,
   type McpToolResult,
   MINIH_COORDINATION_SERVER_NAME,
+  normalizeMcpToolName,
   TOOL_CONTRACTS,
 } from './types.js';
 
@@ -64,25 +64,26 @@ export function dispatchToolCall(
   name: string,
   args: Record<string, unknown>,
 ): CallToolResult {
-  if (!isMcpToolName(name)) {
+  const toolName = normalizeMcpToolName(name);
+  if (toolName === null) {
     return toCallToolResult(
       errorResult(new McpToolError('MCP_NOT_FOUND', 'unknown MCP tool')),
     );
   }
 
   try {
-    switch (name) {
-      case 'inbox.list':
+    switch (toolName) {
+      case 'inbox_list':
         return toCallToolResult(inboxList(context, args));
-      case 'inbox.send':
+      case 'inbox_send':
         return toCallToolResult(inboxSend(context, args));
-      case 'inbox.ack':
+      case 'inbox_ack':
         return toCallToolResult(inboxAck(context, args));
-      case 'state.get':
+      case 'state_get':
         return toCallToolResult(stateGet(context, args));
-      case 'state.set':
+      case 'state_set':
         return toCallToolResult(stateSet(context, args));
-      case 'state.transition':
+      case 'state_transition':
         return toCallToolResult(stateTransition(context, args));
     }
   } catch (error) {

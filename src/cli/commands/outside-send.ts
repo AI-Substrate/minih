@@ -4,10 +4,11 @@ import type { InboxMessage } from '../../runner/index.js';
 import { ulid } from '../../runner/index.js';
 import {
   appendInboxMessage,
+  type CoordinationRunTarget,
   invalidArgs,
   requireNonEmptyOption,
   requireStringOption,
-  resolveAgentOrExit,
+  resolveCoordinationRunOrExit,
 } from '../coordination.js';
 import { exitWithEnvelope, formatSuccess } from '../output.js';
 
@@ -36,12 +37,11 @@ export function buildOutsideMessage(input: OutsideMessageInput): InboxMessage {
 }
 
 export function appendOutsideMessage(
-  slug: string,
-  agentsDir: string,
+  target: CoordinationRunTarget,
   message: InboxMessage,
   commandName = COMMAND,
 ): void {
-  appendInboxMessage(commandName, slug, agentsDir, 'outside', message);
+  appendInboxMessage(commandName, target.location, 'outside', message);
 }
 
 export function registerOutsideSendCommand(program: Command): void {
@@ -52,6 +52,7 @@ export function registerOutsideSendCommand(program: Command): void {
     .option('--subject <subject>', 'Short message subject')
     .option('--body <body>', 'Message body')
     .option('--ack-of <msgId>', 'Message id this ack acknowledges')
+    .option('--run <runId>', 'Target run ID (default: only active run)')
     .action(
       (
         slug: string,
@@ -60,10 +61,16 @@ export function registerOutsideSendCommand(program: Command): void {
           subject?: string;
           body?: string;
           ackOf?: string;
+          run?: string;
         },
       ) => {
         const agentsDir = program.opts().agentsDir ?? 'agents';
-        resolveAgentOrExit(COMMAND, slug, agentsDir);
+        const target = resolveCoordinationRunOrExit(
+          COMMAND,
+          slug,
+          agentsDir,
+          opts.run,
+        );
 
         const type = requireNonEmptyOption(COMMAND, opts.type, '--type');
         const subject = requireNonEmptyOption(
@@ -89,7 +96,7 @@ export function registerOutsideSendCommand(program: Command): void {
           body,
           ...(opts.ackOf && { ackOf: opts.ackOf }),
         });
-        appendOutsideMessage(slug, agentsDir, message);
+        appendOutsideMessage(target, message);
 
         if (process.stderr.isTTY) {
           process.stderr.write(
@@ -100,6 +107,7 @@ export function registerOutsideSendCommand(program: Command): void {
         exitWithEnvelope(
           formatSuccess(COMMAND, {
             slug,
+            runId: target.runId,
             messageId: message.id,
             target: 'inside',
             timestamp: message.ts,

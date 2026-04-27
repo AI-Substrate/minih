@@ -20,6 +20,7 @@ import type { OutsideState } from './types.js';
 export interface StateForwarderOptions {
   slug: string;
   agentsDir: string;
+  runId: string;
   sender: SessionSender;
   commitProgress?: 'immediate' | 'manual';
   debounceMs?: number;
@@ -101,11 +102,7 @@ export function createStateForwarder(
       const coldDrain = await drain();
       if (closed) return coldDrain;
 
-      const outsideStatePath = stateFilePath(
-        options.slug,
-        options.agentsDir,
-        'outside',
-      );
+      const outsideStatePath = stateFilePath(options, 'outside');
       assertPathInsideAgentsDir(outsideStatePath, options.agentsDir);
       watcher = watchFileChanges(
         outsideStatePath,
@@ -175,21 +172,13 @@ async function drainOnce(
   lastSentFingerprint: string | null,
   onProgress: (fingerprint: string) => void,
 ): Promise<StateDrainResult> {
-  const outsideStatePath = stateFilePath(
-    options.slug,
-    options.agentsDir,
-    'outside',
-  );
+  const outsideStatePath = stateFilePath(options, 'outside');
   assertPathInsideAgentsDir(outsideStatePath, options.agentsDir);
   if (!fs.existsSync(outsideStatePath)) {
     return { sent: false, fingerprint: lastSentFingerprint };
   }
 
-  const state = readStateLazy(
-    'outside',
-    options.slug,
-    options.agentsDir,
-  ) as OutsideState;
+  const state = readStateLazy(options, 'outside') as OutsideState;
   const nextFingerprint = fingerprintOutsideState(state);
   if (lastSentFingerprint === nextFingerprint) {
     return { sent: false, fingerprint: nextFingerprint };

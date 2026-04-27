@@ -24,7 +24,8 @@ export function registerValidateCommand(program: Command): void {
     .description(
       'Re-validate the most recent run output against current schema',
     )
-    .action((slug: string) => {
+    .option('--run <runId>', 'Specific run ID (default: latest)')
+    .action((slug: string, opts: { run?: string }) => {
       const agentsDir = program.opts().agentsDir ?? 'agents';
 
       const slugError = validateSlug(slug);
@@ -84,7 +85,17 @@ export function registerValidateCommand(program: Command): void {
         return;
       }
 
-      const latestRun = entries[0].name;
+      const latestRun = opts.run ?? entries[0].name;
+      if (!entries.some((entry) => entry.name === latestRun)) {
+        exitWithEnvelope(
+          formatError(
+            'validate',
+            ErrorCodes.AGENT_VALIDATION_FAILED,
+            `Run "${latestRun}" not found.`,
+          ),
+        );
+        return;
+      }
       const outputPath = path.join(runsDir, latestRun, 'output', 'report.json');
       const result = validateOutput(definition.schemaPath, outputPath);
 

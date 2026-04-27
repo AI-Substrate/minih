@@ -3,8 +3,14 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
-import type { AgentDefinition, InboxMessage, Side } from '../runner/index.js';
+import type {
+  AgentDefinition,
+  CoordinationRunLocation,
+  InboxMessage,
+  Side,
+} from '../runner/index.js';
 import {
+  coordinationRunLocation,
   inboxLanePath,
   listAgents,
   OutsideAgentsDirError,
@@ -21,6 +27,13 @@ import {
 export const INBOX_MESSAGE_SCHEMA_PATH = fileURLToPath(
   new URL('../schemas/inbox-message.json', import.meta.url),
 );
+
+export interface CoordinationRunTarget {
+  definition: AgentDefinition;
+  runId: string;
+  runDir: string;
+  location: CoordinationRunLocation;
+}
 
 export function resolveAgentOrExit(
   commandName: string,
@@ -78,8 +91,7 @@ export function resolveAgentOrExit(
 
 export function appendInboxMessage(
   commandName: string,
-  slug: string,
-  agentsDir: string,
+  location: CoordinationRunLocation,
   lane: Side,
   message: InboxMessage,
 ): void {
@@ -99,18 +111,17 @@ export function appendInboxMessage(
     );
   }
 
-  const filePath = inboxLanePath(slug, agentsDir, lane);
+  const filePath = inboxLanePath(location, lane);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.appendFileSync(filePath, `${JSON.stringify(message)}\n`);
 }
 
 export function readInboxLaneOrExit(
   commandName: string,
-  slug: string,
-  agentsDir: string,
+  location: CoordinationRunLocation,
   lane: Side,
 ): InboxMessage[] {
-  const filePath = inboxLanePath(slug, agentsDir, lane);
+  const filePath = inboxLanePath(location, lane);
   if (!fs.existsSync(filePath)) return [];
 
   const raw = fs.readFileSync(filePath, 'utf8');
@@ -189,6 +200,85 @@ export function readInboxLaneOrExit(
     messages.push(message);
   }
   return messages;
+}
+
+export function resolveCoordinationRunOrExit(
+  commandName: string,
+  slug: string,
+  agentsDir: string,
+  runId: string | undefined,
+): CoordinationRunTarget {
+  const definition = resolveAgentOrExit(commandName, slug, agentsDir);
+  const runsDir = path.join(definition.dir, 'runs');
+  if (!fs.existsSync(runsDir)) {
+    exitWithEnvelope(
+      formatError(
+        commandName,
+        ErrorCodes.AGENT_VALIDATION_FAILED,
+        `No runs found for "${slug}". Start a coordinated run first, then pass --run <runId>.`,
+      ),
+    );
+  }
+
+  const entries = fs
+    .readdirSync(runsDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .sort((a, b) => b.name.localeCompare(a.name));
+
+  if (entries.length === 0) {
+    exitWithEnvelope(
+      formatError(
+        commandName,
+        ErrorCodes.AGENT_VALIDATION_FAILED,
+        `No runs found for "${slug}". Start a coordinated run first, then pass --run <runId>.`,
+      ),
+    );
+  }
+
+  let targetRunId = runId;
+  if (targetRunId === undefined) {
+    const activeRuns = entries.filter((entry) => {
+      const dir = path.join(runsDir, entry.name);
+      return (
+        fs.existsSync(path.join(dir, 'events.ndjson')) &&
+        !fs.existsSync(path.join(dir, 'completed.json'))
+      );
+    });
+    if (activeRuns.length === 1) {
+      targetRunId = activeRuns[0].name;
+    } else if (entries.length === 1) {
+      targetRunId = entries[0].name;
+    } else {
+      exitWithEnvelope(
+        invalidArgs(
+          commandName,
+          `Multiple runs found for "${slug}". Pass --run <runId> to choose the coordination conversation.`,
+          { runs: entries.map((entry) => entry.name) },
+        ),
+      );
+    }
+  }
+
+  const targetRunDir = path.join(runsDir, targetRunId);
+  if (
+    !fs.existsSync(targetRunDir) ||
+    !fs.statSync(targetRunDir).isDirectory()
+  ) {
+    exitWithEnvelope(
+      formatError(
+        commandName,
+        ErrorCodes.AGENT_VALIDATION_FAILED,
+        `Run "${targetRunId}" not found for "${slug}".`,
+      ),
+    );
+  }
+
+  return {
+    definition,
+    runId: targetRunId,
+    runDir: targetRunDir,
+    location: coordinationRunLocation(slug, agentsDir, targetRunId),
+  };
 }
 
 export function validateJsonSchema(

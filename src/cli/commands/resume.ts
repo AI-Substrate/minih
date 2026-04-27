@@ -172,7 +172,7 @@ export function registerResumeCommand(program: Command): void {
               agentSlug,
               agentsDir,
             }),
-          reservedMcpToolPrefixes: ['inbox.', 'state.'],
+          reservedMcpToolPrefixes: ['inbox_', 'state_'],
           ...(mcpServers && { mcpServers }),
         };
 

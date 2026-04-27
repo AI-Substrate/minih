@@ -39,4 +39,4 @@
 |------|-------|----------|
 | 2026-04-27 | Full quality gate passed after updating the stale coordination env test to expect run-scoped paths. | `just fft` passed: lint, format, build, typecheck, tests, audit. |
 | 2026-04-27 | Live `coordination-loop-validator` rerun completed on `gpt-5.5`. | Run `2026-04-27T19-13-21-327Z-ebc1`, result `completed`, `5622` events, `55` tool calls, `validated: true`. |
-| 2026-04-27 | Rerun evidence written. | [run-scoped-rerun-evidence.md](../run-scoped-rerun-evidence.md) |
+| 2026-04-27 | Rerun evidence written. | [002-run-scoped-rerun-evidence.md](../posts/002-run-scoped-rerun-evidence.md) |

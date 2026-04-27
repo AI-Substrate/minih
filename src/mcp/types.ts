@@ -1,6 +1,7 @@
 import type { Side } from '../runner/types.js';
 
 export const MINIH_COORDINATION_SERVER_NAME = 'minih-coordination';
+export const MAX_INBOX_WAIT_MS = 30000;
 
 export const MCP_TOOL_NAMES = [
   'inbox_list',
@@ -115,6 +116,7 @@ export interface InboxListInput {
   type?: string;
   limit?: number;
   after?: string;
+  waitMs?: number;
 }
 
 export interface InboxSendInput {
@@ -178,6 +180,13 @@ export const TOOL_CONTRACTS: readonly ToolContract[] = [
           type: 'string',
           description: 'Return messages after this message id.',
           minLength: 1,
+        },
+        waitMs: {
+          type: 'integer',
+          description:
+            'Optional bounded long-poll duration in milliseconds. Omit or set to 0 for immediate reads.',
+          minimum: 0,
+          maximum: MAX_INBOX_WAIT_MS,
         },
       },
       additionalProperties: false,

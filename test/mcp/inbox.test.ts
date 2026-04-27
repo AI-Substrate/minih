@@ -39,84 +39,180 @@ afterEach(() => {
 });
 
 describe('inboxList', () => {
-  it('returns an empty list when lanes are absent', () => {
-    expect(inboxList(context).structuredContent).toEqual({
+  it('returns an empty list when lanes are absent', async () => {
+    expect(await listed()).toEqual({
       messages: [],
       nextAfter: null,
     });
   });
 
-  it('filters unread messages using append-only inside ack records', () => {
+  it('filters unread messages using append-only inside ack records', async () => {
     writeMessage('outside', peerMessage('m1', 'First'));
     writeMessage('outside', peerMessage('m2', 'Second'));
     writeMessage('inside', insideAck('m1'));
 
-    expect(inboxList(context, { unread: true }).structuredContent).toEqual({
+    expect(await listed({ unread: true })).toEqual({
       messages: [expect.objectContaining({ id: 'm2' })],
       nextAfter: null,
     });
   });
 
-  it('filters by exact message type alongside unread filtering', () => {
+  it('filters by exact message type alongside unread filtering', async () => {
     writeMessage('outside', peerMessage('m1', 'First'));
     writeMessage('outside', peerMessage('m2', 'Directive', 'directive'));
     writeMessage('outside', peerMessage('m3', 'Status', 'status'));
     writeMessage('inside', insideAck('m3'));
 
-    expect(
-      inboxList(context, { unread: true, type: 'directive' }).structuredContent,
-    ).toEqual({
+    expect(await listed({ unread: true, type: 'directive' })).toEqual({
       messages: [expect.objectContaining({ id: 'm2', type: 'directive' })],
       nextAfter: null,
     });
   });
 
-  it('supports bounded pagination', () => {
+  it('supports bounded pagination', async () => {
     for (let i = 0; i < 5; i++) {
       writeMessage('outside', peerMessage(`m${i}`, `Subject ${i}`));
     }
 
-    expect(inboxList(context, { limit: 2 }).structuredContent).toMatchObject({
+    expect(await listed({ limit: 2 })).toMatchObject({
       messages: [{ id: 'm0' }, { id: 'm1' }],
       nextAfter: 'm1',
     });
-    expect(
-      inboxList(context, { after: 'm1', limit: 2 }).structuredContent,
-    ).toMatchObject({
+    expect(await listed({ after: 'm1', limit: 2 })).toMatchObject({
       messages: [{ id: 'm2' }, { id: 'm3' }],
       nextAfter: 'm3',
     });
   });
 
-  it('rejects invalid limits', () => {
-    expect(() => inboxList(context, { limit: 201 })).toThrow(McpToolError);
+  it('rejects invalid limits', async () => {
+    await expect(inboxList(context, { limit: 201 })).rejects.toThrow(
+      McpToolError,
+    );
   });
 
-  it('rejects malformed and torn peer lane data', () => {
+  it('rejects malformed and torn peer lane data', async () => {
     writeRaw('outside', '{"id":');
-    expect(() => inboxList(context)).toThrow(/torn final line/);
+    await expect(inboxList(context)).rejects.toThrow(/torn final line/);
 
     writeRaw('outside', '{"id":\n');
-    expect(() => inboxList(context)).toThrow(/malformed JSON/);
+    await expect(inboxList(context)).rejects.toThrow(/malformed JSON/);
   });
 
-  it('rejects malformed own-lane ack data used for unread filtering', () => {
+  it('rejects malformed own-lane ack data used for unread filtering', async () => {
     writeMessage('outside', peerMessage('m1', 'First'));
     writeRaw('inside', '{"ackOf":');
 
-    expect(() => inboxList(context, { unread: true })).toThrow(
+    await expect(inboxList(context, { unread: true })).rejects.toThrow(
       /torn final line/,
     );
   });
 
-  it('bounds large inbox output', () => {
+  it('bounds large inbox output', async () => {
     for (let i = 0; i < 250; i++) {
       writeMessage('outside', peerMessage(`m${i}`, `Subject ${i}`));
     }
 
-    const result = inboxList(context, { limit: 200 }).structuredContent;
+    const result = await listed({ limit: 200 });
     expect(result?.messages).toHaveLength(200);
     expect(result?.nextAfter).toBe('m199');
+  });
+
+  it('preserves the immediate response shape when waitMs is omitted or zero', async () => {
+    writeMessage('outside', peerMessage('m1', 'First'));
+
+    expect(await listed()).toEqual(await listed({ waitMs: 0 }));
+    expect(await listed({ waitMs: 0 })).not.toHaveProperty('wait');
+  });
+
+  it('rejects invalid waitMs values', async () => {
+    for (const waitMs of [-1, 1.5, Number.POSITIVE_INFINITY, 30001]) {
+      await expect(inboxList(context, { waitMs })).rejects.toThrow(
+        /waitMs must be an integer from 0 to 30000/,
+      );
+    }
+    await expect(inboxList(context, { waitMs: '30' })).rejects.toThrow(
+      /waitMs must be a number/,
+    );
+  });
+
+  it('returns immediately with wait metadata when a matching message exists', async () => {
+    writeMessage('outside', peerMessage('m1', 'Directive', 'directive'));
+
+    expect(await listed({ type: 'directive', waitMs: 1000 })).toMatchObject({
+      messages: [{ id: 'm1', type: 'directive' }],
+      nextAfter: null,
+      wait: {
+        requestedMs: 1000,
+        timedOut: false,
+        matched: true,
+      },
+    });
+  });
+
+  it('waits until a newly appended matching outside message arrives', async () => {
+    const pending = listed({ unread: true, type: 'directive', waitMs: 1000 });
+
+    setTimeout(() => {
+      writeMessage('outside', peerMessage('m1', 'Noise', 'note'));
+    }, 10);
+    setTimeout(() => {
+      writeMessage('outside', peerMessage('m2', 'Directive', 'directive'));
+    }, 30);
+
+    await expect(pending).resolves.toMatchObject({
+      messages: [{ id: 'm2', type: 'directive' }],
+      wait: {
+        requestedMs: 1000,
+        timedOut: false,
+        matched: true,
+      },
+    });
+  });
+
+  it('times out with explicit wait metadata when no matching message arrives', async () => {
+    const result = await listed({ type: 'directive', waitMs: 25 });
+
+    expect(result).toMatchObject({
+      messages: [],
+      nextAfter: null,
+      wait: {
+        requestedMs: 25,
+        timedOut: true,
+        matched: false,
+      },
+    });
+    expect(result?.wait?.elapsedMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('settles overlapping waits independently', async () => {
+    const statusWait = listed({ type: 'status', waitMs: 1000 });
+    const directiveWait = listed({ type: 'directive', waitMs: 1000 });
+
+    setTimeout(() => {
+      writeMessage('outside', peerMessage('m1', 'Status', 'status'));
+    }, 10);
+    setTimeout(() => {
+      writeMessage('outside', peerMessage('m2', 'Directive', 'directive'));
+    }, 30);
+
+    await expect(statusWait).resolves.toMatchObject({
+      messages: [{ id: 'm1', type: 'status' }],
+      wait: { timedOut: false, matched: true },
+    });
+    await expect(directiveWait).resolves.toMatchObject({
+      messages: [{ id: 'm2', type: 'directive' }],
+      wait: { timedOut: false, matched: true },
+    });
+  });
+
+  it('surfaces corrupt inbox files during a wait instead of timing out', async () => {
+    const pending = inboxList(context, { type: 'directive', waitMs: 1000 });
+
+    setTimeout(() => {
+      writeRaw('outside', '{"id":\n');
+    }, 10);
+
+    await expect(pending).rejects.toThrow(/malformed JSON/);
   });
 });
 
@@ -177,9 +273,9 @@ describe('inboxAck', () => {
       msgId: 'm1',
     });
     expect(readLane('inside')).toHaveLength(1);
-    expect(
-      inboxList(context, { unread: true }).structuredContent?.messages,
-    ).toEqual([]);
+    return expect(listed({ unread: true })).resolves.toMatchObject({
+      messages: [],
+    });
   });
 
   it('rejects missing and unknown message ids', () => {
@@ -197,6 +293,10 @@ function peerMessage(id: string, subject: string, type = 'note'): InboxMessage {
     body: `${subject} body`,
     ts: '2026-04-26T00:00:00Z',
   };
+}
+
+async function listed(input: Record<string, unknown> = {}) {
+  return (await inboxList(context, input)).structuredContent;
 }
 
 function insideAck(msgId: string): InboxMessage {

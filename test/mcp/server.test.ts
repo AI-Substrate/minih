@@ -122,6 +122,30 @@ describe('real MCP stdio server', () => {
     expect(result.isError).toBe(true);
     expect(result._meta?.code).toBe('MCP_NOT_FOUND');
   });
+
+  it('keeps long-poll inbox reads asynchronous over JSON-RPC', async () => {
+    client = await createClient();
+
+    const pending = client.callTool('inbox_list', {
+      type: 'directive',
+      waitMs: 1000,
+    });
+    setTimeout(() => {
+      seedOutsideInbox('m1', 'Noise', 'note');
+      seedOutsideInbox('m2', 'Directive', 'directive');
+    }, 10);
+
+    await expect(pending).resolves.toMatchObject({
+      structuredContent: {
+        messages: [{ id: 'm2', type: 'directive' }],
+        wait: {
+          requestedMs: 1000,
+          timedOut: false,
+          matched: true,
+        },
+      },
+    });
+  });
 });
 
 async function createClient(): Promise<TestMcpClient> {

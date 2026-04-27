@@ -94,6 +94,16 @@ Expected readiness evidence:
 - inside state status `in-progress`;
 - inside state `data.phase` such as `ready-waiting-for-milestone`.
 
+## Inside wait behavior
+
+The inside validator should wait for outside signals with the private MCP `inbox_list` long-poll option, not with agent-authored sleep loops. For milestones, the intended inside call is:
+
+```json
+{ "unread": true, "type": "milestone", "waitMs": 30000 }
+```
+
+For the completion signal, use the same bounded pattern with `type: "complete"`. The outside peer still uses normal CLI observation commands (`status`, `tail`, `outside-inbox-list`, and `state get`); `waitMs` is an inside MCP tool option, not a new outside CLI flag.
+
 ## Supported variation: already-running inside
 
 If another terminal, human, or host agent already started the inside validator, do not start a second run. Use:
@@ -202,7 +212,7 @@ minih status coordination-loop-validator
 minih tail coordination-loop-validator
 ```
 
-If the inside agent times out or reports `partial`, capture which expected signal was missing. A bounded partial is better evidence than an indefinite hang.
+If the inside agent times out or reports `partial`, capture which expected signal was missing. A bounded `waitMs` partial is better evidence than an indefinite hang.
 
 ## Final checks
 

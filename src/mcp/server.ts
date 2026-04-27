@@ -63,36 +63,44 @@ export function dispatchToolCall(
   context: McpServerContext,
   name: string,
   args: Record<string, unknown>,
-): CallToolResult {
+): Promise<CallToolResult> {
   const toolName = normalizeMcpToolName(name);
   if (toolName === null) {
-    return toCallToolResult(
-      errorResult(new McpToolError('MCP_NOT_FOUND', 'unknown MCP tool')),
+    return Promise.resolve(
+      toCallToolResult(
+        errorResult(new McpToolError('MCP_NOT_FOUND', 'unknown MCP tool')),
+      ),
     );
   }
 
-  try {
-    switch (toolName) {
-      case 'inbox_list':
-        return toCallToolResult(inboxList(context, args));
-      case 'inbox_send':
-        return toCallToolResult(inboxSend(context, args));
-      case 'inbox_ack':
-        return toCallToolResult(inboxAck(context, args));
-      case 'state_get':
-        return toCallToolResult(stateGet(context, args));
-      case 'state_set':
-        return toCallToolResult(stateSet(context, args));
-      case 'state_transition':
-        return toCallToolResult(stateTransition(context, args));
-    }
-  } catch (error) {
+  return dispatchNormalizedToolCall(context, toolName, args).catch((error) => {
     if (error instanceof McpToolError) {
       return toCallToolResult(errorResult(error));
     }
     return toCallToolResult(
       errorResult(new McpToolError('MCP_INTERNAL_ERROR', 'MCP tool failed')),
     );
+  });
+}
+
+async function dispatchNormalizedToolCall(
+  context: McpServerContext,
+  toolName: NonNullable<ReturnType<typeof normalizeMcpToolName>>,
+  args: Record<string, unknown>,
+): Promise<CallToolResult> {
+  switch (toolName) {
+    case 'inbox_list':
+      return toCallToolResult(await inboxList(context, args));
+    case 'inbox_send':
+      return toCallToolResult(inboxSend(context, args));
+    case 'inbox_ack':
+      return toCallToolResult(inboxAck(context, args));
+    case 'state_get':
+      return toCallToolResult(stateGet(context, args));
+    case 'state_set':
+      return toCallToolResult(stateSet(context, args));
+    case 'state_transition':
+      return toCallToolResult(stateTransition(context, args));
   }
 }
 

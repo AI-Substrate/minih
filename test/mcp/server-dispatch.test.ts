@@ -56,8 +56,8 @@ describe('MCP server dispatcher', () => {
     );
   });
 
-  it('dispatches successful tool calls', () => {
-    const result = dispatchToolCall(context, 'inbox_send', {
+  it('dispatches successful tool calls', async () => {
+    const result = await dispatchToolCall(context, 'inbox_send', {
       subject: 'Hello',
       body: 'World',
     });
@@ -68,15 +68,17 @@ describe('MCP server dispatcher', () => {
     });
   });
 
-  it('dispatches typed tool errors through _meta.code', () => {
-    const result = dispatchToolCall(context, 'inbox_ack', { msgId: 'missing' });
+  it('dispatches typed tool errors through _meta.code', async () => {
+    const result = await dispatchToolCall(context, 'inbox_ack', {
+      msgId: 'missing',
+    });
 
     expect(result.isError).toBe(true);
     expect(result._meta?.code).toBe('MCP_NOT_FOUND');
   });
 
-  it('accepts legacy dotted tool names without exposing them in the manifest', () => {
-    const result = dispatchToolCall(context, 'inbox.send', {
+  it('accepts legacy dotted tool names without exposing them in the manifest', async () => {
+    const result = await dispatchToolCall(context, 'inbox.send', {
       subject: 'Hello',
       body: 'World',
     });
@@ -87,11 +89,20 @@ describe('MCP server dispatcher', () => {
     });
   });
 
-  it('rejects unknown tools without throwing', () => {
-    const result = dispatchToolCall(context, 'unknown.tool', {});
+  it('rejects unknown tools without throwing', async () => {
+    const result = await dispatchToolCall(context, 'unknown.tool', {});
 
     expect(result.isError).toBe(true);
     expect(result._meta?.code).toBe('MCP_NOT_FOUND');
+  });
+
+  it('returns typed validation errors for invalid waitMs values', async () => {
+    const result = await dispatchToolCall(context, 'inbox_list', {
+      waitMs: 30001,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result._meta?.code).toBe('MCP_INVALID_ARGUMENT');
   });
 
   it('loads context from env and applies the process marker', () => {

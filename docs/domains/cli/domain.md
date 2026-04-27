@@ -95,3 +95,4 @@
 | 007-backgrounding P7 | Finalized CLI documentation for the complete command surface, outside-context contract statuses, coordinated scaffold files, doctor outside-contract checks, dry-run parity, and MCP composition-root boundary. |
 | 008-canonical-coordination-loop | Updated coordinated `run`/`resume` reserved MCP namespace checks from dotted `inbox.*`/`state.*` prefixes to backend-safe `inbox_`/`state_` prefixes and added the rich `coordination-loop-validator` worked-example docs/tests. |
 | 008 FX001 | Outside coordination commands now resolve a run target, include `runId` in envelopes, and keep same-agent concurrent runs isolated across inbox/state/retros. |
+| 008 FX002 | Clarified worked-example docs that `waitMs` is an inside MCP long-poll option while outside peers continue observing through CLI `status`, `tail`, `outside-inbox-list`, and state commands. |

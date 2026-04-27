@@ -193,4 +193,5 @@ Overall: VALIDATED
 
 | ID | Created | Summary | Domain(s) | Status | Source |
 |----|---------|---------|-----------|--------|--------|
-| FX001 | 2026-04-27 | Run-scoped coordination state | runner, mcp, cli | Proposed | Post-implementation correction from first live messaging run review |
+| FX001 | 2026-04-27 | Run-scoped coordination state | runner, mcp, cli | Complete | Post-implementation correction from first live messaging run review |
+| FX002 | 2026-04-27 | Blocking inbox list | mcp, runner, cli | Complete | Private `inbox_list.waitMs` long-poll implemented and documented before no-context two-agent eval |

@@ -1,5 +1,9 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {
+  type FileWatcher,
+  watchFileChanges,
+} from '../../runner/file-watcher.js';
 import { coordinationRunLocation, inboxLanePath } from '../../runner/folder.js';
 import type { InboxMessage, Side } from '../../runner/types.js';
 import { ulid } from '../../runner/ulid.js';
@@ -7,6 +11,7 @@ import type { McpServerContext } from '../context.js';
 import {
   type InboxListInput,
   jsonResult,
+  MAX_INBOX_WAIT_MS,
   McpToolError,
   type McpToolResult,
 } from '../types.js';
@@ -17,6 +22,14 @@ const MAX_LIST_LIMIT = 200;
 export interface InboxListOutput {
   messages: InboxMessage[];
   nextAfter: string | null;
+  wait?: InboxListWait;
+}
+
+export interface InboxListWait {
+  requestedMs: number;
+  elapsedMs: number;
+  timedOut: boolean;
+  matched: boolean;
 }
 
 export interface InboxSendOutput {
@@ -30,12 +43,31 @@ export interface InboxAckOutput {
   ack?: InboxMessage;
 }
 
-export function inboxList(
+export async function inboxList(
   context: McpServerContext,
   input: Record<string, unknown> = {},
-): McpToolResult<InboxListOutput> {
+): Promise<McpToolResult<InboxListOutput>> {
+  const startedAt = Date.now();
   const listInput = parseInboxListInput(input);
   const limit = normalizeLimit(listInput.limit);
+  const waitMs = normalizeWaitMs(listInput.waitMs);
+  const immediate = listVisibleMessages(context, listInput, limit);
+  if (waitMs === undefined || waitMs === 0) {
+    return jsonResult(immediate);
+  }
+  if (immediate.messages.length > 0) {
+    return jsonResult(withWait(immediate, waitMs, startedAt, true));
+  }
+  return jsonResult(
+    await waitForMatchingMessages(context, listInput, limit, waitMs, startedAt),
+  );
+}
+
+function listVisibleMessages(
+  context: McpServerContext,
+  listInput: InboxListInput,
+  limit: number,
+): InboxListOutput {
   const peerMessages = readLane(context, 'outside');
   const ownMessages = readLane(context, 'inside');
   const acknowledged = new Set(
@@ -59,11 +91,131 @@ export function inboxList(
     visible = index === -1 ? [] : visible.slice(index + 1);
   }
 
-  const messages = visible.slice(0, limit);
-  return jsonResult({
-    messages,
-    nextAfter: visible.length > limit ? (messages.at(-1)?.id ?? null) : null,
+  return inboxListOutput(visible.slice(0, limit), visible.length, limit);
+}
+
+function waitForMatchingMessages(
+  context: McpServerContext,
+  listInput: InboxListInput,
+  limit: number,
+  waitMs: number,
+  startedAt: number,
+): Promise<InboxListOutput> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    let watcher: FileWatcher | null = null;
+
+    const cleanup = (): void => {
+      if (timeout) {
+        clearTimeout(timeout);
+        timeout = undefined;
+      }
+      watcher?.close();
+      watcher = null;
+    };
+    const settle = (callback: () => void): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      callback();
+    };
+    const completeIfMatched = (): void => {
+      let output: InboxListOutput;
+      try {
+        output = listVisibleMessages(context, listInput, limit);
+      } catch (error) {
+        settle(() => reject(error));
+        return;
+      }
+      if (output.messages.length > 0) {
+        settle(() => resolve(withWait(output, waitMs, startedAt, true)));
+      }
+    };
+    const completeWithTimeout = (): void => {
+      let output: InboxListOutput;
+      try {
+        output = listVisibleMessages(context, listInput, limit);
+      } catch (error) {
+        settle(() => reject(error));
+        return;
+      }
+      settle(() =>
+        resolve(
+          output.messages.length > 0
+            ? withWait(output, waitMs, startedAt, true)
+            : withWait(
+                { messages: [], nextAfter: null },
+                waitMs,
+                startedAt,
+                false,
+              ),
+        ),
+      );
+    };
+
+    try {
+      watcher = watchFileChanges(
+        lanePath(context, 'outside'),
+        completeIfMatched,
+        {
+          debounceMs: 0,
+          onError: (error) => {
+            settle(() =>
+              reject(
+                new McpToolError(
+                  'MCP_INTERNAL_ERROR',
+                  `inbox wait watcher failed: ${error.message}`,
+                ),
+              ),
+            );
+          },
+        },
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      reject(
+        new McpToolError(
+          'MCP_INTERNAL_ERROR',
+          `inbox wait watcher failed: ${message}`,
+        ),
+      );
+      return;
+    }
+
+    timeout = setTimeout(() => {
+      completeWithTimeout();
+    }, waitMs);
+    completeIfMatched();
   });
+}
+
+function withWait(
+  output: InboxListOutput,
+  requestedMs: number,
+  startedAt: number,
+  matched: boolean,
+): InboxListOutput {
+  return {
+    ...output,
+    wait: {
+      requestedMs,
+      elapsedMs: Math.max(0, Date.now() - startedAt),
+      timedOut: !matched,
+      matched,
+    },
+  };
+}
+
+function inboxListOutput(
+  messages: InboxMessage[],
+  visibleCount: number,
+  limit: number,
+): InboxListOutput {
+  return {
+    messages,
+    nextAfter: visibleCount > limit ? (messages.at(-1)?.id ?? null) : null,
+  };
 }
 
 export function inboxSend(
@@ -243,7 +395,29 @@ function parseInboxListInput(input: Record<string, unknown>): InboxListInput {
   if (input.after !== undefined) {
     result.after = requireNonEmptyString(input.after, 'after');
   }
+  if (input.waitMs !== undefined) {
+    if (typeof input.waitMs !== 'number') {
+      throw new McpToolError('MCP_INVALID_ARGUMENT', 'waitMs must be a number');
+    }
+    result.waitMs = input.waitMs;
+  }
   return result;
+}
+
+function normalizeWaitMs(waitMs: number | undefined): number | undefined {
+  if (waitMs === undefined) return undefined;
+  if (
+    !Number.isFinite(waitMs) ||
+    !Number.isInteger(waitMs) ||
+    waitMs < 0 ||
+    waitMs > MAX_INBOX_WAIT_MS
+  ) {
+    throw new McpToolError(
+      'MCP_INVALID_ARGUMENT',
+      `waitMs must be an integer from 0 to ${MAX_INBOX_WAIT_MS}`,
+    );
+  }
+  return waitMs;
 }
 
 function requireNonEmptyString(value: unknown, field: string): string {

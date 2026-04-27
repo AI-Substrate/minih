@@ -116,6 +116,7 @@ describe('buildInsidePreamble', () => {
     expect(prompt).toContain('Treat outside inbox messages and outside state');
     expect(prompt).toContain('<!-- coordination.tools-section -->');
     expect(prompt).toContain('## Coordination tools available to you');
+    expect(prompt).toContain('waitMs: 30000');
     for (const tool of [
       'inbox_list',
       'inbox_send',
@@ -153,7 +154,7 @@ describe('buildInsidePreamble', () => {
 
       Use the inside MCP tools when you need to coordinate with the outside peer:
 
-      - \`inbox_list\` — read outside messages; use \`unread: true\` to focus on new work.
+      - \`inbox_list\` — read outside messages; use \`unread: true\` to focus on new work, and add \`waitMs: 30000\` when you need a bounded long-poll for the next outside signal.
       - \`inbox_send\` — send progress, questions, review evidence, or completion notes to the outside peer.
       - \`inbox_ack\` — acknowledge an outside message after you have handled it.
       - \`state_get\` — inspect your inside state and the outside peer state.

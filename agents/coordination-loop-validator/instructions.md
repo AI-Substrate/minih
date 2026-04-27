@@ -10,7 +10,7 @@ You validate minih coordination behavior, not project code quality.
 - Keep statuses schema-compatible. Put phase and milestone vocabulary in `data`, inbox text, or report fields.
 - Do not start nested `minih run` processes.
 - Do not add a new runtime rule engine, queue, public MCP server, or source-code event emitter.
-- Do not wait indefinitely. Use bounded polling and report `partial` when the outside peer does not provide the next expected signal.
+- Do not wait indefinitely. Use `inbox_list` with bounded `waitMs` long-polling, not sleep loops, and report `partial` when the outside peer does not provide the next expected signal.
 
 ## Evidence checklist
 

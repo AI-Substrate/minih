@@ -19,7 +19,7 @@ This is an honest harness. The outside peer is pretending to complete work areas
    - use `state_set` or `state_transition` to publish inside status `in-progress` with `data.phase: "ready-waiting-for-milestone"`;
    - use `inbox_send` with type `ready` so the outside peer can read that you are standing by.
 2. Process exactly three outside milestone messages with `type: "milestone"`:
-   - call `inbox_list` with `unread: true`;
+   - call `inbox_list` with `unread: true`, `type: "milestone"`, and a bounded `waitMs` such as `30000`;
    - record each message id, subject, body summary, and milestone id from message text or outside state data;
    - read both side states with `state_get`;
    - acknowledge each handled outside message with `inbox_ack`;
@@ -36,7 +36,13 @@ This is an honest harness. The outside peer is pretending to complete work areas
 
 ## Bounded waiting
 
-Do not wait forever. After announcing readiness, poll for unread outside messages in bounded cycles. If no new outside signal arrives after a reasonable bounded wait, produce a `partial` report instead of hanging:
+Do not wait forever. After announcing readiness, use the private MCP `inbox_list` blocking read instead of agent-authored sleep loops:
+
+```json
+{ "unread": true, "type": "milestone", "waitMs": 30000 }
+```
+
+For the final completion signal, use the same pattern with `type: "complete"`. If the bounded wait expires without the next expected outside signal, produce a `partial` report instead of hanging:
 
 - set inside status `paused` or `error` with `data.phase: "waiting-timeout"` and the last observed outside state;
 - send a `blocked` or `partial` inside message explaining what was missing;

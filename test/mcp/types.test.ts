@@ -43,6 +43,18 @@ describe('MCP tool contracts', () => {
     );
   });
 
+  it('documents bounded waitMs on the inbox_list contract', () => {
+    const inboxList = TOOL_CONTRACTS.find((tool) => tool.name === 'inbox_list');
+
+    expect(inboxList?.inputSchema.properties?.waitMs).toEqual({
+      type: 'integer',
+      description:
+        'Optional bounded long-poll duration in milliseconds. Omit or set to 0 for immediate reads.',
+      minimum: 0,
+      maximum: 30000,
+    });
+  });
+
   it('identifies supported tool names', () => {
     expect(isMcpToolName('inbox_list')).toBe(true);
     expect(isMcpToolName('inbox.list')).toBe(false);

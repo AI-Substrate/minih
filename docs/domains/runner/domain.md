@@ -51,7 +51,7 @@
 | `listAgents(agentsDir)` | Function | cli (list, doctor) |
 | `resolveAgent(slug, agentsDir)` | Function | cli (run, validate, history) |
 | `runAgent(adapter, def, config, onEvent?, agentsDir?)` | Function | cli (run command) |
-| `buildInsidePreamble(input)` / `PreambleAssemblyInput` | Function/Type | runner (fresh-run prompt assembly), coordinated-agent prompt wiring |
+| `buildInsidePreamble(input)` / `PreambleAssemblyInput` | Function/Type | runner (fresh-run prompt assembly), coordinated-agent prompt wiring including inside MCP `waitMs` guidance |
 | `findRunSession(slug, agentsDir, runId?)` | Function | cli (resume, connect — session lookup from completed.json) |
 | `RunSession` | Type | cli (resume, connect — session lookup result) |
 | `validateInput(schemaPath, params)` | Function | cli (check --input), runner (pre-execution) |
@@ -88,7 +88,7 @@
 | Folder convention | An agent IS a folder. prompt.md with frontmatter = agent exists. |
 | Frozen inputs | Every run copies its inputs into the run folder for reproducibility. |
 | Degraded vs Failed | Invalid output = "degraded" (agent worked, schema didn't match), not hard failure. |
-| Prompt assembly | `buildInsidePreamble` preserves the legacy preamble → instructions → output hint → params → prompt join for non-coordinated agents, and inserts real coordinated identity, tool, checklist, and peer-contract sections only when `coordination.enabled` is true. Frontmatter stripped. |
+| Prompt assembly | `buildInsidePreamble` preserves the legacy preamble → instructions → output hint → params → prompt join for non-coordinated agents, and inserts real coordinated identity, tool, checklist, wait guidance, and peer-contract sections only when `coordination.enabled` is true. Frontmatter stripped. |
 | Coordination identity block | `buildInsidePreamble` injects `<!-- coordination.identity-block -->` with the agent slug, run id, and outside-peer framing for coordinated fresh runs only. Resume turns skip prompt assembly. |
 | Peer contract framing | `outside.md` content is quoted under `<!-- coordination.peer-contract -->` / `## Peer's Contract (from outside.md)`. Optional absence means no peer-contract section; an empty file is still a present empty contract. |
 | Event-driven terminal condition | `runAgent` relies on adapter idle completion, then waits for `awaitTerminalCondition(adapterResult, pendingForwarderCount)` with a live inbox/state forwarder drain counter so queued `session.send` work settles before the run completes. |
@@ -141,3 +141,4 @@
 | 007-backgrounding P7 | Finalized runner documentation for coordinated identity/peer-contract framing, atomic write semantics, test provenance, and the explicit no-MCP/no-rule-engine boundary. |
 | 008-canonical-coordination-loop | Updated coordinated prompt guidance to teach inside agents the backend-safe underscore MCP tool names and documented the live `coordination-loop-validator` evidence path. |
 | 008 FX001 | Moved mutable coordination state from agent-scoped folders to `agents/<slug>/runs/<runId>/{inbox,state}`; runner/MCP/CLI now share `CoordinationRunLocation` and overlapping same-agent runs are isolated by run id. |
+| 008 FX002 | Updated coordinated preamble guidance to teach bounded `inbox_list` long-poll waits with `waitMs` for outside signals. |

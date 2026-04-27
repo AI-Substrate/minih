@@ -164,3 +164,4 @@ flowchart LR
 | 2026-04-27 | Stage 7 | Completed real live run `2026-04-27T15-25-51-655Z-a767`: readiness, three milestone cycles, completion, `validate`, and retros captured in `manual-live-run-evidence.md`. |
 | 2026-04-27 | Stage 8 | `just fft` passed: Biome check/format, build, typecheck, 414 tests passed with 9 expected skips, and audit found 0 vulnerabilities. Plan/domain artifacts aligned and generated run folders cleaned. |
 | 2026-04-27 | FX002 | Added private MCP `inbox_list.waitMs` blocking reads before the no-context two-agent eval; targeted MCP/preamble tests, build, and `just fft` passed. |
+| 2026-04-27 | Post 003 | Ran `coordination-loop-validator` against FX002 (`2026-04-27T20-18-21-699Z-d1ca`): completed, validated, 5055 events, 45 tool calls; evidence captured in `posts/003-fx002-blocking-inbox-live-run.md`. |

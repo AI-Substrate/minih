@@ -197,3 +197,12 @@ Make minih's coordination CLI **honest** (lane = subcommand), **blocking** (`--w
 - R-004 (companion blast radius) — implementer must restart companion in their pane after T005-T008 PR lands (existing companion uses old CLI surface for `outside-send` etc.). Already noted in plan § Notes for /plan-6.
 
 **Overall**: ✅ **VALIDATED WITH FIXES** — ready for `/plan-6-v2-implement-phase`.
+
+---
+
+## Companion Retrospectives (post-implementation)
+
+| Run | Tasks Reviewed | Findings | Magic Wand | Difficulties | Detail |
+|-----|---------------|----------|------------|--------------|--------|
+| 2026-04-28T21-15-10-836Z-9315 | T001-T008 (HF-001 + HF-002) | 9 (2 HIGH fixed inline, 3 MED open, 4 LOW open) | `peerIdleSince` field in coordination state (target: coordination) | MH-004 (error-code drift between plan and output.ts), MH-005 (no built-in idle-budget timer) | [runs/002-companion-retrospective.md](./runs/002-companion-retrospective.md) |
+| _pending HF-003_ | T009-T019 | — | — | — | _to be captured when HF-003 ships_ |

@@ -100,11 +100,10 @@ describe('state CLI', () => {
 
   it('sets outside status, validates schema, and appends history before write', () => {
     const { stdout, exitCode } = run([
+      'outside',
       'state',
       'set',
       'demo',
-      '--side',
-      'outside',
       '--status',
       'done',
       '--agents-dir',
@@ -130,11 +129,10 @@ describe('state CLI', () => {
 
   it('appends history for data-only state set mutations', () => {
     const dataJson = run([
+      'outside',
       'state',
       'set',
       'demo',
-      '--side',
-      'outside',
       '--data-json',
       '{"phase":"review"}',
       '--agents-dir',
@@ -143,11 +141,10 @@ describe('state CLI', () => {
     expect(dataJson.exitCode).toBe(0);
 
     const keyWrite = run([
+      'outside',
       'state',
       'set',
       'demo',
-      '--side',
-      'outside',
       '--key',
       'data.count',
       '--value-json',
@@ -166,11 +163,10 @@ describe('state CLI', () => {
 
   it('supports key writes and value-json writes under data', () => {
     const phase = run([
+      'outside',
       'state',
       'set',
       'demo',
-      '--side',
-      'outside',
       '--key',
       'data.phase',
       '--value',
@@ -181,11 +177,10 @@ describe('state CLI', () => {
     expect(phase.exitCode).toBe(0);
 
     const count = run([
+      'outside',
       'state',
       'set',
       'demo',
-      '--side',
-      'outside',
       '--key',
       'data.count',
       '--value-json',
@@ -199,25 +194,23 @@ describe('state CLI', () => {
 
   it('rejects inside writes and invalid JSON as invalid args', () => {
     const inside = run([
+      'inside',
       'state',
       'set',
       'demo',
-      '--side',
-      'inside',
       '--status',
       'done',
       '--agents-dir',
       agentsDir,
     ]);
     expect(inside.exitCode).toBe(1);
-    expect(JSON.parse(inside.stdout).error.code).toBe('E108');
+    expect(JSON.parse(inside.stdout).error.code).toBe('E143');
 
     const invalidJson = run([
+      'outside',
       'state',
       'set',
       'demo',
-      '--side',
-      'outside',
       '--data-json',
       '{bad',
       '--agents-dir',
@@ -229,6 +222,7 @@ describe('state CLI', () => {
 
   it('transitions outside state and avoids partial writes when history append fails', () => {
     const ok = run([
+      'outside',
       'state',
       'transition',
       'demo',
@@ -252,6 +246,7 @@ describe('state CLI', () => {
       'utf8',
     );
     const tooLarge = run([
+      'outside',
       'state',
       'transition',
       'demo',
@@ -269,6 +264,7 @@ describe('state CLI', () => {
     );
 
     const sameStatusTooLarge = run([
+      'outside',
       'state',
       'transition',
       'demo',
@@ -306,6 +302,7 @@ describe('state CLI', () => {
     );
 
     const blocked = run([
+      'outside',
       'state',
       'transition',
       'demo',
@@ -317,6 +314,7 @@ describe('state CLI', () => {
     expect(blocked.exitCode).toBe(0);
 
     const done = run([
+      'outside',
       'state',
       'transition',
       'demo',
@@ -335,11 +333,10 @@ describe('state CLI', () => {
     });
 
     const first = run([
+      'outside',
       'state',
       'set',
       'demo',
-      '--side',
-      'outside',
       '--status',
       'in-progress',
       '--data-json',
@@ -350,11 +347,10 @@ describe('state CLI', () => {
       runId,
     ]);
     const second = run([
+      'outside',
       'state',
       'set',
       'demo',
-      '--side',
-      'outside',
       '--status',
       'done',
       '--data-json',

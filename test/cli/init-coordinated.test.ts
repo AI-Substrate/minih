@@ -61,7 +61,7 @@ describe('init --coordinated', () => {
       path.join(tmpDir, 'paired-agent', 'outside.md'),
       'utf8',
     );
-    expect(outside).toContain('outside-send paired-agent');
+    expect(outside).toContain('outside inbox send paired-agent');
 
     const insideSchema = JSON.parse(
       fs.readFileSync(

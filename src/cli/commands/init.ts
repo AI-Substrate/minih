@@ -45,9 +45,9 @@ Use this contract when coordinating with the inside minih agent.
 
 ## How to drive this agent
 
-1. Send requests with \`minih outside-send ${slug} --subject "..." --body "..."\`.
-2. Track outside progress with \`minih state set ${slug} --side outside --status in-progress\`.
-3. Read inside replies with \`minih outside-inbox-list ${slug}\`.
+1. Send requests with \`minih outside inbox send ${slug} --subject "..." --body "..."\`.
+2. Track outside progress with \`minih outside state set ${slug} --status in-progress\`.
+3. Read inside replies with \`minih inside inbox list ${slug}\`.
 
 ## Expected completion signal
 
@@ -185,7 +185,7 @@ export function registerInitCommand(program: Command): void {
         commandName: 'init',
         alternatives: [
           'Create or edit agent files from the outside project shell.',
-          'Use `minih outside-context <slug>` to inspect an existing coordination contract.',
+          'Use `minih outside context <slug>` to inspect an existing coordination contract.',
         ],
       });
     })

@@ -72,8 +72,8 @@ describe('coordination-loop-validator worked example', () => {
     expect(agent.checks.filter((check) => check.status === 'fail')).toEqual([]);
   });
 
-  it('exposes the canonical outside runbook through outside-context', () => {
-    const result = run(['outside-context', 'coordination-loop-validator']);
+  it('exposes the canonical outside runbook through outside context', () => {
+    const result = run(['outside', 'context', 'coordination-loop-validator']);
     expect(result.exitCode).toBe(0);
 
     const envelope = parseEnvelope(result.stdout);

@@ -1,6 +1,6 @@
 # Peer's contract (outside view)
 
-Outside is responsible for signalling milestones to inside via `outside-send`.
+Outside is responsible for signalling milestones to inside via `outside inbox send`.
 Inside is responsible for completing each milestone and sending an ack back via
 the inside MCP `inbox_send` tool.
 

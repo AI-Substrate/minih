@@ -19,6 +19,17 @@ export const ErrorCodes = {
   AGENT_MODEL_INVALID: 'E127',
   INVALID_CONTEXT: 'E128',
   INIT_ALREADY_EXISTS: 'E130',
+  // Plan 010 — coordination CLI ergonomics
+  NOT_COORDINATED: 'E140',
+  WAIT_OUT_OF_RANGE: 'E141',
+  AGENT_GONE: 'E142',
+  INSIDE_READ_ONLY: 'E143',
+  ALREADY_ACTIVE: 'E144',
+  NO_RUN_TO_RESUME: 'E145',
+  SESSION_EXPIRED: 'E146',
+  RESUME_IN_PROGRESS: 'E147',
+  INBOX_CORRUPT: 'E148',
+  MCP_SPAWN_FAILED: 'E149',
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];

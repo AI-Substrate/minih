@@ -14,7 +14,7 @@ RUN_ID=$(minih status coordination-smoke-test 2>/dev/null | jq -r '.data.runId')
 Send a request to that run:
 
 ```bash
-npx minih outside-send coordination-smoke-test \
+npx minih outside inbox send coordination-smoke-test \
   --run "$RUN_ID" \
   --subject "Smoke test request" \
   --body "Please acknowledge this message, update inside state, and report back."
@@ -23,15 +23,15 @@ npx minih outside-send coordination-smoke-test \
 Optionally publish outside progress:
 
 ```bash
-npx minih state set coordination-smoke-test \
+npx minih outside state set coordination-smoke-test \
   --run "$RUN_ID" \
-  --side outside \
+  \
   --status in-progress \
   --data-json '{"driver":"outside smoke test"}'
 ```
 
 ## Expected inside behavior
 
-The inside agent should use `inbox_list`, `inbox_ack`, `inbox_send`, `state_get`, `state_set`, and `state_transition` — and **for each call, read back the artifact from disk to verify the tool actually wrote what it claimed** (per the prompt's "verify don't just call" contract). After the run, inspect replies with `minih outside-inbox-list coordination-smoke-test --run "$RUN_ID"` and state with `minih state get coordination-smoke-test --run "$RUN_ID"`.
+The inside agent should use `inbox_list`, `inbox_ack`, `inbox_send`, `state_get`, `state_set`, and `state_transition` — and **for each call, read back the artifact from disk to verify the tool actually wrote what it claimed** (per the prompt's "verify don't just call" contract). After the run, inspect replies with `minih inside inbox list coordination-smoke-test --run "$RUN_ID"` and state with `minih state get coordination-smoke-test --run "$RUN_ID"`.
 
 The report MUST include a top-level `artifacts` object asserting which observable artifacts (`stateFile`, `historyFile`, `inboxInsideFile`) existed at session end. A verdict of `all-pass` requires every tool check `pass` AND every artifact flag `true`.

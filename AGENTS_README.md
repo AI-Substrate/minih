@@ -409,7 +409,7 @@ With coordination enabled, fresh runs get extra prompt sections for identity, av
 Run:
 
 ```bash
-minih outside-context coordination-smoke-test
+minih outside context coordination-smoke-test
 ```
 
 With no slug, `minih outside-context` returns system-only coordination guidance. With a slug, the JSON envelope includes `contractStatus` and `hasOutsideContract`.
@@ -424,7 +424,7 @@ The outside peer uses CLI commands from the project shell:
 minih run coordination-smoke-test          # Start in another terminal/background shell
 RUN_ID=$(minih status coordination-smoke-test 2>/dev/null | jq -r '.data.runId')
 
-minih outside-send coordination-smoke-test \
+minih outside inbox send coordination-smoke-test \
   --run "$RUN_ID" \
   --subject "Smoke test request" \
   --body "Please acknowledge this, publish state, and report back."
@@ -434,7 +434,7 @@ minih state set coordination-smoke-test \
   --side outside \
   --status in-progress \
   --data-json '{"driver":"outside smoke test"}'
-minih outside-inbox-list coordination-smoke-test --run "$RUN_ID"
+minih inside inbox list coordination-smoke-test --run "$RUN_ID"
 minih state get coordination-smoke-test --run "$RUN_ID"
 minih retros --agent coordination-smoke-test --run "$RUN_ID"
 ```
@@ -719,12 +719,12 @@ minih difficulties                        # Aggregate difficulty reports across 
 minih difficulties --agent <slug>         # Filter to a specific agent
 
 # Outside/inside coordination
-minih outside-context [slug]              # Show system guidance or a slug's outside contract
-minih outside-send <slug> --run <runId> --subject ... --body ...
-minih outside-inbox-list <slug> --run <runId> # Read inside replies from the outside lane
+minih outside context [slug]              # Show system guidance or a slug's outside contract
+minih outside inbox send <slug> --run <runId> --subject ... --body ...
+minih inside inbox list <slug> --run <runId> # Read inside replies from the outside lane
 minih state get <slug> --run <runId>      # Read inside/outside state
 minih state set <slug> --run <runId> --side outside --status in-progress
-minih outside-retro <slug> --run <runId> --target coordination --body ...
+minih outside retro add <slug> --run <runId> --target coordination --body ...
 minih retros --agent <slug> --run <runId> # Aggregate inside + outside retrospectives
 
 # Session management

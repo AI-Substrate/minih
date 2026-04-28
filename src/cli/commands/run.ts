@@ -47,7 +47,7 @@ export function registerRunCommand(program: Command): void {
         commandName: 'run',
         alternatives: [
           'Use the inbox/state MCP tools from inside the session.',
-          'From an outside shell, use `minih outside-send <slug>` to communicate with the running agent.',
+          'From an outside shell, use `minih outside inbox send <slug>` to communicate with the running agent.',
         ],
       });
     })
@@ -81,7 +81,7 @@ export function registerRunCommand(program: Command): void {
     .option('--mcp-config <path>', 'MCP config file with mcpServers (JSON)')
     .addHelpText(
       'after',
-      '\nTip: For coordinated agents, run `minih outside-context <slug>` first to read the outside-side contract.\n',
+      '\nTip: For coordinated agents, run `minih outside context <slug>` first to read the outside-side contract.\n',
     )
     .action(
       async (

@@ -59,14 +59,7 @@ describe('CLI commands', () => {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
-    for (const command of [
-      'outside-send',
-      'outside-inbox-list',
-      'state',
-      'outside-context',
-      'outside-retro',
-      'retros',
-    ]) {
+    for (const command of ['outside', 'inside', 'state', 'retros']) {
       expect(help).toContain(command);
     }
   });

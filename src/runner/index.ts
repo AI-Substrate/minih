@@ -44,6 +44,13 @@ export {
 } from './human-view-errors.js';
 export type { HumanViewSources } from './human-view-model.js';
 export { buildHumanViewModel } from './human-view-model.js';
+export type {
+  InboxPollErrorCode,
+  PollInboxOptions,
+  PollInboxResult,
+  PollInboxWait,
+} from './inbox-poll.js';
+export { InboxPollError, pollInboxLane } from './inbox-poll.js';
 export type { PreambleAssemblyInput } from './preamble-builder.js';
 export { buildInsidePreamble } from './preamble-builder.js';
 export { PrettyDisplay } from './pretty.js';

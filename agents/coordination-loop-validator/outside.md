@@ -7,7 +7,7 @@ This is minih's richer worked example for the outside/inside coordination loop. 
 Read this contract:
 
 ```bash
-minih outside-context coordination-loop-validator
+minih outside context coordination-loop-validator
 ```
 
 Start the inside validator in another terminal or background shell:
@@ -28,7 +28,7 @@ If an inside validator is already running, skip startup and continue. Keep the o
 minih status coordination-loop-validator
 minih tail coordination-loop-validator
 minih tail coordination-loop-validator --run "$RUN_ID" --lines 20 --snapshot
-minih outside-inbox-list coordination-loop-validator --run "$RUN_ID" --type ready
+minih inside inbox list coordination-loop-validator --run "$RUN_ID" --type ready
 minih state get coordination-loop-validator --run "$RUN_ID" --side both
 ```
 
@@ -47,10 +47,10 @@ Keep workflow words in `data` and message text, not in `status`. Use schema-comp
 ### Milestone 1
 
 ```bash
-minih state set coordination-loop-validator --side outside --status in-progress \
+minih outside state set coordination-loop-validator --status in-progress \
   --run "$RUN_ID" \
   --data-json '{"phase":"milestone-ready","milestone":"area-1","summary":"Pretended to finish the parser boundary handoff"}'
-minih outside-send coordination-loop-validator --type milestone \
+minih outside inbox send coordination-loop-validator --type milestone \
   --run "$RUN_ID" \
   --subject "area-1 ready for validation" \
   --body "Pretend work area 1 is complete: parser boundary handoff. Validate message/state coherence and send coordination-focused feedback."
@@ -59,10 +59,10 @@ minih outside-send coordination-loop-validator --type milestone \
 ### Milestone 2
 
 ```bash
-minih state set coordination-loop-validator --side outside --status in-progress \
+minih outside state set coordination-loop-validator --status in-progress \
   --run "$RUN_ID" \
   --data-json '{"phase":"milestone-ready","milestone":"area-2","summary":"Pretended to finish the runner handoff"}'
-minih outside-send coordination-loop-validator --type milestone \
+minih outside inbox send coordination-loop-validator --type milestone \
   --run "$RUN_ID" \
   --subject "area-2 ready for validation" \
   --body "Pretend work area 2 is complete: runner handoff. Validate that the inside agent can read state, acknowledge the message, and reply."
@@ -71,10 +71,10 @@ minih outside-send coordination-loop-validator --type milestone \
 ### Milestone 3
 
 ```bash
-minih state set coordination-loop-validator --side outside --status in-progress \
+minih outside state set coordination-loop-validator --status in-progress \
   --run "$RUN_ID" \
   --data-json '{"phase":"milestone-ready","milestone":"area-3","summary":"Pretended to finish the documentation handoff"}'
-minih outside-send coordination-loop-validator --type milestone \
+minih outside inbox send coordination-loop-validator --type milestone \
   --run "$RUN_ID" \
   --subject "area-3 ready for validation" \
   --body "Pretend work area 3 is complete: documentation handoff. Validate final milestone coordination and tell me whether the loop is ready to finish."
@@ -83,20 +83,20 @@ minih outside-send coordination-loop-validator --type milestone \
 After each milestone:
 
 ```bash
-minih outside-inbox-list coordination-loop-validator --run "$RUN_ID" --unread
+minih inside inbox list coordination-loop-validator --run "$RUN_ID" --unread
 minih state get coordination-loop-validator --run "$RUN_ID" --side both
 minih status coordination-loop-validator
 ```
 
-Save each `outside-send` message id. The inside report should include acknowledgement evidence for each id.
+Save each `outside inbox send` message id. The inside report should include acknowledgement evidence for each id.
 
 ## Finish
 
 ```bash
-minih state set coordination-loop-validator --side outside --status done \
+minih outside state set coordination-loop-validator --status done \
   --run "$RUN_ID" \
   --data-json '{"phase":"complete","milestones":["area-1","area-2","area-3"],"summary":"All three simulated milestones were sent"}'
-minih outside-send coordination-loop-validator --type complete \
+minih outside inbox send coordination-loop-validator --type complete \
   --run "$RUN_ID" \
   --subject "manual validation complete" \
   --body "All three fake work areas have been sent. Produce the final coordination validation report."
@@ -116,7 +116,7 @@ Use `validate --run` for a completed run output. Use `check --file <path>` only 
 Record outside feedback:
 
 ```bash
-minih outside-retro coordination-loop-validator --run "$RUN_ID" --body "WORKED WELL: ...
+minih outside retro add coordination-loop-validator --run "$RUN_ID" --body "WORKED WELL: ...
 CONFUSING: ...
 MAGIC WAND: ..."
 ```

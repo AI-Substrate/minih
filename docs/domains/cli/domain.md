@@ -32,11 +32,11 @@
 | `src/cli/commands/inspect.ts` | internal | Prompt/config inspection |
 | `src/cli/preaction-context.ts` | internal | Reusable inside-context block for outside-only shell commands (007-backgrounding P5) |
 | `src/cli/coordination.ts` | internal | Shared outside coordination CLI helpers: agent/run resolution, schema validation, inbox lane parsing/appending (007-backgrounding P5 + FX001) |
-| `src/cli/commands/outside-send.ts` | contract | Append outside-lane inbox messages, including ack records (007-backgrounding P5) |
-| `src/cli/commands/outside-inbox-list.ts` | contract | Read/filter inside-lane replies for outside callers (007-backgrounding P5) |
+| `src/cli/commands/outside.ts` | contract | Append outside-lane inbox messages, including ack records (007-backgrounding P5) |
+| `src/cli/commands/inside.ts` | contract | Read/filter inside-lane replies for outside callers (007-backgrounding P5) |
 | `src/cli/commands/state.ts` | contract | Outside state get/set/transition subcommands (007-backgrounding P5) |
-| `src/cli/commands/outside-context.ts` | contract | Emit outside-side coordination markdown in a JSON envelope (007-backgrounding P5) |
-| `src/cli/commands/outside-retro.ts` | contract | Record outside-side retro messages with target metadata (007-backgrounding P5) |
+| `src/cli/commands/outside.ts` | contract | Emit outside-side coordination markdown in a JSON envelope (007-backgrounding P5) |
+| `src/cli/commands/outside.ts` | contract | Record outside-side retro messages with target metadata (007-backgrounding P5) |
 | `src/cli/commands/retros.ts` | contract | Aggregate inside report retros and outside retro messages (007-backgrounding P5) |
 
 ## Contracts
@@ -59,11 +59,11 @@
 | Inside MCP wiring | `run.ts` and `resume.ts` import `mcp` spawn config and pass a generic factory to runner only at the CLI composition boundary. |
 | stdout = machine | JSON envelope on stdout. Human formatting on stderr. TTY-detected. |
 | Three consumers | Agent inside minih, external coding agents, humans/CI. |
-| Outside commander surface | Humans, CI, and host agents coordinate with an inside session through `outside-send`, `outside-inbox-list`, `state get`, `state set`, `outside-context`, `outside-retro`, and `retros`. Mutable commands target a run explicitly with `--run <runId>` or resolve only when unambiguous; they read/write runner coordination files and do not invoke inside MCP tools directly. |
+| Outside commander surface | Humans, CI, and host agents coordinate with an inside session through `outside inbox send`, `inside inbox list`, `state get`, `state set`, `outside context`, `outside retro add`, and `retros`. Mutable commands target a run explicitly with `--run <runId>` or resolve only when unambiguous; they read/write runner coordination files and do not invoke inside MCP tools directly. |
 | Context block | `run`, `resume`, `quickstart`, `tail`, and `init` fail with `E128 INVALID_CONTEXT` under strict `MINIH=1`, while normal outside behavior is unchanged. |
 | Cross-side retros | Inside managed `report.json.retrospective` entries and outside-lane `retro` messages flow into the same `retros` aggregation surface. |
 | Coordinated scaffold | `init --coordinated` writes `coordination: enabled`, `outside.md`, `inside-state.schema.json`, and `outside-state.schema.json` without changing default init output. |
-| Outside context preview | `outside-context` with no slug returns system-only guidance. With a slug, `contractStatus` is `absent`, `empty`, or `present`, and `hasOutsideContract` distinguishes no file from an empty file. |
+| Outside context preview | `outside context` with no slug returns system-only guidance. With a slug, `contractStatus` is `absent`, `empty`, or `present`, and `hasOutsideContract` distinguishes no file from an empty file. |
 | Outside contract health | `doctor` warns when coordinated `outside.md` is older than `prompt.md` or over 4KB, fails over 8KB, ignores absent/non-coordinated outside contracts, and preserves realpath containment checks. |
 | Dry-run prompt parity | `run --dry-run` uses `buildInsidePreamble()` and returns the assembled prompt in the JSON envelope, so coordinated previews include the same identity/tool/peer/checklist sections as real runs. |
 | File vs run validation | `check` validates explicit files (`--file` or best-effort `MINIH_OUTPUT_PATH`), while `validate --run` revalidates completed run outputs. A mistaken `check --run` returns a JSON envelope with the correct alternatives. |
@@ -73,8 +73,8 @@
 
 | Area | Tests |
 |------|-------|
-| Outside context statuses | `test/cli/outside-context.test.ts` |
-| Outside inbox/state/retro commands | `test/cli/outside-send.test.ts`, `test/cli/outside-inbox-list.test.ts`, `test/cli/outside-retro.test.ts`, `test/cli/state.test.ts`, `test/cli/retros.test.ts` |
+| Outside context statuses | `test/cli/outside-inbox-wait.test.ts` |
+| Outside inbox/state/retro commands | `test/cli/outside-inbox-wait.test.ts`, `test/cli/outside-inbox-wait.test.ts`, `test/cli/outside-inbox-wait.test.ts`, `test/cli/state.test.ts`, `test/cli/retros.test.ts` |
 | Coordinated scaffold and dry-run parity | `test/cli/init-coordinated.test.ts` |
 | Doctor outside-contract checks | `test/cli/doctor-outside-md.test.ts` |
 | MCP composition wiring from CLI | `test/mcp/spawn.test.ts`, `test/mcp/leak-regression.test.ts` |
@@ -97,5 +97,6 @@
 | 007-backgrounding P7 | Finalized CLI documentation for the complete command surface, outside-context contract statuses, coordinated scaffold files, doctor outside-contract checks, dry-run parity, and MCP composition-root boundary. |
 | 008-canonical-coordination-loop | Updated coordinated `run`/`resume` reserved MCP namespace checks from dotted `inbox.*`/`state.*` prefixes to backend-safe `inbox_`/`state_` prefixes and added the rich `coordination-loop-validator` worked-example docs/tests. |
 | 008 FX001 | Outside coordination commands now resolve a run target, include `runId` in envelopes, and keep same-agent concurrent runs isolated across inbox/state/retros. |
-| 008 FX002 | Clarified worked-example docs that `waitMs` is an inside MCP long-poll option while outside peers continue observing through CLI `status`, `tail`, `outside-inbox-list`, and state commands. |
+| 008 FX002 | Clarified worked-example docs that `waitMs` is an inside MCP long-poll option while outside peers continue observing through CLI `status`, `tail`, `inside inbox list`, and state commands. |
 | 008 FX003 | Added `tail --lines` and `--snapshot`, clarified `check --file` vs `validate --run`, and added friendly `check --run` guidance for fresh-agent coordination evals. |
+| 010 HF-001/HF-002 | Lane CLI hard rename: introduced `outside <verb>` and `inside <verb>` Commander subcommand trees (replacing flat `outside-send` / `outside-inbox-list` / `outside-context` / `outside-retro` and moving `state set`/`transition` under `outside state`). Top-level `state get` survives as cross-lane both-view. Inside lane is read-only from CLI; write attempts return E143. Long-poll on inbox-list via shared `runner.pollInboxLane`: `--wait <ms>` (bare = 60_000, max 300_000), composes with `--type` / `--unread` / `--after`, surfaces E141 (out-of-range), E142 (agent-gone via run.json status flip). New `inside retro show` reads farewell envelope retrospective. Error code range E140-E149 reserved. Functional smoke verified against live coordinated agent. |

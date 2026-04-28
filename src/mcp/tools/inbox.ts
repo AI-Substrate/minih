@@ -1,10 +1,11 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {
-  type FileWatcher,
-  watchFileChanges,
-} from '../../runner/file-watcher.js';
 import { coordinationRunLocation, inboxLanePath } from '../../runner/folder.js';
+import {
+  InboxPollError,
+  type PollInboxOptions,
+  pollInboxLane,
+} from '../../runner/inbox-poll.js';
 import type { InboxMessage, Side } from '../../runner/types.js';
 import { ulid } from '../../runner/ulid.js';
 import type { McpServerContext } from '../context.js';
@@ -15,9 +16,6 @@ import {
   McpToolError,
   type McpToolResult,
 } from '../types.js';
-
-const DEFAULT_LIST_LIMIT = 50;
-const MAX_LIST_LIMIT = 200;
 
 export interface InboxListOutput {
   messages: InboxMessage[];
@@ -47,179 +45,41 @@ export async function inboxList(
   context: McpServerContext,
   input: Record<string, unknown> = {},
 ): Promise<McpToolResult<InboxListOutput>> {
-  const startedAt = Date.now();
   const listInput = parseInboxListInput(input);
-  const limit = normalizeLimit(listInput.limit);
-  const waitMs = normalizeWaitMs(listInput.waitMs);
-  const immediate = listVisibleMessages(context, listInput, limit);
-  if (waitMs === undefined || waitMs === 0) {
-    return jsonResult(immediate);
-  }
-  if (immediate.messages.length > 0) {
-    return jsonResult(withWait(immediate, waitMs, startedAt, true));
-  }
-  return jsonResult(
-    await waitForMatchingMessages(context, listInput, limit, waitMs, startedAt),
-  );
-}
-
-function listVisibleMessages(
-  context: McpServerContext,
-  listInput: InboxListInput,
-  limit: number,
-): InboxListOutput {
-  const peerMessages = readLane(context, 'outside');
-  const ownMessages = readLane(context, 'inside');
-  const acknowledged = new Set(
-    ownMessages
-      .filter((message) => message.type === 'ack' && message.ackOf)
-      .map((message) => message.ackOf as string),
-  );
-
-  let visible = listInput.unread
-    ? peerMessages.filter((message) => !acknowledged.has(message.id))
-    : peerMessages;
-
-  if (listInput.type !== undefined) {
-    visible = visible.filter((message) => message.type === listInput.type);
-  }
-  if (listInput.waitForAny !== undefined) {
-    const types = new Set(listInput.waitForAny);
-    visible = visible.filter((message) => types.has(message.type));
-  }
-
-  if (listInput.after !== undefined) {
-    const index = visible.findIndex(
-      (message) => message.id === listInput.after,
+  const pollOptions: PollInboxOptions = {
+    type: listInput.type,
+    waitForAny: listInput.waitForAny,
+    unread: listInput.unread,
+    after: listInput.after,
+    limit: listInput.limit,
+    waitMs: listInput.waitMs,
+    maxWaitMs: MAX_INBOX_WAIT_MS,
+  };
+  try {
+    const result = await pollInboxLane(
+      coordinationRunLocationFromContext(context),
+      'outside',
+      pollOptions,
     );
-    visible = index === -1 ? [] : visible.slice(index + 1);
+    return jsonResult(result);
+  } catch (error) {
+    throw mapPollError(error);
   }
-
-  return inboxListOutput(visible.slice(0, limit), visible.length, limit);
 }
 
-function waitForMatchingMessages(
-  context: McpServerContext,
-  listInput: InboxListInput,
-  limit: number,
-  waitMs: number,
-  startedAt: number,
-): Promise<InboxListOutput> {
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    let timeout: ReturnType<typeof setTimeout> | undefined;
-    let watcher: FileWatcher | null = null;
-
-    const cleanup = (): void => {
-      if (timeout) {
-        clearTimeout(timeout);
-        timeout = undefined;
-      }
-      watcher?.close();
-      watcher = null;
-    };
-    const settle = (callback: () => void): void => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      callback();
-    };
-    const completeIfMatched = (): void => {
-      let output: InboxListOutput;
-      try {
-        output = listVisibleMessages(context, listInput, limit);
-      } catch (error) {
-        settle(() => reject(error));
-        return;
-      }
-      if (output.messages.length > 0) {
-        settle(() => resolve(withWait(output, waitMs, startedAt, true)));
-      }
-    };
-    const completeWithTimeout = (): void => {
-      let output: InboxListOutput;
-      try {
-        output = listVisibleMessages(context, listInput, limit);
-      } catch (error) {
-        settle(() => reject(error));
-        return;
-      }
-      settle(() =>
-        resolve(
-          output.messages.length > 0
-            ? withWait(output, waitMs, startedAt, true)
-            : withWait(
-                { messages: [], nextAfter: null },
-                waitMs,
-                startedAt,
-                false,
-              ),
-        ),
-      );
-    };
-
-    try {
-      watcher = watchFileChanges(
-        lanePath(context, 'outside'),
-        completeIfMatched,
-        {
-          debounceMs: 0,
-          onError: (error) => {
-            settle(() =>
-              reject(
-                new McpToolError(
-                  'MCP_INTERNAL_ERROR',
-                  `inbox wait watcher failed: ${error.message}`,
-                ),
-              ),
-            );
-          },
-        },
-      );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      reject(
-        new McpToolError(
-          'MCP_INTERNAL_ERROR',
-          `inbox wait watcher failed: ${message}`,
-        ),
-      );
-      return;
+function mapPollError(error: unknown): McpToolError {
+  if (error instanceof InboxPollError) {
+    if (error.code === 'INBOX_POLL_INVALID_ARGUMENT') {
+      return new McpToolError('MCP_INVALID_ARGUMENT', error.message);
     }
-
-    timeout = setTimeout(() => {
-      completeWithTimeout();
-    }, waitMs);
-    completeIfMatched();
-  });
-}
-
-function withWait(
-  output: InboxListOutput,
-  requestedMs: number,
-  startedAt: number,
-  matched: boolean,
-): InboxListOutput {
-  return {
-    ...output,
-    wait: {
-      requestedMs,
-      elapsedMs: Math.max(0, Date.now() - startedAt),
-      timedOut: !matched,
-      matched,
-    },
-  };
-}
-
-function inboxListOutput(
-  messages: InboxMessage[],
-  visibleCount: number,
-  limit: number,
-): InboxListOutput {
-  return {
-    messages,
-    nextAfter: visibleCount > limit ? (messages.at(-1)?.id ?? null) : null,
-  };
+    if (error.code === 'INBOX_POLL_CORRUPT') {
+      return new McpToolError('MCP_INBOX_CORRUPT', error.message);
+    }
+    return new McpToolError('MCP_INTERNAL_ERROR', error.message);
+  }
+  if (error instanceof McpToolError) return error;
+  const message = error instanceof Error ? error.message : String(error);
+  return new McpToolError('MCP_INTERNAL_ERROR', message);
 }
 
 export function inboxSend(
@@ -371,17 +231,6 @@ function coordinationRunLocationFromContext(context: McpServerContext) {
   );
 }
 
-function normalizeLimit(limit: number | undefined): number {
-  if (limit === undefined) return DEFAULT_LIST_LIMIT;
-  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_LIST_LIMIT) {
-    throw new McpToolError(
-      'MCP_INVALID_ARGUMENT',
-      `limit must be an integer from 1 to ${MAX_LIST_LIMIT}`,
-    );
-  }
-  return limit;
-}
-
 function parseInboxListInput(input: Record<string, unknown>): InboxListInput {
   const result: InboxListInput = {};
   if (input.unread !== undefined) {
@@ -456,22 +305,6 @@ function requireWaitForAny(value: unknown): string[] {
     types.push(item);
   }
   return types;
-}
-
-function normalizeWaitMs(waitMs: number | undefined): number | undefined {
-  if (waitMs === undefined) return undefined;
-  if (
-    !Number.isFinite(waitMs) ||
-    !Number.isInteger(waitMs) ||
-    waitMs < 0 ||
-    waitMs > MAX_INBOX_WAIT_MS
-  ) {
-    throw new McpToolError(
-      'MCP_INVALID_ARGUMENT',
-      `waitMs must be an integer from 0 to ${MAX_INBOX_WAIT_MS}`,
-    );
-  }
-  return waitMs;
 }
 
 function requireNonEmptyString(value: unknown, field: string): string {

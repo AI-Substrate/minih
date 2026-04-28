@@ -180,7 +180,9 @@ describeE2e('two-agent coordination e2e', () => {
     const runId = await waitForRunId(slug);
 
     runCli([
-      'outside-send',
+      'outside',
+      'inbox',
+      'send',
       slug,
       '--type',
       'note',
@@ -222,7 +224,9 @@ describeE2e('two-agent coordination e2e', () => {
 
     const replies = JSON.parse(
       runCli([
-        'outside-inbox-list',
+        'inside',
+        'inbox',
+        'list',
         slug,
         '--agents-dir',
         agentsDir,

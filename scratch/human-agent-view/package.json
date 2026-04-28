@@ -1,0 +1,12 @@
+{
+  "name": "human-agent-view-scratch",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/app.mjs",
+    "coordination": "node src/app.mjs --fixture coordination-rich",
+    "stream": "node src/app.mjs --fixture token-deltas --play",
+    "readonly": "node src/app.mjs --fixture attached-read-only",
+    "snapshot": "node src/app.mjs --snapshot --width 120 --height 34"
+  }
+}

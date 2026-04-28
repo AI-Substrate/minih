@@ -8,19 +8,71 @@ coordination: enabled
 
 ## Objective
 
-Verify that a coordinated minih agent can see outside peer context, use all inside MCP coordination tools, publish state, and produce a validating report.
+Verify that a coordinated minih agent can see outside peer context, use all inside MCP coordination tools, publish state, and produce a validating report. **Verify by reading the artifacts back from disk after each tool call** — a tool that returns OK but failed to write its artifact is a HARD FAIL, not a pass.
 
-## Required coordination exercise
+## Required coordination exercise — VERIFY DON'T JUST CALL
 
-1. Use `inbox_list` with `unread: true` to inspect outside peer messages.
-2. If a message exists, use `inbox_ack` for the message id and `inbox_send` to reply with progress evidence.
-3. Use `state_get` with `side: "both"` to inspect inside and outside state.
-4. Use `state_set` to publish an inside status such as `reviewing`.
-5. Use `state_transition` to move to a final inside status such as `complete`.
-6. Before final output, send a final `inbox_send` note summarizing what you verified.
+For every tool call below, after calling the tool you MUST read back the artifact the tool was supposed to produce and quote a snippet into `toolChecks[].evidence`. If the artifact is missing, mismatched, or empty, record `status: 'fail'` and add a `retrospective.confusing` note. The smoke must light up like a Christmas tree when contracts break.
 
-If no outside message exists, still exercise the state tools and send a note that the outside lane was empty.
+Helpful environment vars (always set when this agent runs):
+- `$MINIH_RUN_DIR` — your run folder
+- `$MINIH_INBOX_DIR` = `$MINIH_RUN_DIR/inbox`
+- `$MINIH_STATE_DIR` = `$MINIH_RUN_DIR/state`
+
+### 1. `inbox_list` (outside lane)
+
+- Call `inbox_list` with `unread: true` to inspect outside peer messages.
+- After the call: `cat $MINIH_INBOX_DIR/outside/messages.ndjson` (if it exists). Compare the message count and message ids returned by the tool against the file. They MUST match.
+- `evidence`: quote the file path AND a snippet of the first message line (or "outside lane file does not exist — empty inbox" if applicable).
+
+### 2. `inbox_send` (with `ackOf` if there was an outside message)
+
+- Call `inbox_send` to reply with progress evidence. If step 1 surfaced an outside message id, **set `ackOf` to that id** (this is now a first-class parameter on the MCP tool surface as of FX001).
+- After the call: `cat $MINIH_INBOX_DIR/inside/messages.ndjson | tail -1` (read the line you just wrote).
+- Verify the line contains your `subject`, `body`, `type`, AND (when set) `ackOf`. If `ackOf` was passed but is missing from the persisted line, that is a HARD FAIL.
+- `evidence`: quote the persisted JSON line.
+
+### 3. `inbox_ack` (only if step 1 surfaced an outside message)
+
+- Call `inbox_ack` with the outside message id.
+- After the call: re-read `$MINIH_INBOX_DIR/inside/messages.ndjson | tail -1` and confirm an `ack` message with `ackOf` equal to the acked id is now present.
+- `evidence`: quote the persisted ack line.
+
+### 4. `state_get` with `side: "both"`
+
+- Call `state_get` with `side: 'both'` to inspect inside and outside state.
+- After the call: list `$MINIH_STATE_DIR` and confirm what files exist (`inside.json`, `outside.json`).
+- `evidence`: quote the directory listing AND the parsed state objects (or note "synthetic defaults — no state files yet" if both are absent).
+
+### 5. `state_set` to publish an inside status (e.g. `reviewing`)
+
+- Call `state_set` with `status: 'reviewing'`.
+- After the call: `cat $MINIH_STATE_DIR/inside.json`. The file MUST exist and `status` MUST equal `reviewing`. If the file is missing, that is a HARD FAIL — the inside-state schema may be misconfigured (FX001-2 fixed the lookup; if you hit this, file a follow-up).
+- `evidence`: quote the persisted `inside.json` content.
+
+### 6. `state_transition` to a final status (e.g. `complete`)
+
+- Call `state_transition` with `to: 'complete'`.
+- After the call: `cat $MINIH_STATE_DIR/inside.json` AND `cat $MINIH_STATE_DIR/history.ndjson | tail -1`. The state MUST equal `complete` and the history line MUST record the transition `from: 'reviewing'` `to: 'complete'`.
+- `evidence`: quote both the new `inside.json` and the new history line.
+
+### 7. Final summary `inbox_send`
+
+- Send a final `inbox_send` of type `summary` summarizing what you verified, with `ackOf` set to the original outside message id if there was one.
+- After the call: read back `$MINIH_INBOX_DIR/inside/messages.ndjson | tail -1` and quote it.
+
+If no outside message exists at step 1, still exercise the state and inbox-send tools and clearly mark the inbox-related steps as `status: 'skip'` with an explanation.
 
 ## Report
 
-Write a JSON report to `$MINIH_OUTPUT_PATH` with the tool evidence, final state, and validation result. Include `retrospective.magicWandTarget: "coordination"` when your feedback targets the outside/inside loop.
+Write a JSON report to `$MINIH_OUTPUT_PATH` with:
+
+- `summary` — what you verified, in plain prose.
+- `toolChecks[]` — one entry per tool exercised, with `tool`, `status`, AND `evidence` quoting the artifact contents you read back.
+- `artifacts` — top-level object asserting which observable artifacts existed at session end:
+  - `stateFile: boolean` — true if `$MINIH_STATE_DIR/inside.json` exists.
+  - `historyFile: boolean` — true if `$MINIH_STATE_DIR/history.ndjson` exists.
+  - `inboxInsideFile: boolean` — true if `$MINIH_INBOX_DIR/inside/messages.ndjson` exists.
+- `verdict` — `all-pass` only if EVERY tool check is `pass` AND every artifact flag is `true`. Otherwise `partial` or `fail`.
+- `retrospective` — include `magicWandTarget: "coordination"` when your feedback targets the outside/inside loop.
+

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Code Review Companion Input",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "initialTask": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional first task to perform after boot. If omitted, the agent runs the built-in 'orient' task: read the active plan tree, summarise where the work stands, then idle waiting for outside messages."
+    },
+    "planPath": {
+      "type": "string",
+      "description": "Optional explicit path under docs/plans/ for the orient default to focus on. If omitted, the agent picks the highest-numbered plan folder."
+    },
+    "idleBudgetMs": {
+      "type": "integer",
+      "minimum": 60000,
+      "default": 1800000,
+      "description": "Idle window (ms) before self-termination. Default 30 minutes (1800000)."
+    }
+  }
+}

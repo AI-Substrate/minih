@@ -169,9 +169,26 @@ function validateInsideState(
   );
 }
 
+/**
+ * Resolves the inside-state JSON schema path with 3-level fallback:
+ *   1. `<agentDir>/state/inside-state.schema.json` — preferred convention
+ *      (groups state-related files under `state/`, matches Phase 2 view layout).
+ *   2. `<agentDir>/inside-state.schema.json` — legacy fallback
+ *      (preserves `coordination-loop-validator` and any other coordinated agent
+ *      that pre-dates the `state/` convention).
+ *   3. `DEFAULT_INSIDE_STATE_SCHEMA` — built-in default
+ *      (preserves agents that ship no inside-state schema at all).
+ */
 function insideStateSchemaPath(context: McpServerContext): string {
-  const localSchema = path.join(context.agentDir, 'inside-state.schema.json');
-  return fs.existsSync(localSchema) ? localSchema : DEFAULT_INSIDE_STATE_SCHEMA;
+  const preferred = path.join(
+    context.agentDir,
+    'state',
+    'inside-state.schema.json',
+  );
+  if (fs.existsSync(preferred)) return preferred;
+  const legacy = path.join(context.agentDir, 'inside-state.schema.json');
+  if (fs.existsSync(legacy)) return legacy;
+  return DEFAULT_INSIDE_STATE_SCHEMA;
 }
 
 function requireNonEmptyString(value: unknown, field: string): string {

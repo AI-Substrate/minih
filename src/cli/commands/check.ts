@@ -6,7 +6,7 @@
  */
 
 import chalk from 'chalk';
-import type { Command } from 'commander';
+import { type Command, Option } from 'commander';
 import {
   resolveAgent,
   validateOutput,
@@ -23,14 +23,29 @@ import {
 export function registerCheckCommand(program: Command): void {
   program
     .command('check [slug]')
-    .description('Validate a file against an agent schema')
-    .option('--file <path>', 'File to validate')
+    .description('Validate an explicit file against an agent schema')
+    .option(
+      '--file <path>',
+      'File to validate (required unless MINIH_OUTPUT_PATH is available)',
+    )
     .option('--input', 'Validate against input-schema.json instead')
+    .addOption(new Option('--run <runId>').hideHelp())
     .action(
       (
         slugArg: string | undefined,
-        opts: { file?: string; input?: boolean },
+        opts: { file?: string; input?: boolean; run?: string },
       ) => {
+        if (opts.run) {
+          exitWithEnvelope(
+            formatError(
+              'check',
+              ErrorCodes.INVALID_ARGS,
+              '`check` validates files, not runs. Use `minih validate <slug> --run <runId>` to validate a completed run output, or `minih check <slug> --file <path>` to validate an explicit file.',
+            ),
+          );
+          return;
+        }
+
         const agentsDir =
           program.opts().agentsDir ?? process.env.MINIH_AGENTS_DIR ?? 'agents';
 
@@ -62,7 +77,7 @@ export function registerCheckCommand(program: Command): void {
             formatError(
               'check',
               ErrorCodes.INVALID_ARGS,
-              'Provide --file <path> or run inside a minih agent (MINIH_OUTPUT_PATH env var).',
+              'Provide --file <path> to validate an explicit file, or run inside a minih agent where MINIH_OUTPUT_PATH is available. Use `minih validate <slug> --run <runId>` for completed run outputs.',
             ),
           );
           return;

@@ -195,3 +195,4 @@ Overall: VALIDATED
 |----|---------|---------|-----------|--------|--------|
 | FX001 | 2026-04-27 | Run-scoped coordination state | runner, mcp, cli | Complete | Post-implementation correction from first live messaging run review |
 | FX002 | 2026-04-27 | Blocking inbox list | mcp, runner, cli | Complete | Private `inbox_list.waitMs` long-poll implemented and documented before no-context two-agent eval |
+| FX003 | 2026-04-27 | Coordination eval UX follow-ups | mcp, cli, runner | Complete | Post-FX002 live-run magic-wand findings: multi-type waits, bounded tail snapshot, validation command clarity, and output-path env guidance |

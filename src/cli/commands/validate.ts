@@ -21,10 +21,8 @@ import {
 export function registerValidateCommand(program: Command): void {
   program
     .command('validate <slug>')
-    .description(
-      'Re-validate the most recent run output against current schema',
-    )
-    .option('--run <runId>', 'Specific run ID (default: latest)')
+    .description('Re-validate a completed run output against current schema')
+    .option('--run <runId>', 'Specific completed run ID (default: latest)')
     .action((slug: string, opts: { run?: string }) => {
       const agentsDir = program.opts().agentsDir ?? 'agents';
 

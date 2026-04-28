@@ -55,6 +55,44 @@ describe('MCP tool contracts', () => {
     });
   });
 
+  it('documents bounded waitForAny on the inbox_list contract', () => {
+    const inboxList = TOOL_CONTRACTS.find((tool) => tool.name === 'inbox_list');
+
+    expect(inboxList?.inputSchema.properties?.waitForAny).toEqual({
+      type: 'array',
+      description:
+        'When set, return messages whose type exactly matches any listed value. Mutually exclusive with type.',
+      items: {
+        type: 'string',
+        minLength: 1,
+        maxLength: 64,
+      },
+      minItems: 1,
+      maxItems: 16,
+      uniqueItems: true,
+    });
+    // The mutual-exclusion of `type` and `waitForAny` is enforced at runtime by
+    // `parseInboxListInput` (src/mcp/tools/inbox.ts). The top-level schema
+    // intentionally does NOT use `not`/`oneOf`/`anyOf`/`allOf`/`enum` because
+    // the Copilot SDK's function-calling layer rejects those at the top level
+    // (CAPIError 400). See plan 009 phase 1 subtask FX001 smoke discovery.
+    expect(inboxList?.inputSchema.not).toBeUndefined();
+  });
+
+  it('exposes optional ackOf on the inbox_send contract for reply correlation', () => {
+    const inboxSend = TOOL_CONTRACTS.find((tool) => tool.name === 'inbox_send');
+
+    expect(inboxSend?.inputSchema.properties?.ackOf).toEqual({
+      type: 'string',
+      minLength: 1,
+      maxLength: 128,
+      description:
+        'Optional inbox message id this reply acknowledges (drives Phase 2 workbench correlation).',
+    });
+    // ackOf must remain optional — only subject + body are required.
+    expect(inboxSend?.inputSchema.required).toEqual(['subject', 'body']);
+  });
+
   it('identifies supported tool names', () => {
     expect(isMcpToolName('inbox_list')).toBe(true);
     expect(isMcpToolName('inbox.list')).toBe(false);

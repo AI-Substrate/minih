@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process';
+import { execSync, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -31,6 +31,23 @@ function run(
     const e = err as { stdout?: string; status?: number };
     return { stdout: e.stdout ?? '', exitCode: e.status ?? 1 };
   }
+}
+
+function runArgs(args: string[]): {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+} {
+  const result = spawnSync(process.execPath, [cliPath, ...args], {
+    cwd: tmpDir,
+    env: { ...process.env, NO_COLOR: '1' },
+    encoding: 'utf-8',
+  });
+  return {
+    stdout: result.stdout,
+    stderr: result.stderr,
+    exitCode: result.status ?? 0,
+  };
 }
 
 describe('CLI commands', () => {
@@ -206,6 +223,84 @@ describe('CLI commands', () => {
     expect(JSON.parse(stdout).error.code).toBe('E121');
   });
 
+  it('check --run returns a friendly file-vs-run validation error', () => {
+    const { exitCode, stdout } = run(
+      `check checker --run run-1 --agents-dir ${tmpDir}`,
+    );
+
+    expect(exitCode).toBe(1);
+    const env = JSON.parse(stdout);
+    expect(env.error.code).toBe('E108');
+    expect(env.error.message).toContain('check` validates files');
+    expect(env.error.message).toContain('minih validate <slug> --run <runId>');
+    expect(env.error.message).toContain('minih check <slug> --file <path>');
+  });
+
+  it('check and validate help distinguish file validation from run validation', () => {
+    const checkHelp = execSync(`node ${cliPath} check --help`, {
+      cwd: tmpDir,
+      env: { ...process.env, NO_COLOR: '1' },
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    const validateHelp = execSync(`node ${cliPath} validate --help`, {
+      cwd: tmpDir,
+      env: { ...process.env, NO_COLOR: '1' },
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    expect(checkHelp).toContain('Validate an explicit file');
+    expect(checkHelp).toContain('--file <path>');
+    expect(checkHelp).not.toContain('--run <runId>');
+    expect(validateHelp).toContain('completed run output');
+    expect(validateHelp).toContain('--run <runId>');
+  });
+
+  it('tail snapshot honors --lines and exits without following', () => {
+    run(`init tailer --agents-dir ${tmpDir}`);
+    const runDir = path.join(tmpDir, 'tailer', 'runs', 'run-1');
+    fs.mkdirSync(runDir, { recursive: true });
+    const events = [
+      textDeltaEvent('event-1'),
+      textDeltaEvent('event-2'),
+      textDeltaEvent('event-3'),
+    ];
+    fs.writeFileSync(
+      path.join(runDir, 'events.ndjson'),
+      `${events.map((event) => JSON.stringify(event)).join('\n')}\n`,
+    );
+    fs.writeFileSync(
+      path.join(runDir, 'completed.json'),
+      JSON.stringify({
+        result: 'completed',
+        durationMs: 1234,
+        eventCount: 3,
+        toolCallCount: 0,
+        validated: true,
+      }),
+    );
+
+    const { exitCode, stderr } = runArgs([
+      'tail',
+      'tailer',
+      '--run',
+      'run-1',
+      '--lines',
+      '2',
+      '--snapshot',
+      '--agents-dir',
+      tmpDir,
+    ]);
+
+    expect(exitCode).toBe(0);
+    expect(stderr).toContain('snapshot');
+    expect(stderr).toContain('event-2');
+    expect(stderr).toContain('event-3');
+    expect(stderr).not.toContain('event-1');
+    expect(stderr).toContain('Run Complete');
+  });
+
   it('dry-run works without GH_TOKEN', () => {
     // Create agent to dry-run against
     run(`init drytest --agents-dir ${tmpDir}`);
@@ -251,3 +346,11 @@ describe('CLI commands', () => {
     expect(env.error.details.context).toBe('inside');
   });
 });
+
+function textDeltaEvent(content: string) {
+  return {
+    type: 'text_delta',
+    timestamp: '2026-04-26T00:00:00Z',
+    data: { content },
+  };
+}

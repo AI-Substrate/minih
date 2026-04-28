@@ -167,6 +167,7 @@ describe('run-folder coordination snapshots', () => {
       'inbox-snapshot/outside.ndjson',
       'output/report.json',
       'prompt.md',
+      'run.json',
       'state/inside.json',
       'state/outside.json',
       'state-snapshot.json',

@@ -117,6 +117,11 @@ describe('buildInsidePreamble', () => {
     expect(prompt).toContain('<!-- coordination.tools-section -->');
     expect(prompt).toContain('## Coordination tools available to you');
     expect(prompt).toContain('waitMs: 30000');
+    expect(prompt).toContain('<!-- coordination.output-validation -->');
+    expect(prompt).toContain(
+      'The literal report path shown above is authoritative.',
+    );
+    expect(prompt).toContain('minih check coord-agent --file /tmp/report.json');
     for (const tool of [
       'inbox_list',
       'inbox_send',
@@ -164,6 +169,16 @@ describe('buildInsidePreamble', () => {
       ---
 
       Write your final JSON report to: /tmp/report.json
+
+      ---
+
+      <!-- coordination.output-validation -->
+
+      ## Output path and validation
+
+      - The literal report path shown above is authoritative.
+      - If your shell can read \`$MINIH_OUTPUT_PATH\`, you may use it.
+      - If the shell cannot see that variable, write to \`/tmp/report.json\` directly and validate with \`minih check coord-agent --file /tmp/report.json\`.
 
       ---
 

@@ -25,4 +25,4 @@ Before final output, confirm the report contains:
 - final validation result;
 - coordination-focused retrospective with `magicWandTarget: "coordination"`.
 
-Write only the JSON report to `$MINIH_OUTPUT_PATH`, then run `minih check`.
+Write only the JSON report to the literal output path shown in the prompt. Then run `minih check` if `$MINIH_OUTPUT_PATH` is visible in your shell; otherwise run `minih check coordination-loop-validator --file <literal-output-path>`.

@@ -31,6 +31,11 @@ import {
   type InboxForwarder,
 } from './inbox-forwarder.js';
 import { buildInsidePreamble } from './preamble-builder.js';
+import {
+  flushThrottled as flushManifestThrottled,
+  updateManifest,
+  writeManifest,
+} from './run-manifest.js';
 import { readStateLazy } from './state.js';
 import {
   createStateForwarder,
@@ -41,6 +46,7 @@ import type {
   AgentRunConfig,
   AgentRunResult,
   CompletedMetadata,
+  LiveRunManifest,
   ParsedReport,
   RunEventStats,
   ValidationResult,
@@ -63,7 +69,8 @@ function resolvePreamblePath(agentsDir: string): string {
 /** System output requirements injected into every agent prompt. */
 export const SYSTEM_OUTPUT_INSTRUCTIONS = `## Required Output Format
 
-Your output MUST be a valid JSON object written to the path specified above ($MINIH_OUTPUT_PATH).
+Your output MUST be a valid JSON object written to the literal path specified above.
+The runner also exposes that path as MINIH_OUTPUT_PATH where the execution environment supports it; if a shell cannot see that variable, use the literal path from this prompt.
 At minimum, your JSON must include these fields:
 
 \`\`\`json
@@ -123,8 +130,8 @@ this system for every agent that runs after you.
 
 ## MANDATORY: Validate Before Finishing
 
-After writing your output, you MUST run \`minih check\` and verify it passes.
-If validation fails, read the errors, fix your output, and re-run \`minih check\`.
+After writing your output, you MUST run \`minih check\` and verify it passes. If MINIH_OUTPUT_PATH is unavailable in your shell, run \`minih check <slug> --file <literal-output-path>\` instead.
+If validation fails, read the errors, fix your output, and re-run the same check command.
 Repeat until validation passes or you've exhausted reasonable attempts.
 
 If you cannot make the output valid after 3 attempts, write a valid JSON object
@@ -139,7 +146,7 @@ explaining what went wrong:
 }
 \`\`\`
 
-Do NOT finish without running \`minih check\` at least once.
+Do NOT finish without running \`minih check\` or \`minih check <slug> --file <literal-output-path>\` at least once.
 
 ## Cleanup
 
@@ -241,6 +248,25 @@ export async function runAgent(
 
   fs.writeFileSync(eventsPath, '');
 
+  // Initial run.json manifest — workshop 002 §1, plan 009.
+  // Written immediately after run-folder creation so attach commands can
+  // resolve the run by ID before session_start.
+  const initialManifest: LiveRunManifest = {
+    schemaVersion: 1,
+    slug: definition.slug,
+    runId,
+    runDir,
+    pid: process.pid,
+    startedAt: startedAt.toISOString(),
+    updatedAt: startedAt.toISOString(),
+    status: 'starting',
+    sessionId: null,
+    model: config.model ?? null,
+    control: { available: coordinationEnabled, kind: 'none' },
+    counters: { events: 0, toolCalls: 0, messages: 0, errors: 0 },
+  };
+  await writeManifest(runDir, initialManifest);
+
   const outputPath = path.join(runDir, 'output', 'report.json');
   const stderrPath = path.join(runDir, 'stderr.log');
 
@@ -272,6 +298,8 @@ export async function runAgent(
     const inputValidation = validateInput(definition.inputSchemaPath, params);
     if (!inputValidation.valid) {
       const errorMsg = `Input parameter validation failed:\n${inputValidation.errors.join('\n')}`;
+      // Finalize manifest so this dead run never looks active to resolveRun().
+      await updateManifest(runDir, { status: 'failed' });
       return {
         agentResult: {
           output: errorMsg,
@@ -400,12 +428,34 @@ export async function runAgent(
         );
         break;
       case 'session_start':
-        if (event.data.sessionId) activeSessionId = event.data.sessionId;
+        if (event.data.sessionId) {
+          activeSessionId = event.data.sessionId;
+          // Immediate (non-throttled) — sessionId + active is the answer
+          // attach-by-id needs as fast as possible.
+          void updateManifest(runDir, {
+            sessionId: event.data.sessionId,
+            status: 'active',
+          });
+        }
         break;
     }
 
     // Write to NDJSON incrementally
     fs.appendFileSync(eventsPath, `${JSON.stringify(event)}\n`);
+
+    // Throttled counter patch — coalesces per-event tick to avoid disk thrash.
+    void updateManifest(
+      runDir,
+      {
+        counters: {
+          events: stats.total,
+          toolCalls: stats.toolCalls,
+          messages: stats.messages,
+          errors: stats.errors,
+        },
+      },
+      { throttleMs: 250 },
+    );
 
     if (onEvent) onEvent(event);
   };
@@ -512,6 +562,9 @@ export async function runAgent(
         ...(mcpServers && { mcpServers }),
       })
       .then(async (result) => {
+        // Manifest: status → completing right before terminal-condition wait
+        // (workshop 002 §Write points).
+        await updateManifest(runDir, { status: 'completing' });
         const terminal = await awaitTerminalCondition(
           result,
           pendingForwarderCount,
@@ -667,6 +720,21 @@ export async function runAgent(
     path.join(runDir, 'completed.json'),
     JSON.stringify(metadata, null, 2),
   );
+
+  // Final manifest patch — flush any pending throttled counters and mark
+  // the run completed/failed so attach commands can render an honest
+  // capability label even before they read completed.json.
+  await flushManifestThrottled(runDir);
+  await updateManifest(runDir, {
+    status: resultStatus === 'completed' ? 'completed' : 'failed',
+    sessionId: agentResult.sessionId || null,
+    counters: {
+      events: stats.total,
+      toolCalls: stats.toolCalls,
+      messages: stats.messages,
+      errors: stats.errors,
+    },
+  });
 
   // Parse report.json for envelope surfacing
   const parsedReport = parseReportJson(outputPath);

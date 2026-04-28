@@ -2,7 +2,13 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Coordination Smoke Test Report",
   "type": "object",
-  "required": ["summary", "toolChecks", "verdict", "retrospective"],
+  "required": [
+    "summary",
+    "toolChecks",
+    "artifacts",
+    "verdict",
+    "retrospective"
+  ],
   "additionalProperties": true,
   "properties": {
     "summary": {
@@ -14,7 +20,7 @@
       "minItems": 6,
       "items": {
         "type": "object",
-        "required": ["tool", "status"],
+        "required": ["tool", "status", "evidence"],
         "additionalProperties": true,
         "properties": {
           "tool": {
@@ -33,8 +39,29 @@
             "enum": ["pass", "fail", "skip"]
           },
           "evidence": {
-            "type": "string"
+            "type": "string",
+            "minLength": 20,
+            "description": "Quote the artifact contents (file path + snippet) you read back to verify the tool actually wrote what it claimed. Empty or hand-wavy evidence is a contract violation."
           }
+        }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "required": ["stateFile", "historyFile", "inboxInsideFile"],
+      "additionalProperties": true,
+      "properties": {
+        "stateFile": {
+          "type": "boolean",
+          "description": "True iff $MINIH_STATE_DIR/inside.json exists at session end."
+        },
+        "historyFile": {
+          "type": "boolean",
+          "description": "True iff $MINIH_STATE_DIR/history.ndjson exists at session end."
+        },
+        "inboxInsideFile": {
+          "type": "boolean",
+          "description": "True iff $MINIH_INBOX_DIR/inside/messages.ndjson exists at session end."
         }
       }
     },

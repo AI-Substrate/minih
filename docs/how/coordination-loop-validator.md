@@ -77,9 +77,10 @@ Keep the outside peer in the loop with status and tail:
 ```bash
 minih status coordination-loop-validator
 minih tail coordination-loop-validator
+minih tail coordination-loop-validator --run "$RUN_ID" --lines 20 --snapshot
 ```
 
-`status` is a one-shot liveness/readiness check for the latest run. `tail` follows the run's `events.ndjson` and exits when `completed.json` appears.
+`status` is a one-shot liveness/readiness check for the latest run. `tail` follows the run's `events.ndjson` and exits when `completed.json` appears. Use `tail --lines <n> --snapshot` when you need a bounded no-follow progress sample.
 
 Wait for readiness before milestone 1:
 
@@ -99,10 +100,10 @@ Expected readiness evidence:
 The inside validator should wait for outside signals with the private MCP `inbox_list` long-poll option, not with agent-authored sleep loops. For milestones, the intended inside call is:
 
 ```json
-{ "unread": true, "type": "milestone", "waitMs": 30000 }
+{ "unread": true, "waitForAny": ["milestone", "complete", "cancel"], "waitMs": 30000 }
 ```
 
-For the completion signal, use the same bounded pattern with `type: "complete"`. The outside peer still uses normal CLI observation commands (`status`, `tail`, `outside-inbox-list`, and `state get`); `waitMs` is an inside MCP tool option, not a new outside CLI flag.
+The multi-type wait lets the inside validator notice milestone, completion, or cancellation signals in one bounded call. The outside peer still uses normal CLI observation commands (`status`, `tail --lines <n> --snapshot`, `outside-inbox-list`, and `state get`); `waitMs` and `waitForAny` are inside MCP tool options, not new outside CLI flags.
 
 ## Supported variation: already-running inside
 
@@ -111,6 +112,7 @@ If another terminal, human, or host agent already started the inside validator, 
 ```bash
 minih status coordination-loop-validator
 minih tail coordination-loop-validator
+minih tail coordination-loop-validator --run "$RUN_ID" --lines 20 --snapshot
 minih outside-inbox-list coordination-loop-validator --run "$RUN_ID" --type ready
 ```
 
@@ -210,6 +212,7 @@ Watch for normal completion:
 ```bash
 minih status coordination-loop-validator
 minih tail coordination-loop-validator
+minih tail coordination-loop-validator --run "$RUN_ID" --lines 20 --snapshot
 ```
 
 If the inside agent times out or reports `partial`, capture which expected signal was missing. A bounded `waitMs` partial is better evidence than an indefinite hang.
@@ -222,6 +225,10 @@ Run:
 minih validate coordination-loop-validator --run "$RUN_ID"
 minih retros --agent coordination-loop-validator --run "$RUN_ID" --target coordination
 ```
+
+`validate --run` re-validates a completed run output. `check --file <path>` validates an explicit report file; do not use `check` as a run validator.
+
+Inside the validator, the literal output path in the prompt is the reliable target. If `$MINIH_OUTPUT_PATH` is not visible from the agent's shell, write to the literal path and run `minih check coordination-loop-validator --file <literal-output-path>`.
 
 Record outside-side feedback:
 

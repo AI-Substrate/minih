@@ -69,6 +69,44 @@ describe('inboxList', () => {
     });
   });
 
+  it('filters by any exact message type alongside unread filtering', async () => {
+    writeMessage('outside', peerMessage('m1', 'First'));
+    writeMessage('outside', peerMessage('m2', 'Milestone', 'milestone'));
+    writeMessage('outside', peerMessage('m3', 'Complete', 'complete'));
+    writeMessage('outside', peerMessage('m4', 'Cancel', 'cancel'));
+    writeMessage('inside', insideAck('m2'));
+
+    expect(
+      await listed({ unread: true, waitForAny: ['milestone', 'complete'] }),
+    ).toEqual({
+      messages: [expect.objectContaining({ id: 'm3', type: 'complete' })],
+      nextAfter: null,
+    });
+  });
+
+  it('rejects invalid waitForAny inputs', async () => {
+    await expect(
+      inboxList(context, { waitForAny: 'milestone' }),
+    ).rejects.toThrow(/waitForAny must be an array/);
+    await expect(inboxList(context, { waitForAny: [] })).rejects.toThrow(
+      /waitForAny must contain 1 to 16 message types/,
+    );
+    await expect(
+      inboxList(context, {
+        waitForAny: Array.from({ length: 17 }, (_, index) => `type-${index}`),
+      }),
+    ).rejects.toThrow(/waitForAny must contain 1 to 16 message types/);
+    await expect(
+      inboxList(context, { waitForAny: ['milestone', 'milestone'] }),
+    ).rejects.toThrow(/waitForAny must not contain duplicate message types/);
+    await expect(
+      inboxList(context, { waitForAny: ['milestone', ''] }),
+    ).rejects.toThrow(/waitForAny\[1\]/);
+    await expect(
+      inboxList(context, { type: 'milestone', waitForAny: ['complete'] }),
+    ).rejects.toThrow(/type and waitForAny are mutually exclusive/);
+  });
+
   it('supports bounded pagination', async () => {
     for (let i = 0; i < 5; i++) {
       writeMessage('outside', peerMessage(`m${i}`, `Subject ${i}`));
@@ -169,6 +207,30 @@ describe('inboxList', () => {
     });
   });
 
+  it('waits until any newly appended requested message type arrives', async () => {
+    const pending = listed({
+      unread: true,
+      waitForAny: ['milestone', 'complete', 'cancel'],
+      waitMs: 1000,
+    });
+
+    setTimeout(() => {
+      writeMessage('outside', peerMessage('m1', 'Noise', 'note'));
+    }, 10);
+    setTimeout(() => {
+      writeMessage('outside', peerMessage('m2', 'Complete', 'complete'));
+    }, 30);
+
+    await expect(pending).resolves.toMatchObject({
+      messages: [{ id: 'm2', type: 'complete' }],
+      wait: {
+        requestedMs: 1000,
+        timedOut: false,
+        matched: true,
+      },
+    });
+  });
+
   it('times out with explicit wait metadata when no matching message arrives', async () => {
     const result = await listed({ type: 'directive', waitMs: 25 });
 
@@ -182,6 +244,26 @@ describe('inboxList', () => {
       },
     });
     expect(result?.wait?.elapsedMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('times out when waited messages do not match waitForAny', async () => {
+    const pending = listed({
+      waitForAny: ['milestone', 'complete', 'cancel'],
+      waitMs: 25,
+    });
+
+    setTimeout(() => {
+      writeMessage('outside', peerMessage('m1', 'Noise', 'note'));
+    }, 10);
+
+    await expect(pending).resolves.toMatchObject({
+      messages: [],
+      wait: {
+        requestedMs: 25,
+        timedOut: true,
+        matched: false,
+      },
+    });
   });
 
   it('settles overlapping waits independently', async () => {

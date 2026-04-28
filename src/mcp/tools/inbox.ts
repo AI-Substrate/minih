@@ -83,6 +83,10 @@ function listVisibleMessages(
   if (listInput.type !== undefined) {
     visible = visible.filter((message) => message.type === listInput.type);
   }
+  if (listInput.waitForAny !== undefined) {
+    const types = new Set(listInput.waitForAny);
+    visible = visible.filter((message) => types.has(message.type));
+  }
 
   if (listInput.after !== undefined) {
     const index = visible.findIndex(
@@ -225,6 +229,7 @@ export function inboxSend(
   const subject = requireNonEmptyString(input.subject, 'subject');
   const body = requireNonEmptyString(input.body, 'body');
   const type = optionalNonEmptyString(input.type, 'type') ?? 'note';
+  const ackOf = parseOptionalAckOf(input.ackOf);
   const message: InboxMessage = {
     id: ulid(),
     sender: 'inside',
@@ -235,6 +240,11 @@ export function inboxSend(
   };
   if (input.meta !== undefined)
     message.meta = requireRecord(input.meta, 'meta');
+  // ackOf is accepted optimistically: we validate shape (non-empty string ≤128 chars)
+  // but do NOT verify the referenced message exists. A stale ackOf becomes the agent's
+  // bug to fix at the human-view rendering layer, not a write-time blocker. Same-lane
+  // (inside-acks-inside) is intentionally allowed for thread continuation.
+  if (ackOf !== undefined) message.ackOf = ackOf;
 
   appendMessage(lanePath(context, 'inside'), message);
   return jsonResult({ message });
@@ -392,6 +402,15 @@ function parseInboxListInput(input: Record<string, unknown>): InboxListInput {
   if (input.type !== undefined) {
     result.type = optionalNonEmptyString(input.type, 'type');
   }
+  if (input.waitForAny !== undefined) {
+    result.waitForAny = requireWaitForAny(input.waitForAny);
+  }
+  if (result.type !== undefined && result.waitForAny !== undefined) {
+    throw new McpToolError(
+      'MCP_INVALID_ARGUMENT',
+      'type and waitForAny are mutually exclusive',
+    );
+  }
   if (input.after !== undefined) {
     result.after = requireNonEmptyString(input.after, 'after');
   }
@@ -402,6 +421,41 @@ function parseInboxListInput(input: Record<string, unknown>): InboxListInput {
     result.waitMs = input.waitMs;
   }
   return result;
+}
+
+function requireWaitForAny(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    throw new McpToolError(
+      'MCP_INVALID_ARGUMENT',
+      'waitForAny must be an array',
+    );
+  }
+  if (value.length < 1 || value.length > 16) {
+    throw new McpToolError(
+      'MCP_INVALID_ARGUMENT',
+      'waitForAny must contain 1 to 16 message types',
+    );
+  }
+
+  const seen = new Set<string>();
+  const types: string[] = [];
+  for (const [index, item] of value.entries()) {
+    if (typeof item !== 'string' || item.trim() === '' || item.length > 64) {
+      throw new McpToolError(
+        'MCP_INVALID_ARGUMENT',
+        `waitForAny[${index}] must be a non-empty string up to 64 characters`,
+      );
+    }
+    if (seen.has(item)) {
+      throw new McpToolError(
+        'MCP_INVALID_ARGUMENT',
+        'waitForAny must not contain duplicate message types',
+      );
+    }
+    seen.add(item);
+    types.push(item);
+  }
+  return types;
 }
 
 function normalizeWaitMs(waitMs: number | undefined): number | undefined {
@@ -436,6 +490,18 @@ function optionalNonEmptyString(
 ): string | undefined {
   if (value === undefined) return undefined;
   return requireNonEmptyString(value, field);
+}
+
+function parseOptionalAckOf(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  const ackOf = requireNonEmptyString(value, 'ackOf');
+  if (ackOf.length > 128) {
+    throw new McpToolError(
+      'MCP_INVALID_ARGUMENT',
+      'ackOf must be at most 128 characters',
+    );
+  }
+  return ackOf;
 }
 
 function requireRecord(value: unknown, field: string): Record<string, unknown> {

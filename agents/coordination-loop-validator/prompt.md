@@ -19,7 +19,7 @@ This is an honest harness. The outside peer is pretending to complete work areas
    - use `state_set` or `state_transition` to publish inside status `in-progress` with `data.phase: "ready-waiting-for-milestone"`;
    - use `inbox_send` with type `ready` so the outside peer can read that you are standing by.
 2. Process exactly three outside milestone messages with `type: "milestone"`:
-   - call `inbox_list` with `unread: true`, `type: "milestone"`, and a bounded `waitMs` such as `30000`;
+   - call `inbox_list` with `unread: true`, `waitForAny: ["milestone", "complete", "cancel"]`, and a bounded `waitMs` such as `30000` while waiting for outside signals;
    - record each message id, subject, body summary, and milestone id from message text or outside state data;
    - read both side states with `state_get`;
    - acknowledge each handled outside message with `inbox_ack`;
@@ -31,18 +31,18 @@ This is an honest harness. The outside peer is pretending to complete work areas
    - outside state was updated with a schema-compatible status such as `in-progress` and milestone details in `data`;
    - the message contains enough context for a future reviewer-style agent to act;
    - your acknowledgement and feedback are observable from the outside lane.
-4. Complete only after all three milestones are handled and the outside peer sends a `type: "complete"` message or outside state moves to `done`.
-5. On completion, set inside status `complete`, send a final inside message, write the JSON report to `$MINIH_OUTPUT_PATH`, then run `minih check`.
+4. Complete only after all three milestones are handled and the outside peer sends a `type: "complete"` message or outside state moves to `done`; if a terminal message arrives early, report `partial` with the missing milestone evidence.
+5. On completion, set inside status `complete`, send a final inside message, write the JSON report to the literal output path shown in your prompt, then validate it. Use `minih check` only if `$MINIH_OUTPUT_PATH` is visible in your shell; otherwise run `minih check coordination-loop-validator --file <literal-output-path>`.
 
 ## Bounded waiting
 
 Do not wait forever. After announcing readiness, use the private MCP `inbox_list` blocking read instead of agent-authored sleep loops:
 
 ```json
-{ "unread": true, "type": "milestone", "waitMs": 30000 }
+{ "unread": true, "waitForAny": ["milestone", "complete", "cancel"], "waitMs": 30000 }
 ```
 
-For the final completion signal, use the same pattern with `type: "complete"`. If the bounded wait expires without the next expected outside signal, produce a `partial` report instead of hanging:
+The multi-type wait lets you notice milestone, completion, or cancellation signals in one bounded call. If the bounded wait expires without the next expected outside signal, produce a `partial` report instead of hanging:
 
 - set inside status `paused` or `error` with `data.phase: "waiting-timeout"` and the last observed outside state;
 - send a `blocked` or `partial` inside message explaining what was missing;
@@ -58,7 +58,7 @@ Inside statuses you may use: `idle`, `in-progress`, `paused`, `reviewing`, `comp
 
 ## Report requirements
 
-Write a single JSON object to `$MINIH_OUTPUT_PATH` with:
+Write a single JSON object to the literal output path shown in your prompt with:
 
 - `summary`: a concise coordination-focused summary;
 - `verdict`: `pass`, `partial`, or `fail`;

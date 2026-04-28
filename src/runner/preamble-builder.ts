@@ -1,6 +1,7 @@
 import type { AgentDefinition } from './types.js';
 
 const SECTION_DIVIDER = '\n\n---\n\n';
+const OUTPUT_HINT_PREFIX = 'Write your final JSON report to: ';
 
 const COORDINATION_TOOLS_SECTION = `<!-- coordination.tools-section -->
 
@@ -65,6 +66,7 @@ export function buildInsidePreamble(input: PreambleAssemblyInput): string {
     COORDINATION_TOOLS_SECTION,
     peerContractSection(input.definition.outsideContract),
     input.outputHint,
+    outputValidationSection(input.definition.slug, input.outputHint),
     input.paramsHint,
     input.userPrompt,
     input.instructions,
@@ -73,6 +75,19 @@ export function buildInsidePreamble(input: PreambleAssemblyInput): string {
   ]
     .filter(Boolean)
     .join(SECTION_DIVIDER);
+}
+
+function outputValidationSection(slug: string, outputHint: string): string {
+  const outputPath = outputHint.startsWith(OUTPUT_HINT_PREFIX)
+    ? outputHint.slice(OUTPUT_HINT_PREFIX.length)
+    : '<literal-output-path>';
+  return `<!-- coordination.output-validation -->
+
+## Output path and validation
+
+- The literal report path shown above is authoritative.
+- If your shell can read \`$MINIH_OUTPUT_PATH\`, you may use it.
+- If the shell cannot see that variable, write to \`${outputPath}\` directly and validate with \`minih check ${slug} --file ${outputPath}\`.`;
 }
 
 function identityBlock(slug: string, runId: string): string {

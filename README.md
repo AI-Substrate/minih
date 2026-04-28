@@ -189,13 +189,15 @@ minih doctor --strict  # Treat warnings as errors
 
 ### `minih check [slug]`
 
-Validate a file against an agent's output schema.
+Validate an explicit file against an agent's output schema.
 
 ```bash
 minih check my-agent --file output.json     # Validate specific file
-minih check                                  # Inside a run — auto-detects via MINIH_* env vars
+minih check                                  # Best effort inside a run — uses MINIH_OUTPUT_PATH if available
 minih check my-agent --file input.json --input  # Validate against input schema
 ```
+
+`check` is for file validation. To validate an already-completed run output, use `minih validate <slug> --run <runId>`.
 
 ### `minih init <slug>`
 
@@ -246,7 +248,12 @@ minih connect smoke-test --list       # Show all runs with session IDs
 
 ### `minih validate <slug>`
 
-Re-validate the most recent run's output against the current schema (useful after updating your schema).
+Re-validate the most recent or specified completed run's output against the current schema (useful after updating your schema).
+
+```bash
+minih validate my-agent                 # Latest run
+minih validate my-agent --run <runId>   # Specific completed run
+```
 
 ### `minih last-run <slug>`
 
@@ -254,7 +261,12 @@ Print the latest run directory and report path.
 
 ### `minih tail <slug>`
 
-Follow a running agent's event stream in real-time.
+Follow a running agent's event stream in real time, or print a bounded snapshot.
+
+```bash
+minih tail my-agent
+minih tail my-agent --run <runId> --lines 20 --snapshot
+```
 
 ### Global Options
 
@@ -265,7 +277,7 @@ Follow a running agent's event stream in real-time.
 
 ## Environment Variables
 
-The runner sets these during agent execution. Use them in scripts or to call `minih check` inside an agent with zero arguments.
+The runner sets these during agent execution where the execution environment exposes them. The prompt's literal output path remains authoritative; use `minih check <slug> --file <path>` if a shell cannot see `MINIH_OUTPUT_PATH`.
 
 | Variable | Description |
 |----------|-------------|
@@ -273,7 +285,7 @@ The runner sets these during agent execution. Use them in scripts or to call `mi
 | `MINIH_AGENT_SLUG` | Current agent slug |
 | `MINIH_RUN_ID` | Unique run identifier (timestamp) |
 | `MINIH_RUN_DIR` | Absolute path to run artifacts folder |
-| `MINIH_OUTPUT_PATH` | Where to write output JSON |
+| `MINIH_OUTPUT_PATH` | Where to write output JSON when available; same target as the literal path in the prompt |
 | `MINIH_AGENTS_DIR` | Absolute path to agents directory |
 | `MINIH_PROJECT_ROOT` | Absolute path to project root |
 | `MINIH_MODEL` | Model being used |

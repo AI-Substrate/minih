@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Code Review Companion Inside State",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["status", "data", "updatedAt", "updatedBy"],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": [
+        "idle",
+        "reading",
+        "reviewing",
+        "reporting",
+        "blocked",
+        "stopping"
+      ],
+      "description": "Lifecycle status. Documentation/intent — minih runtime currently validates output-schema.json and the shared outside-state.schema.json, but inside-state validation is not yet enforced. The agent prompt teaches the agent to use these statuses; runtime drift is detectable but not auto-rejected."
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Free-form scratch — e.g. current task id, files being read, partial findings count."
+    },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "updatedBy": { "type": "string", "enum": ["inside"] }
+  }
+}

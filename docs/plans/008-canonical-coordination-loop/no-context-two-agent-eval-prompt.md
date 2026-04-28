@@ -53,7 +53,7 @@ The inner agent should be coordinated and should:
 
 - announce readiness through the private inbox tool;
 - publish inside state transitions;
-- wait for three outside milestone messages and the final completion message with the private `inbox_list` blocking read, for example `inbox_list({ "unread": true, "type": "milestone", "waitMs": 30000 })`, rather than arbitrary sleep-polling;
+- wait for three outside milestone messages and the final completion message with the private `inbox_list` blocking read, for example `inbox_list({ "unread": true, "waitForAny": ["milestone", "complete", "cancel"], "waitMs": 30000 })`, rather than arbitrary sleep-polling;
 - acknowledge each milestone;
 - send useful feedback for each milestone;
 - accept a final completion message;
@@ -65,7 +65,7 @@ The outer agent should:
 - read the inner agent's `outside.md` contract;
 - start the inner agent if it is not already running;
 - capture the inner run id;
-- keep the user informed using `minih status` and `minih tail`;
+- keep the user informed using `minih status` and bounded `minih tail --lines <n> --snapshot` samples, falling back to live `minih tail` only when continuous following is useful;
 - send exactly three outside milestones to the inner agent with explicit `--run <runId>`;
 - inspect inside replies with `minih outside-inbox-list`;
 - inspect both sides of state with `minih state get --side both`;
@@ -136,7 +136,7 @@ Once the inner run exists, all outside commands targeting the inner agent should
 RUN_ID="<innerRunId>"
 
 node dist/cli/index.js status coordination-eval-inner --run "$RUN_ID"
-node dist/cli/index.js tail coordination-eval-inner --run "$RUN_ID"
+node dist/cli/index.js tail coordination-eval-inner --run "$RUN_ID" --lines 20 --snapshot
 node dist/cli/index.js outside-inbox-list coordination-eval-inner --run "$RUN_ID"
 node dist/cli/index.js state get coordination-eval-inner --run "$RUN_ID" --side both
 ```
@@ -163,6 +163,7 @@ Repeat for `area-2` and `area-3`, changing the state data and message body. Afte
 node dist/cli/index.js outside-inbox-list coordination-eval-inner --run "$RUN_ID" --unread
 node dist/cli/index.js state get coordination-eval-inner --run "$RUN_ID" --side both
 node dist/cli/index.js status coordination-eval-inner --run "$RUN_ID"
+node dist/cli/index.js tail coordination-eval-inner --run "$RUN_ID" --lines 20 --snapshot
 ```
 
 Completion pattern:
@@ -202,6 +203,7 @@ The eval is successful if:
 - all mutable coordination artifacts for the inner conversation live under `agents/coordination-eval-inner/runs/<innerRunId>/`;
 - outside commands use `--run <innerRunId>`;
 - `minih validate coordination-eval-inner --run <innerRunId>` passes or the failure is clearly documented;
+- any file-level self-checks use `minih check coordination-eval-inner --file <literal-output-path>` when `$MINIH_OUTPUT_PATH` is not visible in the agent shell;
 - `minih retros --agent coordination-eval-inner --run <innerRunId> --target coordination` returns useful inner feedback;
 - `minih outside-retro coordination-eval-inner --run <innerRunId>` records the outer side's feedback;
 - `docs/plans/008-canonical-coordination-loop/evals/no-context-two-agent-eval.md` captures the observed experience.
@@ -212,9 +214,9 @@ Pay special attention to:
 
 - whether an agent with no chat context understands `outside.md`;
 - whether the outer agent can correctly discover and target the inner run id;
-- whether `minih tail` is enough to understand progress;
-- whether the inner agent uses `inbox_list({ "unread": true, "type": "milestone", "waitMs": 30000 })` or equivalent bounded long-polling instead of arbitrary sleep-polling;
-- whether report/output path instructions are clear;
+- whether `minih tail --lines <n> --snapshot` is enough to understand progress without starting a long-lived follow loop;
+- whether the inner agent uses `inbox_list({ "unread": true, "waitForAny": ["milestone", "complete", "cancel"], "waitMs": 30000 })` or equivalent bounded long-polling instead of arbitrary sleep-polling;
+- whether report/output path instructions are clear, especially the literal output path plus `minih check <slug> --file <path>` fallback;
 - whether schema errors are easy to recover from;
 - whether the run-scoped folder model is obvious;
 - whether `retros` and `outside-retro` produce enough experience data to improve the harness.

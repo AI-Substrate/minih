@@ -21,12 +21,12 @@
 | `src/cli/commands/sdk-runtime.ts` | internal | Shared SDK bootstrap: auth, import, client, SIGINT (003-resume-prompt) |
 | `src/cli/commands/list.ts` | internal | List agents with descriptions (Phase 4) |
 | `src/cli/commands/doctor.ts` | internal | Structural validation plus coordinated `outside.md` drift/size checks (Phase 5 + 007 P6) |
-| `src/cli/commands/check.ts` | internal | File validation against schema (Phase 5) |
+| `src/cli/commands/check.ts` | internal | Explicit file validation against schema, with a friendly `check --run` correction toward `validate --run` (Phase 5 + 008 FX003) |
 | `src/cli/commands/init.ts` | internal | Agent scaffolding, including canonical shared-preamble creation and `--coordinated` outside/state-schema scaffold (Phase 5 + 007 P6) |
 | `src/cli/commands/history.ts` | internal | Past runs display (Phase 4) |
-| `src/cli/commands/validate.ts` | internal | Re-validate latest output (Phase 4) |
+| `src/cli/commands/validate.ts` | internal | Re-validate latest or selected completed run output (Phase 4 + 008 FX003) |
 | `src/cli/commands/last-run.ts` | internal | Latest run info (Phase 4) |
-| `src/cli/commands/tail.ts` | internal | Follow event stream (Phase 4) |
+| `src/cli/commands/tail.ts` | internal | Follow event stream or print bounded `--lines`/`--snapshot` samples (Phase 4 + 008 FX003) |
 | `src/cli/commands/difficulties.ts` | internal | Aggregate difficulty reports across all agents (006-compounding-value) |
 | `src/cli/commands/status.ts` | internal | Latest run status summary |
 | `src/cli/commands/inspect.ts` | internal | Prompt/config inspection |
@@ -66,6 +66,8 @@
 | Outside context preview | `outside-context` with no slug returns system-only guidance. With a slug, `contractStatus` is `absent`, `empty`, or `present`, and `hasOutsideContract` distinguishes no file from an empty file. |
 | Outside contract health | `doctor` warns when coordinated `outside.md` is older than `prompt.md` or over 4KB, fails over 8KB, ignores absent/non-coordinated outside contracts, and preserves realpath containment checks. |
 | Dry-run prompt parity | `run --dry-run` uses `buildInsidePreamble()` and returns the assembled prompt in the JSON envelope, so coordinated previews include the same identity/tool/peer/checklist sections as real runs. |
+| File vs run validation | `check` validates explicit files (`--file` or best-effort `MINIH_OUTPUT_PATH`), while `validate --run` revalidates completed run outputs. A mistaken `check --run` returns a JSON envelope with the correct alternatives. |
+| Tail snapshot | `tail --lines <n> --snapshot` prints a bounded recent event window plus completion summary if present, then exits without polling forever; no flags preserve live follow behavior. |
 
 ## Tests & Validation
 
@@ -96,3 +98,4 @@
 | 008-canonical-coordination-loop | Updated coordinated `run`/`resume` reserved MCP namespace checks from dotted `inbox.*`/`state.*` prefixes to backend-safe `inbox_`/`state_` prefixes and added the rich `coordination-loop-validator` worked-example docs/tests. |
 | 008 FX001 | Outside coordination commands now resolve a run target, include `runId` in envelopes, and keep same-agent concurrent runs isolated across inbox/state/retros. |
 | 008 FX002 | Clarified worked-example docs that `waitMs` is an inside MCP long-poll option while outside peers continue observing through CLI `status`, `tail`, `outside-inbox-list`, and state commands. |
+| 008 FX003 | Added `tail --lines` and `--snapshot`, clarified `check --file` vs `validate --run`, and added friendly `check --run` guidance for fresh-agent coordination evals. |

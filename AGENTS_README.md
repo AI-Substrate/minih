@@ -195,7 +195,7 @@ Scan all TypeScript files under `src/` for TODO and FIXME comments.
 3. For each hit, record the file path, line number, and the comment text
 4. Categorize by priority: FIXME = high, TODO = medium
 
-Write your JSON report to $MINIH_OUTPUT_PATH.
+Write your JSON report to the literal output path shown by minih. `$MINIH_OUTPUT_PATH` usually points at the same file; if your shell cannot see it, use the literal path from the prompt.
 ```
 
 ### 3. Check it's valid
@@ -459,7 +459,7 @@ See [`agents/coordination-smoke-test/`](./agents/coordination-smoke-test/) for t
 
 ## The Output Contract
 
-Every agent must produce a JSON object written to `$MINIH_OUTPUT_PATH` with at minimum:
+Every agent must produce a JSON object written to the output path shown in the prompt. `$MINIH_OUTPUT_PATH` is the convenience variable for that path when the execution environment exposes it:
 
 ```json
 {
@@ -474,7 +474,7 @@ Every agent must produce a JSON object written to `$MINIH_OUTPUT_PATH` with at m
 
 Your agent-specific fields go alongside these. The runner enforces this — if your agent doesn't produce `summary` + `retrospective`, the run is marked as **degraded**.
 
-Agents must also run `minih check` before finishing to self-validate their output. If validation fails after 3 attempts, the agent should write a valid fallback JSON explaining what went wrong.
+Agents must also run `minih check` before finishing to self-validate their output. If `$MINIH_OUTPUT_PATH` is unavailable in the agent shell, run `minih check <slug> --file <literal-output-path>` using the path from the prompt. If validation fails after 3 attempts, the agent should write a valid fallback JSON explaining what went wrong.
 
 ---
 
@@ -690,11 +690,12 @@ minih init <slug> --coordinated           # Also create outside.md + state schem
 
 # Validation & inspection
 minih doctor                              # Check all agents for convention compliance
-minih check                               # Validate current run output (inside agent)
+minih check                               # Best-effort current output validation inside an agent
 minih check <slug> --file <path>          # Validate a file against agent schema
 minih inspect <slug>                      # Show fully composed prompt with sections
 minih inspect <slug> --raw                # Without resolving template variables
-minih validate <slug>                     # Re-validate latest run output
+minih validate <slug>                     # Re-validate latest completed run output
+minih validate <slug> --run <runId>       # Re-validate a specific completed run output
 
 # Running agents
 minih run <slug>                          # Execute with pretty streaming output
@@ -710,6 +711,7 @@ minih run <slug> --mcp-config config.json # Load MCP servers from file
 minih status <slug>                       # One-shot liveness check (active/stale/done)
 minih status <slug> -n 10                 # Show last 10 turns instead of 5
 minih tail <slug>                         # Follow live event stream (Ctrl+C to stop)
+minih tail <slug> --lines 20 --snapshot   # Print recent events and exit
 minih list                                # Show all agents with descriptions
 minih history <slug>                      # Past runs with status, duration, velocity trend
 minih last-run <slug>                     # Latest run directory and report path
@@ -749,7 +751,7 @@ When your agent runs, minih sets these environment variables:
 | `MINIH_AGENT_SLUG` | Agent slug (e.g., `smoke-test`) |
 | `MINIH_RUN_ID` | Unique run identifier |
 | `MINIH_RUN_DIR` | Absolute path to run artifacts folder |
-| `MINIH_OUTPUT_PATH` | Where to write your JSON output |
+| `MINIH_OUTPUT_PATH` | Where to write your JSON output when the execution environment exposes it; the prompt's literal output path is authoritative |
 | `MINIH_PROJECT_ROOT` | The actual project root (cd here first!) |
 | `MINIH_AGENTS_DIR` | Absolute path to agents directory |
 | `MINIH_MODEL` | Model being used for this run |
@@ -766,7 +768,7 @@ When your agent runs, minih sets these environment variables:
 1. **Start with `cd $MINIH_PROJECT_ROOT`** — your CWD is the run folder, not the repo root
 2. **Make agents reusable, not hardcoded** — an agent should be a tool you run many times, not a script for one specific task. Use input parameters to tell it what to do, and make it discover context on its own when no inputs are given. A code-review agent should accept a commit range or tasks file, not have one hardcoded. A scanner should accept a target directory, not assume `src/`.
 3. **Be specific in your prompt** — "scan src/ for XSS" beats "find security issues"
-4. **Validate before finishing** — run `minih check` at the end to catch schema issues
+4. **Validate before finishing** — run `minih check` at the end to catch schema issues, or `minih check <slug> --file <literal-output-path>` if the shell cannot see `$MINIH_OUTPUT_PATH`
 5. **Use `minih inspect`** — see exactly what the LLM receives before running
 6. **Write honest retrospectives** — the magicWand feedback is how the system improves
 7. **Keep agents focused** — one job per agent, run them often

@@ -12,9 +12,9 @@
 
 | File | Classification | Purpose |
 |------|----------------|---------|
-| `src/mcp/types.ts` | contract | Six tool names, input schemas including bounded `inbox_list.waitMs`, result/error envelope helpers, MCP error codes |
+| `src/mcp/types.ts` | contract | Six tool names, input schemas including bounded `inbox_list.waitMs` and multi-type `waitForAny`, result/error envelope helpers, MCP error codes |
 | `src/mcp/context.ts` | contract | Hidden context loader/validator for baked run env; canonical path containment and redacted errors |
-| `src/mcp/tools/inbox.ts` | internal | `inbox_list`, `inbox_send`, `inbox_ack` over append-only NDJSON lanes, including bounded long-poll reads for peer messages |
+| `src/mcp/tools/inbox.ts` | internal | `inbox_list`, `inbox_send`, `inbox_ack` over append-only NDJSON lanes, including bounded long-poll reads and multi-type filters for peer messages |
 | `src/mcp/tools/state.ts` | internal | `state_get`, `state_set`, `state_transition` over runner state helpers and schema validation |
 | `src/mcp/server.ts` | internal | Stdio MCP server, six-tool manifest, async-safe dispatcher, signal cleanup, process marker |
 | `src/mcp/spawn.ts` | contract | `buildInsideMcpServerConfig(...)` and private server-entry resolution |
@@ -52,7 +52,7 @@ All tool handlers are backed by hidden baked context, not by client-supplied pat
 | Runner env reuse | The context contract reuses `MINIH_INBOX_DIR`, `MINIH_STATE_DIR`, and `MINIH_CONTEXT`; MCP adds only `MINIH_MCP_*` run metadata. |
 | Append-only inbox | `inbox_send` and `inbox_ack` append single-line NDJSON records to the inside lane; `inbox_list({ unread: true })` reconstructs unread from peer messages and own ack records. |
 | State as data | State tools use runner persistence helpers. `state_transition` validates status through inside-state JSON Schema and appends history; it does not enforce peer-gated rules. |
-| Blocking inbox read | `inbox_list({ unread: true, type, waitMs })` can wait up to `MAX_INBOX_WAIT_MS` for a filter-matching outside-lane message, returning explicit `wait` metadata on match or timeout while preserving immediate response shape when omitted or zero. |
+| Blocking inbox read | `inbox_list({ unread: true, type, waitForAny, waitMs })` can wait up to `MAX_INBOX_WAIT_MS` for a filter-matching outside-lane message. `waitForAny` accepts 1-16 unique exact message types and is mutually exclusive with `type`; omitted or zero waits preserve the immediate response shape. |
 | Private server artifact | Spawn config resolves `dist/mcp/server.js` as an implementation detail in dev/package modes; the artifact path is not a user-facing contract. |
 | Leak marker | Spawned server sets `process.title` to `minih-mcp-<runId>` so opt-in tests can assert cleanup without broad process killing. |
 
@@ -81,3 +81,5 @@ The current supported validation surface is the MCP server/spawn/leak test suite
 | 008-canonical-coordination-loop | Changed the exposed MCP tool manifest to backend-safe underscore names (`inbox_list`, `state_get`, etc.) after live CAPI 400 failures with dotted names; kept dotted names as local dispatcher aliases. |
 | 008 FX001 | Moved hidden context validation and all inside tools to run-scoped `runs/<runId>/{inbox,state}` paths, rejecting agent-scoped directories. |
 | 008 FX002 | Added bounded `waitMs` long-poll support to private `inbox_list`, made MCP dispatch async-safe, and covered direct plus real stdio wait behavior. |
+| 008 FX003 | Added `inbox_list.waitForAny` for bounded multi-type inside waits with array bounds, duplicate rejection, `type` mutual exclusion, and direct/dispatcher coverage. |
+| 009 P1 FX001 | Removed top-level `not: { required: ['type','waitForAny'] }` from `inbox_list.inputSchema` — Copilot SDK's function-calling layer (gpt-5.4) rejects top-level `not`/`oneOf`/`anyOf`/`allOf`/`enum` with CAPIError 400. Mutual exclusion of `type` and `waitForAny` remains enforced at runtime in `parseInboxListInput`. Found while building the `code-review-companion` exemplar (subtask FX001 of plan 009 phase 1). Companion verified live end-to-end: orient → outside task → ack → finding → summary → control:stop → farewell envelope. Test in `test/mcp/types.test.ts` updated to assert `not === undefined` with comment explaining why. |

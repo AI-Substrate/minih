@@ -17,7 +17,7 @@
 | `src/runner/validator.ts` | internal | AJV 2020-12 schema validation (Phase 2) |
 | `src/runner/display.ts` | internal | Verbose terminal output formatting (Phase 2) |
 | `src/runner/pretty.ts` | internal | Pretty streaming display — clean output with delta accumulation (002-pretty-mode) |
-| `src/runner/preamble-builder.ts` | contract | Pure inside-prompt assembly with coordinated identity, MCP tools, checklist, and peer-contract injection (007/P2 + P6) |
+| `src/runner/preamble-builder.ts` | contract | Pure inside-prompt assembly with coordinated identity, MCP tools, output-validation fallback, checklist, and peer-contract injection (007/P2 + P6 + 008 FX003) |
 | `src/runner/runner.ts` | internal | Core orchestration (Phase 2) |
 | `src/runner/index.ts` | contract | Barrel export |
 | `src/schemas/retrospective.json` | contract | Reusable retrospective schema fragment; includes optional coordination feedback (Phase 2 + 007 P6) |
@@ -51,7 +51,7 @@
 | `listAgents(agentsDir)` | Function | cli (list, doctor) |
 | `resolveAgent(slug, agentsDir)` | Function | cli (run, validate, history) |
 | `runAgent(adapter, def, config, onEvent?, agentsDir?)` | Function | cli (run command) |
-| `buildInsidePreamble(input)` / `PreambleAssemblyInput` | Function/Type | runner (fresh-run prompt assembly), coordinated-agent prompt wiring including inside MCP `waitMs` guidance |
+| `buildInsidePreamble(input)` / `PreambleAssemblyInput` | Function/Type | runner (fresh-run prompt assembly), coordinated-agent prompt wiring including inside MCP `waitMs`/`waitForAny` guidance and literal output-path validation fallback |
 | `findRunSession(slug, agentsDir, runId?)` | Function | cli (resume, connect — session lookup from completed.json) |
 | `RunSession` | Type | cli (resume, connect — session lookup result) |
 | `validateInput(schemaPath, params)` | Function | cli (check --input), runner (pre-execution) |
@@ -88,7 +88,8 @@
 | Folder convention | An agent IS a folder. prompt.md with frontmatter = agent exists. |
 | Frozen inputs | Every run copies its inputs into the run folder for reproducibility. |
 | Degraded vs Failed | Invalid output = "degraded" (agent worked, schema didn't match), not hard failure. |
-| Prompt assembly | `buildInsidePreamble` preserves the legacy preamble → instructions → output hint → params → prompt join for non-coordinated agents, and inserts real coordinated identity, tool, checklist, wait guidance, and peer-contract sections only when `coordination.enabled` is true. Frontmatter stripped. |
+| Prompt assembly | `buildInsidePreamble` preserves the legacy preamble -> instructions -> output hint -> params -> prompt join for non-coordinated agents, and inserts real coordinated identity, tool, output-validation, checklist, wait guidance, and peer-contract sections only when `coordination.enabled` is true. Frontmatter stripped. |
+| Coordinated output validation fallback | Coordinated prompts treat the literal output path as authoritative and tell agents to use `minih check <slug> --file <literal-output-path>` if the shell cannot see `$MINIH_OUTPUT_PATH`. |
 | Coordination identity block | `buildInsidePreamble` injects `<!-- coordination.identity-block -->` with the agent slug, run id, and outside-peer framing for coordinated fresh runs only. Resume turns skip prompt assembly. |
 | Peer contract framing | `outside.md` content is quoted under `<!-- coordination.peer-contract -->` / `## Peer's Contract (from outside.md)`. Optional absence means no peer-contract section; an empty file is still a present empty contract. |
 | Event-driven terminal condition | `runAgent` relies on adapter idle completion, then waits for `awaitTerminalCondition(adapterResult, pendingForwarderCount)` with a live inbox/state forwarder drain counter so queued `session.send` work settles before the run completes. |
@@ -142,3 +143,5 @@
 | 008-canonical-coordination-loop | Updated coordinated prompt guidance to teach inside agents the backend-safe underscore MCP tool names and documented the live `coordination-loop-validator` evidence path. |
 | 008 FX001 | Moved mutable coordination state from agent-scoped folders to `agents/<slug>/runs/<runId>/{inbox,state}`; runner/MCP/CLI now share `CoordinationRunLocation` and overlapping same-agent runs are isolated by run id. |
 | 008 FX002 | Updated coordinated preamble guidance to teach bounded `inbox_list` long-poll waits with `waitMs` for outside signals. |
+| 008 FX003 | Added coordinated output-path validation fallback guidance and refreshed system output instructions so shell env visibility is best-effort, not assumed. |
+| 009-human-agent-view P1 | Added live-run identity, shared run resolver, and pure HumanViewModel reducer. NEW: `run-manifest.ts` (`writeManifest`/`readManifest`/`updateManifest`/`flushThrottled` with throttled atomic writes via `writeFileAtomicAsync`), `run-resolver.ts` (`resolveRun({ slug, mode })` for `by-id`/`latest-active`/`latest-completed`/`latest-any`, `MultipleActiveRunsError`, per-candidate fault tolerance, configurable stale detection), `human-view-model.ts` (pure `buildHumanViewModel({ events, manifest, completed, inbox, state, history, output, validation })` returning Workshop 004 `HumanViewModel`), `human-view-errors.ts` (`MultipleActiveRunsError`, `ManifestSchemaVersionError`), `human-view-fixtures.ts` (test/fixture builders). EXTENDED `runner.ts` to write `runs/<runId>/run.json` at folder-create / `session_start` (immediate) / event tick (throttled 250ms) / terminal condition / completion (status `starting → active → completing → completed/failed`). EXTENDED `types.ts` and `index.ts` re-exports for `LiveRunManifest`, `LiveRunStatus`, `RunResolveMode`, `ResolvedRun`, full `HumanViewModel` family + all `CoordinationTimelineEntry` union members. 30 new tests; 468/477 (9 pre-existing skipped). |

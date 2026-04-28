@@ -240,3 +240,249 @@ export interface CoordinationFrontmatter {
   outside?: Record<string, unknown>;
   inside?: Record<string, unknown>;
 }
+
+// ===========================================================================
+// Human View — Phase 1 (plan 009-human-agent-view)
+//
+// Live run identity (`run.json`), shared run resolver, and the pure
+// `HumanViewModel` reducer contract. These types are the public surface
+// Phase 2's CLI renderer will import via `src/runner/index.ts`.
+// ===========================================================================
+
+/** Lifecycle status of a live run, written into `run.json`. */
+export type LiveRunStatus =
+  | 'starting'
+  | 'active'
+  | 'idle'
+  | 'completing'
+  | 'completed'
+  | 'failed'
+  | 'stale';
+
+/**
+ * Live run manifest written to `runs/<runId>/run.json` from folder-create
+ * onward. Schema-versioned for forward compatibility (workshop 002 §1).
+ */
+export interface LiveRunManifest {
+  schemaVersion: 1;
+  slug: string;
+  runId: string;
+  runDir: string;
+  pid: number;
+  startedAt: string;
+  updatedAt: string;
+  status: LiveRunStatus;
+  sessionId: string | null;
+  model: string | null;
+  control: {
+    available: boolean;
+    kind: 'none' | 'file-command-lane';
+    commandLanePath?: string;
+  };
+  counters: {
+    events: number;
+    toolCalls: number;
+    messages: number;
+    errors: number;
+  };
+}
+
+/** Mode passed to `resolveRun({ slug, mode })`. */
+export type RunResolveMode =
+  | { kind: 'by-id'; runId: string }
+  | { kind: 'latest-active' }
+  | { kind: 'latest-completed' }
+  | { kind: 'latest-any' };
+
+/** Liveness as inferred by the resolver. */
+export type RunLiveness =
+  | 'active'
+  | 'stale'
+  | 'completed'
+  | 'failed'
+  | 'unknown';
+
+/** Single resolver diagnostic (e.g., a candidate run with a torn manifest). */
+export interface ResolverDiagnostic {
+  runId: string;
+  message: string;
+}
+
+/** Result of a successful `resolveRun(...)` call. */
+export interface ResolvedRun {
+  slug: string;
+  runId: string;
+  runDir: string;
+  manifest: LiveRunManifest | null;
+  completed: CompletedMetadata | null;
+  liveness: RunLiveness;
+  diagnostics: ResolverDiagnostic[];
+}
+
+/** Lightweight candidate descriptor used in `MultipleActiveRunsError`. */
+export interface ActiveRunCandidate {
+  runId: string;
+  startedAt: string;
+  sessionId: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// HumanViewModel — Workshop 004 contract.
+// Pure reducer output; no I/O on this side. Phase 2 destructures everything
+// listed below; do NOT change shape without coordinating downstream.
+// ---------------------------------------------------------------------------
+
+/** Header pane projection. */
+export interface HumanHeaderView {
+  slug: string;
+  runId: string;
+  sessionId: string | null;
+  model: string | null;
+  status: 'starting' | 'active' | 'stale' | 'completed' | 'failed' | 'unknown';
+  capability: 'starting' | 'input-available' | 'input-read-only' | 'completed';
+  elapsedMs: number | null;
+  eventCount: number;
+  toolCallCount: number;
+  unreadCount: number;
+}
+
+/** A single transcript row. */
+export interface TranscriptEntry {
+  id: string;
+  ts: string;
+  role: 'user' | 'assistant' | 'system' | 'error';
+  /** Displayed actor label — outside actor / inside agent / system. */
+  actorLabel: 'Outside actor' | 'Inside agent' | 'System' | 'Error';
+  content: string;
+  status: 'streaming' | 'final' | 'collapsed' | 'error';
+  sourceEventIds: string[];
+  messageId: string | null;
+}
+
+/** A tool call lifecycle row. */
+export interface ToolCallView {
+  id: string;
+  toolName: string;
+  startedAt: string;
+  completedAt: string | null;
+  status: 'running' | 'ok' | 'error';
+  inputSummary: string;
+  outputSummary: string | null;
+  outputTruncated: boolean;
+}
+
+/** Inbox entry on the merged coordination timeline. */
+export interface InboxTimelineEntry {
+  kind: 'inbox';
+  id: string;
+  ts: string;
+  lane: 'outside' | 'inside';
+  type: string;
+  subject: string;
+  bodyPreview: string;
+  ackOf: string | null;
+  ackState: 'not-ack' | 'acks-other' | 'acked' | 'unacked';
+}
+
+/** State transition entry on the timeline. */
+export interface StateTransitionTimelineEntry {
+  kind: 'state-transition';
+  id: string;
+  ts: string;
+  side: Side;
+  from: string;
+  to: string;
+  reason: string | null;
+  peerStatus: string | null;
+}
+
+/** Output validation entry on the timeline. */
+export interface ValidationTimelineEntry {
+  kind: 'validation';
+  id: string;
+  ts: string;
+  valid: boolean;
+  errors: string[];
+}
+
+/** Future cross-process control entry on the timeline (placeholder). */
+export interface ControlTimelineEntry {
+  kind: 'control';
+  id: string;
+  ts: string;
+  controlType: string;
+  description: string;
+}
+
+/** Diagnostic entry on the timeline (degraded source / parse error). */
+export interface DiagnosticTimelineEntry {
+  kind: 'diagnostic';
+  id: string;
+  ts: string;
+  source: string;
+  message: string;
+}
+
+/** Discriminated union for the merged coordination timeline. */
+export type CoordinationTimelineEntry =
+  | InboxTimelineEntry
+  | StateTransitionTimelineEntry
+  | ValidationTimelineEntry
+  | ControlTimelineEntry
+  | DiagnosticTimelineEntry;
+
+/** State pane projection (inside/outside snapshots). */
+export interface StatePaneView {
+  inside: { status: string; updatedAt: string | null } | null;
+  outside: { status: string; updatedAt: string | null } | null;
+}
+
+/** Output pane projection (output path, validation, recent-write info). */
+export interface OutputPaneView {
+  outputPath: string | null;
+  exists: boolean;
+  bytes: number | null;
+  lastValidation: ValidationResult | null;
+}
+
+/** Input footer projection — drives footer enable/disable + reason. */
+export interface InputFooterView {
+  enabled: boolean;
+  mode:
+    | 'same-process'
+    | 'attached-read-only'
+    | 'attached-control'
+    | 'completed';
+  disabledReason: string | null;
+  draft: string;
+  followPaused: boolean;
+  pendingCommandCount: number;
+}
+
+/** A single view-model diagnostic surfaced in the diagnostics pane. */
+export interface ViewDiagnostic {
+  source:
+    | 'events'
+    | 'manifest'
+    | 'completed'
+    | 'inbox'
+    | 'state'
+    | 'history'
+    | 'output'
+    | 'validation';
+  message: string;
+  /** Optional original line/path/ref for the implementor to chase down. */
+  ref?: string;
+}
+
+/** Full Workshop 004 top-level model. */
+export interface HumanViewModel {
+  header: HumanHeaderView;
+  transcript: TranscriptEntry[];
+  tools: ToolCallView[];
+  coordination: CoordinationTimelineEntry[];
+  state: StatePaneView;
+  output: OutputPaneView;
+  input: InputFooterView;
+  diagnostics: ViewDiagnostic[];
+}

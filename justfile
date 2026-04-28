@@ -31,9 +31,15 @@ test-watch:
 audit:
     npm audit --audit-level=high || true
 
-# Install all dependencies
+# Install all dependencies, build, and link `minih` to this repo
+# (so fresh clones get a working `minih` CLI without npm-publishing).
 install:
     npm install
+    npm run build
+    npm link
+    @echo ""
+    @echo "✅ minih linked to this repo. Try: minih list"
+    @echo "   To unlink: npm unlink -g minih && npm install -g minih"
 
 # Clean build artifacts
 clean:

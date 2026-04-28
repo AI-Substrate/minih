@@ -105,6 +105,16 @@ describe('MCP server dispatcher', () => {
     expect(result._meta?.code).toBe('MCP_INVALID_ARGUMENT');
   });
 
+  it('returns typed validation errors for invalid waitForAny values', async () => {
+    const result = await dispatchToolCall(context, 'inbox_list', {
+      type: 'milestone',
+      waitForAny: ['complete'],
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result._meta?.code).toBe('MCP_INVALID_ARGUMENT');
+  });
+
   it('loads context from env and applies the process marker', () => {
     const env = makeEnv();
     const created = createMinihMcpServerFromEnv(env);

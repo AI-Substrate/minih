@@ -27,11 +27,12 @@ If an inside validator is already running, skip startup and continue. Keep the o
 ```bash
 minih status coordination-loop-validator
 minih tail coordination-loop-validator
+minih tail coordination-loop-validator --run "$RUN_ID" --lines 20 --snapshot
 minih outside-inbox-list coordination-loop-validator --run "$RUN_ID" --type ready
 minih state get coordination-loop-validator --run "$RUN_ID" --side both
 ```
 
-`status` gives a one-shot run summary. `tail` follows `events.ndjson` and exits on completion.
+`status` gives a one-shot run summary. `tail` follows `events.ndjson` and exits on completion; `tail --lines <n> --snapshot` prints a bounded no-follow sample.
 
 ## Clean-slate rule
 
@@ -105,9 +106,12 @@ Then inspect:
 
 ```bash
 minih status coordination-loop-validator
+minih tail coordination-loop-validator --run "$RUN_ID" --lines 20 --snapshot
 minih validate coordination-loop-validator --run "$RUN_ID"
 minih retros --agent coordination-loop-validator --run "$RUN_ID" --target coordination
 ```
+
+Use `validate --run` for a completed run output. Use `check --file <path>` only when you have an explicit report file path to validate.
 
 Record outside feedback:
 

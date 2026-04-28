@@ -103,6 +103,15 @@ export type JsonSchema =
       properties?: Record<string, JsonSchema>;
       required?: string[];
       additionalProperties?: boolean;
+      not?: { required: string[] };
+    }
+  | {
+      type: 'array';
+      description?: string;
+      items: JsonSchema;
+      minItems?: number;
+      maxItems?: number;
+      uniqueItems?: boolean;
     };
 
 export interface ToolContract {
@@ -114,6 +123,7 @@ export interface ToolContract {
 export interface InboxListInput {
   unread?: boolean;
   type?: string;
+  waitForAny?: string[];
   limit?: number;
   after?: string;
   waitMs?: number;
@@ -170,6 +180,19 @@ export const TOOL_CONTRACTS: readonly ToolContract[] = [
           minLength: 1,
           maxLength: 64,
         },
+        waitForAny: {
+          type: 'array',
+          description:
+            'When set, return messages whose type exactly matches any listed value. Mutually exclusive with type.',
+          items: {
+            type: 'string',
+            minLength: 1,
+            maxLength: 64,
+          },
+          minItems: 1,
+          maxItems: 16,
+          uniqueItems: true,
+        },
         limit: {
           type: 'integer',
           description: 'Maximum number of messages to return.',
@@ -207,6 +230,13 @@ export const TOOL_CONTRACTS: readonly ToolContract[] = [
           maxLength: 64,
         },
         meta: { type: 'object', additionalProperties: true },
+        ackOf: {
+          type: 'string',
+          minLength: 1,
+          maxLength: 128,
+          description:
+            'Optional inbox message id this reply acknowledges (drives Phase 2 workbench correlation).',
+        },
       },
       required: ['subject', 'body'],
       additionalProperties: false,

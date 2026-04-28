@@ -84,6 +84,9 @@ describe('coordination-loop-validator worked example', () => {
     );
     expect(context).toContain('minih status coordination-loop-validator');
     expect(context).toContain('minih tail coordination-loop-validator');
+    expect(context).toContain(
+      'minih tail coordination-loop-validator --run "$RUN_ID" --lines 20 --snapshot',
+    );
     expect(context).toContain('area-1 ready for validation');
     expect(context).toContain('area-2 ready for validation');
     expect(context).toContain('area-3 ready for validation');
@@ -103,6 +106,10 @@ describe('coordination-loop-validator worked example', () => {
     expect(prompt).toContain('## Your Context (coordination)');
     expect(prompt).toContain("## Peer's Contract (from outside.md)");
     expect(prompt).toContain('minih tail coordination-loop-validator');
+    expect(prompt).toContain('waitForAny: ["milestone", "complete", "cancel"]');
+    expect(prompt).toContain(
+      'minih check coordination-loop-validator --file <literal-output-path>',
+    );
     expect(prompt).toContain('Bounded waiting');
     expect(prompt).toContain('not the quality of source code');
   });

@@ -114,3 +114,26 @@ minih version: $(cat $MINIH_AGENTS_DIR/../package.json | grep version | head -1)
 crash or hang, confusing error message with no workaround. **When NOT to file**: Style
 preferences, minor docs nits, or things already in your magicWand (those get triaged
 from retrospectives).
+
+## On Resume
+
+If your first user turn begins with `[SYSTEM RESUME]`, this is **not** a user message — it's a structured signal that:
+
+1. Your run was paused and is now continuing in the **same run dir**.
+2. Your inbox, state, and history files are intact — read them.
+3. Orient briefly (`inbox_list` + `state_get` + glance at `state/history.ndjson`) and then continue from where you left off, or pick up the new direction the resume-prompt provides.
+4. Acknowledge briefly via one `progress` inbox message; do NOT repeat your full orient sequence.
+
+The envelope looks like:
+
+```
+[SYSTEM RESUME]
+  ts: 2026-04-29T08:30:00.000Z
+  reason: <why the operator resumed>
+  fromState: stale|completed|failed|active
+  previousPid: <prior process pid, if any>
+
+(continue from your last task — your inbox and state are intact)
+```
+
+If a user message follows after `---`, treat it as a normal user instruction layered on top of the resume context.

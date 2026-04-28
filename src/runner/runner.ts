@@ -240,13 +240,51 @@ export async function runAgent(
 ): Promise<AgentRunResult> {
   const startedAt = new Date();
   const isResume = !!config.sessionId;
+  const isResumeInPlace = !!config.resumeInPlace;
   const coordinationEnabled = definition.coordination?.enabled === true;
 
-  // Create run folder with frozen copies
-  const { runDir, runId } = createRunFolder(definition);
+  // Resolve runDir/runId — either reuse the original (resume-in-place) or
+  // allocate a fresh folder. Fail fast if resume-in-place is requested but
+  // the prerequisite inputs are missing/invalid.
+  let runDir: string;
+  let runId: string;
+  if (isResumeInPlace) {
+    if (!config.resumedFromRunId) {
+      throw new Error(
+        'resumeInPlace=true requires resumedFromRunId pointing at the original run',
+      );
+    }
+    const resolvedAgentsDir = agentsDir
+      ? path.resolve(agentsDir)
+      : path.resolve('agents');
+    runId = config.resumedFromRunId;
+    runDir = path.join(resolvedAgentsDir, definition.slug, 'runs', runId);
+    if (!fs.existsSync(runDir)) {
+      throw new Error(
+        `resumeInPlace requires existing run dir; not found at ${runDir}`,
+      );
+    }
+  } else {
+    const created = createRunFolder(definition);
+    runDir = created.runDir;
+    runId = created.runId;
+  }
   const eventsPath = path.join(runDir, 'events.ndjson');
 
-  fs.writeFileSync(eventsPath, '');
+  if (isResumeInPlace) {
+    // Append a synthetic resume marker so downstream tooling can see the
+    // session boundary in the event stream.
+    const marker = {
+      type: 'resume',
+      ts: startedAt.toISOString(),
+      fromState: config.resumeFromState ?? null,
+      kind: config.resumeKind ?? 'completed-followup',
+      previousPid: config.resumePreviousPid ?? null,
+    };
+    fs.appendFileSync(eventsPath, `${JSON.stringify(marker)}\n`);
+  } else {
+    fs.writeFileSync(eventsPath, '');
+  }
 
   // Initial run.json manifest — workshop 002 §1, plan 009.
   // Written immediately after run-folder creation so attach commands can
@@ -265,7 +303,50 @@ export async function runAgent(
     control: { available: coordinationEnabled, kind: 'none' },
     counters: { events: 0, toolCalls: 0, messages: 0, errors: 0 },
   };
-  await writeManifest(runDir, initialManifest);
+  if (isResumeInPlace) {
+    // Resume-in-place: mutate the existing run.json instead of overwriting it.
+    // Workshop 001 § Manifest Evolution defines this contract.
+    //
+    // Write order (crash-recovery): rename completed.json BEFORE rewriting
+    // run.json, so a crash mid-resume leaves run.json on the prior status
+    // (detectRunState returns "stale") and a harmless completed-N.json artifact.
+    const existing = JSON.parse(
+      fs.readFileSync(path.join(runDir, 'run.json'), 'utf8'),
+    );
+    const priorResumes = Array.isArray(existing.resumes)
+      ? existing.resumes
+      : [];
+    const completedPath = path.join(runDir, 'completed.json');
+    if (fs.existsSync(completedPath)) {
+      const archiveIndex = priorResumes.length + 1;
+      fs.renameSync(
+        completedPath,
+        path.join(runDir, `completed-${archiveIndex}.json`),
+      );
+    }
+    const resumeEntry: Record<string, unknown> = {
+      ts: startedAt.toISOString(),
+      kind: config.resumeKind ?? 'completed-followup',
+    };
+    if (config.resumeFromState) resumeEntry.fromState = config.resumeFromState;
+    if (typeof config.resumePreviousPid === 'number') {
+      resumeEntry.previousPid = config.resumePreviousPid;
+    }
+    const updated = {
+      ...existing,
+      schemaVersion: 1,
+      pid: process.pid,
+      status: 'starting',
+      updatedAt: startedAt.toISOString(),
+      resumes: [...priorResumes, resumeEntry],
+    };
+    fs.writeFileSync(
+      path.join(runDir, 'run.json'),
+      `${JSON.stringify(updated, null, 2)}\n`,
+    );
+  } else {
+    await writeManifest(runDir, initialManifest);
+  }
 
   const outputPath = path.join(runDir, 'output', 'report.json');
   const stderrPath = path.join(runDir, 'stderr.log');

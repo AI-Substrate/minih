@@ -4,6 +4,32 @@
  * Every command returns a MinihEnvelope to stdout.
  * Exit 0 for ok/degraded, exit 1 for error.
  * No zod — handwritten types (Finding 05).
+ *
+ * Error code table (grep `Exxx` to find call sites):
+ *   E100  UNKNOWN                  — unclassified failure
+ *   E108  INVALID_ARGS             — argument/flag validation
+ *   E120  AGENT_EXECUTION_FAILED   — agent run errored
+ *   E121  AGENT_NOT_FOUND          — agent slug doesn't resolve
+ *   E122  AGENT_AUTH_MISSING       — Copilot auth not present
+ *   E123  AGENT_TIMEOUT            — adapter exceeded timeout
+ *   E124  AGENT_VALIDATION_FAILED  — output schema mismatch
+ *   E125  AGENT_INPUT_INVALID      — input params failed validation
+ *   E126  AGENT_SDK_MISSING        — @github/copilot-sdk not installed
+ *   E127  AGENT_MODEL_INVALID      — model name not registered with SDK
+ *   E128  INVALID_CONTEXT          — outside/inside lane mismatch
+ *   E130  INIT_ALREADY_EXISTS      — `minih init` target dir not empty
+ *
+ * Plan 010 — coordination CLI ergonomics:
+ *   E140  NOT_COORDINATED          — agent has no `outside.md`
+ *   E141  WAIT_OUT_OF_RANGE        — `--wait` outside [0, 300_000]
+ *   E142  AGENT_GONE               — agent process died during long-poll
+ *   E143  INSIDE_READ_ONLY         — write attempted on inside lane
+ *   E144  ALREADY_ACTIVE           — resume target is active without --takeover
+ *   E145  NO_RUN_TO_RESUME         — no eligible run for slug
+ *   E146  SESSION_EXPIRED          — SDK session no longer resumable
+ *   E147  RESUME_IN_PROGRESS       — resume-intent.lock held by another caller
+ *   E148  INBOX_CORRUPT            — inbox file has torn final line
+ *   E149  MCP_SPAWN_FAILED         — inside MCP subprocess failed to start
  */
 
 export const ErrorCodes = {

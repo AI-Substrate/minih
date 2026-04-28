@@ -54,6 +54,28 @@ export { InboxPollError, pollInboxLane } from './inbox-poll.js';
 export type { PreambleAssemblyInput } from './preamble-builder.js';
 export { buildInsidePreamble } from './preamble-builder.js';
 export { PrettyDisplay } from './pretty.js';
+export type {
+  AcquireLockOptions,
+  AcquireLockResult,
+  ResumeLockContent,
+  ResumeLockKind,
+  WaitForLockOptions,
+  WaitForLockResult,
+} from './resume-lock.js';
+export {
+  acquireResumeLock,
+  clearResumeLock,
+  readResumeLock,
+  waitForResumeLock,
+} from './resume-lock.js';
+export type {
+  DetectRunStateOptions,
+  RunEligibilityState,
+} from './run-eligibility.js';
+export {
+  detectRunState,
+  isProcessAliveDefault,
+} from './run-eligibility.js';
 export { RUN_LOCK_HELD, RunLockHeldError } from './run-lock.js';
 export {
   flushThrottled as flushManifestThrottled,

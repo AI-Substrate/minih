@@ -53,6 +53,14 @@ export interface AgentRunConfig {
   sessionId?: string;
   /** Run ID of the original run being resumed */
   resumedFromRunId?: string;
+  /** Resume in place: reuse the original run dir + manifest instead of creating a new run folder. Requires `resumedFromRunId`. */
+  resumeInPlace?: boolean;
+  /** Eligibility state of the resumed run at takeover (recorded in `run.json.resumes[]`). */
+  resumeFromState?: 'active' | 'stale' | 'completed' | 'failed';
+  /** Pid of the prior process at takeover (recorded in `run.json.resumes[]`). */
+  resumePreviousPid?: number;
+  /** Resume kind (recorded in `run.json.resumes[]`). Defaults to 'completed-followup'. */
+  resumeKind?: 'takeover' | 'stale-revive' | 'completed-followup';
   /** Override the prompt text (used by resume — sends follow-up message instead of prompt.md) */
   promptOverride?: string;
   /** Config directory for MCP auto-discovery (typically project root) */

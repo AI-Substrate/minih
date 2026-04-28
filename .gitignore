@@ -146,3 +146,4 @@ agents/*/runs/
 .fs2/
 session-state/
 session-store.db
+session-store.db*

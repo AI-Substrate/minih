@@ -146,6 +146,38 @@ describe('real MCP stdio server', () => {
       },
     });
   });
+
+  it('inbox_send accepts ackOf for any type and round-trips it (plan 013 T009)', async () => {
+    client = await createClient();
+    const parentId = '01HXYZXYZXYZXYZXYZXYZXYZAB';
+
+    // Send a non-ack reply with ackOf
+    const sent = await client.callTool('inbox_send', {
+      type: 'note',
+      subject: 'Reply to parent',
+      body: 'continuing the conversation',
+      ackOf: parentId,
+    });
+    expect(sent.isError).toBeUndefined();
+    expect(sent.structuredContent).toMatchObject({
+      message: {
+        sender: 'inside',
+        type: 'note',
+        subject: 'Reply to parent',
+        ackOf: parentId,
+      },
+    });
+
+    // Read it back via inbox_list — same lane (inside reads its own) is not
+    // exposed to inbox_list (which reads peer/outside lane). Instead, verify
+    // by reading the inside lane file directly.
+    const insideLane = inboxLanePath(location(), 'inside');
+    const content = fs.readFileSync(insideLane, 'utf8');
+    const lines = content.trim().split('\n').filter(Boolean);
+    const last = JSON.parse(lines[lines.length - 1]);
+    expect(last.ackOf).toBe(parentId);
+    expect(last.type).toBe('note');
+  });
 });
 
 async function createClient(): Promise<TestMcpClient> {

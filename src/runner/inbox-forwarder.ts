@@ -157,7 +157,13 @@ export function renderInboxMessageForAgent(message: InboxMessage): string {
     `Subject: ${message.subject}`,
     `Timestamp: ${message.ts}`,
   ];
-  if (message.ackOf) lines.push(`Acknowledges: ${message.ackOf}`);
+  if (message.ackOf) {
+    // Plan 013: 'ackOf' is now a general parent pointer for reply chains.
+    // 'Acknowledges:' is preserved for type=ack (today's contract); any
+    // other type with ackOf renders as a plain reply.
+    const label = message.type === 'ack' ? 'Acknowledges' : 'In reply to';
+    lines.push(`${label}: ${message.ackOf}`);
+  }
   lines.push('', message.body);
   return lines.join('\n');
 }

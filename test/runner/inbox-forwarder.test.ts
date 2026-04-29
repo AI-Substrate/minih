@@ -353,3 +353,80 @@ describe('inbox forwarder', () => {
     expect(inboxForwarder.pendingCount()).toBe(0);
   });
 });
+
+// ============================================================================
+// Plan 013 T008 — renderInboxMessageForAgent label switch
+// ============================================================================
+
+describe('renderInboxMessageForAgent — reply chain label (plan 013 T008)', () => {
+  it("renders 'In reply to:' for non-ack messages with ackOf", async () => {
+    const { renderInboxMessageForAgent } = await import(
+      '../../src/runner/inbox-forwarder.js'
+    );
+    const out = renderInboxMessageForAgent({
+      id: '01HXYZXYZXYZXYZXYZXYZXYZAB',
+      sender: 'outside',
+      type: 'note',
+      subject: 'follow-up',
+      body: 'continuing the conversation',
+      ts: '2026-04-29T00:00:00.000Z',
+      ackOf: '01HPARENTPARENTPARENTPAREN',
+    });
+    expect(out).toContain('In reply to: 01HPARENTPARENTPARENTPAREN');
+    expect(out).not.toContain('Acknowledges:');
+  });
+
+  it("renders 'Acknowledges:' for ack-typed messages with ackOf (no regression)", async () => {
+    const { renderInboxMessageForAgent } = await import(
+      '../../src/runner/inbox-forwarder.js'
+    );
+    const out = renderInboxMessageForAgent({
+      id: '01HXYZXYZXYZXYZXYZXYZXYZAB',
+      sender: 'outside',
+      type: 'ack',
+      subject: 'Ack: 01HPARENTPARENTPARENTPAREN',
+      body: 'acknowledged',
+      ts: '2026-04-29T00:00:00.000Z',
+      ackOf: '01HPARENTPARENTPARENTPAREN',
+    });
+    expect(out).toContain('Acknowledges: 01HPARENTPARENTPARENTPAREN');
+    expect(out).not.toContain('In reply to:');
+  });
+
+  it('omits the parent-pointer line when ackOf is absent', async () => {
+    const { renderInboxMessageForAgent } = await import(
+      '../../src/runner/inbox-forwarder.js'
+    );
+    const out = renderInboxMessageForAgent({
+      id: '01HXYZXYZXYZXYZXYZXYZXYZAB',
+      sender: 'outside',
+      type: 'note',
+      subject: 'no parent',
+      body: 'standalone',
+      ts: '2026-04-29T00:00:00.000Z',
+    });
+    expect(out).not.toContain('In reply to:');
+    expect(out).not.toContain('Acknowledges:');
+  });
+
+  it('renders various non-ack types as "In reply to:"', async () => {
+    const { renderInboxMessageForAgent } = await import(
+      '../../src/runner/inbox-forwarder.js'
+    );
+    for (const type of ['question', 'review', 'directive', 'task']) {
+      const out = renderInboxMessageForAgent({
+        id: '01HXYZXYZXYZXYZXYZXYZXYZAB',
+        sender: 'outside',
+        type,
+        subject: `s-${type}`,
+        body: `b-${type}`,
+        ts: '2026-04-29T00:00:00.000Z',
+        ackOf: '01HPARENTPARENTPARENTPAREN',
+      });
+      expect(out, `type=${type}`).toContain(
+        'In reply to: 01HPARENTPARENTPARENTPAREN',
+      );
+      expect(out, `type=${type}`).not.toContain('Acknowledges:');
+    }
+  });
+});

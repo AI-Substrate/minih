@@ -87,7 +87,7 @@ describe('MCP tool contracts', () => {
       minLength: 1,
       maxLength: 128,
       description:
-        'Optional inbox message id this reply acknowledges (drives Phase 2 workbench correlation).',
+        'Optional id of the message this is a reply to. Used to form reply chains; renders as "In reply to:" in the next agent\'s prompt. For acknowledgement specifically, prefer inbox_ack.',
     });
     // ackOf must remain optional — only subject + body are required.
     expect(inboxSend?.inputSchema.required).toEqual(['subject', 'body']);

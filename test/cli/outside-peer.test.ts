@@ -392,7 +392,15 @@ describe('outside inbox send — --ack-of for reply chains (plan 013 T007)', () 
     try {
       const stdout = execFileSync(
         'node',
-        [cliPath, '--agents-dir', agentsDir, 'outside', 'inbox', 'send', ...args],
+        [
+          cliPath,
+          '--agents-dir',
+          agentsDir,
+          'outside',
+          'inbox',
+          'send',
+          ...args,
+        ],
         { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
       );
       return { stdout, stderr: '', status: 0 };
@@ -462,7 +470,9 @@ describe('outside inbox send — --ack-of for reply chains (plan 013 T007)', () 
     expect(status).not.toBe(0);
     const env = JSON.parse(stdout);
     expect(env.status).toBe('error');
-    expect(env.error.message).toMatch(/--ack-of is required when --type is ack/);
+    expect(env.error.message).toMatch(
+      /--ack-of is required when --type is ack/,
+    );
   });
 
   it('AC-3: still accepts --type ack with --ack-of (no regression)', () => {

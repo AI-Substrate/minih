@@ -160,7 +160,7 @@ describe('buildInsidePreamble', () => {
       Use the inside MCP tools when you need to coordinate with the outside peer:
 
       - \`inbox_list\` — read outside messages; use \`unread: true\` to focus on new work, and add \`waitMs: 30000\` when you need a bounded long-poll for the next outside signal.
-      - \`inbox_send\` — send progress, questions, review evidence, or completion notes to the outside peer.
+      - \`inbox_send\` — send progress, questions, review evidence, or completion notes to the outside peer. Set \`ackOf\` to a prior message id to make your message a **reply** to it; replies can themselves be replied to, forming chains. Use \`inbox_ack\` (not \`inbox_send\`) when you specifically want to acknowledge a peer message.
       - \`inbox_ack\` — acknowledge an outside message after you have handled it.
       - \`state_get\` — inspect your inside state and the outside peer state.
       - \`state_set\` — publish your current inside state.

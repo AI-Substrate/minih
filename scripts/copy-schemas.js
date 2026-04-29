@@ -22,3 +22,7 @@ copyFileSync(
   join('src/templates', 'shared-preamble.md'),
   join('dist/templates', 'shared-preamble.md'),
 );
+copyFileSync(
+  join('src/templates', 'retros-readme.md'),
+  join('dist/templates', 'retros-readme.md'),
+);

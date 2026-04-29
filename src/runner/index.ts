@@ -69,6 +69,17 @@ export {
   waitForResumeLock,
 } from './resume-lock.js';
 export type {
+  AppendRetroEntryArgs,
+  AppendRetroStubArgs,
+  RetroResult,
+  RetrospectiveLike,
+} from './retro-ledger.js';
+export {
+  appendRetroEntry,
+  appendRetroStub,
+  RetroLedgerError,
+} from './retro-ledger.js';
+export type {
   DetectRunStateOptions,
   RunEligibilityState,
 } from './run-eligibility.js';

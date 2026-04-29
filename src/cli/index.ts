@@ -16,6 +16,7 @@ import { registerCheckCommand } from './commands/check.js';
 import { registerConnectCommand } from './commands/connect.js';
 import { registerDifficultiesCommand } from './commands/difficulties.js';
 import { registerDoctorCommand } from './commands/doctor.js';
+import { registerHarvestCommand } from './commands/harvest.js';
 import { registerHistoryCommand } from './commands/history.js';
 import { registerInitCommand } from './commands/init.js';
 import { registerInsideCommand } from './commands/inside.js';
@@ -82,5 +83,6 @@ registerDoctorCommand(program);
 registerDifficultiesCommand(program);
 registerCheckCommand(program);
 registerInitCommand(program);
+registerHarvestCommand(program);
 
 program.parse();

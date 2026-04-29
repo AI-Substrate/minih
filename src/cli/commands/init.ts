@@ -159,8 +159,32 @@ const DEFAULT_SHARED_PREAMBLE_PATH = fileURLToPath(
   new URL('../../templates/shared-preamble.md', import.meta.url),
 );
 
+const DEFAULT_RETROS_README_PATH = fileURLToPath(
+  new URL('../../templates/retros-readme.md', import.meta.url),
+);
+
 function readDefaultSharedPreamble(): string {
   return fs.readFileSync(DEFAULT_SHARED_PREAMBLE_PATH, 'utf-8');
+}
+
+function readDefaultRetrosReadme(): string {
+  return fs.readFileSync(DEFAULT_RETROS_README_PATH, 'utf-8');
+}
+
+/**
+ * Ensure docs/retros/README.md exists in the project root.
+ * Plan 011: scaffolds the retro-ledger directory with bundled convention guide.
+ * Idempotent — does not overwrite an existing README.
+ *
+ * @returns true if the README was created, false if it already existed.
+ */
+export function ensureRetrosLedger(projectRoot: string): boolean {
+  const retrosDir = path.join(projectRoot, 'docs', 'retros');
+  const readmePath = path.join(retrosDir, 'README.md');
+  if (fs.existsSync(readmePath)) return false;
+  fs.mkdirSync(retrosDir, { recursive: true });
+  fs.writeFileSync(readmePath, readDefaultRetrosReadme());
+  return true;
 }
 
 /**
@@ -286,6 +310,12 @@ export function registerInitCommand(program: Command): void {
         // Create preamble on first init (if doesn't exist)
         const preambleCreated = ensurePreamble(resolvedDir);
 
+        // Plan 011 — scaffold docs/retros/ ledger with bundled README.
+        // resolvedDir is the agents dir (e.g. <project>/agents); the project
+        // root is its parent. Idempotent on re-init.
+        const projectRoot = path.dirname(resolvedDir);
+        const retrosCreated = ensureRetrosLedger(projectRoot);
+
         if (process.stderr.isTTY) {
           process.stderr.write(
             `\n  ${chalk.bold('Created agent:')} ${chalk.cyan(slug)}\n`,
@@ -301,6 +331,11 @@ export function registerInitCommand(program: Command): void {
               `  ${chalk.green('✓')} _shared/preamble.md ${chalk.dim('(created)')}\n`,
             );
           }
+          if (retrosCreated) {
+            process.stderr.write(
+              `  ${chalk.green('✓')} docs/retros/README.md ${chalk.dim('(created)')}\n`,
+            );
+          }
           process.stderr.write('\n');
         }
 
@@ -310,6 +345,7 @@ export function registerInitCommand(program: Command): void {
             dir: agentDir,
             files,
             preambleCreated,
+            retrosCreated,
           }),
         );
       },

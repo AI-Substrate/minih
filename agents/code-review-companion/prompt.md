@@ -38,7 +38,7 @@ main loop:
   result = inbox_list({
     unread: true,
     waitMs: 30000,
-    waitForAny: ['task', 'question', 'directive', 'control']
+    waitForAny: ['task', 'question', 'directive', 'control', 'briefing', 'review-request']
   })
   if result is empty:
     if elapsed_since_last_outside_message > input.idleBudgetMs:
@@ -158,7 +158,7 @@ When an outside `task` arrives:
 **If you cannot proceed** without an answer:
 - `state_transition({ to: 'blocked', reason: 'awaiting clarification' })`.
 - `inbox_send({ type: 'question', subject: '<terse Q>', body: '<full Q>', ackOf: task.id })`.
-- Loop on `inbox_list({ waitMs: 30000, waitForAny: ['question', 'directive', 'control'] })` until reply arrives.
+- Loop on `inbox_list({ waitMs: 30000, waitForAny: ['question', 'directive', 'control', 'briefing', 'review-request'] })` until reply arrives.
 
 **If a `directive` arrives mid-task**: narrow scope, log a `progress` message acknowledging the steer, continue. Do NOT restart.
 

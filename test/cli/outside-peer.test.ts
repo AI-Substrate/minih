@@ -378,3 +378,137 @@ describe('outside inbox list --wait — peer block (T004)', () => {
     expect(env.data.peer).toBeUndefined();
   });
 });
+
+// ============================================================================
+// T007 (plan 013) — --ack-of accepted for any --type to form reply chains
+// ============================================================================
+
+describe('outside inbox send — --ack-of for reply chains (plan 013 T007)', () => {
+  function runSendCustom(args: string[]): {
+    stdout: string;
+    stderr: string;
+    status: number;
+  } {
+    try {
+      const stdout = execFileSync(
+        'node',
+        [cliPath, '--agents-dir', agentsDir, 'outside', 'inbox', 'send', ...args],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+      );
+      return { stdout, stderr: '', status: 0 };
+    } catch (err) {
+      const e = err as { stdout?: Buffer; stderr?: Buffer; status?: number };
+      return {
+        stdout: e.stdout?.toString() ?? '',
+        stderr: e.stderr?.toString() ?? '',
+        status: e.status ?? 1,
+      };
+    }
+  }
+
+  it('AC-1: accepts --ack-of with --type note (non-ack reply)', () => {
+    writeRunJson();
+    const parentId = '01HXYZXYZXYZXYZXYZXYZXYZAB';
+    const { stdout, status } = runSendCustom([
+      slug,
+      '--run',
+      runId,
+      '--type',
+      'note',
+      '--subject',
+      'a follow-up',
+      '--body',
+      'continuing the discussion',
+      '--ack-of',
+      parentId,
+    ]);
+    expect(status).toBe(0);
+    const env = JSON.parse(stdout);
+    expect(env.status).toBe('ok');
+    expect(env.data.message.ackOf).toBe(parentId);
+    expect(env.data.message.type).toBe('note');
+
+    // The JSONL file should contain the ackOf field
+    const lanePath = path.join(
+      agentsDir,
+      slug,
+      'runs',
+      runId,
+      'inbox',
+      'outside',
+      'messages.ndjson',
+    );
+    const content = fs.readFileSync(lanePath, 'utf8');
+    const lines = content.trim().split('\n').filter(Boolean);
+    expect(lines).toHaveLength(1);
+    const stored = JSON.parse(lines[0]);
+    expect(stored.ackOf).toBe(parentId);
+    expect(stored.type).toBe('note');
+  });
+
+  it('AC-2: still rejects --type ack without --ack-of', () => {
+    writeRunJson();
+    const { stdout, status } = runSendCustom([
+      slug,
+      '--run',
+      runId,
+      '--type',
+      'ack',
+      '--subject',
+      'ack',
+      '--body',
+      'ack body',
+    ]);
+    expect(status).not.toBe(0);
+    const env = JSON.parse(stdout);
+    expect(env.status).toBe('error');
+    expect(env.error.message).toMatch(/--ack-of is required when --type is ack/);
+  });
+
+  it('AC-3: still accepts --type ack with --ack-of (no regression)', () => {
+    writeRunJson();
+    const parentId = '01HXYZXYZXYZXYZXYZXYZXYZAB';
+    const { stdout, status } = runSendCustom([
+      slug,
+      '--run',
+      runId,
+      '--type',
+      'ack',
+      '--subject',
+      `Ack: ${parentId}`,
+      '--body',
+      'acknowledged',
+      '--ack-of',
+      parentId,
+    ]);
+    expect(status).toBe(0);
+    const env = JSON.parse(stdout);
+    expect(env.status).toBe('ok');
+    expect(env.data.message.type).toBe('ack');
+    expect(env.data.message.ackOf).toBe(parentId);
+  });
+
+  it('accepts --ack-of with arbitrary types (question, review, directive)', () => {
+    writeRunJson();
+    const parentId = '01HXYZXYZXYZXYZXYZXYZXYZAB';
+    for (const type of ['question', 'review', 'directive']) {
+      const { stdout, status } = runSendCustom([
+        slug,
+        '--run',
+        runId,
+        '--type',
+        type,
+        '--subject',
+        `s-${type}`,
+        '--body',
+        `b-${type}`,
+        '--ack-of',
+        parentId,
+      ]);
+      expect(status, `type=${type}`).toBe(0);
+      const env = JSON.parse(stdout);
+      expect(env.data.message.type).toBe(type);
+      expect(env.data.message.ackOf).toBe(parentId);
+    }
+  });
+});

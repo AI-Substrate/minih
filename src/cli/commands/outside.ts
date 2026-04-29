@@ -206,14 +206,8 @@ function handleOutsideInboxSend(root: Command) {
         ),
       );
     }
-    if (type !== 'ack' && opts.ackOf) {
-      exitWithEnvelope(
-        invalidArgs(
-          OUTSIDE_INBOX_SEND_CMD,
-          '--ack-of is only supported for --type ack',
-        ),
-      );
-    }
+    // --ack-of is now allowed for any --type to form reply chains (plan 013).
+    // The inverse check (ack requires ack-of) is preserved above.
 
     const message = buildOutsideMessage({
       type,

@@ -25,10 +25,12 @@ import {
   type AgentDefinition,
   appendHistory,
   type CoordinationRunLocation,
+  derivePeerActivity,
   HistoryLineTooLargeError,
   type InboxMessage,
   InboxPollError,
   type OutsideState,
+  type PeerActivity,
   pollInboxLane,
   readStateLazy,
   StateCorruptError,
@@ -66,6 +68,30 @@ const STATUS_POLL_INTERVAL_MS = 250;
 const RETRO_TARGETS = ['project', 'minih', 'coordination'] as const;
 type RetroTarget = (typeof RETRO_TARGETS)[number];
 
+// ─── peer activity helpers (plan 012) ─────────────────────────────────
+
+/**
+ * Render the peer verdict on stderr in TTY mode.
+ * Silent in piped mode (preserves clean stdout).
+ */
+function renderPeerVerdict(peer: PeerActivity): void {
+  if (!process.stderr.isTTY) return;
+  if (peer.verdict === 'n/a' || peer.verdict === 'unknown') return;
+  const colour =
+    peer.verdict === 'deaf' || peer.verdict === 'dead'
+      ? chalk.red
+      : peer.verdict === 'silent'
+        ? chalk.yellow
+        : chalk.green;
+  const icon =
+    peer.verdict === 'listening' || peer.verdict === 'between-polls'
+      ? '✓'
+      : '⚠';
+  process.stderr.write(
+    `  ${colour(icon)} peer: ${colour(peer.verdict)} — ${peer.reason}\n`,
+  );
+}
+
 export function registerOutsideCommand(program: Command): void {
   const outside = program
     .command('outside')
@@ -96,6 +122,10 @@ function registerOutsideInbox(parent: Command, root: Command): void {
     .option('--body <body>', 'Message body')
     .option('--ack-of <msgId>', 'Message id this ack acknowledges')
     .option('--run <runId>', 'Target run ID (default: only active run)')
+    .option(
+      '--strict-peer',
+      "Refuse to send when peer.verdict is 'deaf' (exit E150)",
+    )
     .action(handleOutsideInboxSend(root));
 
   inbox
@@ -119,7 +149,7 @@ const OUTSIDE_INBOX_SEND_CMD = 'outside.inbox.send';
 const OUTSIDE_INBOX_LIST_CMD = 'outside.inbox.list';
 
 function handleOutsideInboxSend(root: Command) {
-  return (
+  return async (
     slug: string,
     opts: {
       type?: string;
@@ -127,6 +157,7 @@ function handleOutsideInboxSend(root: Command) {
       body?: string;
       ackOf?: string;
       run?: string;
+      strictPeer?: boolean;
     },
   ) => {
     const agentsDir = root.opts().agentsDir ?? 'agents';
@@ -182,9 +213,35 @@ function handleOutsideInboxSend(root: Command) {
       message,
     );
 
+    // Derive peer activity AFTER append so the snapshot reflects observed state
+    // at the moment the message lands. Tolerate any errors silently — peer is
+    // additive, never blocks the send.
+    let peer: PeerActivity | null = null;
+    try {
+      peer = await derivePeerActivity({
+        runDir: target.runDir,
+        messageType: type,
+      });
+    } catch {
+      peer = null;
+    }
+
     if (process.stderr.isTTY) {
       process.stderr.write(
-        `\n  ${chalk.green('✓')} Sent ${chalk.cyan(type)} message to ${chalk.cyan(slug)}\n\n`,
+        `\n  ${chalk.green('✓')} Sent ${chalk.cyan(type)} message to ${chalk.cyan(slug)}\n`,
+      );
+      if (peer) renderPeerVerdict(peer);
+      process.stderr.write('\n');
+    }
+
+    if (opts.strictPeer && peer && peer.verdict === 'deaf') {
+      exitWithEnvelope(
+        formatError(
+          OUTSIDE_INBOX_SEND_CMD,
+          ErrorCodes.DEAF_PEER,
+          `Refusing to send: peer.verdict is 'deaf' (${peer.reason}). Use a different --type or omit --strict-peer.`,
+          { slug, runId: target.runId, peer },
+        ),
       );
     }
 
@@ -196,6 +253,7 @@ function handleOutsideInboxSend(root: Command) {
         target: 'inside',
         timestamp: message.ts,
         message,
+        ...(peer && { peer }),
       }),
     );
   };

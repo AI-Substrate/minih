@@ -56,6 +56,8 @@ export const ErrorCodes = {
   RESUME_IN_PROGRESS: 'E147',
   INBOX_CORRUPT: 'E148',
   MCP_SPAWN_FAILED: 'E149',
+  // Plan 012 — peer activity telemetry
+  DEAF_PEER: 'E150',
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];

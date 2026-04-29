@@ -149,7 +149,7 @@ describe('runAgent auto-append (success paths)', () => {
 
 describe('runAgent auto-append (terminal-failure stubs)', () => {
   it('writes a stub when input validation fails (early-return path)', async () => {
-    const def = makeAgent('demo');
+    makeAgent('demo');
     // Add an input schema requiring `topic`; pass empty params to fail it.
     fs.writeFileSync(
       path.join(agentsDir, 'demo', 'input-schema.json'),

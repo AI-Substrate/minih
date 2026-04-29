@@ -32,6 +32,12 @@ import {
 } from './inbox-forwarder.js';
 import { buildInsidePreamble } from './preamble-builder.js';
 import {
+  appendRetroEntry,
+  appendRetroStub,
+  type RetroResult,
+  type RetrospectiveLike,
+} from './retro-ledger.js';
+import {
   flushThrottled as flushManifestThrottled,
   updateManifest,
   writeManifest,
@@ -64,6 +70,106 @@ import {
  */
 function resolvePreamblePath(agentsDir: string): string {
   return path.join(path.resolve(agentsDir), '_shared', 'preamble.md');
+}
+
+/**
+ * Plan 011 / Workshop 002 — auto-harvest helpers.
+ *
+ * Each call wraps a `retro-ledger` write in:
+ *   - `MINIH_NO_AUTO_HARVEST=1` opt-out check (skip silently if set)
+ *   - try/catch with debug stderr line on error (never throws back to runner)
+ *
+ * `runHarvested` is a function-local boolean threaded through runAgent's
+ * crash-safety try/finally: success/stub paths set it true; the finally
+ * block writes a `crashed` stub if it's still false (guards against
+ * uncaught exceptions emitting nothing).
+ */
+interface HarvestContext {
+  slug: string;
+  runId: string;
+  runDir: string;
+  ledgerDir: string;
+  planId: string | null;
+  /** True when cwd has agents/ — guards against ad-hoc test invocations polluting unrelated projects. */
+  isMinihProject: boolean;
+  /** Mutated by the helpers below — the finally hook checks this. */
+  done: { value: boolean };
+}
+
+function buildLedgerDir(cwd: string | undefined): string {
+  return path.join(cwd ?? process.cwd(), 'docs', 'retros');
+}
+
+/**
+ * Detect whether the cwd looks like a minih project root.
+ *
+ * Conservative heuristic — auto-harvest only fires when:
+ *   1. `config.cwd` is EXPLICITLY set (not defaulted), AND
+ *   2. that path contains an `agents/` directory.
+ *
+ * The CLI always passes an explicit cwd (see commands/run.ts and
+ * commands/resume.ts). Tests that skip cwd default to undefined and so
+ * skip auto-harvest cleanly. This guards against test/library invocations
+ * polluting unrelated projects.
+ */
+function looksLikeMinihProject(cwd: string | undefined): boolean {
+  if (!cwd) return false;
+  const target = path.join(cwd, 'agents');
+  try {
+    return fs.statSync(target).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+async function tryAutoHarvestRetro(
+  ctx: HarvestContext,
+  retrospective: RetrospectiveLike,
+): Promise<void> {
+  if (process.env.MINIH_NO_AUTO_HARVEST === '1') return;
+  if (ctx.done.value) return;
+  if (!ctx.isMinihProject) return; // non-project cwd — skip silently
+  try {
+    await appendRetroEntry({
+      slug: ctx.slug,
+      runId: ctx.runId,
+      runDir: ctx.runDir,
+      retrospective,
+      planId: ctx.planId ?? undefined,
+      ledgerDir: ctx.ledgerDir,
+    });
+    ctx.done.value = true;
+  } catch (err) {
+    process.stderr.write(
+      `MINIH_AUTO_HARVEST_SKIPPED: ${(err as Error).message}\n`,
+    );
+  }
+}
+
+async function tryAutoHarvestStub(
+  ctx: HarvestContext,
+  result: RetroResult,
+  stderrTail: string,
+): Promise<void> {
+  if (process.env.MINIH_NO_AUTO_HARVEST === '1') return;
+  if (ctx.done.value) return;
+  if (!ctx.isMinihProject) return;
+  try {
+    await appendRetroStub({
+      slug: ctx.slug,
+      runId: ctx.runId,
+      runDir: ctx.runDir,
+      result,
+      stderrTail,
+      planId: ctx.planId ?? undefined,
+      ledgerDir: ctx.ledgerDir,
+    });
+    ctx.done.value = true;
+  } catch (err) {
+    process.stderr.write(
+      `MINIH_AUTO_HARVEST_SKIPPED: ${(err as Error).message}\n`,
+    );
+  }
 }
 
 /** System output requirements injected into every agent prompt. */
@@ -248,7 +354,6 @@ export async function runAgent(
   // Intentionally NOT added to MINIH_ENV_KEYS — that list drives the runtime
   // cleanup loop which would `delete process.env[key]` and lose the value.
   const planId: string | null = process.env.MINIH_PLAN_ID ?? null;
-  void planId; // wired in T011
 
   // Resolve runDir/runId — either reuse the original (resume-in-place) or
   // allocate a fresh folder. Fail fast if resume-in-place is requested but
@@ -278,567 +383,640 @@ export async function runAgent(
   }
   const eventsPath = path.join(runDir, 'events.ndjson');
 
-  if (isResumeInPlace) {
-    // Append a synthetic resume marker so downstream tooling can see the
-    // session boundary in the event stream.
-    const marker = {
-      type: 'resume',
-      ts: startedAt.toISOString(),
-      fromState: config.resumeFromState ?? null,
-      kind: config.resumeKind ?? 'completed-followup',
-      previousPid: config.resumePreviousPid ?? null,
-    };
-    fs.appendFileSync(eventsPath, `${JSON.stringify(marker)}\n`);
-  } else {
-    fs.writeFileSync(eventsPath, '');
-  }
-
-  // Initial run.json manifest — workshop 002 §1, plan 009.
-  // Written immediately after run-folder creation so attach commands can
-  // resolve the run by ID before session_start.
-  const initialManifest: LiveRunManifest = {
-    schemaVersion: 1,
+  // Plan 011 / Workshop 002 — auto-harvest context. Threaded through every
+  // terminal site below; the surrounding try/finally guarantees a stub
+  // emission on crash if no entry was written.
+  const harvestCtx: HarvestContext = {
     slug: definition.slug,
     runId,
     runDir,
-    pid: process.pid,
-    startedAt: startedAt.toISOString(),
-    updatedAt: startedAt.toISOString(),
-    status: 'starting',
-    sessionId: null,
-    model: config.model ?? null,
-    control: { available: coordinationEnabled, kind: 'none' },
-    counters: { events: 0, toolCalls: 0, messages: 0, errors: 0 },
+    ledgerDir: buildLedgerDir(config.cwd),
+    planId,
+    isMinihProject: looksLikeMinihProject(config.cwd),
+    done: { value: false },
   };
-  if (isResumeInPlace) {
-    // Resume-in-place: mutate the existing run.json instead of overwriting it.
-    // Workshop 001 § Manifest Evolution defines this contract.
-    //
-    // Write order (crash-recovery): rename completed.json BEFORE rewriting
-    // run.json, so a crash mid-resume leaves run.json on the prior status
-    // (detectRunState returns "stale") and a harmless completed-N.json artifact.
-    const existing = JSON.parse(
-      fs.readFileSync(path.join(runDir, 'run.json'), 'utf8'),
-    );
-    const priorResumes = Array.isArray(existing.resumes)
-      ? existing.resumes
-      : [];
-    const completedPath = path.join(runDir, 'completed.json');
-    if (fs.existsSync(completedPath)) {
-      const archiveIndex = priorResumes.length + 1;
-      fs.renameSync(
-        completedPath,
-        path.join(runDir, `completed-${archiveIndex}.json`),
+
+  try {
+    if (isResumeInPlace) {
+      // Append a synthetic resume marker so downstream tooling can see the
+      // session boundary in the event stream.
+      const marker = {
+        type: 'resume',
+        ts: startedAt.toISOString(),
+        fromState: config.resumeFromState ?? null,
+        kind: config.resumeKind ?? 'completed-followup',
+        previousPid: config.resumePreviousPid ?? null,
+      };
+      fs.appendFileSync(eventsPath, `${JSON.stringify(marker)}\n`);
+    } else {
+      fs.writeFileSync(eventsPath, '');
+    }
+
+    // Initial run.json manifest — workshop 002 §1, plan 009.
+    // Written immediately after run-folder creation so attach commands can
+    // resolve the run by ID before session_start.
+    const initialManifest: LiveRunManifest = {
+      schemaVersion: 1,
+      slug: definition.slug,
+      runId,
+      runDir,
+      pid: process.pid,
+      startedAt: startedAt.toISOString(),
+      updatedAt: startedAt.toISOString(),
+      status: 'starting',
+      sessionId: null,
+      model: config.model ?? null,
+      control: { available: coordinationEnabled, kind: 'none' },
+      counters: { events: 0, toolCalls: 0, messages: 0, errors: 0 },
+    };
+    if (isResumeInPlace) {
+      // Resume-in-place: mutate the existing run.json instead of overwriting it.
+      // Workshop 001 § Manifest Evolution defines this contract.
+      //
+      // Write order (crash-recovery): rename completed.json BEFORE rewriting
+      // run.json, so a crash mid-resume leaves run.json on the prior status
+      // (detectRunState returns "stale") and a harmless completed-N.json artifact.
+      const existing = JSON.parse(
+        fs.readFileSync(path.join(runDir, 'run.json'), 'utf8'),
+      );
+      const priorResumes = Array.isArray(existing.resumes)
+        ? existing.resumes
+        : [];
+      const completedPath = path.join(runDir, 'completed.json');
+      if (fs.existsSync(completedPath)) {
+        const archiveIndex = priorResumes.length + 1;
+        fs.renameSync(
+          completedPath,
+          path.join(runDir, `completed-${archiveIndex}.json`),
+        );
+      }
+      const resumeEntry: Record<string, unknown> = {
+        ts: startedAt.toISOString(),
+        kind: config.resumeKind ?? 'completed-followup',
+      };
+      if (config.resumeFromState)
+        resumeEntry.fromState = config.resumeFromState;
+      if (typeof config.resumePreviousPid === 'number') {
+        resumeEntry.previousPid = config.resumePreviousPid;
+      }
+      const updated = {
+        ...existing,
+        schemaVersion: 1,
+        pid: process.pid,
+        status: 'starting',
+        updatedAt: startedAt.toISOString(),
+        resumes: [...priorResumes, resumeEntry],
+      };
+      fs.writeFileSync(
+        path.join(runDir, 'run.json'),
+        `${JSON.stringify(updated, null, 2)}\n`,
+      );
+    } else {
+      await writeManifest(runDir, initialManifest);
+    }
+
+    const outputPath = path.join(runDir, 'output', 'report.json');
+    const stderrPath = path.join(runDir, 'stderr.log');
+
+    // Read prompt and strip frontmatter (or use override for resume)
+    const rawPrompt = fs.readFileSync(definition.promptPath, 'utf-8');
+    const prompt = config.promptOverride ?? parseFrontmatter(rawPrompt).body;
+
+    // Read instructions (optional)
+    const instructions = definition.instructionsPath
+      ? fs.readFileSync(definition.instructionsPath, 'utf-8')
+      : null;
+
+    // Shared preamble — injected for all agents with template variables replaced
+    const repoRoot = config.cwd ?? process.cwd();
+    let preamble: string | null = null;
+    if (agentsDir) {
+      const preamblePath = resolvePreamblePath(agentsDir);
+      if (fs.existsSync(preamblePath)) {
+        preamble = fs
+          .readFileSync(preamblePath, 'utf-8')
+          .replaceAll('{{REPO_ROOT}}', repoRoot);
+      }
+    }
+
+    // Validate and format input parameters (skip for resume — SDK has prior context)
+    let paramsHint: string | null = null;
+    if (!isResume && definition.inputSchemaPath) {
+      const params = config.params ?? {};
+      const inputValidation = validateInput(definition.inputSchemaPath, params);
+      if (!inputValidation.valid) {
+        const errorMsg = `Input parameter validation failed:\n${inputValidation.errors.join('\n')}`;
+        // Finalize manifest so this dead run never looks active to resolveRun().
+        await updateManifest(runDir, { status: 'failed' });
+        // Plan 011 — emit a stub so operators see this terminal failure in the ledger.
+        await tryAutoHarvestStub(
+          harvestCtx,
+          'failed',
+          errorMsg.split('\n')[0] ?? '',
+        );
+        return {
+          agentResult: {
+            output: errorMsg,
+            sessionId: '',
+            status: 'failed',
+            exitCode: 1,
+            tokens: null,
+          },
+          metadata: {
+            slug: definition.slug,
+            runId,
+            startedAt: startedAt.toISOString(),
+            completedAt: new Date().toISOString(),
+            durationMs: Date.now() - startedAt.getTime(),
+            sessionId: '',
+            result: 'failed',
+            exitCode: 1,
+            validated: null,
+            validationErrors: [],
+            systemValidated: false,
+            userValidated: null,
+            eventCount: 0,
+            toolCallCount: 0,
+            artifacts: listArtifacts(runDir),
+          },
+          validation: null,
+          runDir,
+          parsedReport: null,
+        };
+      }
+      if (Object.keys(params).length > 0) {
+        const lines = Object.entries(params).map(([k, v]) => `${k}: ${v}`);
+        paramsHint = `## Input Parameters\n\n${lines.join('\n')}`;
+      }
+    }
+
+    // Build prompt: full assembly for fresh runs, just the message for resume
+    let finalPrompt: string;
+
+    if (isResume) {
+      // Resume: send only the follow-up message — SDK has full conversation history
+      finalPrompt = prompt;
+    } else {
+      // Fresh run: full prompt assembly (preamble + instructions + output hint + params + prompt + system requirements)
+      const outputHint = `Write your final JSON report to: ${outputPath}`;
+      finalPrompt = buildInsidePreamble({
+        definition,
+        runId,
+        preamble,
+        instructions,
+        outputHint,
+        paramsHint,
+        userPrompt: prompt,
+        systemOutputInstructions: SYSTEM_OUTPUT_INSTRUCTIONS,
+      });
+    }
+
+    // Set runtime environment for the agent (Workshop 007)
+    const resolvedAgentsDir = agentsDir ? path.resolve(agentsDir) : '';
+    const preamblePath = agentsDir ? resolvePreamblePath(agentsDir) : '';
+    process.env.MINIH = '1';
+    process.env.MINIH_AGENT_SLUG = definition.slug;
+    process.env.MINIH_RUN_ID = runId;
+    process.env.MINIH_RUN_DIR = runDir;
+    process.env.MINIH_OUTPUT_PATH = outputPath;
+    process.env.MINIH_AGENTS_DIR = resolvedAgentsDir;
+    process.env.MINIH_PROJECT_ROOT = config.cwd ?? process.cwd();
+    process.env.MINIH_MODEL = config.model ?? '';
+    process.env.MINIH_TIMEOUT = String(config.timeout ?? 300);
+    process.env.MINIH_SCHEMA_PATH = definition.schemaPath ?? '';
+    process.env.MINIH_INSTRUCTIONS_PATH = definition.instructionsPath ?? '';
+    process.env.MINIH_PREAMBLE_PATH = fs.existsSync(preamblePath)
+      ? preamblePath
+      : '';
+    process.env.MINIH_HAS_INPUT_SCHEMA = definition.inputSchemaPath
+      ? 'true'
+      : 'false';
+    process.env.MINIH_PARAMS = JSON.stringify(config.params ?? {});
+    if (coordinationEnabled && agentsDir) {
+      const resolvedCoordinationAgentsDir = path.resolve(agentsDir);
+      const coordinationLocation = coordinationRunLocation(
+        definition.slug,
+        resolvedCoordinationAgentsDir,
+        runId,
+      );
+      process.env.MINIH_CONTEXT = 'inside';
+      process.env.MINIH_INBOX_DIR = path.dirname(
+        path.dirname(inboxLanePath(coordinationLocation, 'inside')),
+      );
+      process.env.MINIH_STATE_DIR = path.dirname(
+        stateFilePath(coordinationLocation, 'inside'),
       );
     }
-    const resumeEntry: Record<string, unknown> = {
-      ts: startedAt.toISOString(),
-      kind: config.resumeKind ?? 'completed-followup',
+
+    // Event tracking
+    const stats: RunEventStats = {
+      total: 0,
+      toolCalls: 0,
+      toolResults: 0,
+      messages: 0,
+      thinking: 0,
+      errors: 0,
     };
-    if (config.resumeFromState) resumeEntry.fromState = config.resumeFromState;
-    if (typeof config.resumePreviousPid === 'number') {
-      resumeEntry.previousPid = config.resumePreviousPid;
-    }
-    const updated = {
-      ...existing,
-      schemaVersion: 1,
-      pid: process.pid,
-      status: 'starting',
-      updatedAt: startedAt.toISOString(),
-      resumes: [...priorResumes, resumeEntry],
+    let activeSessionId = '';
+    const stderrLines: string[] = [];
+
+    const handleEvent = (event: AgentEvent): void => {
+      stats.total++;
+      switch (event.type) {
+        case 'tool_call':
+          stats.toolCalls++;
+          break;
+        case 'tool_result':
+          stats.toolResults++;
+          break;
+        case 'message':
+          stats.messages++;
+          break;
+        case 'thinking':
+          stats.thinking++;
+          break;
+        case 'session_error':
+          stats.errors++;
+          stderrLines.push(
+            `[${event.timestamp}] ${event.data.errorType ?? 'ERROR'}: ${event.data.message ?? ''}`,
+          );
+          break;
+        case 'session_start':
+          if (event.data.sessionId) {
+            activeSessionId = event.data.sessionId;
+            // Immediate (non-throttled) — sessionId + active is the answer
+            // attach-by-id needs as fast as possible.
+            void updateManifest(runDir, {
+              sessionId: event.data.sessionId,
+              status: 'active',
+            });
+          }
+          break;
+      }
+
+      // Write to NDJSON incrementally
+      fs.appendFileSync(eventsPath, `${JSON.stringify(event)}\n`);
+
+      // Throttled counter patch — coalesces per-event tick to avoid disk thrash.
+      void updateManifest(
+        runDir,
+        {
+          counters: {
+            events: stats.total,
+            toolCalls: stats.toolCalls,
+            messages: stats.messages,
+            errors: stats.errors,
+          },
+        },
+        { throttleMs: 250 },
+      );
+
+      if (onEvent) onEvent(event);
     };
-    fs.writeFileSync(
-      path.join(runDir, 'run.json'),
-      `${JSON.stringify(updated, null, 2)}\n`,
-    );
-  } else {
-    await writeManifest(runDir, initialManifest);
-  }
 
-  const outputPath = path.join(runDir, 'output', 'report.json');
-  const stderrPath = path.join(runDir, 'stderr.log');
+    // Execute agent with timeout
+    let agentResult: AgentResult;
+    let timedOut = false;
+    const timeoutMs = (config.timeout ?? 300) * 1000;
 
-  // Read prompt and strip frontmatter (or use override for resume)
-  const rawPrompt = fs.readFileSync(definition.promptPath, 'utf-8');
-  const prompt = config.promptOverride ?? parseFrontmatter(rawPrompt).body;
+    let inboxForwarder: InboxForwarder | null = null;
+    let stateForwarder: StateForwarder | null = null;
+    const forwarderErrors: Error[] = [];
+    const pendingForwarderCount = (): number =>
+      (inboxForwarder?.pendingCount() ?? 0) +
+      (stateForwarder?.pendingCount() ?? 0);
+    const closeForwarders = (): void => {
+      inboxForwarder?.close();
+      stateForwarder?.close();
+      inboxForwarder = null;
+      stateForwarder = null;
+    };
+    const handleForwarderError = (error: Error): void => {
+      forwarderErrors.push(error);
+      closeForwarders();
+    };
+    const startForwarders = (sender: SessionSender): void => {
+      if (!coordinationEnabled || !agentsDir) return;
+      const forwarderOptions = {
+        slug: definition.slug,
+        agentsDir,
+        runId,
+        sender,
+        commitProgress: 'manual' as const,
+        onError: handleForwarderError,
+      };
+      inboxForwarder = createInboxForwarder(forwarderOptions);
+      stateForwarder = createStateForwarder(forwarderOptions);
+      void Promise.all([inboxForwarder.start(), stateForwarder.start()]).catch(
+        (error: unknown) => {
+          handleForwarderError(
+            error instanceof Error ? error : new Error(String(error)),
+          );
+        },
+      );
+    };
 
-  // Read instructions (optional)
-  const instructions = definition.instructionsPath
-    ? fs.readFileSync(definition.instructionsPath, 'utf-8')
-    : null;
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    try {
+      // MCP config resolution:
+      // - Explicit mcpServers (from --mcp-config): use directly
+      // - Auto-discovery: check for .mcp.json at project root, load it ourselves
+      //   (SDK discovers from workingDirectory which is the run folder, not project root)
+      // - Always pass configDir for user-level config (~/.copilot/mcp-config)
+      let mcpServers = config.mcpServers;
+      if (!mcpServers) {
+        const projectRoot = config.cwd ?? process.cwd();
+        const mcpJsonPath = path.join(projectRoot, '.mcp.json');
+        if (fs.existsSync(mcpJsonPath)) {
+          try {
+            const parsed = JSON.parse(fs.readFileSync(mcpJsonPath, 'utf-8'));
+            if (parsed.mcpServers && typeof parsed.mcpServers === 'object') {
+              mcpServers = parsed.mcpServers as Record<string, unknown>;
+            }
+          } catch {
+            // Skip invalid .mcp.json — don't block the run
+          }
+        }
+        // Set cwd on local MCP servers so they resolve relative paths from project root
+        if (mcpServers) {
+          const projectRoot = config.cwd ?? process.cwd();
+          for (const server of Object.values(mcpServers)) {
+            const s = server as Record<string, unknown>;
+            if (
+              !s.cwd &&
+              (!s.type || s.type === 'local' || s.type === 'stdio')
+            ) {
+              s.cwd = projectRoot;
+            }
+          }
+        }
+      }
+      const insideMcpServers =
+        coordinationEnabled && agentsDir && config.insideMcpServerFactory
+          ? config.insideMcpServerFactory({
+              runId,
+              runDir,
+              agentSlug: definition.slug,
+              agentsDir: path.resolve(agentsDir),
+            })
+          : undefined;
+      mcpServers = mergeMcpServers(
+        mcpServers,
+        insideMcpServers,
+        config.reservedMcpToolPrefixes ?? [],
+      );
 
-  // Shared preamble — injected for all agents with template variables replaced
-  const repoRoot = config.cwd ?? process.cwd();
-  let preamble: string | null = null;
-  if (agentsDir) {
-    const preamblePath = resolvePreamblePath(agentsDir);
-    if (fs.existsSync(preamblePath)) {
-      preamble = fs
-        .readFileSync(preamblePath, 'utf-8')
-        .replaceAll('{{REPO_ROOT}}', repoRoot);
-    }
-  }
-
-  // Validate and format input parameters (skip for resume — SDK has prior context)
-  let paramsHint: string | null = null;
-  if (!isResume && definition.inputSchemaPath) {
-    const params = config.params ?? {};
-    const inputValidation = validateInput(definition.inputSchemaPath, params);
-    if (!inputValidation.valid) {
-      const errorMsg = `Input parameter validation failed:\n${inputValidation.errors.join('\n')}`;
-      // Finalize manifest so this dead run never looks active to resolveRun().
-      await updateManifest(runDir, { status: 'failed' });
-      return {
-        agentResult: {
-          output: errorMsg,
+      const runPromise = adapter
+        .run({
+          prompt: finalPrompt,
+          sessionId: config.sessionId,
+          model: config.model,
+          reasoningEffort: config.reasoningEffort,
+          cwd: runDir, // SDK isolated to run folder (Workshop 005)
+          onEvent: handleEvent,
+          onSessionReady: startForwarders,
+          configDir: config.configDir ?? config.cwd,
+          ...(mcpServers && { mcpServers }),
+        })
+        .then(async (result) => {
+          // Manifest: status → completing right before terminal-condition wait
+          // (workshop 002 §Write points).
+          await updateManifest(runDir, { status: 'completing' });
+          const terminal = await awaitTerminalCondition(
+            result,
+            pendingForwarderCount,
+          );
+          if (forwarderErrors.length > 0) throw forwarderErrors[0];
+          if (terminal.status === 'completed') {
+            inboxForwarder?.commit();
+            stateForwarder?.commit();
+          }
+          return terminal;
+        })
+        .finally(closeForwarders);
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutHandle = setTimeout(() => {
+          timedOut = true;
+          reject(new Error(`Agent timed out after ${config.timeout ?? 300}s`));
+        }, timeoutMs);
+      });
+      agentResult = await Promise.race([runPromise, timeoutPromise]);
+    } catch (error) {
+      if (timedOut) {
+        try {
+          await adapter.terminate(activeSessionId);
+        } catch {
+          /* best-effort */
+        }
+        agentResult = {
+          output: `Agent timed out after ${config.timeout ?? 300}s`,
+          sessionId: '',
+          status: 'killed',
+          exitCode: 124,
+          tokens: null,
+        };
+      } else {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        agentResult = {
+          output: `Agent execution failed: ${errorMessage}`,
           sessionId: '',
           status: 'failed',
           exitCode: 1,
           tokens: null,
-        },
-        metadata: {
-          slug: definition.slug,
-          runId,
-          startedAt: startedAt.toISOString(),
-          completedAt: new Date().toISOString(),
-          durationMs: Date.now() - startedAt.getTime(),
-          sessionId: '',
-          result: 'failed',
-          exitCode: 1,
-          validated: null,
-          validationErrors: [],
-          systemValidated: false,
-          userValidated: null,
-          eventCount: 0,
-          toolCallCount: 0,
-          artifacts: listArtifacts(runDir),
-        },
-        validation: null,
-        runDir,
-        parsedReport: null,
-      };
-    }
-    if (Object.keys(params).length > 0) {
-      const lines = Object.entries(params).map(([k, v]) => `${k}: ${v}`);
-      paramsHint = `## Input Parameters\n\n${lines.join('\n')}`;
-    }
-  }
-
-  // Build prompt: full assembly for fresh runs, just the message for resume
-  let finalPrompt: string;
-
-  if (isResume) {
-    // Resume: send only the follow-up message — SDK has full conversation history
-    finalPrompt = prompt;
-  } else {
-    // Fresh run: full prompt assembly (preamble + instructions + output hint + params + prompt + system requirements)
-    const outputHint = `Write your final JSON report to: ${outputPath}`;
-    finalPrompt = buildInsidePreamble({
-      definition,
-      runId,
-      preamble,
-      instructions,
-      outputHint,
-      paramsHint,
-      userPrompt: prompt,
-      systemOutputInstructions: SYSTEM_OUTPUT_INSTRUCTIONS,
-    });
-  }
-
-  // Set runtime environment for the agent (Workshop 007)
-  const resolvedAgentsDir = agentsDir ? path.resolve(agentsDir) : '';
-  const preamblePath = agentsDir ? resolvePreamblePath(agentsDir) : '';
-  process.env.MINIH = '1';
-  process.env.MINIH_AGENT_SLUG = definition.slug;
-  process.env.MINIH_RUN_ID = runId;
-  process.env.MINIH_RUN_DIR = runDir;
-  process.env.MINIH_OUTPUT_PATH = outputPath;
-  process.env.MINIH_AGENTS_DIR = resolvedAgentsDir;
-  process.env.MINIH_PROJECT_ROOT = config.cwd ?? process.cwd();
-  process.env.MINIH_MODEL = config.model ?? '';
-  process.env.MINIH_TIMEOUT = String(config.timeout ?? 300);
-  process.env.MINIH_SCHEMA_PATH = definition.schemaPath ?? '';
-  process.env.MINIH_INSTRUCTIONS_PATH = definition.instructionsPath ?? '';
-  process.env.MINIH_PREAMBLE_PATH = fs.existsSync(preamblePath)
-    ? preamblePath
-    : '';
-  process.env.MINIH_HAS_INPUT_SCHEMA = definition.inputSchemaPath
-    ? 'true'
-    : 'false';
-  process.env.MINIH_PARAMS = JSON.stringify(config.params ?? {});
-  if (coordinationEnabled && agentsDir) {
-    const resolvedCoordinationAgentsDir = path.resolve(agentsDir);
-    const coordinationLocation = coordinationRunLocation(
-      definition.slug,
-      resolvedCoordinationAgentsDir,
-      runId,
-    );
-    process.env.MINIH_CONTEXT = 'inside';
-    process.env.MINIH_INBOX_DIR = path.dirname(
-      path.dirname(inboxLanePath(coordinationLocation, 'inside')),
-    );
-    process.env.MINIH_STATE_DIR = path.dirname(
-      stateFilePath(coordinationLocation, 'inside'),
-    );
-  }
-
-  // Event tracking
-  const stats: RunEventStats = {
-    total: 0,
-    toolCalls: 0,
-    toolResults: 0,
-    messages: 0,
-    thinking: 0,
-    errors: 0,
-  };
-  let activeSessionId = '';
-  const stderrLines: string[] = [];
-
-  const handleEvent = (event: AgentEvent): void => {
-    stats.total++;
-    switch (event.type) {
-      case 'tool_call':
-        stats.toolCalls++;
-        break;
-      case 'tool_result':
-        stats.toolResults++;
-        break;
-      case 'message':
-        stats.messages++;
-        break;
-      case 'thinking':
-        stats.thinking++;
-        break;
-      case 'session_error':
-        stats.errors++;
-        stderrLines.push(
-          `[${event.timestamp}] ${event.data.errorType ?? 'ERROR'}: ${event.data.message ?? ''}`,
-        );
-        break;
-      case 'session_start':
-        if (event.data.sessionId) {
-          activeSessionId = event.data.sessionId;
-          // Immediate (non-throttled) — sessionId + active is the answer
-          // attach-by-id needs as fast as possible.
-          void updateManifest(runDir, {
-            sessionId: event.data.sessionId,
-            status: 'active',
-          });
-        }
-        break;
-    }
-
-    // Write to NDJSON incrementally
-    fs.appendFileSync(eventsPath, `${JSON.stringify(event)}\n`);
-
-    // Throttled counter patch — coalesces per-event tick to avoid disk thrash.
-    void updateManifest(
-      runDir,
-      {
-        counters: {
-          events: stats.total,
-          toolCalls: stats.toolCalls,
-          messages: stats.messages,
-          errors: stats.errors,
-        },
-      },
-      { throttleMs: 250 },
-    );
-
-    if (onEvent) onEvent(event);
-  };
-
-  // Execute agent with timeout
-  let agentResult: AgentResult;
-  let timedOut = false;
-  const timeoutMs = (config.timeout ?? 300) * 1000;
-
-  let inboxForwarder: InboxForwarder | null = null;
-  let stateForwarder: StateForwarder | null = null;
-  const forwarderErrors: Error[] = [];
-  const pendingForwarderCount = (): number =>
-    (inboxForwarder?.pendingCount() ?? 0) +
-    (stateForwarder?.pendingCount() ?? 0);
-  const closeForwarders = (): void => {
-    inboxForwarder?.close();
-    stateForwarder?.close();
-    inboxForwarder = null;
-    stateForwarder = null;
-  };
-  const handleForwarderError = (error: Error): void => {
-    forwarderErrors.push(error);
-    closeForwarders();
-  };
-  const startForwarders = (sender: SessionSender): void => {
-    if (!coordinationEnabled || !agentsDir) return;
-    const forwarderOptions = {
-      slug: definition.slug,
-      agentsDir,
-      runId,
-      sender,
-      commitProgress: 'manual' as const,
-      onError: handleForwarderError,
-    };
-    inboxForwarder = createInboxForwarder(forwarderOptions);
-    stateForwarder = createStateForwarder(forwarderOptions);
-    void Promise.all([inboxForwarder.start(), stateForwarder.start()]).catch(
-      (error: unknown) => {
-        handleForwarderError(
-          error instanceof Error ? error : new Error(String(error)),
-        );
-      },
-    );
-  };
-
-  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
-  try {
-    // MCP config resolution:
-    // - Explicit mcpServers (from --mcp-config): use directly
-    // - Auto-discovery: check for .mcp.json at project root, load it ourselves
-    //   (SDK discovers from workingDirectory which is the run folder, not project root)
-    // - Always pass configDir for user-level config (~/.copilot/mcp-config)
-    let mcpServers = config.mcpServers;
-    if (!mcpServers) {
-      const projectRoot = config.cwd ?? process.cwd();
-      const mcpJsonPath = path.join(projectRoot, '.mcp.json');
-      if (fs.existsSync(mcpJsonPath)) {
-        try {
-          const parsed = JSON.parse(fs.readFileSync(mcpJsonPath, 'utf-8'));
-          if (parsed.mcpServers && typeof parsed.mcpServers === 'object') {
-            mcpServers = parsed.mcpServers as Record<string, unknown>;
-          }
-        } catch {
-          // Skip invalid .mcp.json — don't block the run
-        }
+        };
       }
-      // Set cwd on local MCP servers so they resolve relative paths from project root
-      if (mcpServers) {
-        const projectRoot = config.cwd ?? process.cwd();
-        for (const server of Object.values(mcpServers)) {
-          const s = server as Record<string, unknown>;
-          if (!s.cwd && (!s.type || s.type === 'local' || s.type === 'stdio')) {
-            s.cwd = projectRoot;
-          }
-        }
-      }
+    } finally {
+      if (timeoutHandle) clearTimeout(timeoutHandle);
+      closeForwarders();
     }
-    const insideMcpServers =
-      coordinationEnabled && agentsDir && config.insideMcpServerFactory
-        ? config.insideMcpServerFactory({
-            runId,
-            runDir,
-            agentSlug: definition.slug,
-            agentsDir: path.resolve(agentsDir),
-          })
-        : undefined;
-    mcpServers = mergeMcpServers(
-      mcpServers,
-      insideMcpServers,
-      config.reservedMcpToolPrefixes ?? [],
-    );
 
-    const runPromise = adapter
-      .run({
-        prompt: finalPrompt,
-        sessionId: config.sessionId,
-        model: config.model,
-        reasoningEffort: config.reasoningEffort,
-        cwd: runDir, // SDK isolated to run folder (Workshop 005)
-        onEvent: handleEvent,
-        onSessionReady: startForwarders,
-        configDir: config.configDir ?? config.cwd,
-        ...(mcpServers && { mcpServers }),
-      })
-      .then(async (result) => {
-        // Manifest: status → completing right before terminal-condition wait
-        // (workshop 002 §Write points).
-        await updateManifest(runDir, { status: 'completing' });
-        const terminal = await awaitTerminalCondition(
-          result,
-          pendingForwarderCount,
-        );
-        if (forwarderErrors.length > 0) throw forwarderErrors[0];
-        if (terminal.status === 'completed') {
-          inboxForwarder?.commit();
-          stateForwarder?.commit();
-        }
-        return terminal;
-      })
-      .finally(closeForwarders);
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutHandle = setTimeout(() => {
-        timedOut = true;
-        reject(new Error(`Agent timed out after ${config.timeout ?? 300}s`));
-      }, timeoutMs);
-    });
-    agentResult = await Promise.race([runPromise, timeoutPromise]);
-  } catch (error) {
-    if (timedOut) {
+    const completedAt = new Date();
+    const durationMs = completedAt.getTime() - startedAt.getTime();
+
+    // Write agent output as fallback (only on completion). When the agent
+    // failed before producing output, agentResult.output holds the SDK error
+    // string — don't write it into output/report.json or downstream JSON
+    // validation will report the misleading "Output is not valid JSON" noise.
+    let agentSucceeded = agentResult.status === 'completed';
+    if (agentSucceeded && agentResult.output && !fs.existsSync(outputPath)) {
+      fs.writeFileSync(outputPath, agentResult.output);
+    }
+
+    if (agentSucceeded && coordinationEnabled && agentsDir) {
       try {
-        await adapter.terminate(activeSessionId);
-      } catch {
-        /* best-effort */
+        snapshotCoordinationFiles(definition.slug, agentsDir, runId, runDir);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        agentResult = {
+          output: `Run finalization failed: ${message}`,
+          sessionId: agentResult.sessionId,
+          status: 'failed',
+          exitCode: 1,
+          tokens: agentResult.tokens,
+        };
+        agentSucceeded = false;
       }
-      agentResult = {
-        output: `Agent timed out after ${config.timeout ?? 300}s`,
-        sessionId: '',
-        status: 'killed',
-        exitCode: 124,
-        tokens: null,
-      };
+    }
+
+    // Persist stderr
+    if (agentResult.stderr) {
+      stderrLines.push(agentResult.stderr);
+    }
+    if (!agentSucceeded && agentResult.output) {
+      stderrLines.push(agentResult.output);
+    }
+    if (stderrLines.length > 0) {
+      fs.writeFileSync(stderrPath, stderrLines.join('\n'));
+    }
+
+    // Two-stage validation: system fields first, then user schema.
+    // Skip both when the agent failed (no output to validate) or when this is
+    // a resume (no summary/retrospective contract on follow-ups).
+    let systemValidation: ValidationResult;
+    let userValidation: ValidationResult | null = null;
+    if (!agentSucceeded) {
+      systemValidation = { valid: false, errors: [] };
+    } else if (isResume) {
+      systemValidation = { valid: true, errors: [] };
     } else {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      agentResult = {
-        output: `Agent execution failed: ${errorMessage}`,
-        sessionId: '',
-        status: 'failed',
-        exitCode: 1,
-        tokens: null,
-      };
+      systemValidation = validateSystemOutput(outputPath);
     }
+    if (agentSucceeded && definition.schemaPath) {
+      userValidation = validateOutput(definition.schemaPath, outputPath);
+    }
+
+    // Combined validation result
+    const allErrors = [
+      ...systemValidation.errors,
+      ...(userValidation?.errors ?? []),
+    ];
+    const validated = !agentSucceeded
+      ? null
+      : systemValidation.valid &&
+        (userValidation ? userValidation.valid : true);
+
+    // Determine final result status
+    let resultStatus: CompletedMetadata['result'] = agentSucceeded
+      ? 'completed'
+      : 'failed';
+    if (timedOut) resultStatus = 'timeout';
+    if (agentSucceeded && validated === false) resultStatus = 'degraded';
+
+    const artifacts = listArtifacts(runDir);
+
+    // Compute velocity (skip for resumed runs — they share the original run's history)
+    let velocity: VelocityData | undefined;
+    if (!isResume && resultStatus === 'completed') {
+      velocity = computeVelocity(durationMs, definition.dir, runId);
+    }
+
+    // Write completed.json
+    const metadata: CompletedMetadata = {
+      slug: definition.slug,
+      runId,
+      startedAt: startedAt.toISOString(),
+      completedAt: completedAt.toISOString(),
+      durationMs,
+      sessionId: agentResult.sessionId,
+      result: resultStatus,
+      exitCode: agentResult.exitCode,
+      validated,
+      validationErrors: allErrors,
+      systemValidated: systemValidation.valid,
+      userValidated: userValidation ? userValidation.valid : null,
+      eventCount: stats.total,
+      toolCallCount: stats.toolCalls,
+      artifacts,
+      ...(config.resumedFromRunId && {
+        resumedFromRunId: config.resumedFromRunId,
+      }),
+      ...(velocity && { velocity }),
+    };
+
+    fs.writeFileSync(
+      path.join(runDir, 'completed.json'),
+      JSON.stringify(metadata, null, 2),
+    );
+
+    // Final manifest patch — flush any pending throttled counters and mark
+    // the run completed/failed so attach commands can render an honest
+    // capability label even before they read completed.json.
+    await flushManifestThrottled(runDir);
+    await updateManifest(runDir, {
+      status: resultStatus === 'completed' ? 'completed' : 'failed',
+      sessionId: agentResult.sessionId || null,
+      counters: {
+        events: stats.total,
+        toolCalls: stats.toolCalls,
+        messages: stats.messages,
+        errors: stats.errors,
+      },
+    });
+
+    // Parse report.json for envelope surfacing
+    const parsedReport = parseReportJson(outputPath);
+
+    // Plan 011 / Workshop 002 — auto-append the retro to the project ledger.
+    // Wired at every terminal-result branch (success / degraded / failed / timeout).
+    // Honors MINIH_NO_AUTO_HARVEST=1 (helper handles opt-out). The surrounding
+    // try/finally guarantees a `crashed` stub if an uncaught exception bypasses
+    // this point.
+    if (
+      parsedReport &&
+      resultStatus !== 'failed' &&
+      resultStatus !== 'timeout'
+    ) {
+      const retro: RetrospectiveLike = {
+        summary: parsedReport.summary,
+        magicWand: parsedReport.magicWand,
+        magicWandTarget:
+          typeof parsedReport.magicWandTarget === 'string'
+            ? parsedReport.magicWandTarget
+            : null,
+        difficulties: parsedReport.difficulties?.map((d) => ({
+          category: d.category,
+          description: d.description,
+          workaround: d.workaround,
+          severity: d.severity,
+        })),
+      };
+      if (retro.magicWand) {
+        await tryAutoHarvestRetro(harvestCtx, retro);
+      }
+    }
+    if (
+      !harvestCtx.done.value &&
+      (resultStatus === 'failed' || resultStatus === 'timeout')
+    ) {
+      const tail = stderrLines.slice(-1)[0] ?? '';
+      const r: RetroResult = resultStatus === 'timeout' ? 'timeout' : 'failed';
+      await tryAutoHarvestStub(harvestCtx, r, tail);
+    }
+
+    // Clean up runtime environment (Workshop 007)
+    for (const key of MINIH_RUNTIME_ENV_KEYS) {
+      delete process.env[key];
+    }
+
+    return {
+      agentResult,
+      metadata,
+      validation: userValidation,
+      runDir,
+      parsedReport,
+    };
   } finally {
-    if (timeoutHandle) clearTimeout(timeoutHandle);
-    closeForwarders();
-  }
-
-  const completedAt = new Date();
-  const durationMs = completedAt.getTime() - startedAt.getTime();
-
-  // Write agent output as fallback (only on completion). When the agent
-  // failed before producing output, agentResult.output holds the SDK error
-  // string — don't write it into output/report.json or downstream JSON
-  // validation will report the misleading "Output is not valid JSON" noise.
-  let agentSucceeded = agentResult.status === 'completed';
-  if (agentSucceeded && agentResult.output && !fs.existsSync(outputPath)) {
-    fs.writeFileSync(outputPath, agentResult.output);
-  }
-
-  if (agentSucceeded && coordinationEnabled && agentsDir) {
-    try {
-      snapshotCoordinationFiles(definition.slug, agentsDir, runId, runDir);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      agentResult = {
-        output: `Run finalization failed: ${message}`,
-        sessionId: agentResult.sessionId,
-        status: 'failed',
-        exitCode: 1,
-        tokens: agentResult.tokens,
-      };
-      agentSucceeded = false;
+    // Crash safety: if we got here without writing anything, the run must
+    // have crashed mid-flight. Emit a stub so the operator has a marker.
+    if (!harvestCtx.done.value) {
+      try {
+        await tryAutoHarvestStub(harvestCtx, 'crashed', '');
+      } catch {
+        // last-resort handler swallows; never throw out of finally.
+      }
     }
   }
-
-  // Persist stderr
-  if (agentResult.stderr) {
-    stderrLines.push(agentResult.stderr);
-  }
-  if (!agentSucceeded && agentResult.output) {
-    stderrLines.push(agentResult.output);
-  }
-  if (stderrLines.length > 0) {
-    fs.writeFileSync(stderrPath, stderrLines.join('\n'));
-  }
-
-  // Two-stage validation: system fields first, then user schema.
-  // Skip both when the agent failed (no output to validate) or when this is
-  // a resume (no summary/retrospective contract on follow-ups).
-  let systemValidation: ValidationResult;
-  let userValidation: ValidationResult | null = null;
-  if (!agentSucceeded) {
-    systemValidation = { valid: false, errors: [] };
-  } else if (isResume) {
-    systemValidation = { valid: true, errors: [] };
-  } else {
-    systemValidation = validateSystemOutput(outputPath);
-  }
-  if (agentSucceeded && definition.schemaPath) {
-    userValidation = validateOutput(definition.schemaPath, outputPath);
-  }
-
-  // Combined validation result
-  const allErrors = [
-    ...systemValidation.errors,
-    ...(userValidation?.errors ?? []),
-  ];
-  const validated = !agentSucceeded
-    ? null
-    : systemValidation.valid && (userValidation ? userValidation.valid : true);
-
-  // Determine final result status
-  let resultStatus: CompletedMetadata['result'] = agentSucceeded
-    ? 'completed'
-    : 'failed';
-  if (timedOut) resultStatus = 'timeout';
-  if (agentSucceeded && validated === false) resultStatus = 'degraded';
-
-  const artifacts = listArtifacts(runDir);
-
-  // Compute velocity (skip for resumed runs — they share the original run's history)
-  let velocity: VelocityData | undefined;
-  if (!isResume && resultStatus === 'completed') {
-    velocity = computeVelocity(durationMs, definition.dir, runId);
-  }
-
-  // Write completed.json
-  const metadata: CompletedMetadata = {
-    slug: definition.slug,
-    runId,
-    startedAt: startedAt.toISOString(),
-    completedAt: completedAt.toISOString(),
-    durationMs,
-    sessionId: agentResult.sessionId,
-    result: resultStatus,
-    exitCode: agentResult.exitCode,
-    validated,
-    validationErrors: allErrors,
-    systemValidated: systemValidation.valid,
-    userValidated: userValidation ? userValidation.valid : null,
-    eventCount: stats.total,
-    toolCallCount: stats.toolCalls,
-    artifacts,
-    ...(config.resumedFromRunId && {
-      resumedFromRunId: config.resumedFromRunId,
-    }),
-    ...(velocity && { velocity }),
-  };
-
-  fs.writeFileSync(
-    path.join(runDir, 'completed.json'),
-    JSON.stringify(metadata, null, 2),
-  );
-
-  // Final manifest patch — flush any pending throttled counters and mark
-  // the run completed/failed so attach commands can render an honest
-  // capability label even before they read completed.json.
-  await flushManifestThrottled(runDir);
-  await updateManifest(runDir, {
-    status: resultStatus === 'completed' ? 'completed' : 'failed',
-    sessionId: agentResult.sessionId || null,
-    counters: {
-      events: stats.total,
-      toolCalls: stats.toolCalls,
-      messages: stats.messages,
-      errors: stats.errors,
-    },
-  });
-
-  // Parse report.json for envelope surfacing
-  const parsedReport = parseReportJson(outputPath);
-
-  // Clean up runtime environment (Workshop 007)
-  for (const key of MINIH_RUNTIME_ENV_KEYS) {
-    delete process.env[key];
-  }
-
-  return {
-    agentResult,
-    metadata,
-    validation: userValidation,
-    runDir,
-    parsedReport,
-  };
 }
 
 function mergeMcpServers(

@@ -161,3 +161,15 @@ minih doctor                          # audit unharvested retros
 Set `MINIH_NO_AUTO_HARVEST=1` to opt out of auto-append (the explicit `minih harvest` verb still works regardless).
 
 Without the retro, this run did not improve the system.
+
+### Coordination visibility (plan 012)
+
+When you `outside inbox send` to a coordinated agent, the response now includes a **`peer` block** with a single-word `verdict`:
+
+- `listening` / `between-polls` — the message will be picked up
+- `deaf` — the agent's filter excludes the message type (the response includes a `try one of:` hint)
+- `silent` — the agent has stopped polling (probably mid-tool-call)
+- `dead` — the run is gone or hasn't polled for >30min
+- `n/a` / `unknown` — non-coordinated agent, or telemetry unreadable
+
+minih **observes and labels**; minih never blocks. Use `outside inbox send --strict-peer` (exits `E150 DEAF_PEER`) only when you want a hard refusal on `deaf`. `minih doctor` lists deaf/silent active runs in its summary.

@@ -166,6 +166,11 @@ export function registerDoctorCommand(program: Command): void {
         path: preamblePath,
       };
 
+      // Plan 011 — audit the retro ledger. resolvedDir is the agents dir;
+      // the project root is its parent.
+      const projectRoot = path.dirname(resolvedDir);
+      const retroChecks = auditRetroLedger(resolvedDir, projectRoot);
+
       // Summarize
       let warnings = 0;
       let errors = 0;
@@ -174,6 +179,10 @@ export function registerDoctorCommand(program: Command): void {
           if (check.status === 'warning') warnings++;
           if (check.status === 'fail') errors++;
         }
+      }
+      for (const check of retroChecks) {
+        if (check.status === 'warning') warnings++;
+        if (check.status === 'fail') errors++;
       }
       const healthy = agentResults.filter((a) =>
         a.checks.every((c) => c.status === 'pass' || c.status === 'skip'),
@@ -210,6 +219,24 @@ export function registerDoctorCommand(program: Command): void {
           );
         }
 
+        // Plan 011 — render retro audit findings
+        if (retroChecks.length > 0) {
+          process.stderr.write(`  ${chalk.bold('docs/retros/')}\n`);
+          for (const check of retroChecks) {
+            const icon =
+              check.status === 'pass'
+                ? chalk.green('✓')
+                : check.status === 'warning'
+                  ? chalk.yellow('⚠')
+                  : check.status === 'fail'
+                    ? chalk.red('✗')
+                    : chalk.dim('—');
+            const msg = check.message ? ` ${chalk.dim(check.message)}` : '';
+            process.stderr.write(`    ${icon} ${check.check}${msg}\n`);
+          }
+          process.stderr.write('\n');
+        }
+
         process.stderr.write(`  ${chalk.bold('─── Results ───')}\n`);
         process.stderr.write(`  Agents:   ${agentResults.length} found\n`);
         process.stderr.write(`  Healthy:  ${healthy}\n`);
@@ -234,6 +261,7 @@ export function registerDoctorCommand(program: Command): void {
             {
               agents: agentResults,
               preamble,
+              retros: retroChecks,
               summary: {
                 total: agentResults.length,
                 healthy,
@@ -250,6 +278,7 @@ export function registerDoctorCommand(program: Command): void {
             {
               agents: agentResults,
               preamble,
+              retros: retroChecks,
               summary: {
                 total: agentResults.length,
                 healthy,
@@ -319,7 +348,92 @@ function checkOutsideContract(
   return results;
 }
 
-/** Create an AJV instance pre-loaded with minih's published schemas for $ref support. */
+/**
+ * Plan 011 / Workshop 002 — audit retro ledger health.
+ *
+ * Walks `<agentsDir>/<slug>/runs/` and reports:
+ *   - Runs whose `output/report.json` contains a `retrospective.magicWand`
+ *     but whose `runId` does NOT appear in `<projectRoot>/docs/retros/<slug>.md`.
+ *   - Ledger files in `docs/retros/` exceeding the soft-warn size threshold.
+ *
+ * Returns `CheckResult` rows added to a synthetic `_retros` slug bucket so
+ * doctor's TTY summary surfaces them under their own heading.
+ */
+const LEDGER_SIZE_WARN_BYTES = 1 * 1024 * 1024; // 1 MB
+
+function auditRetroLedger(
+  agentsDir: string,
+  projectRoot: string,
+): CheckResult[] {
+  const results: CheckResult[] = [];
+  const ledgerDir = path.join(projectRoot, 'docs', 'retros');
+
+  const ledgerFiles: Record<string, string> = {};
+  if (fs.existsSync(ledgerDir)) {
+    const files = fs.readdirSync(ledgerDir);
+    for (const f of files) {
+      if (!f.endsWith('.md')) continue;
+      const full = path.join(ledgerDir, f);
+      try {
+        ledgerFiles[f.replace(/\.md$/, '')] = fs.readFileSync(full, 'utf-8');
+        const stat = fs.statSync(full);
+        if (stat.size > LEDGER_SIZE_WARN_BYTES) {
+          results.push({
+            check: `ledger/${f}`,
+            status: 'warning',
+            message: `ledger ${f} is ${(stat.size / 1024 / 1024).toFixed(1)}MB — consider rotating`,
+          });
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  // Walk run dirs looking for unharvested retros
+  if (!fs.existsSync(agentsDir)) return results;
+  const slugDirs = fs.readdirSync(agentsDir, { withFileTypes: true });
+  let totalUnharvested = 0;
+  for (const slugEntry of slugDirs) {
+    if (!slugEntry.isDirectory() || slugEntry.name.startsWith('_')) continue;
+    const runsDir = path.join(agentsDir, slugEntry.name, 'runs');
+    if (!fs.existsSync(runsDir)) continue;
+    const ledgerContent = ledgerFiles[slugEntry.name] ?? '';
+
+    const runEntries = fs.readdirSync(runsDir, { withFileTypes: true });
+    for (const runEntry of runEntries) {
+      if (!runEntry.isDirectory()) continue;
+      const runId = runEntry.name;
+      const runDir = path.join(runsDir, runId);
+      const reportPath = path.join(runDir, 'output', 'report.json');
+      if (!fs.existsSync(reportPath)) continue;
+
+      let report: { retrospective?: { magicWand?: string } } | null = null;
+      try {
+        report = JSON.parse(fs.readFileSync(reportPath, 'utf-8'));
+      } catch {
+        continue;
+      }
+      const wand = report?.retrospective?.magicWand;
+      if (!wand) continue;
+
+      if (!ledgerContent.includes(`runId: ${runId}`)) {
+        totalUnharvested++;
+        results.push({
+          check: `unharvested/${slugEntry.name}/${runId}`,
+          status: 'warning',
+          message: `unharvested retro — run \`minih harvest ${slugEntry.name}\` (or with --since)`,
+        });
+      }
+    }
+  }
+
+  if (totalUnharvested === 0 && results.length === 0) {
+    results.push({ check: 'retros', status: 'pass' });
+  }
+  return results;
+}
+
 function createRefAwareAjv(): InstanceType<typeof Ajv2020> {
   const ajv = new Ajv2020({ allErrors: true });
   const schemasDir = path.resolve(

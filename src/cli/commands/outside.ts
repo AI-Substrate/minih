@@ -71,6 +71,21 @@ type RetroTarget = (typeof RETRO_TARGETS)[number];
 // ─── peer activity helpers (plan 012) ─────────────────────────────────
 
 /**
+ * Derive peer activity, swallowing errors. Returns null if anything goes wrong.
+ * Keeps peer purely additive — never blocks the underlying command.
+ */
+async function derivePeerOrNull(
+  runDir: string,
+  messageType: string | null,
+): Promise<PeerActivity | null> {
+  try {
+    return await derivePeerActivity({ runDir, messageType });
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Render the peer verdict on stderr in TTY mode.
  * Silent in piped mode (preserves clean stdout).
  */
@@ -214,17 +229,9 @@ function handleOutsideInboxSend(root: Command) {
     );
 
     // Derive peer activity AFTER append so the snapshot reflects observed state
-    // at the moment the message lands. Tolerate any errors silently — peer is
+    // at the moment the message lands. Tolerates any errors silently — peer is
     // additive, never blocks the send.
-    let peer: PeerActivity | null = null;
-    try {
-      peer = await derivePeerActivity({
-        runDir: target.runDir,
-        messageType: type,
-      });
-    } catch {
-      peer = null;
-    }
+    const peer = await derivePeerOrNull(target.runDir, type);
 
     if (process.stderr.isTTY) {
       process.stderr.write(
@@ -312,6 +319,7 @@ function handleOutsideInboxList(root: Command) {
       'outside',
       opts,
       waitMs,
+      true, // derivePeer — workshop §"Where it's invoked": list --wait wants peer
     );
   };
 }
@@ -360,7 +368,7 @@ function registerOutsideState(parent: Command, root: Command): void {
     .option('--value <value>', 'String value for --key')
     .option('--value-json <json>', 'JSON value for --key')
     .option('--run <runId>', 'Target run ID (default: only active run)')
-    .action((slug: string, opts: StateSetOptions) => {
+    .action(async (slug: string, opts: StateSetOptions) => {
       const cmd = 'outside.state.set';
       const agentsDir = root.opts().agentsDir ?? 'agents';
       const target = resolveCoordinationRunOrExit(
@@ -378,16 +386,30 @@ function registerOutsideState(parent: Command, root: Command): void {
         const next = buildSetState(cmd, current, opts);
         validateOutsideStateOrExit(cmd, target.definition, next);
         writeOutsideStateAndHistory(target.location, current, next, null);
-
-        if (process.stderr.isTTY) {
-          process.stderr.write(
-            `\n  ${chalk.green('✓')} outside state for ${chalk.cyan(slug)} is ${chalk.cyan(next.status)}\n\n`,
-          );
-        }
-        exitWithEnvelope(
-          formatSuccess(cmd, { slug, runId: target.runId, state: next }),
-        );
       });
+
+      const peer = await derivePeerOrNull(target.runDir, null);
+
+      if (process.stderr.isTTY) {
+        const next = readStateLazy(target.location, 'outside') as OutsideState;
+        process.stderr.write(
+          `\n  ${chalk.green('✓')} outside state for ${chalk.cyan(slug)} is ${chalk.cyan(next.status)}\n`,
+        );
+        if (peer) renderPeerVerdict(peer);
+        process.stderr.write('\n');
+      }
+      const finalState = readStateLazy(
+        target.location,
+        'outside',
+      ) as OutsideState;
+      exitWithEnvelope(
+        formatSuccess(cmd, {
+          slug,
+          runId: target.runId,
+          state: finalState,
+          ...(peer && { peer }),
+        }),
+      );
     });
 
   state
@@ -398,7 +420,7 @@ function registerOutsideState(parent: Command, root: Command): void {
     .option('--data-json <json>', 'Replacement outside data object')
     .option('--run <runId>', 'Target run ID (default: only active run)')
     .action(
-      (
+      async (
         slug: string,
         opts: { to?: string; reason?: string; dataJson?: string; run?: string },
       ) => {
@@ -412,6 +434,10 @@ function registerOutsideState(parent: Command, root: Command): void {
         );
         const to = requireNonEmptyOption(cmd, opts.to, '--to');
 
+        let transitioned = false;
+        let from = '';
+        let nextState: OutsideState | null = null;
+
         withStateErrors(cmd, () => {
           const current = readStateLazy(
             target.location,
@@ -424,17 +450,10 @@ function registerOutsideState(parent: Command, root: Command): void {
           const next = buildOutsideState(to, data);
           validateOutsideStateOrExit(cmd, target.definition, next);
 
+          from = current.status;
           if (current.status === next.status && deepEqual(current.data, data)) {
-            exitWithEnvelope(
-              formatSuccess(cmd, {
-                slug,
-                runId: target.runId,
-                state: current,
-                transitioned: false,
-                from: current.status,
-                to,
-              }),
-            );
+            nextState = current;
+            return; // transitioned stays false
           }
 
           writeOutsideStateAndHistory(
@@ -443,23 +462,32 @@ function registerOutsideState(parent: Command, root: Command): void {
             next,
             opts.reason ?? null,
           );
+          nextState = next;
+          transitioned = true;
+        });
 
-          if (process.stderr.isTTY) {
+        const peer = await derivePeerOrNull(target.runDir, null);
+
+        if (process.stderr.isTTY) {
+          if (transitioned) {
             process.stderr.write(
-              `\n  ${chalk.green('✓')} transitioned ${chalk.cyan(slug)} outside state ${chalk.dim(current.status)} → ${chalk.cyan(to)}\n\n`,
+              `\n  ${chalk.green('✓')} transitioned ${chalk.cyan(slug)} outside state ${chalk.dim(from)} → ${chalk.cyan(to)}\n`,
             );
           }
-          exitWithEnvelope(
-            formatSuccess(cmd, {
-              slug,
-              runId: target.runId,
-              state: next,
-              transitioned: true,
-              from: current.status,
-              to,
-            }),
-          );
-        });
+          if (peer) renderPeerVerdict(peer);
+          if (transitioned) process.stderr.write('\n');
+        }
+        exitWithEnvelope(
+          formatSuccess(cmd, {
+            slug,
+            runId: target.runId,
+            state: nextState,
+            transitioned,
+            from,
+            to,
+            ...(peer && { peer }),
+          }),
+        );
       },
     );
 }
@@ -500,7 +528,7 @@ function registerOutsideRetro(parent: Command, root: Command): void {
     )
     .option('--run <runId>', 'Target run ID (default: only active run)')
     .action(
-      (
+      async (
         slug: string,
         opts: { body?: string; target?: string; run?: string },
       ) => {
@@ -523,10 +551,14 @@ function registerOutsideRetro(parent: Command, root: Command): void {
         });
         appendInboxMessage(cmd, runTarget.location, 'outside', message);
 
+        const peer = await derivePeerOrNull(runTarget.runDir, 'retro');
+
         if (process.stderr.isTTY) {
           process.stderr.write(
-            `\n  ${chalk.green('✓')} Recorded outside retro for ${chalk.cyan(slug)} (${target})\n\n`,
+            `\n  ${chalk.green('✓')} Recorded outside retro for ${chalk.cyan(slug)} (${target})\n`,
           );
+          if (peer) renderPeerVerdict(peer);
+          process.stderr.write('\n');
         }
         exitWithEnvelope(
           formatSuccess(cmd, {
@@ -536,6 +568,7 @@ function registerOutsideRetro(parent: Command, root: Command): void {
             target: 'inside',
             timestamp: message.ts,
             message,
+            ...(peer && { peer }),
           }),
         );
       },
@@ -636,6 +669,7 @@ export function emitListResult(
     timedOut: boolean;
     matched: boolean;
   },
+  peer?: PeerActivity | null,
 ): void {
   if (process.stderr.isTTY) {
     const tag = wait
@@ -644,8 +678,10 @@ export function emitListResult(
         : chalk.yellow('timed out')
       : '';
     process.stderr.write(
-      `\n  ${chalk.bold('Messages:')} ${chalk.cyan(slug)} (${messages.length}${tag ? `, ${tag}` : ''})\n\n`,
+      `\n  ${chalk.bold('Messages:')} ${chalk.cyan(slug)} (${messages.length}${tag ? `, ${tag}` : ''})\n`,
     );
+    if (peer) renderPeerVerdict(peer);
+    process.stderr.write('\n');
   }
 
   exitWithEnvelope(
@@ -660,6 +696,7 @@ export function emitListResult(
         after: opts.after ?? null,
       },
       ...(wait && { wait }),
+      ...(peer && { peer }),
     }),
   );
 }
@@ -671,6 +708,7 @@ export async function pollLaneAndEmit(
   readLane: 'inside' | 'outside',
   opts: { type?: string; unread?: boolean; after?: string },
   waitMs: number,
+  derivePeer = false,
 ): Promise<void> {
   const livenessAbort = new AbortController();
   let pollResult: Awaited<ReturnType<typeof pollInboxLane>>;
@@ -712,7 +750,19 @@ export async function pollLaneAndEmit(
   }
   livenessAbort.abort();
 
-  emitListResult(cmd, slug, target, pollResult.messages, opts, pollResult.wait);
+  // Derive peer at envelope-construction time (post-poll), not at call entry,
+  // so the snapshot reflects what the agent is doing right now.
+  const peer = derivePeer ? await derivePeerOrNull(target.runDir, null) : null;
+
+  emitListResult(
+    cmd,
+    slug,
+    target,
+    pollResult.messages,
+    opts,
+    pollResult.wait,
+    peer,
+  );
 }
 
 class AgentGoneError extends Error {}

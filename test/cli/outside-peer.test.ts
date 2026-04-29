@@ -218,3 +218,150 @@ describe('outside inbox send — peer block (plan 012 T003)', () => {
     expect(env.data.peer.verdict).toBe('listening');
   });
 });
+
+// ============================================================================
+// T004 — peer block on remaining 4 commands
+// ============================================================================
+
+function runCmd(args: string[]): { stdout: string; status: number } {
+  try {
+    const stdout = execFileSync(
+      'node',
+      [cliPath, '--agents-dir', agentsDir, ...args],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+    return { stdout, status: 0 };
+  } catch (err) {
+    const e = err as { stdout?: Buffer; status?: number };
+    return { stdout: e.stdout?.toString() ?? '', status: e.status ?? 1 };
+  }
+}
+
+describe('outside state set — peer block (T004)', () => {
+  it('includes peer block on success', () => {
+    writeRunJson();
+    writeInsideState();
+    writePollEvent(['task', 'question']);
+    const { stdout, status } = runCmd([
+      'outside',
+      'state',
+      'set',
+      slug,
+      '--run',
+      runId,
+      '--status',
+      'in-progress',
+    ]);
+    expect(status).toBe(0);
+    const env = JSON.parse(stdout);
+    expect(env.data.peer).toBeDefined();
+    // messageType: null for state commands → no type-match check
+    expect(env.data.peer.willMatchType).toBeNull();
+    expect(env.data.peer.verdict).toBe('listening');
+    // Existing fields preserved
+    expect(env.data.state.status).toBe('in-progress');
+  });
+});
+
+describe('outside state transition — peer block (T004)', () => {
+  it('includes peer block on successful transition', () => {
+    writeRunJson();
+    writeInsideState();
+    writePollEvent(['task']);
+    // Seed initial state so transition has somewhere to come from
+    runCmd([
+      'outside',
+      'state',
+      'set',
+      slug,
+      '--run',
+      runId,
+      '--status',
+      'idle',
+    ]);
+    const { stdout, status } = runCmd([
+      'outside',
+      'state',
+      'transition',
+      slug,
+      '--run',
+      runId,
+      '--to',
+      'in-progress',
+    ]);
+    expect(status).toBe(0);
+    const env = JSON.parse(stdout);
+    expect(env.data.peer).toBeDefined();
+    expect(env.data.peer.willMatchType).toBeNull();
+    expect(env.data.transitioned).toBe(true);
+    expect(env.data.from).toBe('idle');
+    expect(env.data.to).toBe('in-progress');
+  });
+});
+
+describe('outside retro add — peer block (T004)', () => {
+  it("uses messageType='retro' so type-match check applies", () => {
+    writeRunJson();
+    writeInsideState();
+    // Filter excludes 'retro' so verdict should be 'deaf'
+    writePollEvent(['task', 'question']);
+    const { stdout, status } = runCmd([
+      'outside',
+      'retro',
+      'add',
+      slug,
+      '--run',
+      runId,
+      '--body',
+      'magicWand: better tooling',
+    ]);
+    expect(status).toBe(0);
+    const env = JSON.parse(stdout);
+    expect(env.data.peer).toBeDefined();
+    expect(env.data.peer.verdict).toBe('deaf');
+    expect(env.data.peer.willMatchType).toBe(false);
+  });
+});
+
+describe('outside inbox list --wait — peer block (T004)', () => {
+  it('includes peer block in --wait response (derived post-poll)', async () => {
+    writeRunJson();
+    writeInsideState();
+    writePollEvent(['task']);
+    // --wait 100 returns quickly with no messages; peer should still be present
+    const { stdout, status } = runCmd([
+      'outside',
+      'inbox',
+      'list',
+      slug,
+      '--run',
+      runId,
+      '--wait',
+      '100',
+    ]);
+    expect(status).toBe(0);
+    const env = JSON.parse(stdout);
+    expect(env.data.peer).toBeDefined();
+    expect(env.data.peer.willMatchType).toBeNull(); // list = read, no type
+    // wait envelope present
+    expect(env.data.wait).toBeDefined();
+  });
+
+  it('does NOT include peer block on bare `list` without --wait', () => {
+    writeRunJson();
+    writeInsideState();
+    writePollEvent(['task']);
+    const { stdout, status } = runCmd([
+      'outside',
+      'inbox',
+      'list',
+      slug,
+      '--run',
+      runId,
+    ]);
+    expect(status).toBe(0);
+    const env = JSON.parse(stdout);
+    // No peer for plain list — only --wait gets peer per workshop
+    expect(env.data.peer).toBeUndefined();
+  });
+});

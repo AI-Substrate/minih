@@ -455,6 +455,34 @@ Agent reports may include `retrospective.coordination` for unresolved peer reque
 
 See [`agents/coordination-smoke-test/`](./agents/coordination-smoke-test/) for the minimal dogfood example, including [`outside.md`](./agents/coordination-smoke-test/outside.md). See [`agents/coordination-loop-validator/`](./agents/coordination-loop-validator/) plus [`docs/how/coordination-loop-validator.md`](./docs/how/coordination-loop-validator.md) for the richer canonical loop worked example.
 
+### Reply chains
+
+Any inbox message can carry an optional `ackOf` field pointing at a prior message id. This makes the new message a **reply** to that one. Replies can themselves be replied to — chains form naturally because each reply's id is itself a valid `ackOf` target for the next reply.
+
+- Inside agents pass `ackOf` to `inbox_send` for any `type` (not just `ack`). Use `inbox_ack` when you specifically want to acknowledge a peer message — that's its own dedicated tool.
+- Outside operators pass `--ack-of <id>` to `outside inbox send` for any `--type`. (`--type ack` still requires `--ack-of`.)
+- The next agent sees `In reply to: <id>` for non-ack replies in its prompt, or `Acknowledges: <id>` for `--type ack` (preserves today's ack semantics).
+
+Worked example — three messages, two chain links:
+
+```bash
+# Outside asks a question
+$ minih outside inbox send my-agent --type question \
+    --subject "Status?" --body "where are we?"
+# returns messageId: 01HAAA...
+
+# Inside replies via inbox_send (not inbox_ack — this is a content reply)
+# inbox_send({ type: 'note', subject: 'progress', body: '...', ackOf: '01HAAA...' })
+# returns messageId: 01HBBB...
+
+# Outside replies to the reply, forming a chain
+$ minih outside inbox send my-agent --type note \
+    --subject "ok keep going" --body "thanks" --ack-of 01HBBB...
+# returns messageId: 01HCCC...  (ackOf: 01HBBB...)
+```
+
+No threads, no thread state, no enforcement — minih is the messenger, not the police. Stale `ackOf` ids are not validated; if you cite a non-existent message, the receiving agent will see it and surface that themselves.
+
 ---
 
 ## The Output Contract

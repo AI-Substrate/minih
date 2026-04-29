@@ -173,3 +173,13 @@ When you `outside inbox send` to a coordinated agent, the response now includes 
 - `n/a` / `unknown` — non-coordinated agent, or telemetry unreadable
 
 minih **observes and labels**; minih never blocks. Use `outside inbox send --strict-peer` (refuses delivery and exits `E150 DEAF_PEER`) only when you want a hard refusal on `deaf`. `minih doctor` lists silent/dead active runs in its summary.
+
+### Coordination reply chains (plan 013)
+
+Any inbox message can carry an `ackOf` field pointing at a prior message id. This makes the new message a **reply** to that one. Replies can themselves be replied to — chains form naturally because each reply's id is itself a valid `ackOf` target for the next reply.
+
+- Inside agents: pass `ackOf` to `inbox_send` for any `type` (not just `ack`). Use `inbox_ack` when you specifically want to acknowledge a peer message — that's its own dedicated tool.
+- Outside operators: pass `--ack-of <id>` to `outside inbox send` for any `--type`. (`--type ack` still requires `--ack-of`.)
+- The next agent sees `In reply to: <id>` for non-ack replies in its prompt, or `Acknowledges: <id>` for `--type ack` (preserves today's ack semantics).
+
+No threads, no thread state, no enforcement — minih is the messenger, not the police. Stale `ackOf` ids are not validated; if you cite a non-existent message, the receiving agent will see it and surface that themselves.

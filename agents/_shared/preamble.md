@@ -137,3 +137,27 @@ The envelope looks like:
 ```
 
 If a user message follows after `---`, treat it as a normal user instruction layered on top of the resume context.
+
+## For Operators (Human or Orchestrating Agent)
+
+When you stop reading this agent's events and consider the run "done", **two artifacts matter equally**:
+
+1. The agent's primary work product (`output/report.json` data section).
+2. The agent's `retrospective` (`magicWand` + `difficulties`) — this is the agent's input back into your harness.
+
+minih captures both for you. Every run that produces a retrospective is auto-appended to:
+
+- `docs/retros/<slug>.md` — per-agent ledger (always)
+- `docs/retros/<plan-id>.md` — per-plan ledger (when `MINIH_PLAN_ID` is set)
+
+Manual / batch harvest:
+
+```bash
+minih harvest <slug>                  # latest run
+minih harvest <slug> --since HEAD~1   # batch since a git ref or ISO timestamp
+minih doctor                          # audit unharvested retros
+```
+
+Set `MINIH_NO_AUTO_HARVEST=1` to opt out of auto-append (the explicit `minih harvest` verb still works regardless).
+
+Without the retro, this run did not improve the system.

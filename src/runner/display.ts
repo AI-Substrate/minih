@@ -13,6 +13,22 @@ function ts(): string {
   return new Date().toISOString().slice(11, 23);
 }
 
+/**
+ * Format a magicWand string for the end-of-run hint.
+ *
+ * Workshop 002 / Plan 011 T001 truncation rule:
+ *   1. Take the first non-empty line.
+ *   2. Collapse internal whitespace to single spaces.
+ *   3. Truncate to 100 chars; append `…` (single-char ellipsis) if truncation occurred.
+ */
+export function formatMagicWandHint(wand: string): string {
+  const firstNonEmpty =
+    wand.split('\n').find((line) => line.trim().length > 0) ?? '';
+  const collapsed = firstNonEmpty.trim().replace(/\s+/g, ' ');
+  if (collapsed.length <= 100) return collapsed;
+  return `${collapsed.slice(0, 100)}…`;
+}
+
 export function displayHeader(
   slug: string,
   runId: string,
@@ -129,8 +145,13 @@ export function displaySummary(result: AgentRunResult): void {
   }
 
   if (parsedReport?.magicWand) {
+    const wand = formatMagicWandHint(parsedReport.magicWand);
     process.stderr.write(
-      `  ${chalk.magenta('🪄 Magic wand')}: ${parsedReport.magicWand.slice(0, 120)}${parsedReport.magicWand.length > 120 ? '...' : ''}\n`,
+      `  ${chalk.magenta('📝 magicWand')}: "${wand}"  ${chalk.dim(`(full: minih harvest ${metadata.slug})`)}\n`,
+    );
+  } else if (metadata.result === 'timeout' || metadata.result === 'failed') {
+    process.stderr.write(
+      `  ${chalk.yellow('⚠️  Retrospective')}: not written (run terminated as ${metadata.result})\n`,
     );
   }
 

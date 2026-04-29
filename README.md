@@ -19,6 +19,8 @@ npx github:AI-Substrate/minih quickstart
 
 One command — scaffolds a hello-world agent, runs it, shows the results. Zero to success in 60 seconds.
 
+> Each run's retro lands in `docs/retros/<slug>.md` (review before commit). See [AGENTS_README.md § The Improvement Loop](AGENTS_README.md#the-improvement-loop).
+
 > **Pin a specific version**: `npx github:AI-Substrate/minih#v0.x.y quickstart`
 
 ### The Manual Way

@@ -243,6 +243,13 @@ export async function runAgent(
   const isResumeInPlace = !!config.resumeInPlace;
   const coordinationEnabled = definition.coordination?.enabled === true;
 
+  // Plan 011 HF-C: capture MINIH_PLAN_ID at entry (before any env scrubbing).
+  // Threaded into auto-harvest writer for per-plan dual-write ledger.
+  // Intentionally NOT added to MINIH_ENV_KEYS — that list drives the runtime
+  // cleanup loop which would `delete process.env[key]` and lose the value.
+  const planId: string | null = process.env.MINIH_PLAN_ID ?? null;
+  void planId; // wired in T011
+
   // Resolve runDir/runId — either reuse the original (resume-in-place) or
   // allocate a fresh folder. Fail fast if resume-in-place is requested but
   // the prerequisite inputs are missing/invalid.

@@ -81,7 +81,8 @@ export function registerRunCommand(program: Command): void {
     .option('--mcp-config <path>', 'MCP config file with mcpServers (JSON)')
     .addHelpText(
       'after',
-      '\nTip: For coordinated agents, run `minih outside context <slug>` first to read the outside-side contract.\n',
+      '\nTip: For coordinated agents, run `minih outside context <slug>` first to read the outside-side contract.\n' +
+        '\nAfter the run completes, `minih harvest <slug>` captures the retro into `docs/retros/`.\n',
     )
     .action(
       async (

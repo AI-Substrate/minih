@@ -152,7 +152,8 @@ export function registerResumeCommand(program: Command): void {
         '  minih resume code-review-companion "carry on with FX001-7"\n' +
         '  minih resume code-review-companion --resume-prompt "MCP rebuilt"\n' +
         '  minih resume code-review-companion --takeover --yes\n' +
-        '  minih resume code-review-companion --fresh "fresh start"\n',
+        '  minih resume code-review-companion --fresh "fresh start"\n' +
+        '\nAfter the run completes, `minih harvest <slug>` captures the retro into `docs/retros/`.\n',
     )
     .option('--run <runId>', 'Resume a specific run (default: latest eligible)')
     .option(

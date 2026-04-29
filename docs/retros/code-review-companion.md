@@ -8,3 +8,13 @@
 - difficulties:
   - [annoying] knowledge: No way to discover my own idle budget. The coordination loop says 'if elapsed_since_last_outside_message > input.idleBudgetMs: goto FAREWELL' but idleBudgetMs is not surfaced as an env var or state field. I had to just keep polling and hope. (workaround: Kept polling indefinitely; relied on outside peer to send a stop signal)
   - [degrading] coordination: waitForAny filter requires explicit enumeration of all message types. No wildcard support. Adding a new outside message type (like 'briefing' or 'review-request') requires updating every companion's prompt AND instructing running sessions to manually widen their filter. (workaround: Manually widened filter per implementor's briefing instructions)
+
+## 2026-04-29T11:17:07.485Z — code-review-companion / 2026-04-29T21-01-20-922Z-b83b
+
+- runId: 2026-04-29T21-01-20-922Z-b83b
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-04-29T21-01-20-922Z-b83b
+- summary: Reviewed plan 013 (message-reply-chains) across 4 commit batches (402fca4..512cee3). Plan promotes the existing ackOf field from ack-only correlation to a general parent pointer for reply chains. Reviewed: T001+T007 (CLI gate removal + integration tests), T002+T008 (forwarder label switch + unit tests), T003+T004+T009 (snapshot sweep no-op + MCP description rewrite + round-trip test), T005+T006 (preamble x3 + AGENTS_README docs), T010+T011+T012 (regression sweep + domain history rows + fft gate). Full drift sweep confirmed zero stale references in source/test files, preamble files byte-identical, domain history rows present in all 3 domains. Verdict: APPROVE. Zero findings — the implementation is clean, backward compatible, and drift-free.
+- **magicWand** (target: coordination): Add a default idleBudgetMs to the code-review-companion's input schema (e.g., 120000ms = 2 minutes) so the companion doesn't have to guess when the drain phase is over. The orchestrator could override it in the briefing, but having a sane default would eliminate the arbitrary '5 long-polls' heuristic I used.
+- difficulties:
+  - [annoying] config: No input.idleBudgetMs in run config — companion had to guess when drain phase was over using arbitrary 5-poll heuristic (workaround: Used 5 consecutive empty 30s long-polls (≈150s) as a proxy for idle budget expiry)
+  - [annoying] config: MINIH_PROJECT_ROOT env var not available in shell session — had to derive project root from run folder path in the preamble (workaround: Used the literal path from the prompt (/Users/jordanknight/substrate/minih))

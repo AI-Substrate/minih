@@ -61,6 +61,24 @@ Helpful environment vars (always set when this agent runs):
 - Send a final `inbox_send` of type `summary` summarizing what you verified, with `ackOf` set to the original outside message id if there was one.
 - After the call: read back `$MINIH_INBOX_DIR/inside/messages.ndjson | tail -1` and quote it.
 
+### 8. Reply chain verification (plan 013)
+
+This step exercises the **reply chain** capability shipped in plan 013: any inbox message can carry `ackOf` regardless of its `type`, and the outside CLI accepts `--ack-of` for any `--type` (not just `ack`). It is what makes multi-turn back-and-forth chains work.
+
+After sending your step 2 reply (which set `ackOf` on a NON-ack `inbox_send`), wait for the outside operator to send a follow-up reply that targets your step 2 message:
+
+- Call `inbox_list` with `waitMs: 30000` and `waitForAny: ['note','task','question','directive']` to wait up to 30 seconds for a non-ack outside follow-up.
+- When a message arrives, verify two properties on the received message:
+  1. `type` is NOT `'ack'` (this is a real reply, not an acknowledgement)
+  2. `ackOf` is set AND equals the id of YOUR step 2 reply (proving the outside-side `--ack-of` flag worked end-to-end)
+- After verification, send a **chain reply** via `inbox_send` with:
+  - `type: 'note'` (or 'progress'; do NOT use 'ack')
+  - `ackOf` set to the id of the message you just received in this step (NOT your earlier step 2 id)
+- Read back `$MINIH_INBOX_DIR/inside/messages.ndjson | tail -1` and confirm the chain-link message persisted with the correct `ackOf`.
+- `evidence`: quote (a) the received outside follow-up's full JSON line, and (b) your chain-link reply's full JSON line. The receive-line's `ackOf` MUST equal your step 2 id, and the chain-link's `ackOf` MUST equal the receive-line's `id`.
+
+If no outside follow-up arrives within the wait window, mark this step `status: 'skip'` with reason "outside operator did not send a follow-up reply within 30s" — the operator may simply have decided not to test reply chains. Do NOT mark `'fail'` for skip-by-omission.
+
 If no outside message exists at step 1, still exercise the state and inbox-send tools and clearly mark the inbox-related steps as `status: 'skip'` with an explanation.
 
 ## Report

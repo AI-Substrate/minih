@@ -56,7 +56,7 @@ export interface DerivePeerInputs {
   /** Newest inside-side inbox_send timestamp; null if none. */
   lastSendAt: number | null;
 
-  /** Newest inbox_ack messageId; null if none. */
+  /** Newest inbox_ack msgId; null if none. */
   lastAckOf: string | null;
 
   /** Most recent non-coordination tool name (e.g. "bash"); null if not mid-tool. */
@@ -406,9 +406,7 @@ export async function derivePeerActivity(
   const lastSendAt = lastSend?.ts ?? null;
   const lastAck = acks[acks.length - 1] ?? null;
   const lastAckOf: string | null =
-    typeof lastAck?.input?.messageId === 'string'
-      ? lastAck.input.messageId
-      : null;
+    typeof lastAck?.input?.msgId === 'string' ? lastAck.input.msgId : null;
 
   // currentlyRunningTool: most recent non-coordination tool name.
   let currentlyRunningTool: string | null = null;

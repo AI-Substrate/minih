@@ -521,3 +521,28 @@ describe('derivePeerActivity — end-to-end with fixture run dir', () => {
     expect(r.willMatchType).toBeNull();
   });
 });
+
+describe('lastAckOf field name (companion review F002)', () => {
+  it('reads ack msgId from input.msgId (not messageId)', async () => {
+    writeRunJson();
+    writeInsideState();
+    writeEvents([
+      pollEvent(-30_000, ['task']),
+      {
+        type: 'tool_call',
+        timestamp: new Date(NOW - 10_000).toISOString(),
+        data: {
+          toolName: 'minih-coordination-inbox_ack',
+          input: { msgId: '01KQABCDEF1234567890ABCDEFGHIJ' },
+          toolCallId: 'tc-ack',
+        },
+      },
+    ]);
+    const r = await derivePeerActivity({
+      runDir,
+      messageType: 'task',
+      now: () => NOW,
+    });
+    expect(r.lastAckOf).toBe('01KQABCDEF1234567890ABCDEFGHIJ');
+  });
+});

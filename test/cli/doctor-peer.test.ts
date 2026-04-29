@@ -182,3 +182,20 @@ describe('minih doctor — peer activity audit (plan 012 T005)', () => {
     expect(peer[0].reason).toMatch(/no poll for/);
   });
 });
+
+describe('doctor surfaces dead verdict (companion review F003)', () => {
+  it('dead active run (last poll >30min) surfaces as warning', () => {
+    writeAgent('stuck');
+    writeRun('stuck', 'run-1', {
+      coordinated: true,
+      pollFilter: ['task'],
+      pollOffsetMs: -35 * 60_000, // 35min ago — past dead threshold
+      pollWaitMs: 30_000,
+    });
+    const { stdout } = runDoctor();
+    const env = JSON.parse(stdout);
+    const peer = env.data?.peer ?? env.error?.details?.peer ?? [];
+    expect(peer.length).toBe(1);
+    expect(peer[0].verdict).toBe('dead');
+  });
+});

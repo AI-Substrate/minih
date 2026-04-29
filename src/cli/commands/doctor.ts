@@ -252,7 +252,7 @@ export function registerDoctorCommand(program: Command): void {
           );
           for (const row of peerAudit.rows) {
             const colour =
-              row.verdict === 'deaf'
+              row.verdict === 'dead'
                 ? chalk.red
                 : row.verdict === 'silent'
                   ? chalk.yellow
@@ -553,7 +553,7 @@ async function auditPeerActivity(agentsDir: string): Promise<PeerAuditResult> {
           runDir,
           messageType: null,
         });
-        if (peer.verdict === 'deaf' || peer.verdict === 'silent') {
+        if (peer.verdict === 'silent' || peer.verdict === 'dead') {
           rows.push({
             slug: slugEntry.name,
             runId: runEntry.name,

@@ -874,7 +874,7 @@ minih outside inbox send <slug> --type review-request --strict-peer ...
 # Exits E150 DEAF_PEER if the agent's filter would reject the message.
 ```
 
-`minih doctor` lists deaf/silent active coordinated runs as part of its standard audit (healthy runs stay quiet).
+`minih doctor` lists silent/dead active coordinated runs as part of its standard audit (healthy runs stay quiet). `deaf` is excluded because doctor doesn't have a target message type to evaluate filters against.
 
 ### Why this matters
 

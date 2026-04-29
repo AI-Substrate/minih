@@ -90,7 +90,7 @@ No new domains. The work fits cleanly inside existing `runner` + `cli` boundarie
 
 11. **AC-11 — `peer` block on every transactional outside command.** `outside inbox send`, `outside inbox list --wait`, `outside state set`, `outside state transition`, and `outside retro add` all include a `peer` block in success envelopes. Pure reads (`state get`, `inspect`) do not.
 
-12. **AC-12 — `minih doctor` lists deaf coordinated runs.** Running `minih doctor` produces a section that names each active coordinated run whose current verdict is `deaf` or `silent` past the default thresholds (silent=5min, dead=30min). Healthy runs are not noised. Thresholds are not user-configurable in v1.
+12. **AC-12 — `minih doctor` lists silent/dead coordinated runs.** Running `minih doctor` produces a section that names each active coordinated run whose current verdict is `silent` or `dead` (past the default thresholds: silent=5min, dead=30min). `deaf` is intentionally excluded from doctor's surface because doctor calls `derivePeerActivity` with `messageType: null` — without a typed message, the deaf rule cannot fire. Healthy runs are not noised. Thresholds are not user-configurable in v1.
 
 13. **AC-13 — Derivation is a pure function with bounded cost.** `derivePeerActivity({ runDir, messageType, now, tailLines })` reads at most `tailLines` lines from `events.ndjson` (default 1000) plus `state/inside.json` and `run.json`. No writes. No process state. Repeatable and deterministic given inputs.
 
@@ -123,7 +123,7 @@ No new domains. The work fits cleanly inside existing `runner` + `cli` boundarie
 - Envelope additivity (existing fields unchanged on each command)
 - TTY rendering (verdict line on stderr only when `process.stderr.isTTY`)
 - `--strict-peer` flag (exits non-zero on `deaf`, no-op on other verdicts)
-- Doctor lists deaf/silent active runs (with healthy-run quietness)
+- Doctor lists silent/dead active runs (with healthy-run quietness)
 
 **Excluded**:
 - Multi-process race tests (the file is append-only; OS handles atomicity per AC-14)

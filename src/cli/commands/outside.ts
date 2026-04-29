@@ -221,6 +221,25 @@ function handleOutsideInboxSend(root: Command) {
       body,
       ...(opts.ackOf && { ackOf: opts.ackOf }),
     });
+
+    // --strict-peer: derive peer BEFORE the append so we can refuse delivery
+    // outright when the agent is deaf. The non-strict path defers derivation
+    // until after the append (so the snapshot reflects the moment the
+    // message lands).
+    if (opts.strictPeer) {
+      const preCheckPeer = await derivePeerOrNull(target.runDir, type);
+      if (preCheckPeer && preCheckPeer.verdict === 'deaf') {
+        exitWithEnvelope(
+          formatError(
+            OUTSIDE_INBOX_SEND_CMD,
+            ErrorCodes.DEAF_PEER,
+            `Refusing to send: peer.verdict is 'deaf' (${preCheckPeer.reason}). Use a different --type or omit --strict-peer.`,
+            { slug, runId: target.runId, peer: preCheckPeer },
+          ),
+        );
+      }
+    }
+
     appendInboxMessage(
       OUTSIDE_INBOX_SEND_CMD,
       target.location,
@@ -239,17 +258,6 @@ function handleOutsideInboxSend(root: Command) {
       );
       if (peer) renderPeerVerdict(peer);
       process.stderr.write('\n');
-    }
-
-    if (opts.strictPeer && peer && peer.verdict === 'deaf') {
-      exitWithEnvelope(
-        formatError(
-          OUTSIDE_INBOX_SEND_CMD,
-          ErrorCodes.DEAF_PEER,
-          `Refusing to send: peer.verdict is 'deaf' (${peer.reason}). Use a different --type or omit --strict-peer.`,
-          { slug, runId: target.runId, peer },
-        ),
-      );
     }
 
     exitWithEnvelope(

@@ -184,7 +184,7 @@ describe('outside inbox send — peer block (plan 012 T003)', () => {
     expect(env.data.peer.verdict).toBe('n/a');
   });
 
-  it("--strict-peer exits E150 when verdict is 'deaf'", () => {
+  it("--strict-peer exits E150 AND does not deliver when verdict is 'deaf'", () => {
     writeRunJson();
     writeInsideState();
     writePollEvent(['question']);
@@ -203,9 +203,22 @@ describe('outside inbox send — peer block (plan 012 T003)', () => {
     expect(env.error.code).toBe('E150');
     expect(env.error.message).toMatch(/deaf/);
     expect(env.error.details?.peer?.verdict).toBe('deaf');
-    // Still appended the message? The send did succeed (we deliberately don't
-    // unwind the append); only the exit code signals refusal. Document this in
-    // the test name if behaviour shifts.
+
+    // F001 fix: strict-peer must NOT deliver the message. The outside lane
+    // file should be empty (no append happened).
+    const lanePath = path.join(
+      agentsDir,
+      slug,
+      'runs',
+      runId,
+      'inbox',
+      'outside',
+      'messages.ndjson',
+    );
+    if (fs.existsSync(lanePath)) {
+      const content = fs.readFileSync(lanePath, 'utf8');
+      expect(content).toBe('');
+    }
   });
 
   it('--strict-peer is a no-op when verdict is not deaf', () => {

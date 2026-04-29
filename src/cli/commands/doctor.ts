@@ -9,9 +9,11 @@ import Ajv2020 from 'ajv/dist/2020.js';
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import {
+  derivePeerActivity,
   hasOutsideMd,
   OutsideAgentsDirError,
   outsideMdPath,
+  type PeerActivity,
   parseFrontmatter,
 } from '../../runner/index.js';
 import {
@@ -32,7 +34,7 @@ export function registerDoctorCommand(program: Command): void {
     .command('doctor')
     .description('Validate all agents and harness structure')
     .option('--strict', 'Treat warnings as errors')
-    .action((opts: { strict?: boolean }) => {
+    .action(async (opts: { strict?: boolean }) => {
       const agentsDir = program.opts().agentsDir ?? 'agents';
       const resolvedDir = path.resolve(agentsDir);
 
@@ -171,6 +173,9 @@ export function registerDoctorCommand(program: Command): void {
       const projectRoot = path.dirname(resolvedDir);
       const retroChecks = auditRetroLedger(resolvedDir, projectRoot);
 
+      // Plan 012 — audit peer activity for active coordinated runs.
+      const peerAudit = await auditPeerActivity(resolvedDir);
+
       // Summarize
       let warnings = 0;
       let errors = 0;
@@ -183,6 +188,9 @@ export function registerDoctorCommand(program: Command): void {
       for (const check of retroChecks) {
         if (check.status === 'warning') warnings++;
         if (check.status === 'fail') errors++;
+      }
+      for (const row of peerAudit.rows) {
+        if (row.status === 'warning') warnings++;
       }
       const healthy = agentResults.filter((a) =>
         a.checks.every((c) => c.status === 'pass' || c.status === 'skip'),
@@ -237,6 +245,29 @@ export function registerDoctorCommand(program: Command): void {
           process.stderr.write('\n');
         }
 
+        // Plan 012 — render peer activity audit
+        if (peerAudit.rows.length > 0) {
+          process.stderr.write(
+            `  ${chalk.bold('🔇 Coordination peer activity')}\n`,
+          );
+          for (const row of peerAudit.rows) {
+            const colour =
+              row.verdict === 'deaf'
+                ? chalk.red
+                : row.verdict === 'silent'
+                  ? chalk.yellow
+                  : chalk.dim;
+            process.stderr.write(
+              `    ${colour('⚠')} ${row.slug}/${row.runId}: ${colour(row.verdict)} — ${row.reason}\n`,
+            );
+          }
+          process.stderr.write('\n');
+        } else if (peerAudit.activeRuns > 0) {
+          process.stderr.write(
+            `  ${chalk.green('✓')} ${peerAudit.activeRuns} active coordinated run(s) healthy\n\n`,
+          );
+        }
+
         process.stderr.write(`  ${chalk.bold('─── Results ───')}\n`);
         process.stderr.write(`  Agents:   ${agentResults.length} found\n`);
         process.stderr.write(`  Healthy:  ${healthy}\n`);
@@ -262,6 +293,7 @@ export function registerDoctorCommand(program: Command): void {
               agents: agentResults,
               preamble,
               retros: retroChecks,
+              peer: peerAudit.rows,
               summary: {
                 total: agentResults.length,
                 healthy,
@@ -279,6 +311,7 @@ export function registerDoctorCommand(program: Command): void {
               agents: agentResults,
               preamble,
               retros: retroChecks,
+              peer: peerAudit.rows,
               summary: {
                 total: agentResults.length,
                 healthy,
@@ -453,4 +486,87 @@ function createRefAwareAjv(): InstanceType<typeof Ajv2020> {
     }
   }
   return ajv;
+}
+
+// ─── plan 012 peer activity audit ─────────────────────────────────────
+
+interface PeerAuditRow {
+  slug: string;
+  runId: string;
+  verdict: PeerActivity['verdict'];
+  reason: string;
+  status: 'warning' | 'pass';
+}
+
+interface PeerAuditResult {
+  rows: PeerAuditRow[];
+  activeRuns: number;
+}
+
+async function auditPeerActivity(agentsDir: string): Promise<PeerAuditResult> {
+  const rows: PeerAuditRow[] = [];
+  let activeRuns = 0;
+
+  if (!fs.existsSync(agentsDir)) return { rows, activeRuns };
+
+  const slugDirs = fs.readdirSync(agentsDir, { withFileTypes: true });
+  for (const slugEntry of slugDirs) {
+    if (!slugEntry.isDirectory() || slugEntry.name.startsWith('_')) continue;
+    const runsDir = path.join(agentsDir, slugEntry.name, 'runs');
+    if (!fs.existsSync(runsDir)) continue;
+
+    const runEntries = fs.readdirSync(runsDir, { withFileTypes: true });
+    for (const runEntry of runEntries) {
+      if (!runEntry.isDirectory()) continue;
+      const runDir = path.join(runsDir, runEntry.name);
+
+      // Skip completed runs (completed.json present means the run wrapped up)
+      if (fs.existsSync(path.join(runDir, 'completed.json'))) continue;
+
+      // Read run.json to determine if active and coordinated
+      const runJsonPath = path.join(runDir, 'run.json');
+      if (!fs.existsSync(runJsonPath)) continue;
+      let manifest: { status?: string } = {};
+      try {
+        manifest = JSON.parse(fs.readFileSync(runJsonPath, 'utf8'));
+      } catch {
+        continue;
+      }
+      // Skip non-active states (we already skipped completed.json above; the
+      // remaining 'completed'/'failed'/'stale' here means a manifest-only
+      // termination — also not interesting for live audit)
+      if (
+        manifest.status &&
+        manifest.status !== 'active' &&
+        manifest.status !== 'idle' &&
+        manifest.status !== 'starting'
+      ) {
+        continue;
+      }
+
+      // Only audit coordinated runs (have state/inside.json)
+      if (!fs.existsSync(path.join(runDir, 'state', 'inside.json'))) continue;
+
+      activeRuns++;
+      try {
+        const peer = await derivePeerActivity({
+          runDir,
+          messageType: null,
+        });
+        if (peer.verdict === 'deaf' || peer.verdict === 'silent') {
+          rows.push({
+            slug: slugEntry.name,
+            runId: runEntry.name,
+            verdict: peer.verdict,
+            reason: peer.reason,
+            status: 'warning',
+          });
+        }
+      } catch {
+        // tolerate per-run derivation errors silently
+      }
+    }
+  }
+
+  return { rows, activeRuns };
 }

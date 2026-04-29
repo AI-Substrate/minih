@@ -6,9 +6,13 @@
  * Every rule path + every precedence boundary.
  */
 
-import { describe, expect, it } from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   type DerivePeerInputs,
+  derivePeerActivity,
   derivePeerVerdict,
 } from '../../src/runner/peer-activity.js';
 
@@ -244,5 +248,276 @@ describe('verdict reason formatting', () => {
       const r = derivePeerVerdict(inputs(override));
       expect(r.reason.length).toBeGreaterThan(0);
     }
+  });
+});
+
+// ============================================================================
+// derivePeerActivity — I/O wrapper + reverse-tail edge cases (workshop §F1-F8)
+// ============================================================================
+
+let runDir: string;
+
+beforeEach(() => {
+  runDir = fs.mkdtempSync(path.join(os.tmpdir(), 'peer-activity-'));
+});
+
+afterEach(() => {
+  fs.rmSync(runDir, { recursive: true, force: true });
+});
+
+function writeRunJson(extras: Record<string, unknown> = {}): void {
+  const manifest = {
+    schemaVersion: 1,
+    slug: 'fixture',
+    runId: 'run-test',
+    runDir,
+    pid: 12345,
+    startedAt: new Date(NOW - 5 * 60_000).toISOString(),
+    updatedAt: new Date(NOW - 1_000).toISOString(),
+    status: 'active',
+    sessionId: 'sess-1',
+    model: 'gpt-test',
+    control: { available: true, kind: 'none' },
+    counters: {},
+    ...extras,
+  };
+  fs.writeFileSync(path.join(runDir, 'run.json'), JSON.stringify(manifest));
+}
+
+function writeInsideState(status = 'idle'): void {
+  fs.mkdirSync(path.join(runDir, 'state'), { recursive: true });
+  fs.writeFileSync(
+    path.join(runDir, 'state', 'inside.json'),
+    JSON.stringify({
+      status,
+      data: {},
+      updatedAt: new Date(NOW - 5_000).toISOString(),
+      updatedBy: 'inside',
+    }),
+  );
+}
+
+function writeEvents(lines: object[]): void {
+  fs.writeFileSync(
+    path.join(runDir, 'events.ndjson'),
+    `${lines.map((l) => JSON.stringify(l)).join('\n')}\n`,
+  );
+}
+
+function pollEvent(
+  tsOffsetMs: number,
+  filter: string[] = ['task'],
+  waitMs = 30_000,
+) {
+  return {
+    type: 'tool_call',
+    timestamp: new Date(NOW + tsOffsetMs).toISOString(),
+    data: {
+      toolName: 'minih-coordination-inbox_list',
+      input: { unread: true, waitMs, waitForAny: filter },
+      toolCallId: `tc-${Math.abs(tsOffsetMs)}`,
+    },
+  };
+}
+
+describe('derivePeerActivity — end-to-end with fixture run dir', () => {
+  it('returns n/a when state/inside.json missing', async () => {
+    writeRunJson();
+    writeEvents([]);
+    const r = await derivePeerActivity({
+      runDir,
+      messageType: 'task',
+      now: () => NOW,
+    });
+    expect(r.verdict).toBe('n/a');
+  });
+
+  it('returns silent when run just started and no polls', async () => {
+    writeRunJson({ startedAt: new Date(NOW - 5_000).toISOString() });
+    writeInsideState();
+    writeEvents([]);
+    const r = await derivePeerActivity({
+      runDir,
+      messageType: 'task',
+      now: () => NOW,
+    });
+    expect(r.verdict).toBe('silent');
+  });
+
+  it('returns listening when actively polling and filter matches', async () => {
+    writeRunJson();
+    writeInsideState();
+    writeEvents([pollEvent(-5_000, ['task', 'control'])]);
+    const r = await derivePeerActivity({
+      runDir,
+      messageType: 'task',
+      now: () => NOW,
+    });
+    expect(r.verdict).toBe('listening');
+    expect(r.lastPollFilter).toEqual(['task', 'control']);
+    expect(r.lastPollWaitMs).toBe(30_000);
+    expect(r.currentlyPolling).toBe(true);
+    expect(r.pollWindowEndsAt).toBeTruthy();
+  });
+
+  it('returns deaf when filter excludes the type', async () => {
+    writeRunJson();
+    writeInsideState();
+    writeEvents([pollEvent(-5_000, ['task', 'question'])]);
+    const r = await derivePeerActivity({
+      runDir,
+      messageType: 'review-request',
+      now: () => NOW,
+    });
+    expect(r.verdict).toBe('deaf');
+    expect(r.willMatchType).toBe(false);
+    expect(r.reason).toMatch(/try one of:.*task.*question/);
+  });
+
+  it('computes pollCadenceMs from multiple polls', async () => {
+    writeRunJson();
+    writeInsideState();
+    writeEvents([
+      pollEvent(-90_000, ['task']),
+      pollEvent(-60_000, ['task']),
+      pollEvent(-30_000, ['task']),
+      pollEvent(-5_000, ['task']),
+    ]);
+    const r = await derivePeerActivity({
+      runDir,
+      messageType: 'task',
+      now: () => NOW,
+    });
+    // Deltas: 30000, 30000, 25000 → median 30000
+    expect(r.pollCadenceMs).toBe(30_000);
+  });
+
+  it('populates currentlyRunningTool with most recent non-coordination tool', async () => {
+    writeRunJson();
+    writeInsideState();
+    writeEvents([
+      pollEvent(-90_000, ['task']),
+      {
+        type: 'tool_call',
+        timestamp: new Date(NOW - 60_000).toISOString(),
+        data: { toolName: 'bash', input: { command: 'ls' } },
+      },
+      {
+        type: 'tool_call',
+        timestamp: new Date(NOW - 30_000).toISOString(),
+        data: { toolName: 'view', input: { path: '/foo' } },
+      },
+      pollEvent(-10_000, ['task']),
+    ]);
+    const r = await derivePeerActivity({
+      runDir,
+      messageType: 'task',
+      now: () => NOW,
+    });
+    expect(r.currentlyRunningTool).toBe('view');
+  });
+
+  it('tolerates missing events.ndjson (treated as silent in grace period)', async () => {
+    writeRunJson({ startedAt: new Date(NOW - 5_000).toISOString() });
+    writeInsideState();
+    // No events.ndjson written
+    const r = await derivePeerActivity({
+      runDir,
+      messageType: 'task',
+      now: () => NOW,
+    });
+    expect(r.verdict).toBe('silent');
+  });
+
+  it('tolerates torn last line in events.ndjson', async () => {
+    writeRunJson();
+    writeInsideState();
+    const goodEvent = JSON.stringify(pollEvent(-5_000, ['task']));
+    fs.writeFileSync(
+      path.join(runDir, 'events.ndjson'),
+      `${goodEvent}\n{"type":"tool_call","data":{"toolName":"minih-coordi`, // torn
+    );
+    const r = await derivePeerActivity({
+      runDir,
+      messageType: 'task',
+      now: () => NOW,
+    });
+    expect(r.verdict).toBe('listening'); // good event still parsed
+  });
+
+  it('tolerates resume / session_start events interleaved with tool_calls', async () => {
+    writeRunJson();
+    writeInsideState();
+    writeEvents([
+      {
+        type: 'session_start',
+        timestamp: new Date(NOW - 100_000).toISOString(),
+        data: {},
+      },
+      {
+        type: 'resume',
+        timestamp: new Date(NOW - 95_000).toISOString(),
+        data: {},
+      },
+      pollEvent(-10_000, ['task']),
+    ]);
+    const r = await derivePeerActivity({
+      runDir,
+      messageType: 'task',
+      now: () => NOW,
+    });
+    expect(r.verdict).toBe('listening');
+  });
+
+  it('returns dead when run.json status is failed', async () => {
+    writeRunJson({ status: 'failed' });
+    writeInsideState();
+    writeEvents([pollEvent(-5_000, ['task'])]);
+    const r = await derivePeerActivity({
+      runDir,
+      messageType: 'task',
+      now: () => NOW,
+    });
+    expect(r.verdict).toBe('dead');
+    expect(r.reason).toMatch(/failed/);
+  });
+
+  it('exposes ISO timestamps on lastPollAt / pollWindowEndsAt / lastSendAt', async () => {
+    writeRunJson();
+    writeInsideState();
+    writeEvents([
+      pollEvent(-5_000, ['task']),
+      {
+        type: 'tool_call',
+        timestamp: new Date(NOW - 7_000).toISOString(),
+        data: {
+          toolName: 'minih-coordination-inbox_send',
+          input: { type: 'progress' },
+        },
+      },
+    ]);
+    const r = await derivePeerActivity({
+      runDir,
+      messageType: 'task',
+      now: () => NOW,
+    });
+    expect(r.lastPollAt).toBe(new Date(NOW - 5_000).toISOString());
+    expect(r.lastSendAt).toBe(new Date(NOW - 7_000).toISOString());
+    expect(r.pollWindowEndsAt).toBe(
+      new Date(NOW - 5_000 + 30_000).toISOString(),
+    );
+  });
+
+  it('returns listening (not deaf) when messageType is null (read command)', async () => {
+    writeRunJson();
+    writeInsideState();
+    writeEvents([pollEvent(-5_000, ['task', 'question'])]);
+    const r = await derivePeerActivity({
+      runDir,
+      messageType: null,
+      now: () => NOW,
+    });
+    expect(r.verdict).toBe('listening');
+    expect(r.willMatchType).toBeNull();
   });
 });

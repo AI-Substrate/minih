@@ -52,11 +52,16 @@ export type {
 } from './inbox-poll.js';
 export { InboxPollError, pollInboxLane } from './inbox-poll.js';
 export type {
+  DerivePeerActivityOptions,
   DerivePeerInputs,
   PeerActivity,
   PeerVerdict,
 } from './peer-activity.js';
-export { computeWillMatch, derivePeerVerdict } from './peer-activity.js';
+export {
+  computeWillMatch,
+  derivePeerActivity,
+  derivePeerVerdict,
+} from './peer-activity.js';
 export type { PreambleAssemblyInput } from './preamble-builder.js';
 export { buildInsidePreamble } from './preamble-builder.js';
 export { PrettyDisplay } from './pretty.js';

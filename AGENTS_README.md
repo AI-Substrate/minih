@@ -447,6 +447,14 @@ Use [`agents/coordination-smoke-test/`](./agents/coordination-smoke-test/) for t
 
 Use [`agents/coordination-loop-validator/`](./agents/coordination-loop-validator/) for the richer canonical worked example: the outside side starts or attaches to an inside validator, watches with `minih status` and `minih tail`, sends exactly three manual milestone events, reads feedback, and validates final evidence. The full runbook lives in [`docs/how/coordination-loop-validator.md`](./docs/how/coordination-loop-validator.md).
 
+### Companion mode (long-lived reviewers / watchers)
+
+When you need a coordinated agent that **follows you through a session** instead of running once — a code reviewer, doc-drift auditor, or test-coverage watcher that boots once, reviews each commit as you ship, and writes a final farewell when the session ends — use **companion mode**.
+
+The protocol covers boot → brief → review-at-each-commit → drain → `control:stop` → read-farewell-before-reporting-back. The full runbook lives in [`docs/how/companion-mode.md`](./docs/how/companion-mode.md). The canonical implementation is [`agents/code-review-companion/`](./agents/code-review-companion/).
+
+Key rule: **always send `control:stop` and read the farewell envelope before reporting back to your operator.** The farewell is the canonical "everything I have to say" record, and auto-harvest only fires on completion — without the stop, the companion idles for up to 30 minutes (its default `idleBudgetMs`) before self-terminating, and the operator's report misses the companion's final session summary.
+
 ### State schemas and retrospectives
 
 Per-agent state schemas let you constrain status values for each side. The default coordinated scaffold uses simple inside statuses (`idle`, `working`, `reviewing`, `complete`, `blocked`) and outside statuses (`idle`, `in-progress`, `review-requested`, `done`, `blocked`); edit the schemas to match your workflow.

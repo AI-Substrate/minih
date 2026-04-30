@@ -18,3 +18,10 @@
 - difficulties:
   - [annoying] config: No input.idleBudgetMs in run config — companion had to guess when drain phase was over using arbitrary 5-poll heuristic (workaround: Used 5 consecutive empty 30s long-polls (≈150s) as a proxy for idle budget expiry)
   - [annoying] config: MINIH_PROJECT_ROOT env var not available in shell session — had to derive project root from run folder path in the preamble (workaround: Used the literal path from the prompt (/Users/jordanknight/substrate/minih))
+
+## 2026-04-30T02:07:22.064Z — code-review-companion / 2026-04-30T11-29-56-399Z-5860
+
+- runId: 2026-04-30T11-29-56-399Z-5860
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-04-30T11-29-56-399Z-5860
+- summary: Reviewed plan 014 (wait_for_any unified event-wait primitive) across 3 commit boundaries spanning T001-T015. The implementation is solid: settlement-race cleanup correctly tears down all watchers on every path (event-fire, timeout, registration-error), the self-write filter correctly suppresses the agent's own state writes via updatedBy check, documentation is in sync across preamble x3 + AGENTS_README + smoke-test, and the MCP error mapping chain (StateFileCorruptError → MCP_STATE_CORRUPT) is complete. Two findings issued: F001 (LOW) for undocumented JSON.stringify assumption in statesEqual, F002 (MEDIUM) for missing error/registration-failure cleanup tests. Both were addressed by the orchestrator in a follow-up commit. Final fft: 649 tests green, 0 vulnerabilities.
+- **magicWand** (target: coordination): The coordination loop would benefit from a 'drain-phase heartbeat' — when the orchestrator signals plan-complete and enters drain mode, a brief automatic 'control: drain' message (distinct from 'stop') would let the companion know to wrap up open findings and prepare the farewell, rather than the current pattern of idle-polling for ~10 minutes before the stop arrives. This would reduce idle token spend significantly in Power On Mode sessions.

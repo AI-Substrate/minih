@@ -117,11 +117,13 @@ function App({
 
   // FX002 follow-up: tool calls are now interleaved into the transcript
   // chronologically (no separate Tools pane). The split-layout state still
-  // toggles which top-level pane is taller (transcript-side vs workbench).
+  // toggles which top-level pane is wider — flexGrow only (no `width="X%"`,
+  // which conflicted with flexGrow and produced uneven columns + mid-word
+  // wrapping when content overflowed).
   const transcriptColRatio =
-    layout === 'transcript' ? 4 : layout === 'workbench' ? 1 : 2;
+    layout === 'transcript' ? 8 : layout === 'workbench' ? 2 : 6;
   const workbenchColRatio =
-    layout === 'workbench' ? 4 : layout === 'transcript' ? 1 : 2;
+    layout === 'workbench' ? 8 : layout === 'transcript' ? 2 : 4;
 
   return (
     <Box flexDirection="column" height={terminalRows}>
@@ -129,14 +131,14 @@ function App({
         <HeaderPane header={model.header} capability={bridge.capability} />
       </Box>
       <Box flexDirection="row" flexGrow={1}>
-        <Box flexDirection="column" width="60%" flexGrow={transcriptColRatio}>
+        <Box flexDirection="column" flexGrow={transcriptColRatio} flexBasis={0}>
           <TranscriptPane transcript={model.transcript} tools={model.tools} />
         </Box>
         <Box
           flexDirection="column"
-          width="40%"
-          minWidth={30}
           flexGrow={workbenchColRatio}
+          flexBasis={0}
+          minWidth={30}
         >
           <WorkbenchPane
             coordination={model.coordination}

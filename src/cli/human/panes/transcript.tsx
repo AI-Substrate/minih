@@ -193,11 +193,15 @@ function ToolRow({ tool }: { tool: ToolCallView }): React.JSX.Element {
   return (
     <Box marginTop={1}>
       <Text color={color}>{glyph} </Text>
-      <Text bold>{tool.toolName}</Text>
+      <Text bold wrap="truncate-end">
+        {tool.toolName}
+      </Text>
       {summary ? (
         <>
           <Text dimColor> · </Text>
-          <Text dimColor>{truncate(summary, 80)}</Text>
+          <Text dimColor wrap="truncate-end">
+            {summary}
+          </Text>
         </>
       ) : null}
       {tool.outputTruncated ? <Text dimColor> …</Text> : null}

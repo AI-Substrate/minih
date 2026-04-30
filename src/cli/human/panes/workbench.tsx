@@ -67,9 +67,9 @@ export function WorkbenchPane({
         {output.exists ? (
           <Box>
             <Text color="green">✓ </Text>
-            <Text>{output.outputPath}</Text>
+            <Text wrap="truncate-start">{output.outputPath}</Text>
             {output.bytes !== null ? (
-              <Text dimColor> ({output.bytes} bytes)</Text>
+              <Text dimColor> ({output.bytes}b)</Text>
             ) : null}
           </Box>
         ) : (
@@ -99,7 +99,10 @@ function TimelineRow({
             {entry.valid ? '✓ valid' : '✗ invalid'}
           </Text>
           {entry.errors.length > 0 ? (
-            <Text dimColor> · {entry.errors[0]}</Text>
+            <Text dimColor wrap="truncate-end">
+              {' · '}
+              {entry.errors[0]}
+            </Text>
           ) : null}
         </Box>
       );
@@ -107,7 +110,10 @@ function TimelineRow({
       return (
         <Box>
           <Text color="yellow">⚙ {entry.controlType}</Text>
-          <Text dimColor> · {entry.description}</Text>
+          <Text dimColor wrap="truncate-end">
+            {' · '}
+            {entry.description}
+          </Text>
         </Box>
       );
     case 'diagnostic':
@@ -115,7 +121,7 @@ function TimelineRow({
         <Box>
           <Text color="red">⚠ </Text>
           <Text dimColor>[{entry.source}] </Text>
-          <Text>{entry.message}</Text>
+          <Text wrap="truncate-end">{entry.message}</Text>
         </Box>
       );
   }
@@ -127,20 +133,21 @@ function InboxRow({ entry }: { entry: InboxTimelineEntry }): React.JSX.Element {
   return (
     <Box flexDirection="column">
       <Box>
-        <Text color={laneColor}>{entry.lane}</Text>
-        <Text dimColor> · </Text>
+        <Text color={laneColor}>{entry.lane[0]}</Text>
+        <Text dimColor> </Text>
         <Text bold>{entry.type}</Text>
-        <Text dimColor> · </Text>
-        <Text>{entry.subject}</Text>
         {ackBadge ? (
           <>
-            <Text dimColor> · </Text>
+            <Text dimColor> </Text>
             <Text color={ackBadge.color}>{ackBadge.label}</Text>
           </>
         ) : null}
       </Box>
+      <Text wrap="truncate-end">{entry.subject}</Text>
       {entry.ackOf ? (
-        <Text dimColor> ↳ in reply to {entry.ackOf.slice(0, 12)}</Text>
+        <Text dimColor wrap="truncate-end">
+          ↳ {entry.ackOf.slice(0, 12)}
+        </Text>
       ) : null}
     </Box>
   );
@@ -154,13 +161,12 @@ function StateRow({
   return (
     <Box>
       <Text color={entry.side === 'outside' ? 'cyan' : 'magenta'}>
-        {entry.side}
+        {entry.side[0]}
       </Text>
       <Text dimColor>: </Text>
       <Text dimColor>{entry.from}</Text>
       <Text> → </Text>
-      <Text>{entry.to}</Text>
-      {entry.reason ? <Text dimColor> ({entry.reason})</Text> : null}
+      <Text wrap="truncate-end">{entry.to}</Text>
     </Box>
   );
 }

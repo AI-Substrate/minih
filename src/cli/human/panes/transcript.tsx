@@ -51,6 +51,14 @@ interface CollapsedSummary {
   id: string;
 }
 
+interface CollapsedTools {
+  kind: 'collapsed-tools';
+  toolName: string;
+  count: number;
+  id: string;
+  status: ToolCallView['status'];
+}
+
 interface ToolItem {
   kind: 'tool';
   tool: ToolCallView;
@@ -64,10 +72,14 @@ interface TranscriptItem {
 }
 
 type StreamItem = TranscriptItem | ToolItem;
-type RenderItem = StreamItem | CollapsedSummary;
+type RenderItem = StreamItem | CollapsedSummary | CollapsedTools;
 
-function isSummary(item: RenderItem): item is CollapsedSummary {
+function isThinkingSummary(item: RenderItem): item is CollapsedSummary {
   return (item as CollapsedSummary).kind === 'collapsed-summary';
+}
+
+function isToolsSummary(item: RenderItem): item is CollapsedTools {
+  return (item as CollapsedTools).kind === 'collapsed-tools';
 }
 
 /**
@@ -77,18 +89,64 @@ function isSummary(item: RenderItem): item is CollapsedSummary {
  * rows are preserved.
  */
 /**
+ * Collapse runs of consecutive identical tool calls (same `toolName`) into a
+ * single `collapsed-tools` summary row. Spammy long-poll patterns (e.g.,
+ * `inbox_list` returning empty 30+ times during idle waits) shouldn't fill
+ * the transcript. Only adjacent-equal runs collapse — interleaved tools/
+ * transcript entries break the run.
+ *
+ * Threshold: runs of ≥3 identical tools collapse. Shorter runs render normally.
+ */
+function collapseToolNoise(rows: StreamItem[]): RenderItem[] {
+  const out: RenderItem[] = [];
+  let i = 0;
+  while (i < rows.length) {
+    const item = rows[i];
+    if (item.kind !== 'tool') {
+      out.push(item);
+      i++;
+      continue;
+    }
+    // Look-ahead: how many consecutive tool items share the same toolName?
+    let runEnd = i + 1;
+    while (
+      runEnd < rows.length &&
+      rows[runEnd].kind === 'tool' &&
+      (rows[runEnd] as ToolItem).tool.toolName === item.tool.toolName
+    ) {
+      runEnd++;
+    }
+    const runLength = runEnd - i;
+    if (runLength >= 3) {
+      const last = rows[runEnd - 1] as ToolItem;
+      out.push({
+        kind: 'collapsed-tools',
+        toolName: item.tool.toolName,
+        count: runLength,
+        id: `tool-collapse-${item.tool.id}`,
+        status: last.tool.status,
+      });
+    } else {
+      for (let j = i; j < runEnd; j++) out.push(rows[j]);
+    }
+    i = runEnd;
+  }
+  return out;
+}
+
+/**
  * Walk the visible window and collapse trailing-but-not-most-recent thinking
- * rows into a single summary entry. Any thinking row that is NOT among the last
- * `maxThinkingRows` thinking rows in the window is collapsed; non-thinking rows
- * (transcript or tool) are preserved.
+ * rows into a single summary entry. Operates AFTER tool-noise collapse.
  */
 function collapseThinkingNoise(
-  rows: StreamItem[],
+  rows: RenderItem[],
   maxThinkingRows: number,
 ): RenderItem[] {
   const thinkingPositions: number[] = [];
   rows.forEach((r, i) => {
     if (
+      !isToolsSummary(r) &&
+      !isThinkingSummary(r) &&
       r.kind === 'transcript' &&
       r.entry.actorLabel === 'Inside agent (thinking)'
     ) {
@@ -105,6 +163,8 @@ function collapseThinkingNoise(
   let inserted = false;
   rows.forEach((r, i) => {
     const isThinking =
+      !isToolsSummary(r) &&
+      !isThinkingSummary(r) &&
       r.kind === 'transcript' &&
       r.entry.actorLabel === 'Inside agent (thinking)';
     if (isThinking && i < keepFromIdx) {
@@ -159,13 +219,15 @@ export function TranscriptPane({
 }: TranscriptPaneProps): React.JSX.Element {
   const stream = buildStream(transcript, tools ?? []);
   const window = stream.slice(-maxRows);
-  const items = collapseThinkingNoise(window, maxThinkingRows);
+  const noToolNoise = collapseToolNoise(window);
+  const items = collapseThinkingNoise(noToolNoise, maxThinkingRows);
   return (
     <Box
       flexDirection="column"
       borderStyle="round"
       borderColor="gray"
       paddingX={1}
+      flexGrow={1}
     >
       <Text bold dimColor>
         Transcript
@@ -174,8 +236,11 @@ export function TranscriptPane({
         <Text dimColor> (no messages yet)</Text>
       ) : (
         items.map((item) => {
-          if (isSummary(item)) {
+          if (isThinkingSummary(item)) {
             return <CollapsedRow key={item.id} count={item.count} />;
+          }
+          if (isToolsSummary(item)) {
+            return <CollapsedToolsRow key={item.id} item={item} />;
           }
           if (item.kind === 'tool') {
             return <ToolRow key={item.tool.id} tool={item.tool} />;
@@ -183,6 +248,23 @@ export function TranscriptPane({
           return <TranscriptRow key={item.entry.id} entry={item.entry} />;
         })
       )}
+    </Box>
+  );
+}
+
+function CollapsedToolsRow({
+  item,
+}: {
+  item: CollapsedTools;
+}): React.JSX.Element {
+  const { glyph, color } = badgeForToolStatus(item.status);
+  return (
+    <Box marginTop={1}>
+      <Text color={color}>{glyph} </Text>
+      <Text bold dimColor>
+        {item.toolName}
+      </Text>
+      <Text dimColor> · × {item.count}</Text>
     </Box>
   );
 }

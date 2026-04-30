@@ -37,6 +37,7 @@ export function WorkbenchPane({
       borderStyle="round"
       borderColor="gray"
       paddingX={1}
+      flexGrow={1}
     >
       <Text bold dimColor>
         Workbench
@@ -133,12 +134,13 @@ function InboxRow({ entry }: { entry: InboxTimelineEntry }): React.JSX.Element {
   return (
     <Box flexDirection="column">
       <Box>
-        <Text color={laneColor}>{entry.lane[0]}</Text>
-        <Text dimColor> </Text>
+        <Text color={laneColor}>✉ </Text>
+        <Text color={laneColor}>{entry.lane}</Text>
+        <Text dimColor> · </Text>
         <Text bold>{entry.type}</Text>
         {ackBadge ? (
           <>
-            <Text dimColor> </Text>
+            <Text dimColor> · </Text>
             <Text color={ackBadge.color}>{ackBadge.label}</Text>
           </>
         ) : null}
@@ -160,8 +162,9 @@ function StateRow({
 }): React.JSX.Element {
   return (
     <Box>
+      <Text color={entry.side === 'outside' ? 'cyan' : 'magenta'}>⇄ </Text>
       <Text color={entry.side === 'outside' ? 'cyan' : 'magenta'}>
-        {entry.side[0]}
+        {entry.side}
       </Text>
       <Text dimColor>: </Text>
       <Text dimColor>{entry.from}</Text>

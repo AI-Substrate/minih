@@ -20,7 +20,6 @@ import type { HumanViewModel } from '../../runner/types.js';
 import type { InputBridge } from './input-bridge.js';
 import { FooterPane } from './panes/footer.js';
 import { HeaderPane } from './panes/header.js';
-import { ToolsPane } from './panes/tools.js';
 import { TranscriptPane } from './panes/transcript.js';
 import { WorkbenchPane } from './panes/workbench.js';
 import type { RunFeed } from './run-feed.js';
@@ -116,13 +115,13 @@ function App({
   // log-mode rendering coherent. Terminal resize is not handled in v1.
   const terminalRows = process.stderr.rows ?? 30;
 
-  // Inside the left column, transcript-vs-tools height ratio swaps with layout.
-  // transcript-expanded: transcript bigger; workbench-expanded (also shrinks
-  // tools); reset: even.
-  const transcriptHeightRatio =
-    layout === 'transcript' ? 4 : layout === 'workbench' ? 2 : 3;
-  const toolsHeightRatio =
-    layout === 'transcript' ? 1 : layout === 'workbench' ? 1 : 2;
+  // FX002 follow-up: tool calls are now interleaved into the transcript
+  // chronologically (no separate Tools pane). The split-layout state still
+  // toggles which top-level pane is taller (transcript-side vs workbench).
+  const transcriptColRatio =
+    layout === 'transcript' ? 4 : layout === 'workbench' ? 1 : 2;
+  const workbenchColRatio =
+    layout === 'workbench' ? 4 : layout === 'transcript' ? 1 : 2;
 
   return (
     <Box flexDirection="column" height={terminalRows}>
@@ -130,15 +129,15 @@ function App({
         <HeaderPane header={model.header} capability={bridge.capability} />
       </Box>
       <Box flexDirection="row" flexGrow={1}>
-        <Box flexDirection="column" width="60%">
-          <Box flexGrow={transcriptHeightRatio}>
-            <TranscriptPane transcript={model.transcript} />
-          </Box>
-          <Box flexGrow={toolsHeightRatio}>
-            <ToolsPane tools={model.tools} />
-          </Box>
+        <Box flexDirection="column" width="60%" flexGrow={transcriptColRatio}>
+          <TranscriptPane transcript={model.transcript} tools={model.tools} />
         </Box>
-        <Box flexDirection="column" width="40%" minWidth={30}>
+        <Box
+          flexDirection="column"
+          width="40%"
+          minWidth={30}
+          flexGrow={workbenchColRatio}
+        >
           <WorkbenchPane
             coordination={model.coordination}
             state={model.state}

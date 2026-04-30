@@ -26,10 +26,16 @@
 
 import { Box, Text } from 'ink';
 import type * as React from 'react';
-import type { TranscriptEntry } from '../../../runner/types.js';
+import type { ToolCallView, TranscriptEntry } from '../../../runner/types.js';
 
 export interface TranscriptPaneProps {
   transcript: TranscriptEntry[];
+  /**
+   * Tool calls — interleaved chronologically with transcript entries via the
+   * `startedAt` timestamp. Pass to render tools inline; omit for a
+   * transcript-only view (legacy).
+   */
+  tools?: ToolCallView[];
   /** Maximum rows to render (most recent N). */
   maxRows?: number;
   /** Maximum thinking rows to keep rendered before collapsing earlier ones. */
@@ -45,7 +51,20 @@ interface CollapsedSummary {
   id: string;
 }
 
-type RenderItem = TranscriptEntry | CollapsedSummary;
+interface ToolItem {
+  kind: 'tool';
+  tool: ToolCallView;
+  ts: string; // For sort key — equals startedAt; mirrored for type narrowing.
+}
+
+interface TranscriptItem {
+  kind: 'transcript';
+  entry: TranscriptEntry;
+  ts: string;
+}
+
+type StreamItem = TranscriptItem | ToolItem;
+type RenderItem = StreamItem | CollapsedSummary;
 
 function isSummary(item: RenderItem): item is CollapsedSummary {
   return (item as CollapsedSummary).kind === 'collapsed-summary';
@@ -57,18 +76,27 @@ function isSummary(item: RenderItem): item is CollapsedSummary {
  * `maxThinkingRows` thinking rows in the window is collapsed; final non-thinking
  * rows are preserved.
  */
+/**
+ * Walk the visible window and collapse trailing-but-not-most-recent thinking
+ * rows into a single summary entry. Any thinking row that is NOT among the last
+ * `maxThinkingRows` thinking rows in the window is collapsed; non-thinking rows
+ * (transcript or tool) are preserved.
+ */
 function collapseThinkingNoise(
-  rows: TranscriptEntry[],
+  rows: StreamItem[],
   maxThinkingRows: number,
 ): RenderItem[] {
-  // Index the positions of all thinking rows in the window.
   const thinkingPositions: number[] = [];
   rows.forEach((r, i) => {
-    if (r.actorLabel === 'Inside agent (thinking)') thinkingPositions.push(i);
+    if (
+      r.kind === 'transcript' &&
+      r.entry.actorLabel === 'Inside agent (thinking)'
+    ) {
+      thinkingPositions.push(i);
+    }
   });
   if (thinkingPositions.length <= maxThinkingRows) return rows;
 
-  // Keep the last N thinking rows visible; collapse the rest.
   const keepFromIdx =
     thinkingPositions[thinkingPositions.length - maxThinkingRows];
   const collapsedCount = thinkingPositions.length - maxThinkingRows;
@@ -76,7 +104,9 @@ function collapseThinkingNoise(
   const out: RenderItem[] = [];
   let inserted = false;
   rows.forEach((r, i) => {
-    const isThinking = r.actorLabel === 'Inside agent (thinking)';
+    const isThinking =
+      r.kind === 'transcript' &&
+      r.entry.actorLabel === 'Inside agent (thinking)';
     if (isThinking && i < keepFromIdx) {
       if (!inserted) {
         out.push({
@@ -93,12 +123,42 @@ function collapseThinkingNoise(
   return out;
 }
 
+/**
+ * Merge transcript entries + tool calls into a single chronological stream
+ * (sorted by ts; transcript ts vs tool startedAt). Stable sort: when two items
+ * share a timestamp, transcript entries render before tool calls (mirrors how
+ * the SDK emits — assistant text typically lands the millisecond before the
+ * tool_call is recorded).
+ */
+function buildStream(
+  transcript: TranscriptEntry[],
+  tools: ToolCallView[],
+): StreamItem[] {
+  const items: StreamItem[] = [];
+  for (const entry of transcript) {
+    items.push({ kind: 'transcript', entry, ts: entry.ts });
+  }
+  for (const tool of tools) {
+    items.push({ kind: 'tool', tool, ts: tool.startedAt });
+  }
+  items.sort((a, b) => {
+    if (a.ts < b.ts) return -1;
+    if (a.ts > b.ts) return 1;
+    // Tie-break: transcript before tool.
+    if (a.kind === b.kind) return 0;
+    return a.kind === 'transcript' ? -1 : 1;
+  });
+  return items;
+}
+
 export function TranscriptPane({
   transcript,
+  tools,
   maxRows = DEFAULT_MAX_ROWS,
   maxThinkingRows = DEFAULT_MAX_THINKING_ROWS,
 }: TranscriptPaneProps): React.JSX.Element {
-  const window = transcript.slice(-maxRows);
+  const stream = buildStream(transcript, tools ?? []);
+  const window = stream.slice(-maxRows);
   const items = collapseThinkingNoise(window, maxThinkingRows);
   return (
     <Box
@@ -113,16 +173,55 @@ export function TranscriptPane({
       {items.length === 0 ? (
         <Text dimColor> (no messages yet)</Text>
       ) : (
-        items.map((item) =>
-          isSummary(item) ? (
-            <CollapsedRow key={item.id} count={item.count} />
-          ) : (
-            <TranscriptRow key={item.id} entry={item} />
-          ),
-        )
+        items.map((item) => {
+          if (isSummary(item)) {
+            return <CollapsedRow key={item.id} count={item.count} />;
+          }
+          if (item.kind === 'tool') {
+            return <ToolRow key={item.tool.id} tool={item.tool} />;
+          }
+          return <TranscriptRow key={item.entry.id} entry={item.entry} />;
+        })
       )}
     </Box>
   );
+}
+
+function ToolRow({ tool }: { tool: ToolCallView }): React.JSX.Element {
+  const { glyph, color } = badgeForToolStatus(tool.status);
+  const summary = tool.outputSummary ?? tool.inputSummary;
+  return (
+    <Box marginTop={1}>
+      <Text color={color}>{glyph} </Text>
+      <Text bold>{tool.toolName}</Text>
+      {summary ? (
+        <>
+          <Text dimColor> · </Text>
+          <Text dimColor>{truncate(summary, 80)}</Text>
+        </>
+      ) : null}
+      {tool.outputTruncated ? <Text dimColor> …</Text> : null}
+    </Box>
+  );
+}
+
+function badgeForToolStatus(status: ToolCallView['status']): {
+  glyph: string;
+  color: string;
+} {
+  switch (status) {
+    case 'running':
+      return { glyph: '◐', color: 'yellow' };
+    case 'ok':
+      return { glyph: '✓', color: 'green' };
+    case 'error':
+      return { glyph: '✗', color: 'red' };
+  }
+}
+
+function truncate(s: string, n: number): string {
+  if (s.length <= n) return s;
+  return `${s.slice(0, n - 1)}…`;
 }
 
 function CollapsedRow({ count }: { count: number }): React.JSX.Element {

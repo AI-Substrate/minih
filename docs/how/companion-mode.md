@@ -248,4 +248,5 @@ cat agents/my-companion/runs/$RUN_ID/output/report.json | jq
 
 - [`coordination-loop-validator.md`](./coordination-loop-validator.md) — richer canonical loop example
 - [`AGENTS_README.md`](../../AGENTS_README.md) § Coordination — outside/inside CLI surface
+- [`AGENTS_README.md`](../../AGENTS_README.md) § Companion mode → § Upgrading an existing one-shot agent to companion mode — the migration recipe
 - `agents/code-review-companion/` — canonical companion implementation

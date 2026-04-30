@@ -725,6 +725,161 @@ This means a companion can react to operator state-flips ("outside set status to
 
 The pattern: orchestrator owns the lifecycle; the companion's idle budget is a safety net, not the primary exit condition.
 
+### Upgrading an existing one-shot agent to companion mode
+
+If you already have a coordinated or one-shot agent (say, a code reviewer that runs once per commit) and want to convert it to companion mode, the migration is editorial — five changes across at most four files. Walk through them in order.
+
+#### Step 1: Mark the agent coordination-aware
+
+In `agents/<slug>/prompt.md`, ensure the YAML frontmatter contains `coordination: enabled`:
+
+```yaml
+---
+description: "..."
+model: gpt-5.5
+timeout: 7200          # bump — companions live longer than one-shots
+coordination: enabled  # ← add this if missing
+---
+```
+
+If your agent was previously a one-shot, also bump `timeout` (most companions sit idle far longer than a one-shot agent runs — 7200s = 2h is a reasonable default; the *real* lifetime is bounded by `idleBudgetMs`, not `timeout`).
+
+#### Step 2: Add the long-poll loop and stop-handling to the prompt body
+
+Insert (or extend) a section that tells the agent how to behave between tasks. The canonical shape:
+
+```markdown
+## Lifecycle
+
+You are **long-running**. After every task, return to `idle` and long-poll for the next message:
+
+```js
+wait_for_any({
+  events: [
+    { kind: 'inbox.message', filter: { types: ['task', 'question', 'directive', 'control', 'briefing', 'review-request'] } },
+    { kind: 'state.peer.changed' }
+  ],
+  waitMs: 30000
+})
+```
+
+When a `type: control` message arrives whose body matches `^stop\b`, transition state to `stopping`, write your **farewell envelope** (see § Output) to `$MINIH_OUTPUT_PATH`, and exit. Until that happens, your idle budget (default 30 min) is a safety net — not the primary exit signal.
+```
+
+The exact prose can vary; what matters is that the agent (a) loops on `wait_for_any` (or `inbox_list --wait`), (b) recognises `^stop\b` in `type: control` bodies, and (c) writes the farewell on stop.
+
+#### Step 3: Extend `output-schema.json` to the farewell shape
+
+Replace (or extend) the agent's output schema with the canonical farewell envelope. Minimum-viable starter — copy this directly into `agents/<slug>/output-schema.json`:
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "<slug> Farewell Envelope",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["session", "summary", "retrospective"],
+  "properties": {
+    "session": {
+      "type": "object",
+      "required": ["startedAt", "endedAt", "exitReason", "messageCounts"],
+      "properties": {
+        "startedAt": { "type": "string" },
+        "endedAt": { "type": "string" },
+        "exitReason": {
+          "type": "string",
+          "enum": ["stop_requested", "idle_budget", "timeout", "error"]
+        },
+        "messageCounts": {
+          "type": "object",
+          "properties": {
+            "tasksReceived": { "type": "integer", "minimum": 0 },
+            "findingsSent": { "type": "integer", "minimum": 0 },
+            "questionsAsked": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "severity", "issue"],
+        "properties": {
+          "id": { "type": "string" },
+          "severity": { "type": "string", "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"] },
+          "file": { "type": "string" },
+          "issue": { "type": "string" },
+          "recommendation": { "type": "string" },
+          "ackOf": { "type": "string" }
+        }
+      }
+    },
+    "summary": { "type": "string" },
+    "retrospective": {
+      "type": "object",
+      "properties": {
+        "workedWell": { "type": "string" },
+        "confusing": { "type": "string" },
+        "magicWand": { "type": "string" },
+        "magicWandTarget": { "type": "string" }
+      }
+    }
+  }
+}
+```
+
+The `findings` array is companion-specific (a reviewer collects findings; a docs-drift watcher collects drifts; a metrics watcher collects breaches). Rename or restructure that field to match your domain — keep `session`, `summary`, and `retrospective` as the contract.
+
+#### Step 4: Add `outside.md` and the state schemas
+
+Companion mode is coordinated, so the agent needs the operator-facing contract and per-side state schemas. Use `minih init --coordinated <throwaway-slug>` once in a scratch dir to generate canonical templates, then copy them into your existing agent directory:
+
+```bash
+# In a scratch dir
+mkdir /tmp/scaffold && cd /tmp/scaffold
+minih init --coordinated scaffolded
+# Copy templates into your real agent
+cp /tmp/scaffold/agents/scaffolded/outside.md            ~/your-project/agents/<slug>/
+cp /tmp/scaffold/agents/scaffolded/inside-state.schema.json  ~/your-project/agents/<slug>/
+cp /tmp/scaffold/agents/scaffolded/outside-state.schema.json ~/your-project/agents/<slug>/
+```
+
+Then edit `outside.md` to describe the contract for **your** agent (what `type: task` messages should contain, what state values mean in your domain, what reply types your agent emits) and prune the state-schema enums to your workflow.
+
+#### Step 5: Verify
+
+```bash
+# Doctor catches missing-file / invalid-schema problems
+minih doctor <slug>
+
+# Smoke test: boot, send one briefing, send control:stop, read farewell
+minih run <slug> &
+RUN_ID=$(minih status <slug> 2>/dev/null | jq -r '.data.runId')
+
+minih outside inbox send <slug> --run "$RUN_ID" \
+  --type briefing --subject "smoke" --body "ping"
+
+# (give it 10s to ack)
+sleep 10
+
+minih outside inbox send <slug> --run "$RUN_ID" \
+  --type control --subject "stop" --body "stop"
+
+sleep 5
+cat agents/<slug>/runs/$RUN_ID/output/report.json | jq .session
+# Expect: exitReason: "stop_requested"
+```
+
+If `report.json` shows `exitReason: "stop_requested"` and validates against your output schema, the migration is done. From there, plug it into your Power On Mode orchestrator (see § The Power On Mode protocol above).
+
+#### What you do NOT need to change
+
+- The agent's *core task logic* — companion mode is purely about lifecycle and contract; the per-task work is unchanged.
+- `instructions.md` — keep it as-is; it still works.
+- `input-schema.json` — only relevant for fresh-run params; companions usually don't need it after the first task (subsequent messages carry their own payload).
+- The MCP tool surface — `wait_for_any`, `inbox_send`, `state_get`, etc. are baked into every coordinated run; no wiring needed.
+
 ### Pointers
 
 - Full runbook + design rationale: [`docs/how/companion-mode.md`](./docs/how/companion-mode.md)

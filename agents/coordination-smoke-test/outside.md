@@ -58,3 +58,17 @@ npx minih outside inbox send coordination-smoke-test \
 ```
 
 The agent's step 8 will read this follow-up and chain another `inbox_send` reply on top of it. The final inside lane will contain a chain: `your initial → agent's step 2 → your follow-up → agent's chain reply`.
+
+## Wait-for-any verification (plan 014)
+
+After the agent finishes step 8 (reply chain), it will call `wait_for_any` with two watch entries — `{ kind: 'inbox.message' }` AND `{ kind: 'state.peer.changed' }` — and `waitMs: 30000`. To exercise the multi-kind wake path, write to outside state during this window:
+
+```bash
+# Trigger a state.peer.changed wake (any time within 30s of the agent's step 9 wait):
+npx minih outside state set coordination-smoke-test \
+  --run "$RUN_ID" \
+  --status in-progress \
+  --data-json '{"plan":"014","trigger":"wait-for-any-fire"}'
+```
+
+If you don't write during the window, the agent's `wait_for_any` will time out cleanly (still a pass — empty events list with `wait.timedOut: true` is the documented no-event shape).

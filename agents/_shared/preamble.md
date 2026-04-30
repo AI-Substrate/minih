@@ -183,3 +183,23 @@ Any inbox message can carry an `ackOf` field pointing at a prior message id. Thi
 - The next agent sees `In reply to: <id>` for non-ack replies in its prompt, or `Acknowledges: <id>` for `--type ack` (preserves today's ack semantics).
 
 No threads, no thread state, no enforcement — minih is the messenger, not the police. Stale `ackOf` ids are not validated; if you cite a non-existent message, the receiving agent will see it and surface that themselves.
+
+### Coordination event waiting (plan 014)
+
+Coordinated agents have a long-poll primitive `wait_for_any` that wakes on any combination of inbox messages and state changes — instead of spinning on `state_get` waiting for the outside operator to publish parameters.
+
+```js
+wait_for_any({
+  events: [
+    { kind: 'inbox.message', filter: { types: ['task', 'question'] } },
+    { kind: 'state.peer.changed' },
+  ],
+  waitMs: 30000
+})
+// → { events: [{ kind, ts, data }, ...], wait: { timedOut, matched, ... } }
+// Clean timeout returns events: [] + timedOut: true (no error thrown).
+```
+
+Supported event kinds in v1: `inbox.message` (with optional `filter.types[]`), `state.peer.changed`, `state.self.changed`. Up to 8 entries per call. `waitMs` capped at 30s. Future kinds (`fs.changed`, `tool.completed`) will plug into the same envelope shape.
+
+When multiple events fire within the same wake window, all of them are delivered in the result `events` array, sorted ascending by envelope `ts`. The agent's own writes do NOT wake `state.self.changed` (self-write filter via `updatedBy`), and `inbox.message` only watches the peer (outside) lane.

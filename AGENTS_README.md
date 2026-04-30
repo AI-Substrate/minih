@@ -483,6 +483,35 @@ $ minih outside inbox send my-agent --type note \
 
 No threads, no thread state, no enforcement — minih is the messenger, not the police. Stale `ackOf` ids are not validated; if you cite a non-existent message, the receiving agent will see it and surface that themselves.
 
+### Wait for any (plan 014)
+
+Coordinated agents have a long-poll MCP tool `wait_for_any` that wakes on any combination of inbox messages and state changes in a single call — replacing the "spin-loop on `state_get`" pattern when an agent is waiting for the outside operator to publish parameters or flip a status.
+
+```js
+wait_for_any({
+  events: [
+    { kind: 'inbox.message', filter: { types: ['task', 'question'] } },
+    { kind: 'state.peer.changed' },
+  ],
+  waitMs: 30000
+})
+// → { events: [{ kind, ts, data }, ...], wait: { requestedMs, elapsedMs, timedOut, matched } }
+```
+
+Each returned event is a discriminated-union envelope `{ kind, ts, data }` so callers can dispatch on `kind` for type-narrowed access to `data`. A clean timeout returns `events: []` + `wait.timedOut: true` (no error thrown).
+
+Supported event kinds in v1:
+
+| Kind | Wakes when | Notes |
+|---|---|---|
+| `inbox.message` | A new message lands in the **peer** inbox lane | Optional `filter.types[]` to scope to specific message types. The agent's own `inbox_send` writes do not wake this watch (structurally — only the peer lane is watched). |
+| `state.peer.changed` | The peer state file changes (mtime + JSON-diff dedup) | The full new state is delivered as `data.newState`. |
+| `state.self.changed` | Another inside-side actor writes the agent's own state file | The agent's own `state_set` / `state_transition` calls are suppressed via `updatedBy` self-write filter. |
+
+Limits: up to 8 watch entries per call, `waitMs` capped at 30 000 ms (same cap as `inbox_list`).
+
+Forward compatibility: future event kinds (`fs.changed`, `tool.completed`, …) will plug into the same `{ kind, ts, data }` envelope without breaking v1 callers. v1 servers reject unknown kinds with `MCP_INVALID_ARGUMENT` — agents are responsible for capability detection.
+
 ---
 
 ## The Output Contract

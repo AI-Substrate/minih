@@ -17,7 +17,7 @@
     },
     "toolChecks": {
       "type": "array",
-      "minItems": 7,
+      "minItems": 8,
       "items": {
         "type": "object",
         "required": ["tool", "status", "evidence"],
@@ -31,7 +31,8 @@
               "inbox_ack",
               "state_get",
               "state_set",
-              "state_transition"
+              "state_transition",
+              "wait_for_any"
             ]
           },
           "status": {

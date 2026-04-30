@@ -9,10 +9,13 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { coordinationRunLocation, inboxLanePath } from '../../src/runner/folder.js';
-import { waitForAnyTool } from '../../src/mcp/tools/wait.js';
 import type { McpServerContext } from '../../src/mcp/context.js';
+import { waitForAnyTool } from '../../src/mcp/tools/wait.js';
 import { McpToolError } from '../../src/mcp/types.js';
+import {
+  coordinationRunLocation,
+  inboxLanePath,
+} from '../../src/runner/folder.js';
 
 let tmpDir: string;
 let agentsDir: string;

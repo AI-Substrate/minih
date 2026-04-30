@@ -9,12 +9,16 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { coordinationRunLocation, inboxLanePath, stateFilePath } from '../../src/runner/folder.js';
-import {
-  type NativeWatcher,
-  type WatchEventType,
-} from '../../src/runner/file-watcher.js';
 import { waitForAny } from '../../src/runner/event-wait.js';
+import type {
+  NativeWatcher,
+  WatchEventType,
+} from '../../src/runner/file-watcher.js';
+import {
+  coordinationRunLocation,
+  inboxLanePath,
+  stateFilePath,
+} from '../../src/runner/folder.js';
 import type { WatchEntry } from '../../src/runner/types.js';
 
 let tmpDir: string;
@@ -109,7 +113,11 @@ function writeInbox(lane: 'inside' | 'outside', lines: string[]): string {
   return target;
 }
 
-function makeMessage(id: string, type = 'task', extras: Record<string, unknown> = {}) {
+function makeMessage(
+  id: string,
+  type = 'task',
+  extras: Record<string, unknown> = {},
+) {
   return `${JSON.stringify({
     id,
     sender: 'outside',
@@ -239,10 +247,11 @@ describe('waitForAny — settlement race + filter (plan 014 T004)', () => {
 
     const result = await wait;
     expect(result.events).toHaveLength(2);
-    expect(result.events.map((e) => (e.kind === 'inbox.message' ? e.data.message.id : ''))).toEqual([
-      'm1',
-      'm2',
-    ]);
+    expect(
+      result.events.map((e) =>
+        e.kind === 'inbox.message' ? e.data.message.id : '',
+      ),
+    ).toEqual(['m1', 'm2']);
   });
 
   it('AC-6 — clean timeout returns empty events with timedOut: true', async () => {
@@ -308,7 +317,7 @@ describe('waitForAny — settlement race + filter (plan 014 T004)', () => {
     }
   });
 
-  it('AC-13 — self-write suppression: inside agent\'s own state write does NOT wake state.self.changed', async () => {
+  it("AC-13 — self-write suppression: inside agent's own state write does NOT wake state.self.changed", async () => {
     writeState('inside', defaultInsideState());
     const index: WatcherIndex = new Map();
     const wait = waitForAny({
@@ -380,10 +389,7 @@ describe('waitForAny — settlement race + filter (plan 014 T004)', () => {
     await waitForAny({
       location: location(),
       side: 'inside',
-      events: [
-        { kind: 'inbox.message' },
-        { kind: 'state.peer.changed' },
-      ],
+      events: [{ kind: 'inbox.message' }, { kind: 'state.peer.changed' }],
       waitMs: 50,
       watchFactory: makeWatchFactory(index),
     });

@@ -79,6 +79,19 @@ After sending your step 2 reply (which set `ackOf` on a NON-ack `inbox_send`), w
 
 If no outside follow-up arrives within the wait window, mark this step `status: 'skip'` with reason "outside operator did not send a follow-up reply within 30s" — the operator may simply have decided not to test reply chains. Do NOT mark `'fail'` for skip-by-omission.
 
+### 9. `wait_for_any` mixed-kind verification (plan 014)
+
+This step exercises the **unified event-wait** primitive shipped in plan 014: a single MCP call that wakes on any combination of inbox messages and state changes, replacing the spin-loop-on-`state_get` pattern.
+
+- Call `wait_for_any` with TWO watch entries — `{ kind: 'inbox.message' }` AND `{ kind: 'state.peer.changed' }` — and `waitMs: 30000`. The outside operator will trigger a wake by either sending a message OR writing outside state during the wait window.
+- When the call resolves, verify the returned envelope shape:
+  1. Top-level fields: `events` (array) and `wait` (object with `requestedMs`, `elapsedMs`, `timedOut`, `matched`).
+  2. If `events.length > 0`: each entry is `{ kind, ts, data }`; `kind` is one of `inbox.message` or `state.peer.changed`; `ts` is an ISO-8601 string; `data` shape matches the kind (`{ message: {...} }` for inbox.message, `{ newState: {...} }` for state.peer.changed).
+  3. If `events.length === 0` and `wait.timedOut === true`: that's the clean-timeout shape — record this case as `pass` with evidence noting the operator did not write during the window.
+- `evidence`: quote the full returned envelope (or the truncated head if it's huge). Confirm at least one of the two outcomes: a non-empty events list with a valid envelope, OR a clean timeout.
+
+If the outside operator did not write during the window AND the call timed out cleanly, that is still a `pass` — it proves the no-event path works. If the call THROWS or returns a malformed envelope, that is a `fail`.
+
 If no outside message exists at step 1, still exercise the state and inbox-send tools and clearly mark the inbox-related steps as `status: 'skip'` with an explanation.
 
 ## Report

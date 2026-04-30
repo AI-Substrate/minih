@@ -11,15 +11,15 @@
 
 import * as fs from 'node:fs';
 import {
-  type CoordinationRunLocation,
-  inboxLanePath,
-  stateFilePath,
-} from './folder.js';
-import {
   type FileWatcher,
   type WatchFactory,
   watchFileChanges,
 } from './file-watcher.js';
+import {
+  type CoordinationRunLocation,
+  inboxLanePath,
+  stateFilePath,
+} from './folder.js';
 import type {
   EventEnvelope,
   EventKind,
@@ -107,7 +107,7 @@ export function waitForAny(opts: WaitForAnyOptions): Promise<WaitForAnyResult> {
     };
 
     const completeWith = (matched: boolean): void => {
-      const elapsed = Math.max(0, ((opts.now ?? Date.now)() - startedAt));
+      const elapsed = Math.max(0, (opts.now ?? Date.now)() - startedAt);
       // Sort events ascending by envelope ts (multi-event delivery contract).
       collected.sort((a, b) => a.ts.localeCompare(b.ts));
       settle(() =>
@@ -283,7 +283,9 @@ function registerWatch(
     default: {
       // Exhaustiveness check
       const _exhaustive: never = entry;
-      throw new Error(`unhandled WatchEntry kind: ${JSON.stringify(_exhaustive)}`);
+      throw new Error(
+        `unhandled WatchEntry kind: ${JSON.stringify(_exhaustive)}`,
+      );
     }
   }
 }

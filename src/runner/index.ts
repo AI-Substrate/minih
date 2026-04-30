@@ -17,6 +17,13 @@ export {
   displaySummary,
   formatEvent,
 } from './display.js';
+export type { WaitForAnyOptions } from './event-wait.js';
+export {
+  EventWaitInboxCorruptError,
+  StateFileCorruptError,
+  SUPPORTED_EVENT_KINDS,
+  waitForAny,
+} from './event-wait.js';
 export type { CoordinationRunLocation, RunSession } from './folder.js';
 export {
   coordinationRunDir,
@@ -62,13 +69,6 @@ export {
   derivePeerActivity,
   derivePeerVerdict,
 } from './peer-activity.js';
-export {
-  EventWaitInboxCorruptError,
-  StateFileCorruptError,
-  SUPPORTED_EVENT_KINDS,
-  waitForAny,
-} from './event-wait.js';
-export type { WaitForAnyOptions } from './event-wait.js';
 export type { PreambleAssemblyInput } from './preamble-builder.js';
 export { buildInsidePreamble } from './preamble-builder.js';
 export { PrettyDisplay } from './pretty.js';

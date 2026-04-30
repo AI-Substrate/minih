@@ -14,7 +14,8 @@ Use the inside MCP tools when you need to coordinate with the outside peer:
 - \`inbox_ack\` — acknowledge an outside message after you have handled it.
 - \`state_get\` — inspect your inside state and the outside peer state.
 - \`state_set\` — publish your current inside state.
-- \`state_transition\` — move your inside status and append transition history.`;
+- \`state_transition\` — move your inside status and append transition history.
+- \`wait_for_any\` — long-poll for any combination of events (inbox messages and/or state changes) in one call, instead of spinning on \`state_get\`. Pass \`{ events: [{ kind: 'inbox.message', filter?: { types: [...] } }, { kind: 'state.peer.changed' }, { kind: 'state.self.changed' }], waitMs: 30000 }\`. Returns \`{ events: EventEnvelope[], wait: { timedOut, ... } }\` where each envelope is \`{ kind, ts, data }\`. Clean timeout returns \`events: []\` + \`timedOut: true\` (no error). Up to 8 watch entries per call; \`waitMs\` capped at 30000.`;
 
 const COORDINATION_PRE_COMPLETION_CHECKLIST = `<!-- coordination.pre-completion-checklist -->
 

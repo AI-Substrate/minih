@@ -5,12 +5,12 @@
  * `runner.waitForAny`, maps runner errors to MCP error codes.
  */
 
-import { coordinationRunLocation } from '../../runner/folder.js';
 import {
   EventWaitInboxCorruptError,
   StateFileCorruptError,
   waitForAny,
 } from '../../runner/event-wait.js';
+import { coordinationRunLocation } from '../../runner/folder.js';
 import type {
   EventKind,
   WaitForAnyResult,
@@ -94,7 +94,10 @@ function parseEvents(value: unknown): WatchEntry[] {
     }
     const obj = raw as Record<string, unknown>;
     const kind = obj.kind;
-    if (typeof kind !== 'string' || !SUPPORTED_KINDS.includes(kind as EventKind)) {
+    if (
+      typeof kind !== 'string' ||
+      !SUPPORTED_KINDS.includes(kind as EventKind)
+    ) {
       throw new McpToolError(
         'MCP_INVALID_ARGUMENT',
         `events[${index}].kind must be one of ${SUPPORTED_KINDS.join(', ')} (got ${JSON.stringify(kind)})`,
@@ -165,16 +168,10 @@ function parseInboxFilter(
 
 function parseWaitMs(value: unknown): number {
   if (typeof value !== 'number' || !Number.isInteger(value)) {
-    throw new McpToolError(
-      'MCP_INVALID_ARGUMENT',
-      'waitMs must be an integer',
-    );
+    throw new McpToolError('MCP_INVALID_ARGUMENT', 'waitMs must be an integer');
   }
   if (value < 0) {
-    throw new McpToolError(
-      'MCP_INVALID_ARGUMENT',
-      'waitMs must be at least 0',
-    );
+    throw new McpToolError('MCP_INVALID_ARGUMENT', 'waitMs must be at least 0');
   }
   if (value > MAX_INBOX_WAIT_MS) {
     throw new McpToolError(

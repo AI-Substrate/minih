@@ -40,6 +40,11 @@ export interface TranscriptPaneProps {
   maxRows?: number;
   /** Maximum thinking rows to keep rendered before collapsing earlier ones. */
   maxThinkingRows?: number;
+  /**
+   * How many rows to scroll back from the live tail. 0 = follow live tail (default).
+   * Higher = older content. The pane clamps to the available range.
+   */
+  scrollOffset?: number;
 }
 
 const DEFAULT_MAX_ROWS = 30;
@@ -216,16 +221,32 @@ export function TranscriptPane({
   tools,
   maxRows = DEFAULT_MAX_ROWS,
   maxThinkingRows = DEFAULT_MAX_THINKING_ROWS,
+  scrollOffset = 0,
 }: TranscriptPaneProps): React.JSX.Element {
   const stream = buildStream(transcript, tools ?? []);
-  const window = stream.slice(-maxRows);
+  // Clamp scroll offset to the valid range. 0 = follow live tail.
+  const maxOffset = Math.max(0, stream.length - maxRows);
+  const offset = Math.min(Math.max(0, scrollOffset), maxOffset);
+  const end = stream.length - offset;
+  const start = Math.max(0, end - maxRows);
+  const window = stream.slice(start, end);
   const noToolNoise = collapseToolNoise(window);
   const items = collapseThinkingNoise(noToolNoise, maxThinkingRows);
+  const showingOlder = offset > 0;
   return (
     <Box flexDirection="column" paddingX={1} flexGrow={1} overflow="hidden">
-      <Text bold dimColor>
-        Transcript
-      </Text>
+      <Box>
+        <Text bold dimColor>
+          Transcript
+        </Text>
+        {showingOlder ? (
+          <Text dimColor italic>
+            {' · scrolled back '}
+            {offset}
+            {' (End to follow)'}
+          </Text>
+        ) : null}
+      </Box>
       {items.length === 0 ? (
         <Text dimColor> (no messages yet)</Text>
       ) : (

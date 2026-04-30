@@ -64,6 +64,10 @@ function App({
   const [bridge, setBridge] = React.useState<InputBridge>(initialBridge);
   const [followPaused, setFollowPaused] = React.useState<boolean>(false);
   const [layout, setLayout] = React.useState<SplitLayout>('reset');
+  // Scroll offset from the live tail (0 = following). Up arrow / PageUp move
+  // back into history; Down arrow / PageDown move toward live; End jumps to
+  // live and resumes follow. Scrolling auto-pauses follow.
+  const [scrollOffset, setScrollOffset] = React.useState<number>(0);
 
   React.useEffect(() => {
     bridgeUpdateRef.current = (next) => setBridge(next);
@@ -71,13 +75,6 @@ function App({
       bridgeUpdateRef.current = null;
     };
   }, [bridgeUpdateRef]);
-
-  // Note: feed updates flow via the module-level appSetModelRef setter; the
-  // run-feed's onUpdate callback calls pushHumanModel which writes through it.
-  // The dynamic flexGrow that used to drive split-layout was removed in FX002-3
-  // — transcript:workbench is now a fixed 60/40 split with minWidth=30 on the
-  // workbench. The split-layout state still drives WHICH pane is visually
-  // expanded via height ratios inside the left column (transcript vs tools).
 
   useInput((input, key) => {
     // FX002 follow-up — Ink with `exitOnCtrlC: false` + raw mode swallows
@@ -88,6 +85,34 @@ function App({
       onExitRequest?.();
       return;
     }
+
+    // Transcript scrolling: arrow keys + PageUp/PageDown + End.
+    // Scrolling auto-pauses follow; End jumps back to live and resumes.
+    if (key.upArrow) {
+      setScrollOffset((o) => o + 1);
+      setFollowPaused(true);
+      return;
+    }
+    if (key.downArrow) {
+      setScrollOffset((o) => Math.max(0, o - 1));
+      return;
+    }
+    if (key.pageUp) {
+      setScrollOffset((o) => o + 10);
+      setFollowPaused(true);
+      return;
+    }
+    if (key.pageDown) {
+      setScrollOffset((o) => Math.max(0, o - 10));
+      return;
+    }
+    // End → jump to live tail; Home → jump to oldest in window.
+    if (input === 'G' || (key.shift && input === 'g')) {
+      setScrollOffset(0);
+      setFollowPaused(false);
+      return;
+    }
+
     if (key.tab && key.shift) {
       setLayout('workbench');
       return;
@@ -138,7 +163,11 @@ function App({
       </Box>
       <Box flexDirection="row" flexGrow={1} width="100%">
         <Box flexDirection="column" flexGrow={transcriptColRatio} flexBasis={0}>
-          <TranscriptPane transcript={model.transcript} tools={model.tools} />
+          <TranscriptPane
+            transcript={model.transcript}
+            tools={model.tools}
+            scrollOffset={scrollOffset}
+          />
         </Box>
         {/* Plain whitespace gap between columns — no manually-drawn vertical
             separator, since that bar-char column had the same Yoga drift

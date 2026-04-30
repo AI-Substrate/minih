@@ -42,7 +42,7 @@ export interface TranscriptPaneProps {
   maxThinkingRows?: number;
 }
 
-const DEFAULT_MAX_ROWS = 80;
+const DEFAULT_MAX_ROWS = 30;
 const DEFAULT_MAX_THINKING_ROWS = 5;
 
 interface CollapsedSummary {
@@ -228,6 +228,7 @@ export function TranscriptPane({
       borderColor="gray"
       paddingX={1}
       flexGrow={1}
+      overflow="hidden"
     >
       <Text bold dimColor>
         Transcript

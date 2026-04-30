@@ -38,6 +38,7 @@ export function WorkbenchPane({
       borderColor="gray"
       paddingX={1}
       flexGrow={1}
+      overflow="hidden"
     >
       <Text bold dimColor>
         Workbench

@@ -32,14 +32,7 @@ export function WorkbenchPane({
 }: WorkbenchPaneProps): React.JSX.Element {
   const visible = coordination.slice(-maxRows);
   return (
-    <Box
-      flexDirection="column"
-      borderStyle="single"
-      borderColor="gray"
-      paddingX={1}
-      flexGrow={1}
-      overflow="hidden"
-    >
+    <Box flexDirection="column" paddingX={1} flexGrow={1} overflow="hidden">
       <Text bold dimColor>
         Workbench
       </Text>

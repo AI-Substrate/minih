@@ -14,7 +14,7 @@
  *   - `feed.stop()` is invoked from `unmount()` so cleanup is single-source.
  */
 
-import { Box, render, useInput } from 'ink';
+import { Box, render, Text, useInput } from 'ink';
 import * as React from 'react';
 import type { HumanViewModel } from '../../runner/types.js';
 import type { InputBridge } from './input-bridge.js';
@@ -130,9 +130,19 @@ function App({
       <Box flexShrink={0} width="100%">
         <HeaderPane header={model.header} capability={bridge.capability} />
       </Box>
+      {/* Thin horizontal divider after the header. */}
+      <Box flexShrink={0} width="100%">
+        <Text dimColor>
+          {'─'.repeat(Math.max(0, (process.stderr.columns ?? 80) - 1))}
+        </Text>
+      </Box>
       <Box flexDirection="row" flexGrow={1} width="100%">
         <Box flexDirection="column" flexGrow={transcriptColRatio} flexBasis={0}>
           <TranscriptPane transcript={model.transcript} tools={model.tools} />
+        </Box>
+        {/* Vertical separator column between transcript and workbench. */}
+        <Box flexDirection="column" flexShrink={0}>
+          <Text dimColor>{'│\n'.repeat(Math.max(0, terminalRows - 5))}</Text>
         </Box>
         <Box
           flexDirection="column"
@@ -146,6 +156,12 @@ function App({
             output={model.output}
           />
         </Box>
+      </Box>
+      {/* Thin horizontal divider before the footer. */}
+      <Box flexShrink={0} width="100%">
+        <Text dimColor>
+          {'─'.repeat(Math.max(0, (process.stderr.columns ?? 80) - 1))}
+        </Text>
       </Box>
       <Box flexShrink={0} width="100%">
         <FooterPane

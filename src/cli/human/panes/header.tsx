@@ -22,13 +22,7 @@ export function HeaderPane({
   const statusColor = colorForStatus(header.status);
   const capColor = colorForCapability(capability);
   return (
-    <Box
-      flexDirection="column"
-      borderStyle="single"
-      borderColor="gray"
-      paddingX={1}
-      width="100%"
-    >
+    <Box flexDirection="column" paddingX={1} paddingY={1} width="100%">
       <Box>
         <Text bold>{header.slug}</Text>
         <Text dimColor> · run </Text>

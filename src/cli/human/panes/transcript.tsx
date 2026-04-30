@@ -222,14 +222,7 @@ export function TranscriptPane({
   const noToolNoise = collapseToolNoise(window);
   const items = collapseThinkingNoise(noToolNoise, maxThinkingRows);
   return (
-    <Box
-      flexDirection="column"
-      borderStyle="single"
-      borderColor="gray"
-      paddingX={1}
-      flexGrow={1}
-      overflow="hidden"
-    >
+    <Box flexDirection="column" paddingX={1} flexGrow={1} overflow="hidden">
       <Text bold dimColor>
         Transcript
       </Text>

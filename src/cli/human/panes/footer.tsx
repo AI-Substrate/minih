@@ -79,13 +79,7 @@ export function FooterPane({
         : 'gray';
 
   return (
-    <Box
-      flexDirection="column"
-      borderStyle="single"
-      borderColor="gray"
-      paddingX={1}
-      width="100%"
-    >
+    <Box flexDirection="column" paddingX={1} paddingY={1} width="100%">
       <Box>
         <Text color={capColor}>{bridge.capability}</Text>
         {bridge.reason ? (

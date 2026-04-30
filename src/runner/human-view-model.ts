@@ -120,6 +120,16 @@ export function buildHumanViewModel(sources: HumanViewSources): HumanViewModel {
  * incoming `messageId`, we fall back to the **most-recent unfinalised text_delta
  * buffer in insertion order**. This is a pragmatic patch — a structural fix
  * pending SDK semantics clarification.
+ *
+ * **Known limitation (F001 from companion review 2026-04-30)**: the LIFO walk
+ * picks the *most-recent* unfinalised buffer. In a theoretical multi-stream
+ * scenario where the SDK is concurrently streaming TWO assistant messages and
+ * finalises them out-of-order with mismatched ids, the heuristic could pair
+ * the wrong buffer with the wrong final message (content swap). In practice
+ * the SDK observed during dogfooding never interleaves streams, so this is
+ * a documented theoretical risk, not an active defect. If we encounter it,
+ * the structural fix is to track stream provenance via `data.parentId` or
+ * similar (not exposed in current SDK shape).
  */
 function projectTranscript(
   events: AgentEvent[],

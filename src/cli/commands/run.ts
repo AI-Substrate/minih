@@ -247,19 +247,28 @@ export function registerRunCommand(program: Command): void {
                   runStatus: 'active',
                 });
 
+                // FX002-5 + Ctrl-C bug: unmount + setImmediate guard so Ink's
+                // terminal-restore side effects flush before process.exit. Used
+                // for both signals AND in-TUI Ctrl-C (raw mode swallows SIGINT).
+                const exitState = { exited: false };
+                const handleRef: {
+                  current: { unmount(): void } | null;
+                } = { current: null };
+                const onSig = (code: number): void => {
+                  if (exitState.exited) return;
+                  exitState.exited = true;
+                  handleRef.current?.unmount();
+                  setImmediate(() => process.exit(code));
+                };
+
                 humanHandle.ref = mountHumanApp({
                   feed,
                   bridge,
                   initial: initialModel,
+                  onExitRequest: () => onSig(130),
                 });
+                handleRef.current = humanHandle.ref;
 
-                // FX002-5 — Ctrl-C: unmount + setImmediate guard for Ink's
-                // terminal-restore side effects + explicit process.exit so the
-                // pending SDK promise doesn't keep the process alive.
-                const onSig = (code: number): void => {
-                  humanHandle.ref?.unmount();
-                  setImmediate(() => process.exit(code));
-                };
                 process.once('SIGINT', () => onSig(130));
                 process.once('SIGTERM', () => onSig(143));
               } catch (err) {

@@ -103,37 +103,43 @@ export function registerViewCommand(program: Command): void {
           runStatus: isTerminal ? 'completed' : 'active',
         });
 
+        // FX002-5 + F002 — single shared exit guard across all three exit paths
+        // (Ctrl-C in TUI, SIGINT/SIGTERM signal, completed-run auto-exit).
+        // `setImmediate` gives Ink's `cli-cursor` show + raw-mode reset a tick
+        // to land before exit. clearTimeout prevents the auto-exit timer from
+        // firing after a Ctrl-C / signal already triggered the exit.
+        const exitState: {
+          exited: boolean;
+          timer: NodeJS.Timeout | null;
+          handle: { unmount(): void } | null;
+        } = { exited: false, timer: null, handle: null };
+        const exit = (code: number): void => {
+          if (exitState.exited) return;
+          exitState.exited = true;
+          if (exitState.timer) clearTimeout(exitState.timer);
+          exitState.handle?.unmount();
+          setImmediate(() => process.exit(code));
+        };
+
         const handle = mountHumanApp({
           feed,
           bridge,
           initial: initialModel,
+          onExitRequest: () => exit(130),
         });
+        exitState.handle = handle;
 
-        // FX002-5 — Ctrl-C / SIGTERM unmount + exit cleanly. setImmediate gives
-        // Ink's `cli-cursor` show + raw-mode reset a tick to land before exit.
-        const onSignal = (signal: NodeJS.Signals): void => {
-          handle.unmount();
-          setImmediate(() => process.exit(signal === 'SIGTERM' ? 143 : 130));
-        };
-        process.once('SIGINT', () => onSignal('SIGINT'));
-        process.once('SIGTERM', () => onSignal('SIGTERM'));
+        process.once('SIGINT', () => exit(130));
+        process.once('SIGTERM', () => exit(143));
 
-        // FX002-5 — completed-run auto-exit. When attached to a terminal run,
-        // wait for first key-press OR 5s timeout, then unmount + exit. Without
-        // this the user sees a static rendering of a finished run forever.
+        // FX002-5 — completed-run auto-exit. Without this, viewing a finished
+        // run shows a static frame forever.
         if (isTerminal && process.stdin.isTTY) {
           const waitMs = 5000;
-          let exited = false;
-          const exit = (): void => {
-            if (exited) return;
-            exited = true;
-            handle.unmount();
-            setImmediate(() => process.exit(0));
-          };
           process.stdin.setRawMode?.(true);
           process.stdin.resume();
-          process.stdin.once('data', exit);
-          setTimeout(exit, waitMs);
+          process.stdin.once('data', () => exit(0));
+          exitState.timer = setTimeout(() => exit(0), waitMs);
         }
 
         await handle.waitUntilExit();

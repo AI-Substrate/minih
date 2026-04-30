@@ -30,6 +30,13 @@ export interface MountHumanAppOptions {
   bridge: InputBridge;
   /** Initial view model — must be provided so first paint is non-blank. */
   initial: HumanViewModel;
+  /**
+   * Called when the user requests exit via Ctrl-C / Ctrl-D inside the TUI.
+   * The caller is expected to call `handle.unmount()` and then exit the
+   * process. Without this, raw-mode + `exitOnCtrlC: false` swallows the
+   * keypress and SIGINT never fires.
+   */
+  onExitRequest?: () => void;
 }
 
 export interface HumanAppHandle {
@@ -45,12 +52,14 @@ interface AppProps {
   initialBridge: InputBridge;
   initial: HumanViewModel;
   bridgeUpdateRef: React.MutableRefObject<((b: InputBridge) => void) | null>;
+  onExitRequest?: () => void;
 }
 
 function App({
   initialBridge,
   initial,
   bridgeUpdateRef,
+  onExitRequest,
 }: AppProps): React.JSX.Element {
   const [model, setModel] = React.useState<HumanViewModel>(initial);
   const [bridge, setBridge] = React.useState<InputBridge>(initialBridge);
@@ -71,7 +80,15 @@ function App({
   // workbench. The split-layout state still drives WHICH pane is visually
   // expanded via height ratios inside the left column (transcript vs tools).
 
-  useInput((_input, key) => {
+  useInput((input, key) => {
+    // FX002 follow-up — Ink with `exitOnCtrlC: false` + raw mode swallows
+    // Ctrl-C; SIGINT never fires. Detect ctrl+c / ctrl+d explicitly and
+    // hand control to the caller (which knows how to tear down the SDK
+    // session, not just the renderer).
+    if (key.ctrl && (input === 'c' || input === 'd')) {
+      onExitRequest?.();
+      return;
+    }
     if (key.tab && key.shift) {
       setLayout('workbench');
       return;
@@ -165,6 +182,7 @@ export function mountHumanApp(options: MountHumanAppOptions): HumanAppHandle {
       initialBridge={options.bridge}
       initial={options.initial}
       bridgeUpdateRef={bridgeUpdateRef}
+      onExitRequest={options.onExitRequest}
     />,
     {
       stdout: process.stderr,

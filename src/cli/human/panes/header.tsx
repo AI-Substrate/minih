@@ -27,6 +27,7 @@ export function HeaderPane({
       borderStyle="round"
       borderColor="gray"
       paddingX={1}
+      width="100%"
     >
       <Box>
         <Text bold>{header.slug}</Text>

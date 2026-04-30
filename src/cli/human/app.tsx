@@ -115,22 +115,22 @@ function App({
   // log-mode rendering coherent. Terminal resize is not handled in v1.
   const terminalRows = process.stderr.rows ?? 30;
 
-  // FX002 follow-up: tool calls are now interleaved into the transcript
-  // chronologically (no separate Tools pane). The split-layout state still
-  // toggles which top-level pane is wider — flexGrow only (no `width="X%"`,
-  // which conflicted with flexGrow and produced uneven columns + mid-word
-  // wrapping when content overflowed).
+  // Plan 009 user pref (2026-04-30 18:25): default 3:1 transcript:workbench
+  // (~75/25). Split-layout swaps:
+  //   reset             → 3:1 (transcript wider — chat is the focus)
+  //   transcript-expand → 9:1 (workbench shrinks to a thin sidebar)
+  //   workbench-expand  → 1:1 (workbench takes equal share for inspecting)
   const transcriptColRatio =
-    layout === 'transcript' ? 8 : layout === 'workbench' ? 2 : 6;
+    layout === 'transcript' ? 9 : layout === 'workbench' ? 1 : 3;
   const workbenchColRatio =
-    layout === 'workbench' ? 8 : layout === 'transcript' ? 2 : 4;
+    layout === 'workbench' ? 1 : layout === 'transcript' ? 1 : 1;
 
   return (
     <Box flexDirection="column" height={terminalRows}>
-      <Box flexShrink={0}>
+      <Box flexShrink={0} width="100%">
         <HeaderPane header={model.header} capability={bridge.capability} />
       </Box>
-      <Box flexDirection="row" flexGrow={1}>
+      <Box flexDirection="row" flexGrow={1} width="100%">
         <Box flexDirection="column" flexGrow={transcriptColRatio} flexBasis={0}>
           <TranscriptPane transcript={model.transcript} tools={model.tools} />
         </Box>
@@ -138,7 +138,7 @@ function App({
           flexDirection="column"
           flexGrow={workbenchColRatio}
           flexBasis={0}
-          minWidth={30}
+          minWidth={24}
         >
           <WorkbenchPane
             coordination={model.coordination}
@@ -147,7 +147,7 @@ function App({
           />
         </Box>
       </Box>
-      <Box flexShrink={0}>
+      <Box flexShrink={0} width="100%">
         <FooterPane
           bridge={bridge}
           followPaused={followPaused}

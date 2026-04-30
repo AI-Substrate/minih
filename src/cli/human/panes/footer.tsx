@@ -84,6 +84,7 @@ export function FooterPane({
       borderStyle="round"
       borderColor="gray"
       paddingX={1}
+      width="100%"
     >
       <Box>
         <Text color={capColor}>{bridge.capability}</Text>

@@ -12,7 +12,8 @@
  *
  * Path resolution: the file is bundled into `dist/AGENTS_README.md` by
  * `scripts/copy-schemas.js` at build time. This module's runtime location is
- * `dist/cli/commands/agent-readme.js`, so the README sits three `..` up.
+ * `dist/cli/commands/agent-readme.js`, so from `dirname(import.meta.url)` the
+ * README sits at `../../AGENTS_README.md` (two `..` up: `commands/` → `cli/` → `dist/`).
  */
 
 import { existsSync, readFileSync } from 'node:fs';

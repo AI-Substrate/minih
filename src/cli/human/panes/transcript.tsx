@@ -272,17 +272,23 @@ function CollapsedToolsRow({
 function ToolRow({ tool }: { tool: ToolCallView }): React.JSX.Element {
   const { glyph, color } = badgeForToolStatus(tool.status);
   const summary = tool.outputSummary ?? tool.inputSummary;
+  // Collapse newlines/tabs/runs of whitespace to single spaces so the row
+  // renders as one truncatable line — multi-line tool output (e.g. `ls`
+  // showing 30 entries on separate lines) would otherwise overflow the
+  // column because Ink only wraps at column-edge whitespace, and each
+  // \n-delimited line is independently rendered.
+  const summaryClean = summary ? summary.replace(/\s+/g, ' ').trim() : null;
   return (
     <Box marginTop={1}>
       <Text color={color}>{glyph} </Text>
       <Text bold wrap="truncate-end">
         {tool.toolName}
       </Text>
-      {summary ? (
+      {summaryClean ? (
         <>
           <Text dimColor> · </Text>
           <Text dimColor wrap="truncate-end">
-            {summary}
+            {summaryClean}
           </Text>
         </>
       ) : null}

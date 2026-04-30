@@ -61,6 +61,7 @@ interface ResumeFlagOpts {
   run?: string;
   timeout?: string;
   verbose?: boolean;
+  human?: boolean;
   mcpConfig?: string;
   resumePrompt?: string;
   takeover?: boolean;
@@ -171,6 +172,10 @@ export function registerResumeCommand(program: Command): void {
     .option('--yes', 'Bypass TTY confirmation for --takeover')
     .option('-t, --timeout <seconds>', 'Timeout in seconds', '300')
     .option('--verbose', 'Show all events with timestamps (verbose mode)')
+    .option(
+      '--human',
+      'Mount the live human-view TUI to stderr (mutually-exclusive with --verbose)',
+    )
     .option('--mcp-config <path>', 'MCP config file with mcpServers (JSON)')
     .action(
       async (
@@ -179,6 +184,17 @@ export function registerResumeCommand(program: Command): void {
         opts: ResumeFlagOpts,
       ) => {
         const agentsDir = program.opts().agentsDir ?? 'agents';
+
+        if (opts.human && opts.verbose) {
+          exitWithEnvelope(
+            formatError(
+              'resume',
+              ErrorCodes.INVALID_ARGS,
+              '--human and --verbose are mutually exclusive.',
+              { provided: ['--human', '--verbose'] },
+            ),
+          );
+        }
 
         let message = messageArg ?? '';
         if (!message && !process.stdin.isTTY) {
@@ -392,9 +408,9 @@ async function runResumed(args: RunResumedArgs): Promise<void> {
 
   const isTTY = process.stderr.isTTY;
   const useVerbose = opts.verbose || !isTTY;
-  const pretty = useVerbose ? null : new PrettyDisplay();
+  const pretty = opts.human || useVerbose ? null : new PrettyDisplay();
 
-  if (isTTY) {
+  if (isTTY && !opts.human) {
     displayHeader(slug, '(resuming...)', undefined);
     displayPreflight('Session', true, session.sessionId);
     displayPreflight('Original run', true, session.runId);
@@ -450,6 +466,15 @@ async function runResumed(args: RunResumedArgs): Promise<void> {
       '(resumed) Check your inbox and continue from your last task.';
   }
 
+  // Plan 009 — humanHandle.ref pattern lets us tear down the renderer on
+  // run completion (mirrors run.ts).
+  const humanHandle: {
+    ref: {
+      unmount(): void;
+      updateBridge(b: import('../human/input-bridge.js').InputBridge): void;
+    } | null;
+  } = { ref: null };
+
   const config: AgentRunConfig = {
     slug,
     timeout: Number.parseInt(opts.timeout ?? '300', 10),
@@ -480,6 +505,60 @@ async function runResumed(args: RunResumedArgs): Promise<void> {
             : 'completed-followup',
       ...(args.previousPid != null && { resumePreviousPid: args.previousPid }),
     }),
+    ...(opts.human && {
+      onSessionReady: async (sender, ctx) => {
+        try {
+          const { createRunFeed } = await import('../human/run-feed.js');
+          const { createInputBridge } = await import(
+            '../human/input-bridge.js'
+          );
+          const { mountHumanApp, pushHumanModel } = await import(
+            '../human/app.js'
+          );
+          const { buildHumanViewModel } = await import('../../runner/index.js');
+
+          const feed = await createRunFeed({
+            runDir: ctx.runDir,
+            onUpdate: (model) => pushHumanModel(model),
+          });
+          const initialSources = await feed.readSnapshot();
+          const initialModel = buildHumanViewModel(initialSources);
+
+          const bridge = createInputBridge({
+            sender,
+            attached: false,
+            runStatus: 'active',
+          });
+
+          // FX002 + Ctrl-C bug: shared exit guard across signal + in-TUI Ctrl-C.
+          const handleRef: { current: { unmount(): void } | null } = {
+            current: null,
+          };
+          let exited = false;
+          const onSig = (code: number): void => {
+            if (exited) return;
+            exited = true;
+            handleRef.current?.unmount();
+            setImmediate(() => process.exit(code));
+          };
+
+          humanHandle.ref = mountHumanApp({
+            feed,
+            bridge,
+            initial: initialModel,
+            onExitRequest: () => onSig(130),
+          });
+          handleRef.current = humanHandle.ref;
+
+          process.once('SIGINT', () => onSig(130));
+          process.once('SIGTERM', () => onSig(143));
+        } catch (err) {
+          process.stderr.write(
+            `human-view mount failed: ${(err as Error).message}\n`,
+          );
+        }
+      },
+    }),
   };
 
   const runtime = await createSdkRuntime('resume', () => pretty?.cleanup());
@@ -488,7 +567,9 @@ async function runResumed(args: RunResumedArgs): Promise<void> {
     const onEvent = pretty
       ? (e: import('../../adapter/events.js').AgentEvent) =>
           pretty.handleEvent(e)
-      : displayEvent;
+      : opts.human
+        ? undefined
+        : displayEvent;
     const result = await runAgent(
       runtime.adapter,
       definition,
@@ -498,7 +579,11 @@ async function runResumed(args: RunResumedArgs): Promise<void> {
     );
 
     pretty?.cleanup();
-    if (isTTY) {
+    if (opts.human && humanHandle.ref) {
+      humanHandle.ref.unmount();
+      humanHandle.ref = null;
+    }
+    if (isTTY && !opts.human) {
       displaySummary(result);
     }
 

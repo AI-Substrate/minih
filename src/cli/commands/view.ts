@@ -109,15 +109,34 @@ export function registerViewCommand(program: Command): void {
           initial: initialModel,
         });
 
-        const onSignal = (): void => {
+        // FX002-5 — Ctrl-C / SIGTERM unmount + exit cleanly. setImmediate gives
+        // Ink's `cli-cursor` show + raw-mode reset a tick to land before exit.
+        const onSignal = (signal: NodeJS.Signals): void => {
           handle.unmount();
+          setImmediate(() => process.exit(signal === 'SIGTERM' ? 143 : 130));
         };
-        process.once('SIGINT', onSignal);
-        process.once('SIGTERM', onSignal);
+        process.once('SIGINT', () => onSignal('SIGINT'));
+        process.once('SIGTERM', () => onSignal('SIGTERM'));
+
+        // FX002-5 — completed-run auto-exit. When attached to a terminal run,
+        // wait for first key-press OR 5s timeout, then unmount + exit. Without
+        // this the user sees a static rendering of a finished run forever.
+        if (isTerminal && process.stdin.isTTY) {
+          const waitMs = 5000;
+          let exited = false;
+          const exit = (): void => {
+            if (exited) return;
+            exited = true;
+            handle.unmount();
+            setImmediate(() => process.exit(0));
+          };
+          process.stdin.setRawMode?.(true);
+          process.stdin.resume();
+          process.stdin.once('data', exit);
+          setTimeout(exit, waitMs);
+        }
 
         await handle.waitUntilExit();
-        process.removeListener('SIGINT', onSignal);
-        process.removeListener('SIGTERM', onSignal);
       },
     );
 }

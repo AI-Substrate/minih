@@ -103,6 +103,24 @@ export function buildHumanViewModel(sources: HumanViewSources): HumanViewModel {
 // Transcript
 // ---------------------------------------------------------------------------
 
+/**
+ * Project AgentEvents into transcript rows.
+ *
+ * Transcript-row sources:
+ *   - `user_prompt` → outside actor row.
+ *   - `text_delta` (assistant streaming) + `message` (final) → coalesced inside
+ *     agent row, paired by `messageId`.
+ *   - `thinking` (FX002-1) → inside-agent-thinking row, coalesced into one buffer
+ *     per "thinking burst" (resets on the next non-thinking event boundary).
+ *   - `session_error` → error row.
+ *
+ * **FX002-2 heuristic** — the SDK observed in plan 009 dogfooding emits different
+ * `messageId`s on `text_delta` vs the finalising `message` event. To avoid empty
+ * "Inside agent" rows, when `message.content` is empty AND no buffer matches the
+ * incoming `messageId`, we fall back to the **most-recent unfinalised text_delta
+ * buffer in insertion order**. This is a pragmatic patch — a structural fix
+ * pending SDK semantics clarification.
+ */
 function projectTranscript(
   events: AgentEvent[],
   diagnostics: ViewDiagnostic[],
@@ -111,10 +129,37 @@ function projectTranscript(
     string,
     { content: string; sourceEventIds: string[]; ts: string }
   >();
+  // Insertion-order keys for FX002-2 fallback (most-recent unfinalised first).
+  const messageBufferOrder: string[] = [];
   const finalized = new Set<string>();
   const out: TranscriptEntry[] = [];
 
   let unkeyedDeltaIdx = 0;
+
+  // FX002-1 — current thinking buffer (only one active at a time; finalised on
+  // first non-thinking event).
+  let thinkingBuffer: {
+    content: string;
+    sourceEventIds: string[];
+    ts: string;
+    idx: number;
+  } | null = null;
+  let thinkingBurstIdx = 0;
+
+  const flushThinking = (): void => {
+    if (!thinkingBuffer) return;
+    out.push({
+      id: `thinking-${thinkingBuffer.idx}`,
+      ts: thinkingBuffer.ts,
+      role: 'assistant',
+      actorLabel: 'Inside agent (thinking)',
+      content: thinkingBuffer.content,
+      status: 'final',
+      sourceEventIds: thinkingBuffer.sourceEventIds,
+      messageId: null,
+    });
+    thinkingBuffer = null;
+  };
 
   for (const ev of events) {
     if (!isKnownEvent(ev)) {
@@ -124,6 +169,9 @@ function projectTranscript(
       });
       continue;
     }
+    // Any non-thinking event flushes the current thinking buffer.
+    if (ev.type !== 'thinking' && thinkingBuffer) flushThinking();
+
     switch (ev.type) {
       case 'user_prompt': {
         out.push({
@@ -138,10 +186,24 @@ function projectTranscript(
         });
         break;
       }
+      case 'thinking': {
+        if (!thinkingBuffer) {
+          thinkingBuffer = {
+            content: '',
+            sourceEventIds: [],
+            ts: ev.timestamp,
+            idx: thinkingBurstIdx++,
+          };
+        }
+        thinkingBuffer.content += ev.data.content;
+        if (ev.eventId) thinkingBuffer.sourceEventIds.push(ev.eventId);
+        break;
+      }
       case 'text_delta': {
         const key = ev.data.messageId ?? `__unkeyed-${unkeyedDeltaIdx++}`;
         if (finalized.has(key)) break;
-        const buf = messageBuffers.get(key) ?? {
+        const existing = messageBuffers.get(key);
+        const buf = existing ?? {
           content: '',
           sourceEventIds: [],
           ts: ev.timestamp,
@@ -149,11 +211,31 @@ function projectTranscript(
         buf.content += ev.data.content;
         if (ev.eventId) buf.sourceEventIds.push(ev.eventId);
         messageBuffers.set(key, buf);
+        if (!existing) messageBufferOrder.push(key);
         break;
       }
       case 'message': {
-        const key = ev.data.messageId ?? `__msg-${out.length}`;
-        const buf = messageBuffers.get(key);
+        const messageId = ev.data.messageId ?? null;
+        const directKey = messageId ?? `__msg-${out.length}`;
+        let buf = messageBuffers.get(directKey);
+        let consumedKey: string | null = buf ? directKey : null;
+
+        // FX002-2 fallback: when the message has empty content AND no buffer
+        // matches its messageId, take the most-recent unfinalised text_delta
+        // buffer (SDK uses different messageIds for deltas vs final message).
+        if (!buf && !ev.data.content) {
+          for (let i = messageBufferOrder.length - 1; i >= 0; i--) {
+            const candidateKey = messageBufferOrder[i];
+            if (finalized.has(candidateKey)) continue;
+            const candidate = messageBuffers.get(candidateKey);
+            if (candidate) {
+              buf = candidate;
+              consumedKey = candidateKey;
+              break;
+            }
+          }
+        }
+
         const content = ev.data.content || (buf?.content ?? '');
         const sourceIds = buf?.sourceEventIds ?? [];
         if (ev.eventId) sourceIds.push(ev.eventId);
@@ -165,10 +247,15 @@ function projectTranscript(
           content,
           status: 'final',
           sourceEventIds: sourceIds,
-          messageId: ev.data.messageId ?? null,
+          messageId,
         });
-        finalized.add(key);
-        messageBuffers.delete(key);
+        if (consumedKey) {
+          finalized.add(consumedKey);
+          messageBuffers.delete(consumedKey);
+        }
+        // Always finalise the direct key too (in case a future event tries to
+        // reuse it).
+        finalized.add(directKey);
         break;
       }
       case 'session_error': {
@@ -184,12 +271,15 @@ function projectTranscript(
         });
         break;
       }
-      // Other event types (usage, session_start, session_idle, raw, thinking,
-      // tool_call, tool_result) are projected elsewhere or intentionally skipped.
+      // Other event types (usage, session_start, session_idle, raw, tool_call,
+      // tool_result) are projected elsewhere or intentionally skipped.
       default:
         break;
     }
   }
+
+  // Trailing thinking buffer (no follow-up event) → flush as final row.
+  if (thinkingBuffer) flushThinking();
 
   // Any unfinalised text_delta buckets become 'streaming' transcript entries.
   for (const [key, buf] of messageBuffers.entries()) {

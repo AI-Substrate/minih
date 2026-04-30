@@ -253,9 +253,15 @@ export function registerRunCommand(program: Command): void {
                   initial: initialModel,
                 });
 
-                const onSig = (): void => humanHandle.ref?.unmount();
-                process.once('SIGINT', onSig);
-                process.once('SIGTERM', onSig);
+                // FX002-5 — Ctrl-C: unmount + setImmediate guard for Ink's
+                // terminal-restore side effects + explicit process.exit so the
+                // pending SDK promise doesn't keep the process alive.
+                const onSig = (code: number): void => {
+                  humanHandle.ref?.unmount();
+                  setImmediate(() => process.exit(code));
+                };
+                process.once('SIGINT', () => onSig(130));
+                process.once('SIGTERM', () => onSig(143));
               } catch (err) {
                 process.stderr.write(
                   `human-view mount failed: ${(err as Error).message}\n`,

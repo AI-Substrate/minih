@@ -373,7 +373,12 @@ export interface TranscriptEntry {
   ts: string;
   role: 'user' | 'assistant' | 'system' | 'error';
   /** Displayed actor label — outside actor / inside agent / system. */
-  actorLabel: 'Outside actor' | 'Inside agent' | 'System' | 'Error';
+  actorLabel:
+    | 'Outside actor'
+    | 'Inside agent'
+    | 'Inside agent (thinking)'
+    | 'System'
+    | 'Error';
   content: string;
   status: 'streaming' | 'final' | 'collapsed' | 'error';
   sourceEventIds: string[];

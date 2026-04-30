@@ -64,18 +64,12 @@ function App({
     };
   }, [bridgeUpdateRef]);
 
-  React.useEffect(() => {
-    let stopped = false;
-    // Subscribe via the feed's onUpdate by re-instantiating? createRunFeed only
-    // takes one onUpdate at construction. Phase 2 contract: caller passed `feed`
-    // already wired to a callback bridge. We expose a setter via window? Simpler:
-    // accept a `subscribe(cb)` from the caller. For v1, the caller passes
-    // `feed` configured to call a parent-owned callback that updates this state.
-    return () => {
-      stopped = true;
-      void stopped;
-    };
-  }, []);
+  // Note: feed updates flow via the module-level appSetModelRef setter; the
+  // run-feed's onUpdate callback calls pushHumanModel which writes through it.
+  // The dynamic flexGrow that used to drive split-layout was removed in FX002-3
+  // — transcript:workbench is now a fixed 60/40 split with minWidth=30 on the
+  // workbench. The split-layout state still drives WHICH pane is visually
+  // expanded via height ratios inside the left column (transcript vs tools).
 
   useInput((_input, key) => {
     if (key.tab && key.shift) {
@@ -100,20 +94,34 @@ function App({
     };
   }, []);
 
-  const transcriptFlex =
-    layout === 'transcript' ? 3 : layout === 'workbench' ? 1 : 2;
-  const workbenchFlex =
-    layout === 'workbench' ? 3 : layout === 'transcript' ? 1 : 2;
+  // FX002-3 — fixed-height layout. `process.stderr.rows` may be undefined when
+  // stderr is not a TTY (CI, piped output); fallback to 30 keeps Ink's
+  // log-mode rendering coherent. Terminal resize is not handled in v1.
+  const terminalRows = process.stderr.rows ?? 30;
+
+  // Inside the left column, transcript-vs-tools height ratio swaps with layout.
+  // transcript-expanded: transcript bigger; workbench-expanded (also shrinks
+  // tools); reset: even.
+  const transcriptHeightRatio =
+    layout === 'transcript' ? 4 : layout === 'workbench' ? 2 : 3;
+  const toolsHeightRatio =
+    layout === 'transcript' ? 1 : layout === 'workbench' ? 1 : 2;
 
   return (
-    <Box flexDirection="column">
-      <HeaderPane header={model.header} capability={bridge.capability} />
-      <Box flexDirection="row">
-        <Box flexDirection="column" flexGrow={transcriptFlex}>
-          <TranscriptPane transcript={model.transcript} />
-          <ToolsPane tools={model.tools} />
+    <Box flexDirection="column" height={terminalRows}>
+      <Box flexShrink={0}>
+        <HeaderPane header={model.header} capability={bridge.capability} />
+      </Box>
+      <Box flexDirection="row" flexGrow={1}>
+        <Box flexDirection="column" width="60%">
+          <Box flexGrow={transcriptHeightRatio}>
+            <TranscriptPane transcript={model.transcript} />
+          </Box>
+          <Box flexGrow={toolsHeightRatio}>
+            <ToolsPane tools={model.tools} />
+          </Box>
         </Box>
-        <Box flexDirection="column" flexGrow={workbenchFlex}>
+        <Box flexDirection="column" width="40%" minWidth={30}>
           <WorkbenchPane
             coordination={model.coordination}
             state={model.state}
@@ -121,11 +129,13 @@ function App({
           />
         </Box>
       </Box>
-      <FooterPane
-        bridge={bridge}
-        followPaused={followPaused}
-        onTogglePause={() => setFollowPaused((p) => !p)}
-      />
+      <Box flexShrink={0}>
+        <FooterPane
+          bridge={bridge}
+          followPaused={followPaused}
+          onTogglePause={() => setFollowPaused((p) => !p)}
+        />
+      </Box>
     </Box>
   );
 }

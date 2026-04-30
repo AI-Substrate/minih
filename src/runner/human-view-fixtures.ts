@@ -11,6 +11,7 @@ import type {
   AgentMessageEvent,
   AgentSessionEvent,
   AgentTextDeltaEvent,
+  AgentThinkingEvent,
   AgentToolCallEvent,
   AgentToolResultEvent,
   AgentUserPromptEvent,
@@ -130,6 +131,23 @@ export function makeMessage(
     timestamp: '2026-04-28T00:00:04.000Z',
     eventId: nextId('evt'),
     data: { content, messageId },
+  };
+}
+
+/**
+ * FX002-1 — fixture builder for `thinking` events. Thinking events have no
+ * messageId; the reducer coalesces consecutive thinking deltas into one
+ * "thinking burst" transcript row, finalised on the next non-thinking event.
+ */
+export function makeThinking(
+  content: string,
+  isDelta = true,
+): AgentThinkingEvent {
+  return {
+    type: 'thinking',
+    timestamp: '2026-04-28T00:00:02.500Z',
+    eventId: nextId('evt'),
+    data: { content, isDelta },
   };
 }
 

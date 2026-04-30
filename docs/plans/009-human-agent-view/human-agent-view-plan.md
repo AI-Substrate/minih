@@ -233,6 +233,7 @@ The following are explicitly out of this 3-phase plan and recorded for a future 
 | ID | Created | Summary | Domain(s) | Status | Source |
 |----|---------|---------|-----------|--------|--------|
 | FX001 | 2026-04-28 | Coordination tool-surface bugs surfaced by companion smoke: MCP `state` tool resolves only root `inside-state.schema.json` (not `state/`); `inbox_send` lacks `ackOf` parameter so reply-correlation contract is unenforceable. Adds the magic-wand end-to-end coordination contract test. | mcp (modify), runner (consume) | Complete | [fixes/FX001-coordination-tool-surface.md](./fixes/FX001-coordination-tool-surface.md) |
+| FX002 | 2026-04-30 | Phase 2 demo polish — append-mode render artifacts, empty transcript rows (thinking events ignored + text_delta/message messageId mismatch), collapsed workbench column, Ctrl-C doesn't exit process. 5 tasks across cli + runner reducer. | cli (modify), runner (extend reducer) | Complete | [fixes/FX002-phase-2-demo-polish.md](./fixes/FX002-phase-2-demo-polish.md) |
 
 ---
 

@@ -61,14 +61,38 @@ The agent's step 8 will read this follow-up and chain another `inbox_send` reply
 
 ## Wait-for-any verification (plan 014)
 
-After the agent finishes step 8 (reply chain), it will call `wait_for_any` with two watch entries — `{ kind: 'inbox.message' }` AND `{ kind: 'state.peer.changed' }` — and `waitMs: 30000`. To exercise the multi-kind wake path, write to outside state during this window:
+After the agent finishes step 8 (reply chain), it will call `wait_for_any` with two watch entries — `{ kind: 'inbox.message' }` AND `{ kind: 'state.peer.changed' }` — and `waitMs: 30000`. To exercise the multi-kind wake path, write to outside state during this window.
+
+**Timing matters**: real `fs.watch` needs a brief moment to subscribe to the parent directory after the agent calls `wait_for_any`. To avoid racing the subscription, watch the inside lane for the agent's chain-link reply (step 8 close), wait ~200ms, **then** fire the state-set trigger:
 
 ```bash
-# Trigger a state.peer.changed wake (any time within 30s of the agent's step 9 wait):
+# Wait until the agent's chain-link reply lands (signals step 8 close, step 9 wait active)
+while true; do
+  CHAIN_REPLY=$(npx minih inside inbox list coordination-smoke-test --run "$RUN_ID" 2>/dev/null \
+    | jq -r '.data.messages[] | select(.subject | startswith("Chain link reply")) | .id' \
+    | head -1)
+  [ -n "$CHAIN_REPLY" ] && break
+  sleep 1
+done
+
+# Brief buffer so the wait_for_any watcher has subscribed before we write
+sleep 0.5
+
+# Trigger a state.peer.changed wake:
 npx minih outside state set coordination-smoke-test \
   --run "$RUN_ID" \
   --status in-progress \
   --data-json '{"plan":"014","trigger":"wait-for-any-fire"}'
 ```
 
-If you don't write during the window, the agent's `wait_for_any` will time out cleanly (still a pass — empty events list with `wait.timedOut: true` is the documented no-event shape).
+If you don't fire during the 30s window, the agent's `wait_for_any` will time out cleanly (still a `pass` — empty events list with `wait.timedOut: true` is the documented no-event shape). The clean-timeout path is intentionally tested too — it proves the no-event branch works.
+
+To exercise the inbox-fire path instead (or in addition), send a message during the window:
+
+```bash
+npx minih outside inbox send coordination-smoke-test \
+  --run "$RUN_ID" \
+  --type note \
+  --subject "wait-for-any inbox fire trigger" \
+  --body "..."
+```

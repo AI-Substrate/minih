@@ -83,14 +83,21 @@ If no outside follow-up arrives within the wait window, mark this step `status: 
 
 This step exercises the **unified event-wait** primitive shipped in plan 014: a single MCP call that wakes on any combination of inbox messages and state changes, replacing the spin-loop-on-`state_get` pattern.
 
-- Call `wait_for_any` with TWO watch entries — `{ kind: 'inbox.message' }` AND `{ kind: 'state.peer.changed' }` — and `waitMs: 30000`. The outside operator will trigger a wake by either sending a message OR writing outside state during the wait window.
+- Call `wait_for_any` with TWO watch entries — `{ kind: 'inbox.message' }` AND `{ kind: 'state.peer.changed' }` — and `waitMs: 30000`. The outside operator's runbook (see `outside.md`) tells them to fire a `state.peer.changed` wake by writing to outside state shortly after you complete step 8.
 - When the call resolves, verify the returned envelope shape:
   1. Top-level fields: `events` (array) and `wait` (object with `requestedMs`, `elapsedMs`, `timedOut`, `matched`).
   2. If `events.length > 0`: each entry is `{ kind, ts, data }`; `kind` is one of `inbox.message` or `state.peer.changed`; `ts` is an ISO-8601 string; `data` shape matches the kind (`{ message: {...} }` for inbox.message, `{ newState: {...} }` for state.peer.changed).
-  3. If `events.length === 0` and `wait.timedOut === true`: that's the clean-timeout shape — record this case as `pass` with evidence noting the operator did not write during the window.
-- `evidence`: quote the full returned envelope (or the truncated head if it's huge). Confirm at least one of the two outcomes: a non-empty events list with a valid envelope, OR a clean timeout.
+  3. If `events.length === 0` and `wait.timedOut === true`: that's the clean-timeout shape — the operator chose not to fire a wake. Record this as `pass` with evidence noting the no-fire path was exercised.
+- Set `tool: 'wait_for_any'` in your `toolChecks[]` entry — that exact verb is in the schema enum. Do NOT use `event_wait` or any variation.
+- `evidence` MUST quote, at minimum:
+  1. The literal JSON keys present at the top level (e.g., `"events":[...], "wait":{...}`).
+  2. The `wait.timedOut` and `wait.matched` boolean values.
+  3. If `events.length > 0`: the `kind` literal of the first event AND the JSON keys present inside its `data` payload (proves discriminated-union shape).
+  4. If `events.length === 0`: the `wait.elapsedMs` value (proves the wait actually ran the full duration).
 
-If the outside operator did not write during the window AND the call timed out cleanly, that is still a `pass` — it proves the no-event path works. If the call THROWS or returns a malformed envelope, that is a `fail`.
+  Hand-wavy evidence ("got an envelope back, looks fine") is a contract violation — quote actual JSON.
+
+If the call THROWS or returns a malformed envelope (missing `events`/`wait` keys, non-array `events`, etc.), that is a HARD FAIL — record `status: 'fail'` and quote the actual response.
 
 If no outside message exists at step 1, still exercise the state and inbox-send tools and clearly mark the inbox-related steps as `status: 'skip'` with an explanation.
 

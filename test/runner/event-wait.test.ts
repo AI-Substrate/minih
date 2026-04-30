@@ -397,6 +397,72 @@ describe('waitForAny — settlement race + filter (plan 014 T004)', () => {
     expect(totalCloseCalls(index)).toBe(2);
   });
 
+  it('AC-15 — cleanup invariant: error path closes all watchers (F002)', async () => {
+    // Write corrupt outside.json — when the watcher fires and tries to read,
+    // it surfaces StateFileCorruptError → onError → settle → cleanup.
+    writeInbox('outside', []);
+    const outsidePath = stateFilePath(location(), 'outside');
+    fs.mkdirSync(path.dirname(outsidePath), { recursive: true });
+    fs.writeFileSync(outsidePath, '{ this is not valid json');
+
+    const index: WatcherIndex = new Map();
+    const wait = waitForAny({
+      location: location(),
+      side: 'inside',
+      events: [{ kind: 'inbox.message' }, { kind: 'state.peer.changed' }],
+      waitMs: 30000,
+      watchFactory: makeWatchFactory(index),
+    });
+
+    fireForFile(index, outsidePath);
+
+    await expect(wait).rejects.toMatchObject({
+      name: 'StateFileCorruptError',
+    });
+    // Both watchers must be closed even though one threw
+    expect(totalWatchers(index)).toBe(2);
+    expect(totalCloseCalls(index)).toBe(2);
+  });
+
+  it('AC-15 — cleanup invariant: registration-failure path closes prior watchers (F002)', async () => {
+    writeInbox('outside', []);
+    writeState('outside', defaultOutsideState());
+
+    const index: WatcherIndex = new Map();
+    let callCount = 0;
+    const failingFactory = (
+      parentDir: string,
+      listener: (
+        eventType: WatchEventType,
+        filename: string | Buffer | null,
+      ) => void,
+    ): NativeWatcher => {
+      callCount += 1;
+      if (callCount === 2) {
+        throw new Error('watchFactory failure on second registration');
+      }
+      const watcher = new FakeNativeWatcher(listener);
+      const list = index.get(parentDir) ?? [];
+      list.push(watcher);
+      index.set(parentDir, list);
+      return watcher;
+    };
+
+    await expect(
+      waitForAny({
+        location: location(),
+        side: 'inside',
+        events: [{ kind: 'inbox.message' }, { kind: 'state.peer.changed' }],
+        waitMs: 30000,
+        watchFactory: failingFactory,
+      }),
+    ).rejects.toThrow('watchFactory failure on second registration');
+
+    // The first watcher (inbox) was registered before the failure — must be closed
+    expect(totalWatchers(index)).toBe(1);
+    expect(totalCloseCalls(index)).toBe(1);
+  });
+
   it('AC-5 — discriminated-union envelope shape', async () => {
     writeInbox('outside', []);
     const index: WatcherIndex = new Map();

@@ -80,51 +80,51 @@ Existing minih harness (`just fft` quality gate). No harness work required. Per-
 
 | Status | ID | Task | Domain | Path(s) | Done When | Notes |
 |--------|-----|------|--------|---------|-----------|-------|
-| [ ] | T001 | Add public types: `EventKind` union, `WatchEntry` discriminated union, `EventEnvelope` discriminated union, `WaitForAnyResult` interface (with `events: EventEnvelope[]` + `wait: { requestedMs, elapsedMs, timedOut, matched }`). | runner | `/Users/jordanknight/substrate/minih/src/runner/types.ts` | Types compile under strict mode; types-test asserts narrowing on `EventEnvelope.kind`. | Per workshop "TypeScript Types (sketch)". |
-| [ ] | T002 | Implement `runner/event-wait.ts:waitForAny(opts) -> Promise<WaitForAnyResult>`. Settlement race over N watches + waitMs timeout, single-settle, cleanup-callback array, batched event delivery. Three internal watch sources: `inbox.message` (delegates to `pollInboxLane`), `state.peer.changed` (file-watch + diff snapshot), `state.self.changed` (file-watch + diff snapshot + self-write filter via `updatedBy === 'inside'` recency check). | runner | `/Users/jordanknight/substrate/minih/src/runner/event-wait.ts` | Function signature matches workshop; `pollInboxLane`/`watchFileChanges`/`readStateLazy` reused; no new file-watch primitive. | Per finding 01, 02, 04, 07. |
-| [ ] | T003 | Re-export `waitForAny`, `EventKind`, `WatchEntry`, `EventEnvelope`, `WaitForAnyResult` from `runner/index.ts`. | runner | `/Users/jordanknight/substrate/minih/src/runner/index.ts` | All five symbols importable as `from '../runner/index.js'`. | |
-| [ ] | T004 | Write unit tests over `FakeNativeWatcher` covering: (a) inbox-only wait fires on append, (b) state-only wait fires on outside.json write, (c) mixed-kind wait fires on whichever first, (d) multi-event delivery — multiple writes within debounce window deliver as one batch sorted by `ts`, (e) clean timeout returns `events: []` + `wait.timedOut: true`, (f) self-write suppression — inside agent's own `updatedBy: 'inside'` write does NOT wake `state.self.changed`, (g) cleanup invariant — every watch closed on every settlement path (fire, timeout, error). | runner (test) | `/Users/jordanknight/substrate/minih/test/runner/event-wait.test.ts` | All 7 unit cases green; covers ACs 1–6, 13, 14, 15. | Per finding 08, 10. |
-| [ ] | T005 | Add `MCP_STATE_CORRUPT` to `McpErrorCode` union in `mcp/types.ts`. Add `wait_for_any` to `MCP_TOOL_NAMES`. Append the `wait_for_any` `ToolContract` to `TOOL_CONTRACTS`: input schema with `events` (array, 1–8, items = `{ kind, filter? }`), `waitMs` (integer, 0–MAX_INBOX_WAIT_MS), both required; description text matches workshop "MCP Tool Schema (sketch)". | mcp | `/Users/jordanknight/substrate/minih/src/mcp/types.ts` | `MCP_TOOL_NAMES.length` = current+1; types-test asserts contract shape. | Per finding 03, 06. |
-| [ ] | T006 | Implement `mcp/tools/wait.ts:waitForAnyTool(context, input)`. Parses input (rejects: missing `events`/`waitMs`, length < 1 or > 8, unknown kind, duplicate kind, `waitMs` out of bounds), delegates to `runner.waitForAny`, maps `StateCorruptError` → `MCP_STATE_CORRUPT`, `InboxPollError` → existing mappings, others → `MCP_INTERNAL_ERROR`. Returns the result via `jsonResult`. | mcp | `/Users/jordanknight/substrate/minih/src/mcp/tools/wait.ts` | All validation paths return the documented error codes; success path returns the discriminated-union envelope. | Per finding 04. |
-| [ ] | T007 | Wire `wait_for_any` into `mcp/server.ts` dispatch table. | mcp | `/Users/jordanknight/substrate/minih/src/mcp/server.ts` | `client.callTool('wait_for_any', {...})` resolves correctly. | |
-| [ ] | T008 | Schema-validation tests in `test/mcp/tools-wait.test.ts`: missing `events`, missing `waitMs`, empty `events`, 9 entries, unknown kind, duplicate kind, `waitMs` < 0, `waitMs` > 30000 — each returns `MCP_INVALID_ARGUMENT`. Plus one happy-path test asserting envelope shape. | mcp (test) | `/Users/jordanknight/substrate/minih/test/mcp/tools-wait.test.ts` | 9 test cases green; covers ACs 7–11, 17. | |
-| [ ] | T009 | Extend `test/mcp/server.test.ts`: add `wait_for_any` to the `MCP_TOOL_NAMES` manifest assertion + one stdio round-trip test (`callTool('wait_for_any', { events: [...], waitMs: 100 })` returns clean-timeout envelope). | mcp (test) | `/Users/jordanknight/substrate/minih/test/mcp/server.test.ts` | Existing 4 tests still pass; new round-trip test passes. | |
-| [ ] | T010 | One integration test in `test/runner/wait-for-any-fs.test.ts` using real `fs.watch` against a tmpdir run folder. Mixed-kind wait; write to `state/outside.json` mid-wait; assert wake with a `state.peer.changed` event. | runner (test) | `/Users/jordanknight/substrate/minih/test/runner/wait-for-any-fs.test.ts` | Test passes locally on Darwin; covers AC-2 + AC-16 with real fs. | Per finding 10. |
-| [ ] | T011 | Extend `coordination-smoke-test` agent: new step 9 in `prompt.md` calling `wait_for_any({ events: [{ kind: 'state.peer.changed' }, { kind: 'inbox.message' }], waitMs: 30000 })` and verifying envelope shape on disk. Update `outside.md` to drive the wake (write to outside state mid-run). Bump `output-schema.json toolChecks.minItems` 7 → 8. | dogfood | `/Users/jordanknight/substrate/minih/agents/coordination-smoke-test/{prompt.md,outside.md,output-schema.json}` | Smoke test agent runs end-to-end with all-pass verdict; new toolCheck includes the `wait_for_any` envelope evidence. | Live regression — covers AC-23. |
-| [ ] | T012 | Update preamble × 3: add `wait_for_any` to `COORDINATION_TOOLS_SECTION` in `preamble-builder.ts`; add `### Coordination event waiting (plan 014)` subsection to `agents/_shared/preamble.md` and `src/templates/shared-preamble.md`. Both shared preambles must stay byte-identical (verified via `diff`). | runner | `/Users/jordanknight/substrate/minih/src/runner/preamble-builder.ts` AND `/Users/jordanknight/substrate/minih/agents/_shared/preamble.md` AND `/Users/jordanknight/substrate/minih/src/templates/shared-preamble.md` | All three files updated; `diff agents/_shared/preamble.md src/templates/shared-preamble.md` is empty. | Covers AC-21. |
-| [ ] | T013 | Update `AGENTS_README.md`: add `### Wait for any` subsection in the coordination area with worked example showing mixed-kind wait. | docs | `/Users/jordanknight/substrate/minih/AGENTS_README.md` | Subsection present; markdown lint clean. | Covers AC-22. |
-| [ ] | T014 | Append history rows to `docs/domains/{runner,mcp}/domain.md` referencing plan 014. Runner row describes new `event-wait.ts` primitive + types; mcp row describes new tool + new error code. Optionally add a Concepts entry for "Event waiting" in `runner/domain.md` if the team feels it warrants surfacing. | runner / mcp | `/Users/jordanknight/substrate/minih/docs/domains/{runner,mcp}/domain.md` | Both domain.md files have a 014 row. | Covers AC-25. |
-| [ ] | T015 | Run `just fft`. Fix any lint/format/typecheck/test/audit findings as ours, no deferrals. | all | repo root | `just fft` passes end-to-end. | Covers AC-24. Project rule: own every finding. |
+| [x] | T001 | Add public types: `EventKind` union, `WatchEntry` discriminated union, `EventEnvelope` discriminated union, `WaitForAnyResult` interface (with `events: EventEnvelope[]` + `wait: { requestedMs, elapsedMs, timedOut, matched }`). | runner | `/Users/jordanknight/substrate/minih/src/runner/types.ts` | Types compile under strict mode; types-test asserts narrowing on `EventEnvelope.kind`. | Per workshop "TypeScript Types (sketch)". |
+| [x] | T002 | Implement `runner/event-wait.ts:waitForAny(opts) -> Promise<WaitForAnyResult>`. Settlement race over N watches + waitMs timeout, single-settle, cleanup-callback array, batched event delivery. Three internal watch sources: `inbox.message` (delegates to `pollInboxLane`), `state.peer.changed` (file-watch + diff snapshot), `state.self.changed` (file-watch + diff snapshot + self-write filter via `updatedBy === 'inside'` recency check). | runner | `/Users/jordanknight/substrate/minih/src/runner/event-wait.ts` | Function signature matches workshop; `pollInboxLane`/`watchFileChanges`/`readStateLazy` reused; no new file-watch primitive. | Per finding 01, 02, 04, 07. |
+| [x] | T003 | Re-export `waitForAny`, `EventKind`, `WatchEntry`, `EventEnvelope`, `WaitForAnyResult` from `runner/index.ts`. | runner | `/Users/jordanknight/substrate/minih/src/runner/index.ts` | All five symbols importable as `from '../runner/index.js'`. | |
+| [x] | T004 | Write unit tests over `FakeNativeWatcher` covering: (a) inbox-only wait fires on append, (b) state-only wait fires on outside.json write, (c) mixed-kind wait fires on whichever first, (d) multi-event delivery — multiple writes within debounce window deliver as one batch sorted by `ts`, (e) clean timeout returns `events: []` + `wait.timedOut: true`, (f) self-write suppression — inside agent's own `updatedBy: 'inside'` write does NOT wake `state.self.changed`, (g) cleanup invariant — every watch closed on every settlement path (fire, timeout, error). | runner (test) | `/Users/jordanknight/substrate/minih/test/runner/event-wait.test.ts` | All 7 unit cases green; covers ACs 1–6, 13, 14, 15. | Per finding 08, 10. |
+| [x] | T005 | Add `MCP_STATE_CORRUPT` to `McpErrorCode` union in `mcp/types.ts`. Add `wait_for_any` to `MCP_TOOL_NAMES`. Append the `wait_for_any` `ToolContract` to `TOOL_CONTRACTS`: input schema with `events` (array, 1–8, items = `{ kind, filter? }`), `waitMs` (integer, 0–MAX_INBOX_WAIT_MS), both required; description text matches workshop "MCP Tool Schema (sketch)". | mcp | `/Users/jordanknight/substrate/minih/src/mcp/types.ts` | `MCP_TOOL_NAMES.length` = current+1; types-test asserts contract shape. | Per finding 03, 06. |
+| [x] | T006 | Implement `mcp/tools/wait.ts:waitForAnyTool(context, input)`. Parses input (rejects: missing `events`/`waitMs`, length < 1 or > 8, unknown kind, duplicate kind, `waitMs` out of bounds), delegates to `runner.waitForAny`, maps `StateCorruptError` → `MCP_STATE_CORRUPT`, `InboxPollError` → existing mappings, others → `MCP_INTERNAL_ERROR`. Returns the result via `jsonResult`. | mcp | `/Users/jordanknight/substrate/minih/src/mcp/tools/wait.ts` | All validation paths return the documented error codes; success path returns the discriminated-union envelope. | Per finding 04. |
+| [x] | T007 | Wire `wait_for_any` into `mcp/server.ts` dispatch table. | mcp | `/Users/jordanknight/substrate/minih/src/mcp/server.ts` | `client.callTool('wait_for_any', {...})` resolves correctly. | |
+| [x] | T008 | Schema-validation tests in `test/mcp/tools-wait.test.ts`: missing `events`, missing `waitMs`, empty `events`, 9 entries, unknown kind, duplicate kind, `waitMs` < 0, `waitMs` > 30000 — each returns `MCP_INVALID_ARGUMENT`. Plus one happy-path test asserting envelope shape. | mcp (test) | `/Users/jordanknight/substrate/minih/test/mcp/tools-wait.test.ts` | 9 test cases green; covers ACs 7–11, 17. | |
+| [x] | T009 | Extend `test/mcp/server.test.ts`: add `wait_for_any` to the `MCP_TOOL_NAMES` manifest assertion + one stdio round-trip test (`callTool('wait_for_any', { events: [...], waitMs: 100 })` returns clean-timeout envelope). | mcp (test) | `/Users/jordanknight/substrate/minih/test/mcp/server.test.ts` | Existing 4 tests still pass; new round-trip test passes. | |
+| [x] | T010 | One integration test in `test/runner/wait-for-any-fs.test.ts` using real `fs.watch` against a tmpdir run folder. Mixed-kind wait; write to `state/outside.json` mid-wait; assert wake with a `state.peer.changed` event. | runner (test) | `/Users/jordanknight/substrate/minih/test/runner/wait-for-any-fs.test.ts` | Test passes locally on Darwin; covers AC-2 + AC-16 with real fs. | Per finding 10. |
+| [x] | T011 | Extend `coordination-smoke-test` agent: new step 9 in `prompt.md` calling `wait_for_any({ events: [{ kind: 'state.peer.changed' }, { kind: 'inbox.message' }], waitMs: 30000 })` and verifying envelope shape on disk. Update `outside.md` to drive the wake (write to outside state mid-run). Bump `output-schema.json toolChecks.minItems` 7 → 8. | dogfood | `/Users/jordanknight/substrate/minih/agents/coordination-smoke-test/{prompt.md,outside.md,output-schema.json}` | Smoke test agent runs end-to-end with all-pass verdict; new toolCheck includes the `wait_for_any` envelope evidence. | Live regression — covers AC-23. |
+| [x] | T012 | Update preamble × 3: add `wait_for_any` to `COORDINATION_TOOLS_SECTION` in `preamble-builder.ts`; add `### Coordination event waiting (plan 014)` subsection to `agents/_shared/preamble.md` and `src/templates/shared-preamble.md`. Both shared preambles must stay byte-identical (verified via `diff`). | runner | `/Users/jordanknight/substrate/minih/src/runner/preamble-builder.ts` AND `/Users/jordanknight/substrate/minih/agents/_shared/preamble.md` AND `/Users/jordanknight/substrate/minih/src/templates/shared-preamble.md` | All three files updated; `diff agents/_shared/preamble.md src/templates/shared-preamble.md` is empty. | Covers AC-21. |
+| [x] | T013 | Update `AGENTS_README.md`: add `### Wait for any` subsection in the coordination area with worked example showing mixed-kind wait. | docs | `/Users/jordanknight/substrate/minih/AGENTS_README.md` | Subsection present; markdown lint clean. | Covers AC-22. |
+| [x] | T014 | Append history rows to `docs/domains/{runner,mcp}/domain.md` referencing plan 014. Runner row describes new `event-wait.ts` primitive + types; mcp row describes new tool + new error code. Optionally add a Concepts entry for "Event waiting" in `runner/domain.md` if the team feels it warrants surfacing. | runner / mcp | `/Users/jordanknight/substrate/minih/docs/domains/{runner,mcp}/domain.md` | Both domain.md files have a 014 row. | Covers AC-25. |
+| [x] | T015 | Run `just fft`. Fix any lint/format/typecheck/test/audit findings as ours, no deferrals. | all | repo root | `just fft` passes end-to-end. | Covers AC-24. Project rule: own every finding. |
 
 ### Acceptance Criteria
 
 Direct mapping from spec § Acceptance Criteria:
 
-- [ ] AC-1 (inbox-only wait fires on append) — T002, T004
-- [ ] AC-2 (state.peer.changed wakes on outside write) — T002, T004, T010
-- [ ] AC-3 (mixed-kind first-fire) — T002, T004
-- [ ] AC-4 (multi-event delivery, sorted by ts) — T002, T004
-- [ ] AC-5 (discriminated-union envelope) — T001, T002
-- [ ] AC-6 (clean timeout, no throw) — T002, T004, T009
-- [ ] AC-7 (events.length cap 1–8) — T006, T008
-- [ ] AC-8 (required fields) — T006, T008
-- [ ] AC-9 (unknown kind) — T006, T008
-- [ ] AC-10 (duplicate kind) — T006, T008
-- [ ] AC-11 (waitMs bounds) — T006, T008
-- [ ] AC-12 (inbox filter passthrough) — T002, T004
-- [ ] AC-13 (self-write suppression on state.self.changed) — T002, T004
-- [ ] AC-14 (cross-lane structural isolation) — T002, T004
-- [ ] AC-15 (cleanup invariants) — T002, T004
-- [ ] AC-16 (pre-existing files) — T002, T010
-- [ ] AC-17 (forward-compat envelope) — T001, T005, T008
-- [ ] AC-18 (MCP_STATE_CORRUPT) — T005, T006
-- [ ] AC-19 (no regression on inbox_list) — T015 (via `just fft`)
-- [ ] AC-20 (no regression on inbox_ack/state_*) — T015
-- [ ] AC-21 (preamble × 3) — T012
-- [ ] AC-22 (AGENTS_README) — T013
-- [ ] AC-23 (smoke-test step) — T011
-- [ ] AC-24 (just fft passes) — T015
-- [ ] AC-25 (domain history) — T014
+- [x] AC-1 (inbox-only wait fires on append) — T002, T004
+- [x] AC-2 (state.peer.changed wakes on outside write) — T002, T004, T010
+- [x] AC-3 (mixed-kind first-fire) — T002, T004
+- [x] AC-4 (multi-event delivery, sorted by ts) — T002, T004
+- [x] AC-5 (discriminated-union envelope) — T001, T002
+- [x] AC-6 (clean timeout, no throw) — T002, T004, T009
+- [x] AC-7 (events.length cap 1–8) — T006, T008
+- [x] AC-8 (required fields) — T006, T008
+- [x] AC-9 (unknown kind) — T006, T008
+- [x] AC-10 (duplicate kind) — T006, T008
+- [x] AC-11 (waitMs bounds) — T006, T008
+- [x] AC-12 (inbox filter passthrough) — T002, T004
+- [x] AC-13 (self-write suppression on state.self.changed) — T002, T004
+- [x] AC-14 (cross-lane structural isolation) — T002, T004
+- [x] AC-15 (cleanup invariants) — T002, T004
+- [x] AC-16 (pre-existing files) — T002, T010
+- [x] AC-17 (forward-compat envelope) — T001, T005, T008
+- [x] AC-18 (MCP_STATE_CORRUPT) — T005, T006
+- [x] AC-19 (no regression on inbox_list) — T015 (via `just fft`)
+- [x] AC-20 (no regression on inbox_ack/state_*) — T015
+- [x] AC-21 (preamble × 3) — T012
+- [x] AC-22 (AGENTS_README) — T013
+- [x] AC-23 (smoke-test step) — T011
+- [x] AC-24 (just fft passes) — T015
+- [x] AC-25 (domain history) — T014
 
 ### Implementation Order Notes
 

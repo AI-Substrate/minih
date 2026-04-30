@@ -385,6 +385,11 @@ function readStateSafe(filePath: string, side: Side): SideState | null {
 function statesEqual(a: SideState | null, b: SideState | null): boolean {
   if (a === null && b === null) return true;
   if (a === null || b === null) return false;
+  // Safe: Node.js preserves object key order through JSON.parse → stringify
+  // roundtrips for objects written by our own runtime (writeState uses
+  // writeFileAtomicAsync over fixed-shape SideState objects). A future
+  // refactor that constructs state objects with dynamic / non-deterministic
+  // key ordering would need a structural diff here instead.
   return JSON.stringify(a) === JSON.stringify(b);
 }
 

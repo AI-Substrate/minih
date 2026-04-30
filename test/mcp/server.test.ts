@@ -178,6 +178,20 @@ describe('real MCP stdio server', () => {
     expect(last.ackOf).toBe(parentId);
     expect(last.type).toBe('note');
   });
+
+  it('wait_for_any round-trips a clean timeout via stdio (plan 014 T009)', async () => {
+    client = await createClient();
+
+    const result = await client.callTool('wait_for_any', {
+      events: [{ kind: 'inbox.message' }],
+      waitMs: 100,
+    });
+    expect(result.isError).toBeUndefined();
+    expect(result.structuredContent).toMatchObject({
+      events: [],
+      wait: { requestedMs: 100, timedOut: true, matched: false },
+    });
+  });
 });
 
 async function createClient(): Promise<TestMcpClient> {

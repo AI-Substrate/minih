@@ -28,7 +28,7 @@ afterEach(() => {
 });
 
 describe('MCP tool contracts', () => {
-  it('defines exactly the six inside coordination tools', () => {
+  it('defines the seven inside coordination tools (six original + wait_for_any from plan 014)', () => {
     expect(MCP_TOOL_NAMES).toEqual([
       'inbox_list',
       'inbox_send',
@@ -36,6 +36,7 @@ describe('MCP tool contracts', () => {
       'state_get',
       'state_set',
       'state_transition',
+      'wait_for_any',
     ]);
     expect(TOOL_CONTRACTS.map((tool) => tool.name)).toEqual(MCP_TOOL_NAMES);
     expect(MCP_TOOL_NAMES.every((name) => /^[a-zA-Z0-9_-]+$/.test(name))).toBe(

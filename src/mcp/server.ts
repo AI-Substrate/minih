@@ -11,6 +11,7 @@ import {
 import { loadMcpContext, type McpServerContext } from './context.js';
 import { inboxAck, inboxList, inboxSend } from './tools/inbox.js';
 import { stateGet, stateSet, stateTransition } from './tools/state.js';
+import { waitForAnyTool } from './tools/wait.js';
 import {
   errorResult,
   McpToolError,
@@ -101,6 +102,8 @@ async function dispatchNormalizedToolCall(
       return toCallToolResult(stateSet(context, args));
     case 'state_transition':
       return toCallToolResult(stateTransition(context, args));
+    case 'wait_for_any':
+      return toCallToolResult(await waitForAnyTool(context, args));
   }
 }
 

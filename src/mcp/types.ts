@@ -10,6 +10,7 @@ export const MCP_TOOL_NAMES = [
   'state_get',
   'state_set',
   'state_transition',
+  'wait_for_any',
 ] as const;
 
 export type McpToolName = (typeof MCP_TOOL_NAMES)[number];
@@ -295,6 +296,47 @@ export const TOOL_CONTRACTS: readonly ToolContract[] = [
         data: { type: 'object', additionalProperties: true },
       },
       required: ['to'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'wait_for_any',
+    description:
+      'Long-poll for any of N event kinds (inbox messages, state changes, …) in one call. Returns all events fired during the wait window in an EventEnvelope discriminated union; clean timeout returns events: [] with timedOut: true. Plan 014.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        events: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 8,
+          description:
+            'Watch entries; each is { kind, filter? }. Supported kinds: inbox.message (with optional filter.types[]), state.peer.changed, state.self.changed.',
+          items: {
+            type: 'object',
+            properties: {
+              kind: {
+                type: 'string',
+                description:
+                  "Event kind to watch. Supported in v1: 'inbox.message', 'state.peer.changed', 'state.self.changed'. Runtime validates; unknown kinds return MCP_INVALID_ARGUMENT.",
+                minLength: 1,
+                maxLength: 64,
+              },
+              filter: { type: 'object', additionalProperties: true },
+            },
+            required: ['kind'],
+            additionalProperties: false,
+          },
+        },
+        waitMs: {
+          type: 'integer',
+          minimum: 0,
+          maximum: MAX_INBOX_WAIT_MS,
+          description:
+            'Bounded wait duration in milliseconds. Required (unlike inbox_list, where waitMs is optional).',
+        },
+      },
+      required: ['events', 'waitMs'],
       additionalProperties: false,
     },
   },

@@ -17,7 +17,9 @@ import type {
 import type { AgentEvent, AgentResult, AgentRunOptions } from './events.js';
 import type { IAgentAdapter } from './interface.js';
 
-const approveAll = () => ({ kind: 'approved' as const });
+// SDK 0.3.0 changed the kind from 'approved' to 'approve-once'. The official
+// `approveAll` export from the SDK uses this same shape.
+const approveAll = () => ({ kind: 'approve-once' as const });
 
 const MAX_PROMPT_LENGTH = 100_000;
 

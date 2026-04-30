@@ -133,7 +133,7 @@ function InboxRow({ entry }: { entry: InboxTimelineEntry }): React.JSX.Element {
   const laneColor = entry.lane === 'outside' ? 'cyan' : 'magenta';
   const ackBadge = badgeForAckState(entry.ackState);
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" width="100%" overflowX="hidden">
       <Box>
         <Text color={laneColor}>✉ </Text>
         <Text color={laneColor}>{entry.lane}</Text>
@@ -162,7 +162,7 @@ function StateRow({
   entry: StateTransitionTimelineEntry;
 }): React.JSX.Element {
   return (
-    <Box>
+    <Box width="100%" overflowX="hidden">
       <Text color={entry.side === 'outside' ? 'cyan' : 'magenta'}>⇄ </Text>
       <Text color={entry.side === 'outside' ? 'cyan' : 'magenta'}>
         {entry.side}

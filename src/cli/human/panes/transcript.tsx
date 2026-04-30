@@ -260,7 +260,7 @@ function CollapsedToolsRow({
 }): React.JSX.Element {
   const { glyph, color } = badgeForToolStatus(item.status);
   return (
-    <Box marginTop={1}>
+    <Box marginTop={1} width="100%" overflowX="hidden">
       <Text color={color}>{glyph} </Text>
       <Text bold dimColor>
         {item.toolName}
@@ -273,14 +273,9 @@ function CollapsedToolsRow({
 function ToolRow({ tool }: { tool: ToolCallView }): React.JSX.Element {
   const { glyph, color } = badgeForToolStatus(tool.status);
   const summary = tool.outputSummary ?? tool.inputSummary;
-  // Collapse newlines/tabs/runs of whitespace to single spaces so the row
-  // renders as one truncatable line — multi-line tool output (e.g. `ls`
-  // showing 30 entries on separate lines) would otherwise overflow the
-  // column because Ink only wraps at column-edge whitespace, and each
-  // \n-delimited line is independently rendered.
   const summaryClean = summary ? summary.replace(/\s+/g, ' ').trim() : null;
   return (
-    <Box marginTop={1}>
+    <Box marginTop={1} width="100%" overflowX="hidden">
       <Text color={color}>{glyph} </Text>
       <Text bold wrap="truncate-end">
         {tool.toolName}
@@ -319,7 +314,7 @@ function truncate(s: string, n: number): string {
 
 function CollapsedRow({ count }: { count: number }): React.JSX.Element {
   return (
-    <Box marginTop={1}>
+    <Box marginTop={1} width="100%" overflowX="hidden">
       <Text dimColor italic>
         … {count} earlier thinking {count === 1 ? 'entry' : 'entries'} collapsed
       </Text>
@@ -346,18 +341,20 @@ function TranscriptRow({
   }
 
   if (isThinking) {
+    // Single truncated line — thinking is transient state, not chat content.
+    const cleaned = entry.content.replace(/\s+/g, ' ').trim();
     return (
-      <Box flexDirection="column" marginTop={1} width="100%">
-        <Text dimColor italic wrap="wrap">
-          💭 {hasContent ? entry.content : '(thinking…)'}
+      <Box marginTop={1} width="100%" overflowX="hidden">
+        <Text dimColor italic wrap="truncate-end">
+          💭 {cleaned || '(thinking…)'}
         </Text>
       </Box>
     );
   }
 
   return (
-    <Box flexDirection="column" marginTop={1} width="100%">
-      <Box>
+    <Box flexDirection="column" marginTop={1} width="100%" overflowX="hidden">
+      <Box width="100%">
         <Text color={labelColor} bold>
           {entry.actorLabel}
         </Text>
@@ -369,7 +366,9 @@ function TranscriptRow({
         ) : null}
       </Box>
       {hasContent ? (
-        <Text wrap="wrap">{entry.content}</Text>
+        <Box width="100%">
+          <Text wrap="wrap">{entry.content}</Text>
+        </Box>
       ) : (
         <Text dimColor italic>
           …

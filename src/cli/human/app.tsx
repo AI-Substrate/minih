@@ -140,10 +140,10 @@ function App({
         <Box flexDirection="column" flexGrow={transcriptColRatio} flexBasis={0}>
           <TranscriptPane transcript={model.transcript} tools={model.tools} />
         </Box>
-        {/* Vertical separator column between transcript and workbench. */}
-        <Box flexDirection="column" flexShrink={0}>
-          <Text dimColor>{'│\n'.repeat(Math.max(0, terminalRows - 5))}</Text>
-        </Box>
+        {/* Plain whitespace gap between columns — no manually-drawn vertical
+            separator, since that bar-char column had the same Yoga drift
+            problem as borders. A 2-char gap reads as visual separation. */}
+        <Box flexShrink={0} width={2} />
         <Box
           flexDirection="column"
           flexGrow={workbenchColRatio}

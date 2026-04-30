@@ -335,11 +335,14 @@ function TranscriptRow({
 
   if (isThinking) {
     // Single truncated line — thinking is transient state, not chat content.
+    // No emoji prefix: 💭 is double-width which throws off Ink's wrap math
+    // (it counts chars, not display cells), causing the second visual cell
+    // to bleed past the column boundary on emoji-containing rows.
     const cleaned = entry.content.replace(/\s+/g, ' ').trim();
     return (
       <Box marginTop={1} width="100%" overflowX="hidden">
         <Text dimColor italic wrap="truncate-end">
-          💭 {cleaned || '(thinking…)'}
+          ~ {cleaned || '(thinking…)'}
         </Text>
       </Box>
     );

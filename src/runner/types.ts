@@ -494,3 +494,52 @@ export interface HumanViewModel {
   input: InputFooterView;
   diagnostics: ViewDiagnostic[];
 }
+
+// ---------------------------------------------------------------------------
+// Plan 014 — wait_for_any event-wait primitive types.
+// Discriminated union over `kind`. Future event sources (fs.changed,
+// tool.completed, ...) plug in by extending these unions.
+// ---------------------------------------------------------------------------
+
+/** Event kinds supported by `wait_for_any` in v1. */
+export type EventKind =
+  | 'inbox.message'
+  | 'state.peer.changed'
+  | 'state.self.changed';
+
+/** A single event-watch registration; discriminated by `kind`. */
+export type WatchEntry =
+  | { kind: 'inbox.message'; filter?: { types?: string[] } }
+  | { kind: 'state.peer.changed' }
+  | { kind: 'state.self.changed' };
+
+/** Tagged event envelope returned in WaitForAnyResult.events. */
+export type EventEnvelope =
+  | {
+      kind: 'inbox.message';
+      /** Envelope-level delivery timestamp (ISO-8601). Distinct from message.ts. */
+      ts: string;
+      data: { message: InboxMessage };
+    }
+  | {
+      kind: 'state.peer.changed';
+      ts: string;
+      data: { newState: SideState };
+    }
+  | {
+      kind: 'state.self.changed';
+      ts: string;
+      data: { newState: SideState };
+    };
+
+/** Result envelope returned by `waitForAny`. */
+export interface WaitForAnyResult {
+  /** All events fired during the wait window, sorted ascending by `ts`. Empty on clean timeout. */
+  events: EventEnvelope[];
+  wait: {
+    requestedMs: number;
+    elapsedMs: number;
+    timedOut: boolean;
+    matched: boolean;
+  };
+}

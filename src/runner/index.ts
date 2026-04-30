@@ -62,6 +62,13 @@ export {
   derivePeerActivity,
   derivePeerVerdict,
 } from './peer-activity.js';
+export {
+  EventWaitInboxCorruptError,
+  StateFileCorruptError,
+  SUPPORTED_EVENT_KINDS,
+  waitForAny,
+} from './event-wait.js';
+export type { WaitForAnyOptions } from './event-wait.js';
 export type { PreambleAssemblyInput } from './preamble-builder.js';
 export { buildInsidePreamble } from './preamble-builder.js';
 export { PrettyDisplay } from './pretty.js';
@@ -131,6 +138,8 @@ export type {
   CoordinationFrontmatter,
   CoordinationTimelineEntry,
   DiagnosticTimelineEntry,
+  EventEnvelope,
+  EventKind,
   HumanHeaderView,
   HumanViewModel,
   InboxMessage,
@@ -159,6 +168,8 @@ export type {
   ValidationTimelineEntry,
   VelocityData,
   ViewDiagnostic,
+  WaitForAnyResult,
+  WatchEntry,
 } from './types.js';
 export { ulid } from './ulid.js';
 export {

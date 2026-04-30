@@ -447,14 +447,6 @@ Use [`agents/coordination-smoke-test/`](./agents/coordination-smoke-test/) for t
 
 Use [`agents/coordination-loop-validator/`](./agents/coordination-loop-validator/) for the richer canonical worked example: the outside side starts or attaches to an inside validator, watches with `minih status` and `minih tail`, sends exactly three manual milestone events, reads feedback, and validates final evidence. The full runbook lives in [`docs/how/coordination-loop-validator.md`](./docs/how/coordination-loop-validator.md).
 
-### Companion mode (long-lived reviewers / watchers)
-
-When you need a coordinated agent that **follows you through a session** instead of running once — a code reviewer, doc-drift auditor, or test-coverage watcher that boots once, reviews each commit as you ship, and writes a final farewell when the session ends — use **companion mode**.
-
-The protocol covers boot → brief → review-at-each-commit → drain → `control:stop` → read-farewell-before-reporting-back. The full runbook lives in [`docs/how/companion-mode.md`](./docs/how/companion-mode.md). The canonical implementation is [`agents/code-review-companion/`](./agents/code-review-companion/).
-
-Key rule: **always send `control:stop` and read the farewell envelope before reporting back to your operator.** The farewell is the canonical "everything I have to say" record, and auto-harvest only fires on completion — without the stop, the companion idles for up to 30 minutes (its default `idleBudgetMs`) before self-terminating, and the operator's report misses the companion's final session summary.
-
 ### State schemas and retrospectives
 
 Per-agent state schemas let you constrain status values for each side. The default coordinated scaffold uses simple inside statuses (`idle`, `working`, `reviewing`, `complete`, `blocked`) and outside statuses (`idle`, `in-progress`, `review-requested`, `done`, `blocked`); edit the schemas to match your workflow.
@@ -519,6 +511,226 @@ Supported event kinds in v1:
 Limits: up to 8 watch entries per call, `waitMs` capped at 30 000 ms (same cap as `inbox_list`).
 
 Forward compatibility: future event kinds (`fs.changed`, `tool.completed`, …) will plug into the same `{ kind, ts, data }` envelope without breaking v1 callers. v1 servers reject unknown kinds with `MCP_INVALID_ARGUMENT` — agents are responsible for capability detection.
+
+---
+
+## Companion mode
+
+A **companion** is a coordinated minih agent that boots once, follows you through a long work session, reviews or watches each unit of work as you ship it, and writes a final **farewell envelope** when you tell it the session is over. It is the long-lived counterpart to a one-shot agent.
+
+The canonical implementation lives at [`agents/code-review-companion/`](./agents/code-review-companion/) — a code reviewer that ships findings as you commit. The pattern generalises: a docs-drift watcher, a security companion, a metrics auditor, a test-coverage tracker.
+
+This section is a **self-contained walkthrough** for any agent or orchestrator implementing or driving companion mode. The full runbook with deeper rationale lives in [`docs/how/companion-mode.md`](./docs/how/companion-mode.md).
+
+### What companion mode is
+
+A companion-mode agent:
+
+1. Boots once at the start of a work session (a normal coordinated `minih run`).
+2. Long-polls its inbox via `wait_for_any` (or `inbox_list --wait`) for messages from the outside operator.
+3. Acts on each message **without exiting** — replies in-band when it has something to say, stays silent when the change is fine.
+4. Receives a final `control:stop` signal when the operator decides the session is done.
+5. Writes a **farewell envelope** to `$MINIH_OUTPUT_PATH` summarising the whole session — every finding, every retrospective insight, every magic-wand wish.
+
+The opposite pattern — **one-shot agents** — boot, do one task, write output, exit. Companion mode is for work that's longer than one task and benefits from continuity (e.g., the reviewer remembers what it has already flagged so it doesn't repeat itself).
+
+### When to use companion mode
+
+Reach for companion mode when:
+
+- You're doing multi-commit work (a plan implementation, a long refactor) and want continuous review without re-pasting full context every time.
+- You want a **second pair of eyes** that fires findings asynchronously without blocking your main work.
+- You want a single farewell artifact at the end (for retros, post-mortems, or auto-harvest into the project ledger).
+- The agent benefits from in-session memory — knowing what it already flagged, what verdict it already gave, what the operator deferred.
+
+Don't use companion mode when:
+
+- The work is one task and one output. Use a normal one-shot agent.
+- You need a synchronous gate (operator blocks on agent verdict). Use a one-shot or invert the pattern.
+- You can't afford the idle compute cost. Companion mode keeps a session alive for the duration; the budget is bounded by `idleBudgetMs` (default 30 min) but it is non-zero.
+
+### The Power On Mode protocol
+
+"Power On Mode" is the orchestrator-side workflow that pairs with a companion. Five phases. The orchestrator drives; the companion follows.
+
+#### 1. Boot
+
+Start the companion as a normal coordinated run:
+
+```bash
+# Boot the companion
+npx minih run code-review-companion
+```
+
+Capture the run ID for use throughout the session:
+
+```bash
+RUN_ID=$(npx minih status code-review-companion 2>/dev/null | jq -r '.data.runId')
+```
+
+#### 2. Brief
+
+Send one `briefing`-typed message naming the plan, the protocol expectations, and what to watch for:
+
+```bash
+# Brief the companion at session start
+npx minih outside inbox send code-review-companion --run "$RUN_ID" \
+  --type briefing \
+  --subject "Plan NNN — Power On Mode start" \
+  --body "Plan: <path>
+Spec: <path>
+
+Protocol:
+- I will ping at every commit boundary as type=task with subject 'review-request: T### <sha>'
+- Fire-and-forget; reply only if you find issues
+- I'll send control:stop when the session ends
+
+Hazards to watch: <list>"
+```
+
+The companion long-polls with `waitForAny: ['task', 'question', 'directive', 'control', 'briefing', 'review-request']`. As long as one of those types arrives within its idle budget, it stays alive.
+
+#### 3. Review at every commit boundary
+
+After every meaningful commit during implementation:
+
+```bash
+# Review-request at every commit boundary
+SHA=$(git rev-parse --short HEAD)
+npx minih outside inbox send code-review-companion --run "$RUN_ID" \
+  --type task \
+  --subject "review-request: T### $SHA" \
+  --body "Diff: git show $SHA. Watch for: <specific concerns>. Reply if you find issues."
+```
+
+The companion either:
+
+- Replies with one or more `finding`-typed messages targeting the review-request via `ackOf`, or
+- Sends a `summary`-typed APPROVE message, or
+- Stays silent if the change is fine.
+
+Fire-and-forget — the orchestrator does NOT wait. If a finding arrives, address it in the next commit and ping the new SHA. Use `--ack-of <id>` (see [Reply chains](#reply-chains)) to thread responses to specific reviews.
+
+#### 4. Drain (optional but recommended)
+
+Before stopping, ping with the final SHA and ask for a full sweep:
+
+```bash
+npx minih outside inbox send code-review-companion --run "$RUN_ID" \
+  --type task \
+  --subject "review-request: final $SHA — DONE" \
+  --body "Final commit. Please scan the entire commit range for: <specific final checks>. I'll send control:stop after I read your reply."
+```
+
+This catches findings that only emerge from looking at the full diff, not individual commits.
+
+#### 5. Stop and read the farewell
+
+**Send `control:stop` BEFORE reporting back to your operator**:
+
+```bash
+# Stop signal — end the session
+npx minih outside inbox send code-review-companion --run "$RUN_ID" \
+  --type control \
+  --subject "stop — session done" \
+  --body "stop — session complete. Please write your farewell envelope and exit."
+```
+
+The companion sees the `type:control` message, matches the body against `^stop\b`, transitions to `stopping`, writes a final report to `$MINIH_OUTPUT_PATH`, and exits. Then read the farewell:
+
+```bash
+RUN_DIR=agents/code-review-companion/runs/$RUN_ID
+cat $RUN_DIR/output/report.json | jq
+```
+
+The farewell envelope contains the canonical session record. Fold any open findings or retro insights into your operator-facing report.
+
+### Control signals
+
+The companion's `prompt.md` defines which control signals it recognises. The canonical signals are:
+
+| Signal | Body match | Effect |
+|---|---|---|
+| `control: stop` | `^stop\b` | Transition to `stopping`, write farewell envelope, exit. **Always wins** over an idle-budget shutdown until the farewell is committed. |
+| `control: pause for <duration>` | starts with `pause for` | Implementation-defined (companion-specific). |
+
+Other signals (e.g., a future `control: drain` distinct from `stop`) are a per-companion extension; check the agent's `prompt.md`.
+
+### Farewell envelope shape
+
+Companion-mode agents SHOULD emit a farewell envelope structurally similar to:
+
+```jsonc
+{
+  "session": {
+    "startedAt": "ISO-8601",
+    "endedAt": "ISO-8601",
+    "exitReason": "stop_requested | idle_budget | timeout | error",
+    "messageCounts": {
+      "tasksReceived": 0,
+      "findingsSent": 0,
+      "questionsAsked": 0
+    }
+  },
+  "findings": [
+    {
+      "id": "F001",
+      "severity": "CRITICAL | HIGH | MEDIUM | LOW",
+      "file": "path/to/file.ts",
+      "category": "...",
+      "issue": "...",
+      "recommendation": "...",
+      "ackOf": "01H...XYZ"
+    }
+  ],
+  "summary": "Plain-prose recap of the session and verdict.",
+  "retrospective": {
+    "workedWell": "...",
+    "confusing": "...",
+    "magicWand": "...",
+    "magicWandTarget": "coordination" | "minih" | "project",
+    "coordination": { /* peer-flow notes */ }
+  }
+}
+```
+
+The exact schema lives in each companion's `output-schema.json`. The high-level structure (session metadata, findings array, summary, retrospective) is the contract orchestrators rely on.
+
+### Pairing with `wait_for_any`
+
+Companion implementations long-poll with [`wait_for_any`](#wait-for-any-plan-014) to wake on **both** inbox messages and state changes in a single call:
+
+```jsonc
+wait_for_any({
+  events: [
+    {
+      kind: 'inbox.message',
+      filter: { types: ['task', 'question', 'directive', 'control', 'briefing', 'review-request'] }
+    },
+    { kind: 'state.peer.changed' }
+  ],
+  waitMs: 30000
+})
+```
+
+This means a companion can react to operator state-flips ("outside set status to `review-requested`") in addition to inbox traffic, without spin-polling. The clean-timeout path (no events within `waitMs`) returns `events: []` + `wait.timedOut: true` and is the natural moment to do periodic housekeeping (pulse a heartbeat, reset internal counters).
+
+### Key rule
+
+**Always send `control:stop` and read the farewell envelope before reporting back to your operator.** Three reasons:
+
+1. The farewell is the canonical "everything I have to say" record. The companion may have findings that only surface in the final summary, not during live review.
+2. Auto-harvest captures the retro for the project ledger only on run completion. Without the stop, the companion's `magicWand` and `difficulties` never reach `docs/retros/<slug>.md`.
+3. It closes the loop deterministically. Without a stop, the companion idles for up to its `idleBudgetMs` (default 30 min) before self-terminating — wasted compute, fuzzy session boundary.
+
+The pattern: orchestrator owns the lifecycle; the companion's idle budget is a safety net, not the primary exit condition.
+
+### Pointers
+
+- Full runbook + design rationale: [`docs/how/companion-mode.md`](./docs/how/companion-mode.md)
+- Canonical implementation: [`agents/code-review-companion/`](./agents/code-review-companion/)
+- Reply-chain primitive used by `ackOf`: [Reply chains](#reply-chains)
+- Long-poll primitive used by companions: [Wait for any](#wait-for-any-plan-014)
 
 ---
 

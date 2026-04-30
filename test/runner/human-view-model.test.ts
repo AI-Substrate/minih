@@ -392,3 +392,62 @@ describe('FX002-2 — text_delta/message messageId mismatch fallback', () => {
     expect(finals[1].content).toBe('second');
   });
 });
+
+describe('FX002-1 follow-up — thinking-flush ignores provider noise', () => {
+  const baseSources = {
+    manifest: null,
+    completed: null,
+    inbox: [],
+    state: { inside: null, outside: null },
+    history: [],
+    output: null,
+    validation: null,
+  };
+
+  it('raw + usage events between thinking deltas do NOT split the burst', () => {
+    resetFixtureCounter();
+    const rawEvent = {
+      type: 'raw' as const,
+      timestamp: '2026-04-28T00:00:02.600Z',
+      eventId: 'evt-raw',
+      data: { provider: 'copilot', originalType: 'noise', originalData: {} },
+    };
+    const usageEvent = {
+      type: 'usage' as const,
+      timestamp: '2026-04-28T00:00:02.700Z',
+      eventId: 'evt-usage',
+      data: { inputTokens: 100, outputTokens: 5 },
+    };
+    const events = [
+      makeThinking('Let me '),
+      rawEvent,
+      makeThinking('understand '),
+      usageEvent,
+      makeThinking('the request.'),
+      makeMessage('done', 'msg-x'),
+    ];
+    const model = buildHumanViewModel({ ...baseSources, events });
+    const thinkingRows = model.transcript.filter(
+      (e) => e.actorLabel === 'Inside agent (thinking)',
+    );
+    expect(thinkingRows).toHaveLength(1);
+    expect(thinkingRows[0].content).toBe('Let me understand the request.');
+  });
+
+  it('tool_call DOES flush thinking burst (boundary event)', () => {
+    resetFixtureCounter();
+    const events = [
+      makeThinking('I need to call a tool. '),
+      makeToolCall('shell', 'tc1'),
+      makeThinking('After tool, more thoughts.'),
+      makeMessage('final', 'msg-y'),
+    ];
+    const model = buildHumanViewModel({ ...baseSources, events });
+    const thinkingRows = model.transcript.filter(
+      (e) => e.actorLabel === 'Inside agent (thinking)',
+    );
+    expect(thinkingRows).toHaveLength(2);
+    expect(thinkingRows[0].content).toBe('I need to call a tool. ');
+    expect(thinkingRows[1].content).toBe('After tool, more thoughts.');
+  });
+});

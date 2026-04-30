@@ -140,14 +140,29 @@ function TranscriptRow({
 }: {
   entry: TranscriptEntry;
 }): React.JSX.Element {
-  const labelColor = colorForActor(entry.actorLabel);
   const isThinking = entry.actorLabel === 'Inside agent (thinking)';
+  const labelColor = colorForActor(entry.actorLabel);
   const statusBadge = badgeForStatus(entry.status);
   const hasContent = entry.content.trim().length > 0;
+
+  // FX002-4 follow-up: thinking rows render as a compact dim italic block with
+  // a leading 💭 glyph instead of the redundant "Inside agent (thinking)"
+  // label. The dim italic style already says "reasoning" — repeating the
+  // actor label per row was just noise.
+  if (isThinking) {
+    return (
+      <Box flexDirection="column" marginTop={1}>
+        <Text dimColor italic>
+          💭 {hasContent ? entry.content : '(thinking…)'}
+        </Text>
+      </Box>
+    );
+  }
+
   return (
     <Box flexDirection="column" marginTop={1}>
       <Box>
-        <Text color={labelColor} bold={!isThinking} italic={isThinking}>
+        <Text color={labelColor} bold>
           {entry.actorLabel}
         </Text>
         {statusBadge ? (
@@ -158,9 +173,7 @@ function TranscriptRow({
         ) : null}
       </Box>
       {hasContent ? (
-        <Text dimColor={isThinking} italic={isThinking}>
-          {entry.content}
-        </Text>
+        <Text>{entry.content}</Text>
       ) : (
         <Text dimColor italic>
           (no content yet)

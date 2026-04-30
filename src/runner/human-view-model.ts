@@ -169,8 +169,20 @@ function projectTranscript(
       });
       continue;
     }
-    // Any non-thinking event flushes the current thinking buffer.
-    if (ev.type !== 'thinking' && thinkingBuffer) flushThinking();
+    // Only "boundary" events flush the active thinking burst. Provider noise
+    // (raw, usage, session_start/idle) is passed through silently — the reducer
+    // shouldn't end a thinking burst just because the SDK emitted a token-count
+    // tick or a debug echo. (Per FX002 user smoke 2026-04-30: without this
+    // filter, every `raw` event between thinking deltas split the burst into
+    // 5+ tiny rows.)
+    const flushesThinking =
+      ev.type === 'user_prompt' ||
+      ev.type === 'message' ||
+      ev.type === 'text_delta' ||
+      ev.type === 'tool_call' ||
+      ev.type === 'tool_result' ||
+      ev.type === 'session_error';
+    if (flushesThinking && thinkingBuffer) flushThinking();
 
     switch (ev.type) {
       case 'user_prompt': {

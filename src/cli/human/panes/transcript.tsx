@@ -330,20 +330,24 @@ function TranscriptRow({
   entry,
 }: {
   entry: TranscriptEntry;
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   const isThinking = entry.actorLabel === 'Inside agent (thinking)';
   const labelColor = colorForActor(entry.actorLabel);
   const statusBadge = badgeForStatus(entry.status);
   const hasContent = entry.content.trim().length > 0;
 
-  // FX002-4 follow-up: thinking rows render as a compact dim italic block with
-  // a leading 💭 glyph instead of the redundant "Inside agent (thinking)"
-  // label. The dim italic style already says "reasoning" — repeating the
-  // actor label per row was just noise.
+  // Skip empty non-streaming rows entirely — the previous "(no content yet)"
+  // placeholder produced visual concat artifacts where the placeholder ran
+  // into the next row's content. If the reducer ever produces an empty
+  // finalised row, that's a reducer bug to fix at source, not paper over here.
+  if (!hasContent && entry.status !== 'streaming') {
+    return null;
+  }
+
   if (isThinking) {
     return (
-      <Box flexDirection="column" marginTop={1}>
-        <Text dimColor italic>
+      <Box flexDirection="column" marginTop={1} width="100%">
+        <Text dimColor italic wrap="wrap">
           💭 {hasContent ? entry.content : '(thinking…)'}
         </Text>
       </Box>
@@ -351,7 +355,7 @@ function TranscriptRow({
   }
 
   return (
-    <Box flexDirection="column" marginTop={1}>
+    <Box flexDirection="column" marginTop={1} width="100%">
       <Box>
         <Text color={labelColor} bold>
           {entry.actorLabel}
@@ -364,10 +368,10 @@ function TranscriptRow({
         ) : null}
       </Box>
       {hasContent ? (
-        <Text>{entry.content}</Text>
+        <Text wrap="wrap">{entry.content}</Text>
       ) : (
         <Text dimColor italic>
-          (no content yet)
+          …
         </Text>
       )}
     </Box>

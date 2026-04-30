@@ -220,6 +220,45 @@ export function mountHumanApp(options: MountHumanAppOptions): HumanAppHandle {
  * Push a new view model into the mounted app. Called by the run-feed's
  * `onUpdate` callback. No-op if no app is mounted.
  */
+/**
+ * Push a new view model into the mounted app. Called by the run-feed's
+ * `onUpdate` callback. No-op if no app is mounted.
+ *
+ * **Throttle**: limit React re-renders to ~10 fps (100ms min interval). Without
+ * this, a burst of fs.watch events can trigger Ink + yoga layout thrash that
+ * leaves ghost border characters from the previous frame (known Ink rendering
+ * artifact with frequent re-renders).
+ */
+let lastPushAt = 0;
+let pendingModel: HumanViewModel | null = null;
+let pendingTimer: NodeJS.Timeout | null = null;
+const PUSH_THROTTLE_MS = 100;
+
 export function pushHumanModel(model: HumanViewModel): void {
-  if (appSetModelRef.current) appSetModelRef.current(model);
+  if (!appSetModelRef.current) return;
+  const now = Date.now();
+  const elapsed = now - lastPushAt;
+  if (elapsed >= PUSH_THROTTLE_MS) {
+    lastPushAt = now;
+    appSetModelRef.current(model);
+    pendingModel = null;
+    if (pendingTimer) {
+      clearTimeout(pendingTimer);
+      pendingTimer = null;
+    }
+    return;
+  }
+  // Queue the latest model for the trailing edge of the throttle window.
+  pendingModel = model;
+  if (!pendingTimer) {
+    const wait = PUSH_THROTTLE_MS - elapsed;
+    pendingTimer = setTimeout(() => {
+      pendingTimer = null;
+      if (pendingModel && appSetModelRef.current) {
+        lastPushAt = Date.now();
+        appSetModelRef.current(pendingModel);
+        pendingModel = null;
+      }
+    }, wait);
+  }
 }

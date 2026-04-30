@@ -24,7 +24,7 @@ export function HeaderPane({
   return (
     <Box
       flexDirection="column"
-      borderStyle="round"
+      borderStyle="single"
       borderColor="gray"
       paddingX={1}
       width="100%"

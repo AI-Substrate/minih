@@ -224,7 +224,7 @@ export function TranscriptPane({
   return (
     <Box
       flexDirection="column"
-      borderStyle="round"
+      borderStyle="single"
       borderColor="gray"
       paddingX={1}
       flexGrow={1}

@@ -58,6 +58,8 @@ export const ErrorCodes = {
   MCP_SPAWN_FAILED: 'E149',
   // Plan 012 — peer activity telemetry
   DEAF_PEER: 'E150',
+  // Plan 015 — agent-readme command
+  README_NOT_FOUND: 'E160',
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];

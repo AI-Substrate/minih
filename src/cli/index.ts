@@ -12,6 +12,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
+import { registerAgentReadmeCommand } from './commands/agent-readme.js';
 import { registerCheckCommand } from './commands/check.js';
 import { registerConnectCommand } from './commands/connect.js';
 import { registerDifficultiesCommand } from './commands/difficulties.js';
@@ -53,7 +54,7 @@ const program = new Command()
   .option('--agents-dir <path>', 'Agents directory', 'agents')
   .addHelpText(
     'after',
-    '\nDocs: https://github.com/AI-Substrate/minih/blob/main/AGENTS_README.md',
+    '\nDocs: https://github.com/AI-Substrate/minih/blob/main/AGENTS_README.md\n      or run: minih agent-readme',
   );
 
 // Resolve --agents-dir to absolute once (DYK #5)
@@ -84,5 +85,6 @@ registerDifficultiesCommand(program);
 registerCheckCommand(program);
 registerInitCommand(program);
 registerHarvestCommand(program);
+registerAgentReadmeCommand(program);
 
 program.parse();

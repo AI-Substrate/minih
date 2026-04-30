@@ -26,3 +26,6 @@ copyFileSync(
   join('src/templates', 'retros-readme.md'),
   join('dist/templates', 'retros-readme.md'),
 );
+
+// Bundle AGENTS_README.md so `minih agent-readme` can dump it on any project.
+copyFileSync('AGENTS_README.md', 'dist/AGENTS_README.md');

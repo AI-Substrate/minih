@@ -696,6 +696,14 @@ export async function runAgent(
       closeForwarders();
     };
     const startForwarders = (sender: SessionSender): void => {
+      // Plan 009 Phase 2 — caller hook (e.g., --human flag) runs alongside.
+      try {
+        config.onSessionReady?.(sender, { runDir, runId });
+      } catch (err) {
+        handleForwarderError(
+          err instanceof Error ? err : new Error(String(err)),
+        );
+      }
       if (!coordinationEnabled || !agentsDir) return;
       const forwarderOptions = {
         slug: definition.slug,

@@ -73,6 +73,19 @@ export interface AgentRunConfig {
   ) => Record<string, unknown>;
   /** Tool-name prefixes reserved by internally supplied MCP servers. */
   reservedMcpToolPrefixes?: string[];
+  /**
+   * Optional caller hook invoked when the SDK session is ready and a
+   * `SessionSender` is available for same-process writes. Plan 009 Phase 2
+   * uses this for the `--human` interactive footer. Coordinated forwarders
+   * also fire on `onSessionReady`; this callback runs alongside them.
+   *
+   * The second argument carries the live runDir/runId so the caller can
+   * mount a human-view feed against the run artifacts.
+   */
+  onSessionReady?: (
+    sender: import('../adapter/events.js').SessionSender,
+    context: { runDir: string; runId: string },
+  ) => void;
 }
 
 export interface InsideMcpServerFactoryContext {

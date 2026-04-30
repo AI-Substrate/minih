@@ -3,7 +3,7 @@
 **Plan**: [../../human-agent-view-plan.md](../../human-agent-view-plan.md)
 **Phase**: Phase 2: Interactive Console & Commands
 **Generated**: 2026-04-30
-**Status**: Ready for takeoff
+**Status**: Landed
 
 ---
 
@@ -82,14 +82,14 @@ stateDiagram-v2
 
 <!-- Updated by /plan-6-v2 during implementation: [ ] → [~] → [x] -->
 
-- [ ] **Stage 1: Wire deps + tsconfig** — Add `ink`, `react`, `@types/react`; verify `.tsx` compiles (`package.json`, `tsconfig.json` if needed)
-- [ ] **Stage 2: Run feed** — `fs.watch` loop + `readSnapshot()` one-shot helper for Phase 3 reuse; first emit lands before handle returns (`src/cli/human/run-feed.ts` — new file)
-- [ ] **Stage 3: Input bridge** — Capability label + same-process `SessionSender.send` / refusal (`src/cli/human/input-bridge.ts` — new file)
-- [ ] **Stage 4: Ink panes** — `app.tsx` exporting `mountHumanApp({ unmount, waitUntilExit })`; `exitOnCtrlC: false` (caller owns lifecycle); 5 panes; render to stderr; split layouts; pause-scroll copy (`src/cli/human/{app.tsx, panes/*.tsx}` — 6 new files)
-- [ ] **Stage 5: `view` command** — Resolves run with **fallback chain** (`latest-active` → `latest-completed`); registers SIGINT → unmount; mounts read-only TUI (`src/cli/commands/view.ts` — new file; `src/cli/index.ts` — modified)
-- [ ] **Stage 6: `run --human`** — Initial `feed.readSnapshot()` BEFORE mount; mount live TUI after `onSessionReady`; SIGINT → unmount + feed.stop (`src/cli/commands/run.ts` — modified)
-- [ ] **Stage 7: Tests + stdout-clean gate** — Input-bridge unit tests, view-command integration, **stdout-empty assertion** (2 new test files)
-- [ ] **Stage 8: `just fft`** — Pipeline green; audit triaged
+- [x] **Stage 1: Wire deps + tsconfig** — Add `ink`, `react`, `@types/react`; verify `.tsx` compiles (`package.json`, `tsconfig.json` if needed)
+- [x] **Stage 2: Run feed** — `fs.watch` loop + `readSnapshot()` one-shot helper for Phase 3 reuse; first emit lands before handle returns (`src/cli/human/run-feed.ts` — new file)
+- [x] **Stage 3: Input bridge** — Capability label + same-process `SessionSender.send` / refusal (`src/cli/human/input-bridge.ts` — new file)
+- [x] **Stage 4: Ink panes** — `app.tsx` exporting `mountHumanApp({ unmount, waitUntilExit })`; `exitOnCtrlC: false` (caller owns lifecycle); 5 panes; render to stderr; split layouts; pause-scroll copy (`src/cli/human/{app.tsx, panes/*.tsx}` — 6 new files)
+- [x] **Stage 5: `view` command** — Resolves run with **fallback chain** (`latest-active` → `latest-completed`); registers SIGINT → unmount; mounts read-only TUI (`src/cli/commands/view.ts` — new file; `src/cli/index.ts` — modified)
+- [x] **Stage 6: `run --human`** — Initial `feed.readSnapshot()` BEFORE mount; mount live TUI after `onSessionReady`; SIGINT → unmount + feed.stop (`src/cli/commands/run.ts` — modified)
+- [x] **Stage 7: Tests + stdout-clean gate** — Input-bridge unit tests, view-command integration, **stdout-empty assertion** (2 new test files)
+- [x] **Stage 8: `just fft`** — Pipeline green; audit triaged
 
 ---
 
@@ -169,11 +169,11 @@ flowchart LR
 
 ## Checklist
 
-- [ ] T001: Add `ink`, `react`, `@types/react`; verify `.tsx` compile + `npm audit` triaged
-- [ ] T002: Implement `src/cli/human/run-feed.ts` (fs.watch + view-model rebuild)
-- [ ] T003: Implement `src/cli/human/input-bridge.ts` (three-state capability bridge)
-- [ ] T004: Implement Ink `app.tsx` + 5 panes; render to stderr; split layouts; correct pause copy
-- [ ] T005: Implement `src/cli/commands/view.ts` and register in `src/cli/index.ts`
-- [ ] T006: Add `--human` flag to `src/cli/commands/run.ts`; mount renderer after `onSessionReady`
-- [ ] T007: Tests — `human-input-bridge.test.ts` + `view-command.test.ts` (incl. stdout-clean assertion)
-- [ ] T008: `just fft` green; audit triaged
+- [x] T001: Add `ink`, `react`, `@types/react`; verify `.tsx` compile + `npm audit` triaged
+- [x] T002: Implement `src/cli/human/run-feed.ts` (fs.watch + view-model rebuild)
+- [x] T003: Implement `src/cli/human/input-bridge.ts` (three-state capability bridge)
+- [x] T004: Implement Ink `app.tsx` + 5 panes; render to stderr; split layouts; correct pause copy
+- [x] T005: Implement `src/cli/commands/view.ts` and register in `src/cli/index.ts`
+- [x] T006: Add `--human` flag to `src/cli/commands/run.ts`; mount renderer after `onSessionReady`
+- [x] T007: Tests — `human-input-bridge.test.ts` + `view-command.test.ts` (incl. stdout-clean assertion)
+- [x] T008: `just fft` green; audit triaged

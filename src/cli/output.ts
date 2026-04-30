@@ -60,6 +60,9 @@ export const ErrorCodes = {
   DEAF_PEER: 'E150',
   // Plan 015 — agent-readme command
   README_NOT_FOUND: 'E160',
+  // Plan 009 Phase 2 — view command
+  AMBIGUOUS_RUN_ID: 'E170',
+  RUN_NOT_FOUND: 'E171',
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];

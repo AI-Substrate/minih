@@ -19,7 +19,6 @@ import {
   inboxLanePath,
   stateFilePath,
 } from '../../src/runner/folder.js';
-import type { WatchEntry } from '../../src/runner/types.js';
 
 let tmpDir: string;
 let agentsDir: string;
@@ -37,7 +36,7 @@ class FakeNativeWatcher implements NativeWatcher {
       filename: string | Buffer | null,
     ) => void,
   ) {}
-  on(event: 'error', _listener: (error: Error) => void): NativeWatcher {
+  on(_event: 'error', _listener: (error: Error) => void): NativeWatcher {
     return this;
   }
   close(): void {

@@ -1,0 +1,196 @@
+/**
+ * minih human-view Ink root — composes header / transcript / tools / workbench /
+ * footer with capability-aware footer input and three split layouts:
+ *   - 'transcript' — transcript expanded, workbench compact (Tab)
+ *   - 'workbench'  — workbench expanded, transcript compact (Shift-Tab)
+ *   - 'reset'      — even split (Esc)
+ *
+ * Renders to `process.stderr` (CLI stdout discipline — AC-13).
+ *
+ * Phase 3 forward-compat seam:
+ *   - `mountHumanApp(props)` returns `{ unmount, waitUntilExit }` so callers
+ *     own lifecycle.
+ *   - Ink configured with `exitOnCtrlC: false` — caller registers signal handlers.
+ *   - `feed.stop()` is invoked from `unmount()` so cleanup is single-source.
+ */
+
+import { Box, render, useInput } from 'ink';
+import * as React from 'react';
+import type { HumanViewModel } from '../../runner/types.js';
+import type { InputBridge } from './input-bridge.js';
+import { FooterPane } from './panes/footer.js';
+import { HeaderPane } from './panes/header.js';
+import { ToolsPane } from './panes/tools.js';
+import { TranscriptPane } from './panes/transcript.js';
+import { WorkbenchPane } from './panes/workbench.js';
+import type { RunFeed } from './run-feed.js';
+
+export interface MountHumanAppOptions {
+  feed: RunFeed;
+  bridge: InputBridge;
+  /** Initial view model — must be provided so first paint is non-blank. */
+  initial: HumanViewModel;
+}
+
+export interface HumanAppHandle {
+  unmount(): void;
+  waitUntilExit(): Promise<void>;
+  /** Programmatic update of the bridge (e.g. when run flips to completed). */
+  updateBridge(bridge: InputBridge): void;
+}
+
+type SplitLayout = 'transcript' | 'workbench' | 'reset';
+
+interface AppProps {
+  initialBridge: InputBridge;
+  initial: HumanViewModel;
+  bridgeUpdateRef: React.MutableRefObject<((b: InputBridge) => void) | null>;
+}
+
+function App({
+  initialBridge,
+  initial,
+  bridgeUpdateRef,
+}: AppProps): React.JSX.Element {
+  const [model, setModel] = React.useState<HumanViewModel>(initial);
+  const [bridge, setBridge] = React.useState<InputBridge>(initialBridge);
+  const [followPaused, setFollowPaused] = React.useState<boolean>(false);
+  const [layout, setLayout] = React.useState<SplitLayout>('reset');
+
+  React.useEffect(() => {
+    bridgeUpdateRef.current = (next) => setBridge(next);
+    return () => {
+      bridgeUpdateRef.current = null;
+    };
+  }, [bridgeUpdateRef]);
+
+  React.useEffect(() => {
+    let stopped = false;
+    // Subscribe via the feed's onUpdate by re-instantiating? createRunFeed only
+    // takes one onUpdate at construction. Phase 2 contract: caller passed `feed`
+    // already wired to a callback bridge. We expose a setter via window? Simpler:
+    // accept a `subscribe(cb)` from the caller. For v1, the caller passes
+    // `feed` configured to call a parent-owned callback that updates this state.
+    return () => {
+      stopped = true;
+      void stopped;
+    };
+  }, []);
+
+  useInput((_input, key) => {
+    if (key.tab && key.shift) {
+      setLayout('workbench');
+      return;
+    }
+    if (key.tab) {
+      setLayout('transcript');
+      return;
+    }
+    if (key.escape) {
+      setLayout('reset');
+      return;
+    }
+  });
+
+  // Expose setModel as a side-effect for the parent — see mountHumanApp below.
+  React.useEffect(() => {
+    appSetModelRef.current = setModel;
+    return () => {
+      if (appSetModelRef.current === setModel) appSetModelRef.current = null;
+    };
+  }, []);
+
+  const transcriptFlex =
+    layout === 'transcript' ? 3 : layout === 'workbench' ? 1 : 2;
+  const workbenchFlex =
+    layout === 'workbench' ? 3 : layout === 'transcript' ? 1 : 2;
+
+  return (
+    <Box flexDirection="column">
+      <HeaderPane header={model.header} capability={bridge.capability} />
+      <Box flexDirection="row">
+        <Box flexDirection="column" flexGrow={transcriptFlex}>
+          <TranscriptPane transcript={model.transcript} />
+          <ToolsPane tools={model.tools} />
+        </Box>
+        <Box flexDirection="column" flexGrow={workbenchFlex}>
+          <WorkbenchPane
+            coordination={model.coordination}
+            state={model.state}
+            output={model.output}
+          />
+        </Box>
+      </Box>
+      <FooterPane
+        bridge={bridge}
+        followPaused={followPaused}
+        onTogglePause={() => setFollowPaused((p) => !p)}
+      />
+    </Box>
+  );
+}
+
+// Module-level setter handle for the live model (set by the App effect on mount).
+// `mountHumanApp` reads it to drive `feed`-emitted updates into React state.
+const appSetModelRef: { current: ((m: HumanViewModel) => void) | null } = {
+  current: null,
+};
+
+/**
+ * Mount the human-view Ink app. Caller owns lifecycle — Ink is configured with
+ * `exitOnCtrlC: false` so the parent registers signal handlers.
+ *
+ * IMPORTANT: caller must wire `feed.onUpdate` in `createRunFeed()` to invoke
+ * the returned `handle.pushModel` (or pass a closure that will). For v1 we
+ * use a module-level setter ref, so callers MUST construct the feed AFTER
+ * mounting the app — see `view.ts` and `run --human` for canonical patterns.
+ */
+export function mountHumanApp(options: MountHumanAppOptions): HumanAppHandle {
+  const bridgeUpdateRef: React.MutableRefObject<
+    ((b: InputBridge) => void) | null
+  > = { current: null };
+
+  const instance = render(
+    <App
+      initialBridge={options.bridge}
+      initial={options.initial}
+      bridgeUpdateRef={bridgeUpdateRef}
+    />,
+    {
+      stdout: process.stderr,
+      exitOnCtrlC: false,
+    },
+  );
+
+  let unmounted = false;
+  const unmount = (): void => {
+    if (unmounted) return;
+    unmounted = true;
+    try {
+      instance.unmount();
+    } catch {
+      // ignore
+    }
+    try {
+      options.feed.stop();
+    } catch {
+      // ignore
+    }
+  };
+
+  return {
+    unmount,
+    waitUntilExit: () => instance.waitUntilExit().then(() => undefined),
+    updateBridge(next: InputBridge): void {
+      if (bridgeUpdateRef.current) bridgeUpdateRef.current(next);
+    },
+  };
+}
+
+/**
+ * Push a new view model into the mounted app. Called by the run-feed's
+ * `onUpdate` callback. No-op if no app is mounted.
+ */
+export function pushHumanModel(model: HumanViewModel): void {
+  if (appSetModelRef.current) appSetModelRef.current(model);
+}

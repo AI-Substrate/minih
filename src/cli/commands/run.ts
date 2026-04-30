@@ -78,6 +78,10 @@ export function registerRunCommand(program: Command): void {
     )
     .option('--dry-run', 'Preview assembled prompt without executing')
     .option('--verbose', 'Show all events with timestamps (verbose mode)')
+    .option(
+      '--human',
+      'Mount the live human-view TUI to stderr (plan 009; mutually-exclusive with --verbose)',
+    )
     .option('--mcp-config <path>', 'MCP config file with mcpServers (JSON)')
     .addHelpText(
       'after',
@@ -95,10 +99,23 @@ export function registerRunCommand(program: Command): void {
           param?: string[];
           dryRun?: boolean;
           verbose?: boolean;
+          human?: boolean;
           mcpConfig?: string;
         },
       ) => {
         const agentsDir = program.opts().agentsDir ?? 'agents';
+
+        // Plan 009 Phase 2 — `--human` and `--verbose` are mutually exclusive.
+        if (opts.human && opts.verbose) {
+          exitWithEnvelope(
+            formatError(
+              'run',
+              ErrorCodes.INVALID_ARGS,
+              '--human and --verbose are mutually exclusive.',
+              { provided: ['--human', '--verbose'] },
+            ),
+          );
+        }
 
         // Pre-flight: validate slug
         const slugError = validateSlug(slug);
@@ -172,6 +189,17 @@ export function registerRunCommand(program: Command): void {
           }
         }
 
+        // Plan 009 Phase 2 — `--human` mounts an Ink TUI to stderr instead of
+        // pretty/verbose. Pretty mode is suppressed; the renderer takes over.
+        const humanHandle: {
+          ref: {
+            unmount(): void;
+            updateBridge(
+              b: import('../human/input-bridge.js').InputBridge,
+            ): void;
+          } | null;
+        } = { ref: null };
+
         const config: AgentRunConfig = {
           slug,
           model,
@@ -190,14 +218,60 @@ export function registerRunCommand(program: Command): void {
             }),
           reservedMcpToolPrefixes: ['inbox_', 'state_'],
           ...(mcpServers && { mcpServers }),
+          ...(opts.human && {
+            onSessionReady: async (sender, ctx) => {
+              try {
+                const { createRunFeed } = await import('../human/run-feed.js');
+                const { createInputBridge } = await import(
+                  '../human/input-bridge.js'
+                );
+                const { mountHumanApp, pushHumanModel } = await import(
+                  '../human/app.js'
+                );
+                const { buildHumanViewModel } = await import(
+                  '../../runner/index.js'
+                );
+
+                const feed = await createRunFeed({
+                  runDir: ctx.runDir,
+                  onUpdate: (model) => {
+                    pushHumanModel(model);
+                  },
+                });
+                const initialSources = await feed.readSnapshot();
+                const initialModel = buildHumanViewModel(initialSources);
+
+                const bridge = createInputBridge({
+                  sender,
+                  attached: false,
+                  runStatus: 'active',
+                });
+
+                humanHandle.ref = mountHumanApp({
+                  feed,
+                  bridge,
+                  initial: initialModel,
+                });
+
+                const onSig = (): void => humanHandle.ref?.unmount();
+                process.once('SIGINT', onSig);
+                process.once('SIGTERM', onSig);
+              } catch (err) {
+                process.stderr.write(
+                  `human-view mount failed: ${(err as Error).message}\n`,
+                );
+              }
+            },
+          }),
         };
 
-        // Display setup: pretty (default) or verbose (--verbose / non-TTY)
+        // Display setup: pretty (default), verbose (--verbose / non-TTY), or
+        // suppressed entirely when --human owns the renderer.
         const isTTY = process.stderr.isTTY;
         const useVerbose = opts.verbose || !isTTY;
-        const pretty = useVerbose ? null : new PrettyDisplay();
+        const pretty = opts.human || useVerbose ? null : new PrettyDisplay();
 
-        if (isTTY) {
+        if (isTTY && !opts.human) {
           displayHeader(slug, '(starting...)', model);
           displayPreflight('GH_TOKEN', true);
           displayPreflight('Agent definition', true, definition.dir);
@@ -311,7 +385,9 @@ export function registerRunCommand(program: Command): void {
           const onEvent = pretty
             ? (e: import('../../adapter/events.js').AgentEvent) =>
                 pretty.handleEvent(e)
-            : displayEvent;
+            : opts.human
+              ? undefined
+              : displayEvent;
           const result = await runAgent(
             runtime.adapter,
             definition,
@@ -321,7 +397,13 @@ export function registerRunCommand(program: Command): void {
           );
 
           pretty?.cleanup();
-          if (isTTY) {
+          // Plan 009 Phase 2 — when --human owns the renderer, the live TUI
+          // already shows the final state; don't double-print the pretty summary.
+          if (opts.human && humanHandle.ref) {
+            humanHandle.ref.unmount();
+            humanHandle.ref = null;
+          }
+          if (isTTY && !opts.human) {
             displaySummary(result);
           }
 

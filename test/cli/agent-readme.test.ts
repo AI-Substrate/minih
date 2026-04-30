@@ -10,7 +10,7 @@ const distReadme = path.join(repoRoot, 'dist/AGENTS_README.md');
 
 function run(
   args: string[],
-  opts: { input?: string; expectFail?: boolean } = {},
+  _opts: { input?: string; expectFail?: boolean } = {},
 ): { stdout: Buffer; stderr: string; exitCode: number } {
   try {
     const stdout = execFileSync('node', [cliPath, ...args], {
@@ -142,7 +142,7 @@ describe('AGENTS_README companion section structure (AC-14, AC-15)', () => {
 
   it('section length is between 100 and 1000 lines (AC-15)', () => {
     const lines = readmeText.split('\n');
-    const startIdx = lines.findIndex((l) => l === '## Companion mode');
+    const startIdx = lines.indexOf('## Companion mode');
     expect(startIdx).toBeGreaterThan(-1);
     let endIdx = lines.length;
     for (let i = startIdx + 1; i < lines.length; i++) {
@@ -159,7 +159,7 @@ describe('AGENTS_README companion section structure (AC-14, AC-15)', () => {
   it('contains required subsection markers per AC-14', () => {
     // Section content (until next H2)
     const lines = readmeText.split('\n');
-    const startIdx = lines.findIndex((l) => l === '## Companion mode');
+    const startIdx = lines.indexOf('## Companion mode');
     let endIdx = lines.length;
     for (let i = startIdx + 1; i < lines.length; i++) {
       if (/^## /.test(lines[i])) {
@@ -181,7 +181,7 @@ describe('AGENTS_README companion section structure (AC-14, AC-15)', () => {
 
   it('AC-15: contains ≥1 fenced code block per protocol phase (boot, brief, review, stop)', () => {
     const lines = readmeText.split('\n');
-    const startIdx = lines.findIndex((l) => l === '## Companion mode');
+    const startIdx = lines.indexOf('## Companion mode');
     let endIdx = lines.length;
     for (let i = startIdx + 1; i < lines.length; i++) {
       if (/^## /.test(lines[i])) {

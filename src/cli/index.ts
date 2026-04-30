@@ -33,6 +33,7 @@ import { registerStateCommand } from './commands/state.js';
 import { registerStatusCommand } from './commands/status.js';
 import { registerTailCommand } from './commands/tail.js';
 import { registerValidateCommand } from './commands/validate.js';
+import { registerViewCommand } from './commands/view.js';
 
 // Read version from package.json (DYK #3: fs.readFileSync, not require)
 const thisDir = path.dirname(fileURLToPath(import.meta.url));
@@ -86,5 +87,6 @@ registerCheckCommand(program);
 registerInitCommand(program);
 registerHarvestCommand(program);
 registerAgentReadmeCommand(program);
+registerViewCommand(program);
 
 program.parse();

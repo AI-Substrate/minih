@@ -7,13 +7,7 @@
   "properties": {
     "status": {
       "type": "string",
-      "enum": [
-        "idle",
-        "reading",
-        "reporting",
-        "blocked",
-        "stopping"
-      ],
+      "enum": ["idle", "reading", "reporting", "blocked", "stopping"],
       "description": "Lifecycle status for the conversational demo companion. Vocabulary intentionally matches prompt.md § State Vocabulary so state_transition calls don't get silently rejected by the inside-state schema."
     },
     "data": {

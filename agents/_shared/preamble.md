@@ -203,3 +203,19 @@ wait_for_any({
 Supported event kinds in v1: `inbox.message` (with optional `filter.types[]`), `state.peer.changed`, `state.self.changed`. Up to 8 entries per call. `waitMs` capped at 30s. Future kinds (`fs.changed`, `tool.completed`) will plug into the same envelope shape.
 
 When multiple events fire within the same wake window, all of them are delivered in the result `events` array, sorted ascending by envelope `ts`. The agent's own writes do NOT wake `state.self.changed` (self-write filter via `updatedBy`), and `inbox.message` only watches the peer (outside) lane.
+
+### State transitions and schema rejections (plan 016 / FX002)
+
+`state_transition` and `state_set` validate the new state against the inside-state JSON schema. If the schema's `properties.status.enum` doesn't include the value you're transitioning to, the call is rejected with:
+
+```
+MCP server 'minih-coordination': state does not match inside state schema
+```
+
+**This is silent unless you surface it.** When this happens:
+
+1. **DO NOT proceed as if the state changed.** The state is unchanged.
+2. **Send one `progress` inbox message** with `subject: "Schema-rejected state transition"` and a body naming the rejected status, the schema in effect, and what you were going to do next. The operator otherwise has no way to know — the agent's timeline will look frozen.
+3. **Continue with the next inbox message.** Don't loop on the failed transition.
+
+For authors: ship a per-agent `state/inside-state.schema.json` whose `status` enum matches the vocabulary in your `prompt.md`. The doctor check `prompt-state-vocabulary-drift` (added in FX002-3) catches mismatches at authoring time. The default schema enum is `idle | in-progress | paused | reviewing | complete | error`.

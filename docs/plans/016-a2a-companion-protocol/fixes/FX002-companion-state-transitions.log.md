@@ -65,3 +65,41 @@ FX002-6 (verification) — keep, with Path C scope.
 - The companion's "Still here — waiting on next message" heartbeat at 01:24:56 is correct behaviour from prompt — proof the main loop is healthy.
 - `state_get` was called 3 times by the companion (likely as boot-time orientation) and succeeded each time, returning the existing idle state.
 
+
+---
+
+## FX002-5 verification (2026-05-01)
+
+Headless verification — fresh run `2026-05-01T16-52-13-658Z-4999`.
+
+### Sequence
+1. Started `npx minih run demo-companion` (background)
+2. Sent briefing via `outside inbox send` (id `01KQH4Z139MAWJ49MZR196B0RG`)
+3. Companion acked + replied with greeting (id `01KQH4Z8R8W7WJ64Y1YDSE8G53`, threaded with `ackOf`)
+4. Sent `control:stop`
+5. Companion wrote farewell envelope; run completed cleanly
+
+### state/history.ndjson populated correctly
+
+```ndjson
+{"ts":"2026-05-01T06:52:39.135Z","side":"inside","from":"idle","to":"reading","reason":"reading briefing: Topic: FX002 verification","peerStateAtTime":{"status":"idle"}}
+{"ts":"2026-05-01T06:52:40.788Z","side":"inside","from":"reading","to":"reporting","reason":"greeting","peerStateAtTime":{"status":"idle"}}
+{"ts":"2026-05-01T06:52:43.144Z","side":"inside","from":"reporting","to":"idle","reason":"briefed","peerStateAtTime":{"status":"idle"}}
+{"ts":"2026-05-01T06:54:50.060Z","side":"inside","from":"idle","to":"stopping","reason":"stop requested","peerStateAtTime":{"status":"idle"}}
+```
+
+Compare to FX002-1's evidence (same prompt, default schema): `state/` directory empty, every transition rejected. **Fix confirmed working.**
+
+### Other observations
+- Farewell envelope written + system validation passed (`validated: true, validationErrors: []`).
+- No `state does not match inside state schema` errors anywhere in `events.ndjson`.
+- The companion's own `magicWand` from this run independently flagged the same `run.json counters.messages: 0` debt I noted from FX002-1's investigation. Filed as MW4 in the parent plan's deferred-follow-ups section.
+
+### Acceptance — closed
+
+- [x] Demo briefing → visible state transitions + threaded `progress` reply ✓
+- [x] `doctor` flags drift before fix; clears after ✓
+- [x] Soft-fail preamble in place ✓
+- [x] `just fft` green ✓
+
+**FX002 complete.**

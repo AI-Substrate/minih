@@ -23,11 +23,11 @@
 - [x] **Stage 2: Per-agent schema** — ship `agents/demo-companion/state/inside-state.schema.json`
 - [x] **Stage 3: Systemic doctor warning** — `prompt-state-vocabulary-drift` check
 - [x] **Stage 4: Soft-fail preamble** — surface schema rejections via `progress`
-- [ ] **Stage 5: Verify** — re-run briefing; workbench shows transitions
+- [x] **Stage 5: Verify** — re-run briefing; workbench shows transitions
 
 ## Acceptance
 
 - [x] Verdict log clear (Path C; not A or B)
-- [ ] After FX002-2, briefing → visible state transitions + threaded `progress` reply
-- [ ] `doctor` flags vocabulary drift before fix; clears after
-- [ ] `just fft` green
+- [x] After FX002-2, briefing → visible state transitions + threaded `progress` reply
+- [x] `doctor` flags vocabulary drift before fix; clears after
+- [x] `just fft` green

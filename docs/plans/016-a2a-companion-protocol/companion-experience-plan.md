@@ -34,7 +34,7 @@ Plan 016 began as A2A protocol research (see `research-dossier.md`). The first a
 | ID | Created | Summary | Domain(s) | Status | Source |
 |----|---------|---------|-----------|--------|--------|
 | [FX001](./fixes/FX001-tui-input-routes-to-inbox.md) | 2026-05-01 | TUI footer input → coordinated inbox | cli, runner | Proposed | Live demo F4 |
-| [FX002](./fixes/FX002-companion-state-transitions.md) | 2026-05-01 | Companion state transitions — schema vocabulary fix + systemic doctor warning (Path C; investigation complete) | cli (doctor), agent | In Progress (FX002-1 ✅) | Live demo F2 |
+| [FX002](./fixes/FX002-companion-state-transitions.md) | 2026-05-01 | Companion state transitions — schema vocabulary fix + systemic doctor warning (Path C) | cli (doctor), agent | **Complete** | Live demo F2 |
 | [FX003](./fixes/FX003-driving-from-outside-docs.md) | 2026-05-01 | Document `--wait` / `--after` as the canonical operator pattern | docs | Proposed | Live demo F1 |
 | [FX004](./fixes/FX004-demo-opens-with-state.md) | 2026-05-01 | `demo-companion` walkthrough sets outside state before briefing | docs, agent prompt | Proposed | Live demo F3 |
 
@@ -52,6 +52,7 @@ Note: parallel parts of FX003 (the new how-to page, AGENTS_README cheat-sheet, s
 - **MW1** — `npx minih outside send-and-wait <slug> --type ... --wait <ms>` collapses send-then-block into one command. File as a separate plan when scoped.
 - **MW2** — `doctor` warning when an `outside.md` contains `sleep N` near `cat <inbox|state>` — automatic foot-gun detector for new agent authors.
 - **MW3** — `--human` view shows a low-key "(idle, polling)" badge during long `wait_for_any` calls so operators know the system isn't dead.
+- **MW4** — `run.json.counters.messages` doesn't track inbox messages on disk (observed `0` despite 3 inside + 1 outside messages present). The companion's farewell run-2 confirmed the gap: companion-mode agents have to reconstruct counts manually at farewell time. Target: `coordination` — a counter helper that records message counts and peer-update counts automatically in run metadata.
 
 ## Layout
 

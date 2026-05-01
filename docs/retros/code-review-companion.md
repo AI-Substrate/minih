@@ -42,3 +42,10 @@
 - difficulties:
   - [annoying] config: MINIH_OUTPUT_PATH and other MINIH_* env vars were not available in the shell session despite the preamble documenting them. Had to use the literal path from the prompt instead. (workaround: Used the literal output path from the prompt text rather than the env var.)
   - [annoying] knowledge: The idle budget baseline is ambiguous when no outside message is ever received. The spec says 'elapsed_since_last_outside_message > idleBudgetMs' but if there is no outside message, the baseline is undefined. Used run start time as the baseline. (workaround: Treated the run start time as the baseline for idle budget calculation.)
+
+## 2026-04-30T22:29:54.728Z — code-review-companion / 2026-05-01T07-56-53-605Z-18dd
+
+- runId: 2026-05-01T07-56-53-605Z-18dd
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-05-01T07-56-53-605Z-18dd
+- summary: Code review companion booted and oriented on plan 015-agent-readme-command (DRAFT status, Simple mode). Plan targets a `minih agent-readme` CLI verb plus companion-mode README expansion. Branch is 007-backgrounding. No outside tasks were received during the 30-minute idle budget, so no review work was performed. The companion long-polled the coordination inbox continuously and shut down gracefully on budget expiration.
+- **magicWand** (target: coordination): Add a 'first-contact timeout' that's shorter than idleBudgetMs — if NO outside message has ever been received within, say, 5 minutes of boot, exit early with a specific exitReason ('no_peer_contact'). This saves 25 minutes of idle polling when the outside actor simply never shows up. The full idleBudgetMs would still apply after the first real message is received.

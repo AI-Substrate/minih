@@ -2,13 +2,13 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Demo Companion Inside State",
   "type": "object",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "required": ["status", "data", "updatedAt", "updatedBy"],
   "properties": {
     "status": {
       "type": "string",
       "enum": ["idle", "reading", "reporting", "blocked", "stopping"],
-      "description": "Lifecycle status for the conversational demo companion. Vocabulary intentionally matches prompt.md § State Vocabulary so state_transition calls don't get silently rejected by the inside-state schema."
+      "description": "Lifecycle status for the conversational demo companion. Vocabulary intentionally matches prompt.md § 3 State Vocabulary so state_transition calls don't get silently rejected by the inside-state schema."
     },
     "data": {
       "type": "object",
@@ -16,6 +16,6 @@
       "description": "Free-form scratch — e.g. current topic, round number, last task id."
     },
     "updatedAt": { "type": "string", "format": "date-time" },
-    "updatedBy": { "type": "string", "enum": ["inside"] }
+    "updatedBy": { "const": "inside" }
   }
 }

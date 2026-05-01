@@ -92,7 +92,7 @@ Three parallel explore agents validated the fix dossier post-creation. Lens cove
 
 | Consumer | Requirement | Failure Mode | Verdict | Evidence |
 |----------|-------------|--------------|---------|----------|
-| `plan-6 --fix FX###` | Tasks executable / not blocked on clarification | shape mismatch | ✅ (post-fix) | FX001-3 made concrete (`appendInboxMessage` cli-domain confirmed); FX002-4 marked BLOCKED until FX002-1 verdict; decision table replaces "Possibly both" |
+| `plan-6 --fix FX###` | Tasks executable / not blocked on clarification | shape mismatch | ✅ (post-fix) | FX001-3 made concrete (`appendInboxMessage` cli-domain confirmed); FX002-4 was initially marked BLOCKED until verdict — verdict (FX002-1) came back as Path C (schema/vocabulary), making B-blocking moot; FX002-4 reframed as Path C shared-preamble guidance; decision table replaces "Possibly both" |
 | Demo re-run | Union of fixes covers all 12 primitives | contract drift | ✅ | FX001 (input bridge), FX002 (state visibility), FX003 (operator round-trip), FX004 (timeline opener) collectively cover the workshop's P1–P12 |
 | Third-party agent authors | Discoverable canonical doc | encapsulation lockout | ✅ (post-fix) | New FX003-7 adds three discoverability surfaces: `init.ts` welcome stderr, `doctor` pointer, `README.md` Coordination link |
 | Live-demo run dir for FX002-1 | Survives until investigation reads it | lifecycle ownership | ✅ (post-fix) | FX002-1 Notes now include explicit "do NOT re-run before this lands" guard; problem section acknowledges the originally-cited run id may be pruned and instructs locating the latest run |
@@ -107,10 +107,10 @@ Three parallel explore agents validated the fix dossier post-creation. Lens cove
 - **C1** (Source-Truth): FX002-1's hardcoded run id replaced with "locate latest demo-companion run dir"; problem statement notes original id may be pruned.
 - **H1** (Source-Truth): FX001-1 corrected — current ctx is `{ runDir, runId }`; `coordinated`/`agentSlug` are NEW additions; `runDir` already present.
 - **H2** (Cross-Ref): Parent plan's recommended order rewritten — FX002-1 first (evidence preservation); FX003 in parallel with FX001 EXCEPT FX003-4 must finish before FX004; FX004 last.
-- **H3** (Cross-Ref): Parent plan Target Domains now includes `mcp` (conditional on FX002-1 verdict).
-- **H4** (Cross-Ref): FX002 Proposed Fix replaces "Possibly both" with strict decision table (Path A only / Path B only / Neither).
+- **H3** (Cross-Ref): Parent plan Target Domains initially flagged `mcp` as conditional on FX002-1 verdict. **Post-FX002-1 update (2026-05-01)**: verdict came back as Path C (schema vocabulary), not Path B (mcp); `mcp` was struck from Target Domains. The conditional was preserved historically, the rule was discharged.
+- **H4** (Cross-Ref): FX002 Proposed Fix replaced "Possibly both" with strict decision table. **Post-FX002-1 update (2026-05-01)**: the decision table itself was superseded — FX002-1 verdict surfaced a fourth path (Path C — schema/vocabulary mismatch) that none of the original three rows matched. Dossier rewritten to Path C as the actual fix; A and B ruled out.
 - **H5** (Forward-Compat): FX001-3 made concrete — `appendInboxMessage` ownership confirmed (`src/cli/coordination.ts:92-117`, cli-domain); no re-export needed; subject synthesis spelled out.
-- **H6** (Forward-Compat): FX002-4 marked explicitly BLOCKED until FX002-1 verdict = Path B; diagnostic steps added.
+- **H6** (Forward-Compat): FX002-4 was initially marked BLOCKED until FX002-1 verdict = Path B; diagnostic steps added. **Post-FX002-1 update (2026-05-01)**: verdict was Path C (not B), so the B-blocking was dissolved. FX002-4 has been reframed as Path C agent guidance (shared preamble: surface schema-rejection errors via `progress` messages so the operator sees them).
 - **H7** (Forward-Compat): FX002-1 Notes now include "do NOT re-run before this lands" lifecycle guard.
 - **M1** (Cross-Ref): FX003-4-before-FX004 ordering documented in BOTH dossiers' Sequencing notes.
 - **M2** (Cross-Ref): FX004 dependency on FX002 + FX003-4 made explicit in parent plan order rationale.

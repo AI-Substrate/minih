@@ -2,6 +2,7 @@
 
 **Fix**: [FX004 dossier](./FX004-demo-opens-with-state.md)
 **Status**: Ready
+**Depends on**: FX003-4 (the `agents/demo-companion/outside.md` `--wait`/`--after` rewrite must land first; both fixes touch the same file).
 
 ## What → Why
 
@@ -17,7 +18,7 @@
 
 ## Stages
 
-- [ ] **Stage 1: Declare presence** — Step 0.5 outside state set after boot
+- [ ] **Stage 1: Declare presence** — Step 0.5 outside state set after boot. **Pre-condition**: FX003-4 has already rewritten `agents/demo-companion/outside.md` to use `--wait`/`--after`; this fix is layered on top.
 - [ ] **Stage 2: Kickoff** — pair briefing with outside `in-progress` flip
 - [ ] **Stage 3: Closure** — final outside `done` flip before reading farewell
 - [ ] **Stage 4: Workshop sync** — update `001-companion-demo.md` to match

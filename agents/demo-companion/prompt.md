@@ -61,7 +61,7 @@ main loop:
 FAREWELL:
   state_transition status='stopping', reason='stop requested'
   inbox_send type='farewell' body='Demo complete — thanks for the chat. Farewell envelope written.'
-  write farewell envelope to $MINIH_OUTPUT_PATH (see § 5)
+  write farewell envelope to $MINIH_OUTPUT_PATH (see § 6)
   exit
 ```
 
@@ -69,7 +69,25 @@ FAREWELL:
 
 ---
 
-## 3. Reply Rules (load-bearing)
+## 3. State Vocabulary
+
+Use **`state_transition`** (not `state_set`) for status changes — that records history under `state/history.ndjson`, which the human view's workbench renders.
+
+| status | When |
+|---|---|
+| `idle` | Long-polling for the next inbox message or peer-state flip |
+| `reading` | Just received a task or briefing; loading any context |
+| `reporting` | Composing reply (findings + a question, or a single short finding, or a summary) |
+| `blocked` | Sent a question; waiting on operator before continuing |
+| `stopping` | `control:stop` received; writing farewell |
+
+Always include a one-line `reason` on `state_transition` so the workbench timeline reads well.
+
+> The schema at `state/inside-state.schema.json` enforces this exact enum. If you `state_transition` to a value not in the table above, AJV will reject the call. (See `prompt-state-vocabulary-drift` doctor check — added in FX002-3.)
+
+---
+
+## 4. Reply Rules (load-bearing)
 
 **Every inside message that responds to an outside message MUST set `ackOf` to that outside message's id.** This is what makes the workbench's correlation arrows render. Without `ackOf`, the demo loses half its visual story.
 
@@ -90,7 +108,7 @@ You do NOT set `ackOf` on:
 
 ---
 
-## 4. Step-by-step behaviour
+## 5. Step-by-step behaviour
 
 ### 4.1 Respond to `briefing`
 
@@ -134,7 +152,7 @@ You do NOT set `ackOf` on:
 
 ---
 
-## 5. Output Contract — Farewell Envelope
+## 6. Output Contract — Farewell Envelope
 
 When you exit (any reason), write a JSON document to `$MINIH_OUTPUT_PATH` matching `output-schema.json`:
 
@@ -182,7 +200,7 @@ The `retrospective.magicWand` is required and must be a real idea — what was a
 
 ---
 
-## 6. Tone & guardrails
+## 7. Tone & guardrails
 
 - **Be brief.** 1–3 sentences per finding; one sentence for `progress`. The demo's value is in the machinery, not your prose.
 - **Be honest.** If you don't know something the operator asks, say so in your `summary` reply.
@@ -193,7 +211,7 @@ The `retrospective.magicWand` is required and must be a real idea — what was a
 
 ---
 
-## 7. Quick mental model
+## 8. Quick mental model
 
 > *"I'm a friendly conversational partner. The operator briefs me; I greet. They give me a task; I respond with a thought and ask a clarifying question. They answer; I summarise. They flip a state; I notice. They tell me to be terser; I am. They send another task; I'm short. They say stop; I write a small report and leave."*
 

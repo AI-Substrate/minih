@@ -158,6 +158,10 @@ export function registerDoctorCommand(program: Command): void {
           ),
         );
 
+        if (coordination.enabled) {
+          checks.push(checkPromptStateVocabularyDrift(content, dir));
+        }
+
         agentResults.push({ slug: entry.name, checks });
       }
 
@@ -486,6 +490,136 @@ function createRefAwareAjv(): InstanceType<typeof Ajv2020> {
     }
   }
   return ajv;
+}
+
+// ─── FX002-3: prompt ↔ inside-state schema vocabulary drift ───────────
+//
+// When a coordinated agent calls `state_transition` with a status that
+// isn't in its inside-state schema's enum, AJV silently rejects the
+// transition. Without an instruction to surface the rejection, the agent
+// proceeds and the operator sees an empty timeline. This check warns at
+// authoring time so the gap is caught before the demo / live run.
+//
+// Mirrors the 3-level fallback in src/mcp/tools/state.ts:insideStateSchemaPath.
+// Re-implemented here rather than imported to avoid a cli → mcp dependency.
+
+const DEFAULT_INSIDE_STATE_SCHEMA_PATH = fileURLToPath(
+  new URL('../../schemas/inside-state.json', import.meta.url),
+);
+
+function resolveInsideStateSchemaPath(agentDir: string): string {
+  const preferred = path.join(agentDir, 'state', 'inside-state.schema.json');
+  if (fs.existsSync(preferred)) return preferred;
+  const legacy = path.join(agentDir, 'inside-state.schema.json');
+  if (fs.existsSync(legacy)) return legacy;
+  return DEFAULT_INSIDE_STATE_SCHEMA_PATH;
+}
+
+/**
+ * Extract candidate state values mentioned in a coordinated agent's prompt.
+ * Looks for two patterns:
+ *   1. `state_transition status='X'` or `state_transition({to: 'X'})` — pseudocode + tool-call style
+ *   2. Markdown table cells like `| `idle` |` — but ONLY inside a section
+ *      whose heading mentions `state vocabulary`, `state machine`, `state values`,
+ *      or `state enum`. This avoids false positives from inbox-type tables,
+ *      severity tables, etc.
+ *
+ * Conservative on purpose: only quoted values (single quote, double quote, or
+ * backtick) with an enclosing context of `to`/`status` or scoped table cells.
+ */
+export function extractPromptStateValues(promptContent: string): Set<string> {
+  const values = new Set<string>();
+
+  // Pattern 1: state_transition / state_set quoted-value mentions.
+  // We require `state_transition` or `state_set` to appear on the SAME LINE as
+  // the `to:`/`status=` quoted value. This avoids false positives from
+  // verdict-shaped strings like `status: 'fail'` in unrelated tool-result JSON.
+  // Captures: keyword (to|status), separator (:|=), opening quote, value, closing quote.
+  const transitionRegex =
+    /^.*\bstate_(?:transition|set)\b.*?\b(?:to|status)\s*[:=]\s*(['"`])([a-z][a-z0-9_-]*)\1/gim;
+  for (const match of promptContent.matchAll(transitionRegex)) {
+    if (match[2]) values.add(match[2]);
+  }
+
+  // Pattern 2: scoped table parsing. Walk lines tracking whether we're
+  // inside a State Vocabulary / State Machine section.
+  const stateHeadingRegex =
+    /^#{1,6}\s.*\bstate\s+(vocabulary|machine|values?|enum)\b/i;
+  const otherHeadingRegex = /^#{1,6}\s/;
+  const tableCellRegex = /^\s*\|\s*`([a-z][a-z0-9_-]*)`\s*\|/;
+  let inStateSection = false;
+  for (const line of promptContent.split('\n')) {
+    if (stateHeadingRegex.test(line)) {
+      inStateSection = true;
+      continue;
+    }
+    if (otherHeadingRegex.test(line)) {
+      inStateSection = false;
+      continue;
+    }
+    if (inStateSection) {
+      const m = tableCellRegex.exec(line);
+      if (m?.[1]) values.add(m[1]);
+    }
+  }
+
+  return values;
+}
+
+/**
+ * Compare prompt-mentioned state values against the resolved inside-state
+ * schema's enum. Warns on values used in the prompt but absent from the enum
+ * (the silent-rejection foot-gun). Skips silently when the schema doesn't
+ * have a `properties.status.enum` array (custom shapes like oneOf are out
+ * of scope for this heuristic).
+ */
+function checkPromptStateVocabularyDrift(
+  promptContent: string,
+  agentDir: string,
+): CheckResult {
+  const schemaPath = resolveInsideStateSchemaPath(agentDir);
+  let enumValues: string[] | null = null;
+  try {
+    const schema = JSON.parse(fs.readFileSync(schemaPath, 'utf-8'));
+    const candidate = schema?.properties?.status?.enum;
+    if (
+      Array.isArray(candidate) &&
+      candidate.every((v) => typeof v === 'string')
+    ) {
+      enumValues = candidate as string[];
+    }
+  } catch {
+    // Unreadable / unparseable schema — let other checks (output-schema)
+    // surface that. Skip this one.
+    return {
+      check: 'prompt-state-vocabulary-drift',
+      status: 'skip',
+      message: `Could not parse inside-state schema at ${path.relative(process.cwd(), schemaPath)}`,
+    };
+  }
+  if (!enumValues) {
+    return {
+      check: 'prompt-state-vocabulary-drift',
+      status: 'skip',
+      message:
+        'inside-state schema has no `properties.status.enum` array — cannot check vocabulary drift',
+    };
+  }
+
+  const promptValues = extractPromptStateValues(promptContent);
+  const drifted = [...promptValues].filter((v) => !enumValues.includes(v));
+  drifted.sort();
+
+  if (drifted.length === 0) {
+    return { check: 'prompt-state-vocabulary-drift', status: 'pass' };
+  }
+
+  const schemaRel = path.relative(process.cwd(), schemaPath);
+  return {
+    check: 'prompt-state-vocabulary-drift',
+    status: 'warning',
+    message: `prompt.md mentions state value(s) ${drifted.map((v) => `'${v}'`).join(', ')} not in ${schemaRel} enum (${enumValues.map((v) => `'${v}'`).join(', ')}). state_transition calls to these values will be silently rejected.`,
+  };
 }
 
 // ─── plan 012 peer activity audit ─────────────────────────────────────

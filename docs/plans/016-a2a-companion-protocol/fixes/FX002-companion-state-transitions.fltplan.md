@@ -21,7 +21,7 @@
 
 - [x] **Stage 1: Investigate** — verdict written to `.log.md` (Path C confirmed; A and B ruled out)
 - [x] **Stage 2: Per-agent schema** — ship `agents/demo-companion/state/inside-state.schema.json`
-- [ ] **Stage 3: Systemic doctor warning** — `prompt-state-vocabulary-drift` check
+- [x] **Stage 3: Systemic doctor warning** — `prompt-state-vocabulary-drift` check
 - [ ] **Stage 4: Soft-fail preamble** — surface schema rejections via `progress`
 - [ ] **Stage 5: Verify** — re-run briefing; workbench shows transitions
 

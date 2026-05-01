@@ -49,3 +49,12 @@
 - runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-05-01T07-56-53-605Z-18dd
 - summary: Code review companion booted and oriented on plan 015-agent-readme-command (DRAFT status, Simple mode). Plan targets a `minih agent-readme` CLI verb plus companion-mode README expansion. Branch is 007-backgrounding. No outside tasks were received during the 30-minute idle budget, so no review work was performed. The companion long-polled the coordination inbox continuously and shut down gracefully on budget expiration.
 - **magicWand** (target: coordination): Add a 'first-contact timeout' that's shorter than idleBudgetMs — if NO outside message has ever been received within, say, 5 minutes of boot, exit early with a specific exitReason ('no_peer_contact'). This saves 25 minutes of idle polling when the outside actor simply never shows up. The full idleBudgetMs would still apply after the first real message is received.
+
+## 2026-05-01T06:43:07.187Z — code-review-companion / 2026-05-01T16-32-21-242Z-507d
+
+- runId: 2026-05-01T16-32-21-242Z-507d
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-05-01T16-32-21-242Z-507d
+- summary: Reviewed Plan 016 prior work, the demo-companion agent/schema, the main plan commit, and the final fft-fix commit. I sent three Medium findings covering stale Path B/MCP parent-plan wording, demo inside-state schema invariant drift plus a dead prompt cross-reference, and an FX004 flight-plan dependency gap; no High or Critical findings were found.
+- **magicWand** (target: coordination): Add a built-in companion session ledger view that groups each outside task with its ack, findings, and summary, plus a generated final-report draft, so long-running reviewers do not need to manually reconstruct counts and ackOf mappings at shutdown.
+- difficulties:
+  - [annoying] coordination: The final report has to mirror findings already sent through the inbox, but there is no automatic export from the inbox lane into the report JSON. (workaround: Manually copied the three finding payloads and task counts into output/report.json before validation.)

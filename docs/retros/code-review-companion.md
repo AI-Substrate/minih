@@ -58,3 +58,13 @@
 - **magicWand** (target: coordination): Add a built-in companion session ledger view that groups each outside task with its ack, findings, and summary, plus a generated final-report draft, so long-running reviewers do not need to manually reconstruct counts and ackOf mappings at shutdown.
 - difficulties:
   - [annoying] coordination: The final report has to mirror findings already sent through the inbox, but there is no automatic export from the inbox lane into the report JSON. (workaround: Manually copied the three finding payloads and task counts into output/report.json before validation.)
+
+## 2026-05-02T03:36:54.149Z — code-review-companion / 2026-05-02T12-29-45-055Z-6ab1
+
+- runId: 2026-05-02T12-29-45-055Z-6ab1
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-05-02T12-29-45-055Z-6ab1
+- summary: Oriented on plan 016 and reviewed three commit-boundary requests covering AGENTS.md dogfood rules, FORCE_COLOR test stabilization, FX007 planning, and FX008 attach/InputBridge implementation. I sent six findings: FX007 setup-race design, AGENTS dogfood drift, coordinated InputBridge fail-closed behavior, and the deferred attach wake e2e. The outside peer reported the AGENTS and InputBridge fail-closed findings fixed in commit 4342735 before stop; I did not independently re-review that final commit before shutdown.
+- **magicWand** (target: coordination): Add a companion report-draft tool that derives tasks received, findings sent, summaries, ackOf chains, and unresolved peer requests from the inbox/state lanes, so the final JSON report is generated from the coordination ledger instead of manually reconstructed.
+- difficulties:
+  - [annoying] coordination: Human in terminal B could not type into a chat with an agent the AI started in terminal A: minih view was read-only cross-process, outside inbox send wrote blind without the live transcript, and resume --human would take over rather than peer-attach. (workaround: The outside peer filed MW12 and implemented FX008/minih attach during the session; I recorded the difficulty for the ledger.)
+  - [annoying] coordination: Final report composition required manually copying findings, counts, and ackOf relationships from the coordination transcript into output/report.json. (workaround: Manually reconstructed tasksReceived, findingsSent, findings[], and coordination notes from the inbox messages before validation.)

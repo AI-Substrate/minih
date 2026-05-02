@@ -1,7 +1,7 @@
 # Flight Plan: Fix FX008 — `minih attach` cross-process read+write TUI
 
 **Fix**: [FX008 dossier](./FX008-minih-attach-cross-process-tui.md)
-**Status**: Ready for takeoff
+**Status**: Landed
 **Depends on**: None (subsumes FX001; workshop 005)
 
 ## What → Why
@@ -35,7 +35,7 @@
 - [ ] **Stage 10: Tests — e2e attach with wake assertion** — gated `MINIH_E2E=1`; asserts agent wakes + PID survives detach. (FX008-11)
 - [x] **Stage 11: FX001 supersession** — header + cross-link in FX001.md. (FX008-12)
 - [x] **Stage 12: Docs** — AGENTS.md companion-mode mention; `--help` text; FX003 how-to (when present). (FX008-13)
-- [~] **Stage 13: `just fft` + companion sign-off** — pipeline clean; companion farewell received. (FX008-14)
+- [x] **Stage 13: `just fft` + companion sign-off** — pipeline clean; companion farewell received. (FX008-14)
 
 ## Flight Status
 
@@ -53,7 +53,7 @@ flowchart LR
     S10[Stage 10: e2e]:::pending
     S11[Stage 11: FX001 super]:::done
     S12[Stage 12: docs]:::done
-    S13[Stage 13: fft+sign-off]:::active
+    S13[Stage 13: fft+sign-off]:::done
 
     S1 --> S2 --> S3 --> S5
     S3 --> S6 --> S7 --> S8
@@ -83,7 +83,9 @@ flowchart LR
 - [ ] FX008-11 — test: e2e attach with wake assertion
 - [x] FX008-12 — docs: FX001 SUPERSEDED
 - [x] FX008-13 — docs: AGENTS.md + `--help`
-- [~] FX008-14 — verify: `just fft` + companion farewell
+- [x] FX008-14 — verify: `just fft` + companion farewell
+
+## Status: Landed
 
 ## Acceptance
 

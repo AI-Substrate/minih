@@ -67,6 +67,30 @@ Added top-of-file SUPERSEDED header to `FX001-tui-input-routes-to-inbox.md` with
 
 Remaining: send `control:stop` to companion, capture farewell, fold any open findings into final summary. FX008-11 (e2e test) deferred — see Discoveries.
 
+### Companion Power-On-Mode review — findings table
+
+| Finding | Severity | File | Status | Fix commit |
+|---------|----------|------|--------|------------|
+| F001 | MEDIUM | FX007 dossier | Out of scope (FX007 territory) | Flagged in this log for FX007 phase |
+| F002 | MEDIUM | AGENTS.md | Fixed | `4342735` |
+| F003 | HIGH | src/cli/human/input-bridge.ts | Fixed | `4342735` |
+| F004 | (re-flag of F003) | input-bridge.ts | Resolved by F003 fix | `4342735` |
+| F005 | (re-flag of F002) | AGENTS.md | Resolved by F002 fix | `4342735` |
+| F006 | LOW | attach wake test | Acknowledged as deferred (FX008-11) | (deferred) |
+
+**Companion farewell envelope (via dogfood path `minih retros --agent code-review-companion --run 2026-05-02T12-29-45-055Z-6ab1`)**:
+- `peerUpdatesSent: 16`, `unresolvedPeerRequests: 0`, `statePublished: true`
+- workedWell: "Project tooling made targeted review fast: git show, ripgrep, and narrow file reads exposed the exact contract surfaces. minih coordination worked well for long-running review: ackOf threading kept each finding tied to a review request, and state transitions made progress visible."
+- confusing: "The project was actively changing while review requests arrived… On the coordination side, producing the final report still required manually reconstructing counts and finding records from inbox messages." (re-flags MW7)
+- magicWand: "Add a companion report-draft tool that derives tasks received, findings sent, summaries, ackOf chains, and unresolved peer requests from the inbox/state lanes, so the final JSON report is generated from the coordination ledger instead of manually reconstructed." (re-flags MW7)
+
+**Verification of F002 fix**: ran `minih retros --agent code-review-companion --run <id>` instead of `cat .../output/report.json` — the dogfood path **works** and returns the same envelope content. F002 fix is viable (no CLI gap).
+
+### Open follow-ups
+
+- **FX008-11**: e2e attach wake assertion. Marker fixture infrastructure deferred. Recommend filing as a separate fix dossier (FX009?) when scoped.
+- **F001 (FX007 race)**: Companion's review of the FX007 dossier surfaced a setup race: pre-render before watcher registration leaves a gap. To address in FX007 implementation phase — change to watch-then-scan (or scan-watch-scan) sequence.
+
 
 
 Bundled because the typecheck couples them: widening `InputCapability` forces the exhaustive switch in `header.tsx` to migrate, which forces `footer.tsx` to migrate, which forces existing tests to migrate. Doing all four in one coherent commit keeps the build green at every step.

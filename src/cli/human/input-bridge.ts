@@ -11,11 +11,11 @@
  * shared between `run --human` (in-process) and `minih attach` (out-of-process).
  */
 
-import type { CoordinationRunLocation } from '../../runner/index.js';
 import type { SessionSender } from '../../adapter/events.js';
+import type { CoordinationRunLocation } from '../../runner/index.js';
 import type { LiveRunStatus } from '../../runner/types.js';
-import { appendInboxMessage } from '../coordination.js';
 import { buildOutsideMessage } from '../commands/outside.js';
+import { appendInboxMessage } from '../coordination.js';
 
 export type InputCapability =
   | 'input → inbox'

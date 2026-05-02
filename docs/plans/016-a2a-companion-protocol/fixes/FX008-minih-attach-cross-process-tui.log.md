@@ -22,7 +22,52 @@
 - `coordinationEnabled` was already computed at `src/runner/runner.ts:350` and `definition.slug` was already in scope at line 700; no extra plumbing needed.
 - The adapter-level `onSessionReady` (`src/adapter/events.ts:46`) is a DIFFERENT signature `(sender) => void` — not affected by this change. Only the runner-level `AgentRunConfig.onSessionReady` widened.
 
-### FX008-2 + FX008-3 + FX008-4 — Bridge widening, write path, footer rendering (DONE 2026-05-02)
+### FX008-5/6/7 — run.ts + resume.ts + view.ts migrations (DONE 2026-05-02)
+
+**Diff summary**:
+- `src/cli/commands/run.ts`: imports `coordinationRunLocation`; bridge is constructed with `runDir`, `agentSlug`, `coordinated` from new ctx fields, plus `location` only when `coordinated`. `commandName: 'human-tui.input'`.
+- `src/cli/commands/resume.ts`: identical wiring.
+- `src/cli/commands/view.ts`: loads `AgentDefinition` to read `coordination?.enabled`. Bridge gets `attached: true`, no `sender`, no `location` (so capability is always read-only).
+
+**Discovery**: `AgentDefinition.coordination` is already a public, parsed field in `runner/types.ts:41` — no need to re-read frontmatter from disk.
+
+### FX008-8/9 — `attach.ts` NEW + CLI registration (DONE 2026-05-02)
+
+**Diff**:
+- `src/cli/commands/attach.ts` (NEW, ~230 lines). Mirror of view.ts with three diffs: (1) bridge mounted with `attached: true` + `coordinated` + optional `location`; (2) `commandName: 'attach.input'`; (3) detach message phrasing: `[detached at <runId> — agent continues. To re-attach: minih attach <slug> --run <runId>]`. Reuses view.ts exit-state guard verbatim (the Ctrl-C-detaches-never-kills invariant is encoded by NOT signalling another process).
+- `src/cli/index.ts`: imports + calls `registerAttachCommand(program)`.
+
+**Verification**: `minih attach --help` renders with the Ctrl-C-detaches help text. `--read-only` flag withholds `location` so coordinated runs fall back to read-only by operator opt-in.
+
+**Resolver choice**: attach uses `latest-active` only — no fallback to completed runs. Attach's value proposition is the live write path; for completed-run inspection use `view`.
+
+### FX008-10 — capability table tests (DONE 2026-05-02)
+
+**Diff**: `test/cli/human-input-bridge.test.ts` extended from 12 → 25 tests. Five new rows for the workshop §4.4 capability table; six `synthesiseSubject` edge cases. Filesystem assertions read `inbox/outside/messages.ndjson` and verify ULID, sender, type, subject, body. Covered the defensive cases too: coord without `location` falls back to `'input → session'` (when sender exists) or `'input read-only — non-coordinated'` (when neither).
+
+**Discovery**: the on-disk inbox path is `runs/<id>/inbox/<lane>/messages.ndjson` (a directory per lane), NOT `runs/<id>/inbox/<lane>.ndjson`. First test attempt looked at the wrong path; fixed quickly.
+
+### FX008-12 — FX001 SUPERSEDED (DONE 2026-05-02)
+
+Added top-of-file SUPERSEDED header to `FX001-tui-input-routes-to-inbox.md` with cross-link to FX008.
+
+### FX008-13 — Docs updates (DONE 2026-05-02)
+
+`AGENTS.md` updates:
+- Companion-mode-mandatory section gains a one-line `minih attach` mention (after the existing `minih view` mention).
+- Dogfood-rule equivalence table grows two new rows: "Watching a run live (read-only)" → `view`, "Following AND chiming in" → `attach`.
+
+**Out of scope (deferred)**:
+- FX003's `docs/how/driving-an-agent-from-outside.md` doesn't exist yet → attach section will be added when FX003 lands. Already noted in the dossier as conditional.
+- `--human` footer hint string explicitly: deferred because FX008-4's capability label (`[ input → inbox ]` / `[ input → session ]`) is self-documenting.
+
+### FX008-14 — `just fft` clean (PARTIAL — pipeline green, companion farewell pending)
+
+`just fft` ran clean: 716 passed | 10 skipped (pre-existing skips), 0 vulns, SDK 0.3.0 latest. Pre-commit linter found 5 formatting nits in the new test file; auto-fixed via `npx biome check --write`. Pipeline now green.
+
+Remaining: send `control:stop` to companion, capture farewell, fold any open findings into final summary. FX008-11 (e2e test) deferred — see Discoveries.
+
+
 
 Bundled because the typecheck couples them: widening `InputCapability` forces the exhaustive switch in `header.tsx` to migrate, which forces `footer.tsx` to migrate, which forces existing tests to migrate. Doing all four in one coherent commit keeps the build green at every step.
 

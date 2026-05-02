@@ -6,13 +6,21 @@
  * Mounts the Ink renderer to stderr; does NOT take input write capability
  * (cross-process attach is `attached-read-only` per finding 03).
  *
+ * FX008 (Plan 016) — `view` retains its read-only contract; the new
+ * `minih attach` command (separate file) wires the cross-process write
+ * path. `view` now loads the agent definition so the input bridge can
+ * resolve to `'input read-only — non-coordinated'` or `'input read-only — completed'`
+ * deterministically (vs the old generic `'input read-only'`).
+ *
  * Snapshot mode (`--snapshot`) is deferred to Phase 3.
  */
 
+import * as path from 'node:path';
 import type { Command } from 'commander';
 import {
   MultipleActiveRunsError,
   type ResolvedRun,
+  resolveAgent,
   resolveRun,
 } from '../../runner/index.js';
 import { mountHumanApp, pushHumanModel } from '../human/app.js';
@@ -85,6 +93,22 @@ export function registerViewCommand(program: Command): void {
         const runStatus = resolved.manifest?.status ?? 'unknown';
         const isTerminal = runStatus === 'completed' || runStatus === 'failed';
 
+        // FX008 — load the agent definition so the bridge resolves to
+        // an informative read-only capability label. `view` is read-only
+        // by design; we never enable the inbox-write path here. The
+        // companion command `minih attach` is the writable counterpart.
+        const agentsDir = path.resolve(opts.agentsDir ?? 'agents');
+        let coordinated = false;
+        try {
+          const definition = resolveAgent(slug, agentsDir);
+          if (definition !== null) {
+            coordinated = definition.coordination?.enabled === true;
+          }
+        } catch {
+          // If we can't resolve the agent (deleted, renamed, ...) we still
+          // want to mount the read-only view — keep coordinated=false.
+        }
+
         const feed = await createRunFeed({
           runDir,
           onUpdate: (model) => {
@@ -101,6 +125,9 @@ export function registerViewCommand(program: Command): void {
           sender: undefined,
           attached: true,
           runStatus: isTerminal ? 'completed' : 'active',
+          runDir,
+          agentSlug: slug,
+          coordinated,
         });
 
         // FX002-5 + F002 — single shared exit guard across all three exit paths

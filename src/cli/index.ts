@@ -13,6 +13,7 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 import { registerAgentReadmeCommand } from './commands/agent-readme.js';
+import { registerAttachCommand } from './commands/attach.js';
 import { registerCheckCommand } from './commands/check.js';
 import { registerConnectCommand } from './commands/connect.js';
 import { registerDifficultiesCommand } from './commands/difficulties.js';
@@ -88,5 +89,6 @@ registerInitCommand(program);
 registerHarvestCommand(program);
 registerAgentReadmeCommand(program);
 registerViewCommand(program);
+registerAttachCommand(program);
 
 program.parse();

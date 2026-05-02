@@ -1,3 +1,9 @@
+**Status**: SUPERSEDED by [FX008](FX008-minih-attach-cross-process-tui.md) (2026-05-02)
+
+> FX001's scope (in-process `run --human` coordinated input routing) is fully covered by FX008's same-process leg. The shared `InputBridge` widening ships once with the cross-process attach path. No work is lost; the union is one fix dossier instead of two with overlapping code. See `FX008-minih-attach-cross-process-tui.md` § "Subsumes FX001" and the migration plan in workshop 005 § 12.
+
+---
+
 # Fix FX001: TUI footer input routes to coordinated inbox
 
 **Created**: 2026-05-01

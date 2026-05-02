@@ -27,15 +27,15 @@
 - [x] **Stage 2: InputBridge contract widening** — 5-value capability enum; widened `InputBridgeInput` shape including optional `commandName`; capability resolution table. (FX008-2)
 - [x] **Stage 3: Coordinated write path** — `submit()` for `'input → inbox'` uses `appendInboxMessage` with proper `CoordinationRunLocation`; subject synthesis helper. (FX008-3)
 - [x] **Stage 4: Footer label rendering** — 5 capability strings render in the footer. (FX008-4)
-- [ ] **Stage 5: run.ts + resume.ts migration** — thread new ctx fields. (FX008-5, FX008-6)
-- [ ] **Stage 6: view.ts migration** — read-only flow, new bridge shape preserved. (FX008-7)
-- [ ] **Stage 7: New attach.ts command** — clone view.ts structure with attach-specific bridge wiring. (FX008-8)
-- [ ] **Stage 8: CLI registration** — `attach` listed in `--help` with detach-not-kill reminder. (FX008-9)
-- [ ] **Stage 9: Tests — capability table coverage** — 5-row capability tests. (FX008-10)
+- [x] **Stage 5: run.ts + resume.ts migration** — thread new ctx fields. (FX008-5, FX008-6)
+- [x] **Stage 6: view.ts migration** — read-only flow, new bridge shape preserved. (FX008-7)
+- [x] **Stage 7: New attach.ts command** — clone view.ts structure with attach-specific bridge wiring. (FX008-8)
+- [x] **Stage 8: CLI registration** — `attach` listed in `--help` with detach-not-kill reminder. (FX008-9)
+- [x] **Stage 9: Tests — capability table coverage** — 5-row capability tests. (FX008-10)
 - [ ] **Stage 10: Tests — e2e attach with wake assertion** — gated `MINIH_E2E=1`; asserts agent wakes + PID survives detach. (FX008-11)
-- [ ] **Stage 11: FX001 supersession** — header + cross-link in FX001.md. (FX008-12)
-- [ ] **Stage 12: Docs** — AGENTS.md companion-mode mention; `--help` text; FX003 how-to (when present). (FX008-13)
-- [ ] **Stage 13: `just fft` + companion sign-off** — pipeline clean; companion farewell received. (FX008-14)
+- [x] **Stage 11: FX001 supersession** — header + cross-link in FX001.md. (FX008-12)
+- [x] **Stage 12: Docs** — AGENTS.md companion-mode mention; `--help` text; FX003 how-to (when present). (FX008-13)
+- [~] **Stage 13: `just fft` + companion sign-off** — pipeline clean; companion farewell received. (FX008-14)
 
 ## Flight Status
 
@@ -45,15 +45,15 @@ flowchart LR
     S2[Stage 2: bridge contract]:::done
     S3[Stage 3: write path]:::done
     S4[Stage 4: footer]:::done
-    S5[Stage 5: run+resume]:::pending
-    S6[Stage 6: view]:::pending
-    S7[Stage 7: attach]:::pending
-    S8[Stage 8: CLI reg]:::pending
-    S9[Stage 9: cap tests]:::pending
+    S5[Stage 5: run+resume]:::done
+    S6[Stage 6: view]:::done
+    S7[Stage 7: attach]:::done
+    S8[Stage 8: CLI reg]:::done
+    S9[Stage 9: cap tests]:::done
     S10[Stage 10: e2e]:::pending
-    S11[Stage 11: FX001 super]:::pending
-    S12[Stage 12: docs]:::pending
-    S13[Stage 13: fft+sign-off]:::pending
+    S11[Stage 11: FX001 super]:::done
+    S12[Stage 12: docs]:::done
+    S13[Stage 13: fft+sign-off]:::active
 
     S1 --> S2 --> S3 --> S5
     S3 --> S6 --> S7 --> S8
@@ -74,16 +74,16 @@ flowchart LR
 - [x] FX008-2 — cli: `InputBridge` 5-value enum + widened input
 - [x] FX008-3 — cli: coordinated `submit()` write path
 - [x] FX008-4 — cli: footer label rendering
-- [ ] FX008-5 — cli: `run.ts` migration
-- [ ] FX008-6 — cli: `resume.ts` migration
-- [ ] FX008-7 — cli: `view.ts` migration
-- [ ] FX008-8 — cli: NEW `attach.ts`
-- [ ] FX008-9 — cli: `cli.ts` registration
-- [ ] FX008-10 — test: capability table (5 rows)
+- [x] FX008-5 — cli: `run.ts` migration
+- [x] FX008-6 — cli: `resume.ts` migration
+- [x] FX008-7 — cli: `view.ts` migration
+- [x] FX008-8 — cli: NEW `attach.ts`
+- [x] FX008-9 — cli: `cli.ts` registration
+- [x] FX008-10 — test: capability table (5 rows)
 - [ ] FX008-11 — test: e2e attach with wake assertion
-- [ ] FX008-12 — docs: FX001 SUPERSEDED
-- [ ] FX008-13 — docs: AGENTS.md + `--help`
-- [ ] FX008-14 — verify: `just fft` + companion farewell
+- [x] FX008-12 — docs: FX001 SUPERSEDED
+- [x] FX008-13 — docs: AGENTS.md + `--help`
+- [~] FX008-14 — verify: `just fft` + companion farewell
 
 ## Acceptance
 

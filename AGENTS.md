@@ -22,6 +22,8 @@
 | `cat .../output/report.json` | `minih last-run <slug>` then `minih validate <slug> --file <path>`; for inspect, `minih retros --slug <slug>` |
 | `ls agents/<slug>/runs/` | `minih history <slug>` |
 | Reading any prompt assembly | `minih inspect <slug>` |
+| Watching a run live (read-only) | `minih view <slug>` |
+| Following a run live AND chiming in | `minih attach <slug>` (FX008 — coordinated agents only; Ctrl-C detaches) |
 
 ### When the CLI gap matters
 
@@ -103,6 +105,8 @@ The `verdict: 'active'` filter is load-bearing — `minih status` defaults to "l
 **Then ping it at every commit boundary** with `outside inbox send --type task --subject "review-request: <topic> <sha>" --body "Diff: git show <sha>. ..."`. Fire-and-forget; the companion replies only if it finds issues.
 
 **To watch it live** in another terminal: `minih view code-review-companion` — read-only TUI, attaches cross-process, renders inbox + state + transcript.
+
+**To watch AND chime in live** (FX008): `minih attach code-review-companion` — same TUI plus footer input writes to the outside inbox. Ctrl-C **detaches** without stopping the agent. Multiple operators may attach simultaneously; messages land in arrival order via append-only file semantics.
 
 **Before reporting back to the user, send `control:stop`** and read the farewell envelope at `agents/code-review-companion/runs/<RUN>/output/report.json` — fold any open findings into your final summary. (Power-On-Mode protocol — without this, the auto-harvested retro misses your session's signal.)
 

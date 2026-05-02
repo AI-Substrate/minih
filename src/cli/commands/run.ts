@@ -16,6 +16,7 @@ import { buildInsideMcpServerConfig } from '../../mcp/index.js';
 import type { AgentRunConfig } from '../../runner/index.js';
 import {
   buildInsidePreamble,
+  coordinationRunLocation,
   displayEvent,
   displayHeader,
   displayPreflight,
@@ -245,6 +246,17 @@ export function registerRunCommand(program: Command): void {
                   sender,
                   attached: false,
                   runStatus: 'active',
+                  runDir: ctx.runDir,
+                  agentSlug: ctx.agentSlug,
+                  coordinated: ctx.coordinated,
+                  commandName: 'human-tui.input',
+                  ...(ctx.coordinated && {
+                    location: coordinationRunLocation(
+                      ctx.agentSlug,
+                      agentsDir,
+                      ctx.runId,
+                    ),
+                  }),
                 });
 
                 // FX002-5 + Ctrl-C bug: unmount + setImmediate guard so Ink's

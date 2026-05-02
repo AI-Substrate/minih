@@ -105,10 +105,11 @@ Note: horizontal rule above should NOT break frontmatter parsing.
     });
 
     // Run agent
-    const def = resolveAgent('smoke-test', tmpDir)!;
+    const def = resolveAgent('smoke-test', tmpDir);
+    expect(def).toBeDefined();
     const result = await runAgent(
       fake,
-      def,
+      def as NonNullable<typeof def>,
       { slug: 'smoke-test', cwd: '/test/project' },
       undefined,
       tmpDir,

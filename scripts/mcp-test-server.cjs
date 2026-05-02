@@ -104,12 +104,16 @@ function handleRequest(req) {
 function sendResponse(id, result) {
   if (result === null || id === undefined) return;
   const body = JSON.stringify({ jsonrpc: '2.0', id, result });
-  process.stdout.write(body + '\n');
+  process.stdout.write(`${body}\n`);
 }
 
-function sendError(id, code, message) {
-  const body = JSON.stringify({ jsonrpc: '2.0', id, error: { code, message } });
-  process.stdout.write(body + '\n');
+function _sendError(id, _code, message) {
+  const body = JSON.stringify({
+    jsonrpc: '2.0',
+    id,
+    error: { code: _code, message },
+  });
+  process.stdout.write(`${body}\n`);
 }
 
 let buffer = '';

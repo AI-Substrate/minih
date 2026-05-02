@@ -68,7 +68,9 @@ function createAgent(
     fs.writeFileSync(path.join(sharedDir, 'preamble.md'), opts.preamble);
   }
 
-  return resolveAgent(slug, tmpDir)!;
+  return resolveAgent(slug, tmpDir) as NonNullable<
+    ReturnType<typeof resolveAgent>
+  >;
 }
 
 describe('runAgent', () => {

@@ -25,13 +25,17 @@ const tracer = trace.getTracer('minih');
 /**
  * Start a span with the minih tracer, execute fn within it, and end on completion.
  * Sets span status to ERROR on exception and re-throws.
+ * If parentContext is provided, the span is created as a child of that context
+ * (used for root spans that should stitch into an external trace via TRACEPARENT).
  */
 export async function withSpan<T>(
   name: string,
   fn: (span: Span) => Promise<T>,
   options?: SpanOptions,
+  parentContext?: Context,
 ): Promise<T> {
-  return tracer.startActiveSpan(name, options ?? {}, async (span) => {
+  const opts = options ?? {};
+  const callback = async (span: Span) => {
     try {
       const result = await fn(span);
       return result;
@@ -44,7 +48,11 @@ export async function withSpan<T>(
     } finally {
       span.end();
     }
-  });
+  };
+  if (parentContext) {
+    return tracer.startActiveSpan(name, opts, parentContext, callback);
+  }
+  return tracer.startActiveSpan(name, opts, callback);
 }
 
 /**
@@ -90,6 +98,21 @@ export function setBaggage(entries: Record<string, string>): Context {
  */
 export function captureContext(): Context {
   return context.active();
+}
+
+/**
+ * Serialize the current active span context as a W3C traceparent string.
+ * Returns undefined if there is no active span or the context is invalid.
+ * Format: 00-{traceId}-{spanId}-{traceFlags}
+ */
+export function getTraceparent(): string | undefined {
+  const span = trace.getActiveSpan();
+  if (!span) return undefined;
+  const ctx = span.spanContext();
+  if (!ctx.traceId || ctx.traceId === '00000000000000000000000000000000')
+    return undefined;
+  const flags = ctx.traceFlags.toString(16).padStart(2, '0');
+  return `00-${ctx.traceId}-${ctx.spanId}-${flags}`;
 }
 
 /**

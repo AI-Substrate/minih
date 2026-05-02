@@ -14,6 +14,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { context } from '@opentelemetry/api';
+import { encode } from 'gpt-tokenizer';
 import type { AgentEvent, AgentResult } from '../adapter/events.js';
 import type { IAgentAdapter } from '../adapter/interface.js';
 import {
@@ -268,7 +269,7 @@ export async function runAgent(
     }
 
     // ── Prompt Assembly Span ──
-    const { finalPrompt, promptCharCount } = withSpanSync(
+    const { finalPrompt, promptTokenCount } = withSpanSync(
       'minih.run.prompt_assembly',
       (assemblySpan) => {
         // Build prompt: full assembly for fresh runs, just the message for resume
@@ -305,7 +306,7 @@ export async function runAgent(
           'instructions.chars': instructions?.length ?? 0,
         });
 
-        return { finalPrompt, promptCharCount: finalPrompt.length };
+        return { finalPrompt, promptTokenCount: encode(finalPrompt).length };
       },
     ); // end prompt assembly span
 
@@ -390,7 +391,7 @@ export async function runAgent(
     let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
     try {
       // ── Execution Span ──
-      agentResult = await withSpan('minh.run.execution', async (execSpan) => {
+      agentResult = await withSpan('minih.run.execution', async (execSpan) => {
         execSpan.setAttribute('agent.slug', definition.slug);
         execSpan.setAttribute('timeout_ms', timeoutMs);
         log.info(`Agent run started: ${definition.slug}`, {
@@ -594,7 +595,7 @@ export async function runAgent(
     runDuration.record(durationMs, metricAttrs);
     runCount.add(1, metricAttrs);
     toolCallMetric.record(stats.toolCalls, metricAttrs);
-    promptTokens.record(promptCharCount, { 'agent.slug': definition.slug });
+    promptTokens.record(promptTokenCount, { 'agent.slug': definition.slug });
 
     log.info(`Agent run completed: ${definition.slug}`, {
       'agent.slug': definition.slug,

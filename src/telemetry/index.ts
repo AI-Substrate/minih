@@ -7,6 +7,7 @@
 
 // Init / lifecycle
 export {
+  getParentContext,
   initTelemetry,
   isTelemetryEnabled,
   isVerboseEnabled,
@@ -30,6 +31,7 @@ export {
 export {
   BaggageCopyProcessor,
   captureContext,
+  getTraceparent,
   runInContext,
   setBaggage,
   withSpan,

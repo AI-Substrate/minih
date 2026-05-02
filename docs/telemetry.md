@@ -34,15 +34,23 @@ open http://localhost:3000
 Every `minih run` and `minih resume` command produces a trace with child spans:
 
 ```
-minih.cli.command
-  └── minih.run.prompt_assembly    (prompt building)
-  └── minih.run.execution          (SDK interaction)
-  │     └── minih.adapter.session_create
-  │     └── minih.adapter.session_send
-  └── minih.run.validation         (output validation)
+minih.cli.command                              (minih)
+  └── minih.run.prompt_assembly                (minih)
+  └── minih.run.execution                      (minih)
+  │     └── minih.adapter.session_create       (minih)
+  │     └── minih.adapter.session_send         (minih)
+  │           └── agent_turn                   (github-copilot)
+  │                 └── chat claude-opus-4.6   (github-copilot)
+  │                 └── execute_tool bash      (github-copilot)
+  │                 │     └── permission       (github-copilot)
+  │                 └── chat claude-opus-4.6   (github-copilot)
+  │                 └── ...                    (more turns)
+  └── minih.run.validation                     (minih)
 ```
 
-All other commands get a root `minih.cli.command` span with timing data.
+SDK spans from `github-copilot` are automatically stitched into the same trace via `onGetTraceContext` (DD13). Two services appear in one trace — this is standard distributed tracing.
+
+Other commands only get telemetry lifecycle (init + flush for logs) but no spans.
 
 ### Metrics
 

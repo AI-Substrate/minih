@@ -64,7 +64,7 @@ program.hook('preAction', (thisCommand) => {
   }
 });
 
-// Flush telemetry after every command (DD1: ensures spans/metrics export before exit)
+// Flush telemetry after every command (DD1)
 program.hook('postAction', async () => {
   await shutdownTelemetry();
 });

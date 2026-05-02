@@ -14,7 +14,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { context, propagation } from '@opentelemetry/api';
+import { type Context, context, propagation } from '@opentelemetry/api';
 import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-proto';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-proto';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-proto';
@@ -34,6 +34,7 @@ import { BaggageCopyProcessor } from './spans.js';
 
 let sdk: NodeSDK | null = null;
 let initialized = false;
+let extractedParentContext: Context | undefined;
 
 /** Read package version from package.json. */
 function getPackageVersion(): string {
@@ -55,6 +56,15 @@ export function isTelemetryEnabled(): boolean {
 /** Check whether verbose telemetry is enabled. */
 export function isVerboseEnabled(): boolean {
   return process.env.MINIH_TELEMETRY_VERBOSE === 'true';
+}
+
+/**
+ * Get the parent context extracted from TRACEPARENT env var (DD11).
+ * Returns undefined if no TRACEPARENT was present at init time.
+ * Pass to withSpan() for root spans to stitch into a calling trace.
+ */
+export function getParentContext(): Context | undefined {
+  return extractedParentContext;
 }
 
 /**
@@ -103,17 +113,12 @@ export function initTelemetry(): void {
 
   sdk.start();
 
-  // DD11: Extract TRACEPARENT/TRACESTATE from env for cross-process stitching
+  // DD11: Extract TRACEPARENT/TRACESTATE from env for cross-process stitching.
+  // Store as parent context — root spans should use getParentContext() so they
+  // appear as children of the calling process's trace.
   const parentContext = propagation.extract(context.active(), process.env);
   if (parentContext !== context.active()) {
-    // Set the extracted context as the active context for this process
-    context.setGlobalContextManager({
-      active: () => parentContext,
-      with: context.with.bind(context),
-      bind: context.bind.bind(context),
-      enable: () => context,
-      disable: () => context,
-    } as never);
+    extractedParentContext = parentContext;
   }
 }
 

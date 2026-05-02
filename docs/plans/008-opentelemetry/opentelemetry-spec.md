@@ -83,23 +83,28 @@ The new `src/telemetry/` module is an internal utility, not a new architectural 
 
 ## Design Decisions
 
-### DD1: Short-lived process flushing via `withTelemetry()` wrapper
+### DD1: Short-lived process flushing via Commander `postAction` hook
 
 **Problem**: minih is a CLI tool. Many commands finish in under 1 second. `BatchSpanProcessor` flushes every 5s by default. `PeriodicExportingMetricReader` flushes every 60s. If the process exits before a flush cycle, all telemetry is silently lost. Node.js `process.on('exit')` handlers are synchronous and cannot await async shutdown.
 
-**Decision**: Every CLI command action handler is wrapped in a `withTelemetry(fn)` helper that calls `await sdk.shutdown()` (which flushes all processors) on return or error.
+**Decision**: Telemetry initialization happens at CLI entry (`initTelemetry()` at top of `src/cli/index.ts`). Shutdown is handled by a Commander `postAction` hook that calls `shutdownTelemetry()` after every command. The CLI uses `await program.parseAsync()` to ensure async hooks complete before process exit. Command handlers use `printEnvelope()` + `process.exitCode` instead of `process.exit()` inside span callbacks to allow spans to close naturally.
 
 ```typescript
-export async function withTelemetry<T>(fn: () => Promise<T>): Promise<T> {
-  try {
-    return await fn();
-  } finally {
-    await shutdownTelemetry(); // flushes spans, metrics, and logs
-  }
-}
+// src/cli/index.ts
+initTelemetry(); // top of file, before command registration
+
+program.hook('postAction', async () => {
+  await shutdownTelemetry();
+});
+
+await program.parseAsync(); // must be parseAsync, not parse
 ```
 
-**Rationale**: Impossible to forget (every command goes through the wrapper), handles both success and error paths, works for fast commands (<1s) and long commands (20min+), single point of control for shutdown semantics.
+**Implementation note**: A `withTelemetry()` wrapper is exported from the telemetry module but currently unused — the `postAction` hook pattern proved simpler for Commander.js integration.
+
+**Rationale**: Works for all commands automatically (no per-command wrapping), handles both success and error paths, works for fast commands (<1s) and long commands (20min+), and Commander's hook system ensures shutdown runs even if the command throws.
+
+**Critical constraint**: Command handlers must NOT call `process.exit()` inside span callbacks. Doing so kills the process before spans can `.end()` and before `postAction` can flush. Use `process.exitCode` + `printEnvelope()` instead of `exitWithEnvelope()` inside `withSpan` blocks.
 
 **Rejected alternatives**:
 
@@ -140,18 +145,19 @@ async function shutdownTelemetry(): Promise<void> {
 **Safe attributes (always included)**:
 
 - `agent.slug`, `run.id`, `model`, `command.name`
-- `prompt.tokens`, `instructions.tokens`, `preamble.tokens` (token counts via tokenizer, not content)
-- `tokens.used`, `tokens.total`, `tokens.limit` (from SDK `AgentResult.tokens`)
+- `prompt.char_count`, `instructions.char_count`, `preamble.char_count` (character counts — simpler than token counting)
 - `duration_ms`, `result`, `valid`, `error.count`
 - `tool.name`, `event.type`, `session.id`
 
-**Tokenizer dependency**: Add `gpt-tokenizer` (lightweight, ESM-compatible, no native bindings) to count input tokens for prompt size attributes. Token counts are more meaningful than character counts for understanding model context window utilization.
+**Implementation note**: The `minih.prompt.tokens` metric records actual GPT token count via `gpt-tokenizer` (`encode(prompt).length`). The `prompt.chars` span attribute retains character count for quick reference.
 
 **Verbose attributes (only with `MINIH_TELEMETRY_VERBOSE=true`)**:
 
 - `prompt.body` (full assembled prompt text)
 - `tool.output` (tool call results)
 - `validation.errors` (full error messages)
+
+**Implementation note**: `MINIH_TELEMETRY_VERBOSE` is defined and checked in `init.ts` (`isVerboseEnabled()`) but not yet consumed by span/metric recording code. The flag is available for future use.
 
 **Invariant**: Default telemetry output must never contain credentials, tokens, prompt content, or tool output.
 
@@ -165,21 +171,22 @@ async function shutdownTelemetry(): Promise<void> {
 
 **Problem**: minih has 15+ commands. The spec focuses on `minih run` but doesn't clarify which other commands get instrumentation.
 
-**Decision**: Root span for every command (free via `withTelemetry()` wrapper from DD1), detailed child spans only in `run` and `resume`.
+**Decision**: Root span (`minih.cli.command`) in `run` and `resume` only (explicitly via `withSpan`), with detailed child spans. Other commands get telemetry lifecycle (init + flush) via the Commander `postAction` hook but no spans.
 
-**Instrumentation tiers**:
+**Instrumentation tiers (as implemented)**:
 
 | Tier | Commands | Instrumentation |
 |------|----------|----------------|
-| Full | `run`, `resume` | Root span + child spans (prompt assembly, execution, validation, adapter) + metrics |
-| Validation | `validate`, `check`, `doctor` | Root span + validation child span |
-| Root only | All others (`list`, `init`, `inspect`, `status`, `tail`, `history`, `quickstart`, `connect`, `difficulties`, `last-run`) | Root span with command name + duration (comes free from `withTelemetry()` wrapper) |
+| Full | `run`, `resume` | `minih.cli.command` root span with baggage context + child spans (prompt assembly, execution, validation, adapter) + SDK spans (via trace stitching) + metrics + structured logs |
+| Lifecycle only | All others (`list`, `init`, `inspect`, `status`, `tail`, `history`, `quickstart`, `connect`, `difficulties`, `last-run`, `validate`, `check`, `doctor`) | Telemetry init + flush via `postAction` hook (structured logs still exported) |
 
-**Rationale**: Since `withTelemetry()` already wraps every command for flush purposes, adding a root `minih.cli.command` span is one extra line. This gives universal timing data with zero additional wiring. Detailed spans are only worthwhile where debugging complexity exists.
+**Implementation note**: The `run` and `resume` commands create a `minih.cli.command` root span that carries baggage context, rich attributes, and parents all runner/adapter child spans. The `postAction` hook in `src/cli/index.ts` calls `shutdownTelemetry()` to flush all signals.
+
+**Rationale**: Full instrumentation was only worthwhile for the complex `run`/`resume` paths where debugging visibility matters. The `postAction` hook still ensures all log records flush for every command.
 
 **Rejected alternatives**:
 
-- Instrument only `run`/`resume` (misses timing data that comes free)
+- Universal `preAction` root span for all commands (created an orphaned trace disconnected from `minih.cli.command` — removed in DD13)
 - Deep instrumentation of all commands (high effort for low-value commands)
 
 ### DD6: Application log level control
@@ -322,6 +329,8 @@ const parentContext = propagation.extract(context.active(), process.env);
 context.with(parentContext, () => { /* run command */ });
 ```
 
+**Implementation status**: The incoming extraction is implemented in `init.ts` — the extracted parent context is stored and passed to root span creation via `withSpan(name, fn, options, parentContext)`. This correctly stitches root spans as children of the calling trace without replacing the global context manager. The outgoing injection (propagating to child processes) is **not yet implemented** — tracked as a future enhancement.
+
 **Rationale**: Enables stitching traces across process boundaries. When an agent runs `minih check` during a `minih run`, the check span appears as a child of the run trace. W3C `TRACEPARENT` is the standard mechanism for cross-process propagation.
 
 **Rejected alternatives**:
@@ -364,7 +373,60 @@ services:
 3. `minih run hello-world` — run an agent
 4. Open `http://localhost:3000` — view traces in Tempo, metrics in Explore, logs in Loki
 
-**Rationale**: Pinned version ensures all developers get identical behavior. `v0.27.0` is the latest stable release and includes Grafana 13 with improved OTLP support. OTLP HTTP on port 4318 matches the OTel SDK default endpoint, so no `OTEL_EXPORTER_OTLP_ENDPOINT` override is needed for local dev.
+**Rationale**: Pinned version ensures all developers get identical behavior. `v0.27.0` is the latest stable release and includes Grafana 13 with improved OTLP support. OTLP HTTP on port 4318 matches the OTel SDK default endpoint when running natively.
+
+**Devcontainer caveat**: When running inside a devcontainer that uses Docker-outside-of-Docker (`ghcr.io/devcontainers/features/docker-outside-of-docker`), the LGTM container's ports are mapped on the **host**, not inside the devcontainer's network namespace. `localhost:4318` is unreachable from within the devcontainer. The exporter must point to the host gateway IP:
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://$(ip route | grep default | awk '{print $3}'):4318
+```
+
+This is typically `172.17.0.1`. The `just telemetry-run` recipe handles this automatically.
+
+### DD13: SDK trace stitching via onGetTraceContext
+
+**Problem**: The `@github/copilot-sdk` has its own built-in OTel instrumentation with a separate `TracerProvider` (service.name=`github-copilot`). SDK spans (agent_turn, chat, execute_tool, permission) appear in a disconnected trace, making it impossible to see the full request lifecycle in Grafana.
+
+**Decision**: Pass an `onGetTraceContext` callback to the `CopilotClient` constructor. The callback returns `{ traceparent }` from `getTraceparent()`, which serializes the current active span context. The SDK calls this on every JSON-RPC request, spreading the result into the wire payload so the server-side SessionManager receives trace context.
+
+**Implementation**:
+
+- `getTraceparent()` in `src/telemetry/spans.ts` serializes the current active span context as `00-{traceId}-{spanId}-{flags}`
+- `onGetTraceContext` callback passed to `new CopilotClient({ onGetTraceContext })` in `src/cli/commands/sdk-runtime.ts`
+- The callback is invoked on every RPC call (session.create, session.send, etc.), providing live trace context at request time
+- No per-session `traceparent` config — the client-level callback handles all sessions
+
+**SDK architecture** (verified from `@github/copilot-sdk` v0.2.1):
+
+The SDK has a client-server architecture over JSON-RPC:
+
+```
+minih process  ──JSON-RPC──►  copilot-agent subprocess (SDK server)
+     │                              │
+  CopilotClient                 SessionManager (W1t)
+  (calls onGetTraceContext)     └── OTelService ($Se)
+                                    └── OTel tracker (XJe, has parentTraceContext)
+```
+
+- `CopilotClient.createSession()` calls `getTraceContext(this.onGetTraceContext)` and spreads the result (`{ traceparent, tracestate }`) into the `session.create` RPC payload
+- Server-side `SessionManager.createSession()` passes `traceparent` from the request to `otel.trackSession(session, { traceparent })`
+- The OTel tracker's constructor parses traceparent: `this.parentTraceContext = hwt(n.traceparent, n.tracestate)`
+- `XJe.ensureAgentSpan()` uses `this.parentTraceContext` as the parent context for `startInvokeAgentSpan()`
+
+**What did NOT work** (per-session `traceparent` in config):
+
+The `SessionOptions.traceparent` field exists on the server-side `SessionManager` interface but `CopilotClient.createSession()` on the client side never reads it from the config object — it only forwards fields it explicitly destructures. The `onGetTraceContext` callback is the designed client-side mechanism.
+
+**Verified behavior**:
+
+- Single unified trace in Tempo containing both `minih` (6 spans) and `github-copilot` (12 spans) services
+- SDK's `agent_turn` root span parents under minih's active span at request time
+- Span hierarchy: `minih.cli.command` → `minih.run.execution` → `minih.adapter.session_send` → SDK `agent_turn` → `chat`, `execute_tool`, `permission`
+- Two services in one trace is correct distributed tracing semantics
+
+**Also fixed**: Removed orphaned `minih.cli` span from `preAction` hook. The hook created a span stored in a variable but never activated it in OTel context, so `minih.cli.command` (inside `withSpan`) started a separate trace. Now only `minih.cli.command` is the root span.
+
+**Rationale**: `onGetTraceContext` is the SDK's documented client-side mechanism for trace propagation (explicit field in `CopilotClientOptions` with JSDoc example showing `propagation.inject(context.active(), carrier)`). It provides live context at every RPC call, not just at session creation.
 
 ## Risks and Assumptions
 
@@ -378,3 +440,26 @@ services:
 | Span explosion from high-frequency events | Noisy traces, high export volume | Only create spans for significant operations, not per-event |
 | Breaking FakeAgentAdapter in tests | Test failures | Telemetry off by default in tests; FakeAgentAdapter unchanged |
 | Telemetry lost on process crash | Missing final spans/metrics | `withTelemetry()` wrapper handles normal exits; crashes are acceptable data loss |
+| Metric instruments created before MeterProvider registered | All metrics are permanent no-ops | Lazy initialization via wrapper objects (DD14) |
+
+### DD14: Lazy metric instrument creation
+
+**Problem**: `src/telemetry/metrics.ts` called `metrics.getMeter('minih')` at module import time. Since ES module imports execute before `initTelemetry()` registers the `MeterProvider`, `getMeter()` returned a no-op meter and all instruments derived from it were permanent no-ops — metrics were never exported.
+
+**Decision**: Wrap each instrument in a lazy proxy object that creates the real instrument on first `.record()` or `.add()` call. By that time, `initTelemetry()` has run and the `MeterProvider` is registered.
+
+**Implementation**:
+
+```typescript
+let _runDuration: Histogram | undefined;
+export const runDuration = {
+  record(value: number, attrs?: Attributes) {
+    (_runDuration ??= getMeter().createHistogram('minih.run.duration', { ... }))
+      .record(value, attrs);
+  },
+};
+```
+
+**Why traces don't have this problem**: `trace.getTracer('minih')` is called inside function bodies (e.g., inside `withSpan()`), not at module scope. By the time any span is created, `initTelemetry()` has already run.
+
+**Rationale**: Minimal change — callers still use `runDuration.record(value, attrs)` as before. The lazy pattern adds one nullish-coalescing check per call (negligible). Once the instrument is created, subsequent calls go directly to the OTel SDK.

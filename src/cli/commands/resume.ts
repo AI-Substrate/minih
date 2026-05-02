@@ -26,7 +26,12 @@ import {
   runAgent,
   validateSlug,
 } from '../../runner/index.js';
-import { createLogger, setBaggage, withSpan } from '../../telemetry/index.js';
+import {
+  createLogger,
+  getParentContext,
+  setBaggage,
+  withSpan,
+} from '../../telemetry/index.js';
 import {
   ErrorCodes,
   exitWithEnvelope,
@@ -175,79 +180,92 @@ export function registerResumeCommand(program: Command): void {
           });
 
           await context.with(baggageCtx, async () => {
-            await withSpan('minih.cli.command', async (rootSpan) => {
-              rootSpan.setAttribute('command.name', 'resume');
-              rootSpan.setAttribute('agent.slug', slug);
-              rootSpan.setAttribute('session.id', session.sessionId);
+            await withSpan(
+              'minih.cli.command',
+              async (rootSpan) => {
+                rootSpan.setAttribute('command.name', 'resume');
+                rootSpan.setAttribute('agent.slug', slug);
+                rootSpan.setAttribute('session.id', session.sessionId);
 
-              const onEvent = pretty
-                ? (e: import('../../adapter/events.js').AgentEvent) =>
-                    pretty.handleEvent(e)
-                : displayEvent;
-              const result = await runAgent(
-                runtime.adapter,
-                definition,
-                config,
-                onEvent,
-                agentsDir,
-              );
-
-              pretty?.cleanup();
-              if (isTTY) {
-                displaySummary(result);
-              }
-
-              rootSpan.setAttribute('run.id', result.metadata.runId);
-              rootSpan.setAttribute('result', result.metadata.result);
-              rootSpan.setAttribute('duration_ms', result.metadata.durationMs);
-
-              log.info(`Command completed: resume ${slug}`, {
-                'command.name': 'resume',
-                'agent.slug': slug,
-                'run.id': result.metadata.runId,
-                result: result.metadata.result,
-                duration_ms: result.metadata.durationMs,
-              });
-
-              const status =
-                result.metadata.result === 'completed'
-                  ? 'ok'
-                  : result.metadata.result === 'degraded'
-                    ? 'degraded'
-                    : 'error';
-
-              if (status === 'error') {
-                const errorCode =
-                  result.metadata.result === 'timeout'
-                    ? ErrorCodes.AGENT_TIMEOUT
-                    : ErrorCodes.AGENT_EXECUTION_FAILED;
-                exitWithEnvelope(
-                  formatError('resume', errorCode, result.agentResult.output, {
-                    runDir: result.runDir,
-                    metadata: result.metadata,
-                  }),
+                const onEvent = pretty
+                  ? (e: import('../../adapter/events.js').AgentEvent) =>
+                      pretty.handleEvent(e)
+                  : displayEvent;
+                const result = await runAgent(
+                  runtime.adapter,
+                  definition,
+                  config,
+                  onEvent,
+                  agentsDir,
                 );
-              } else {
-                exitWithEnvelope(
-                  formatSuccess(
-                    'resume',
-                    {
-                      slug,
-                      runId: result.metadata.runId,
-                      runDir: result.runDir,
-                      sessionId: result.metadata.sessionId,
-                      resumedFromRunId: session.runId,
-                      originalSessionId: session.sessionId,
-                      result: result.metadata.result,
-                      durationMs: result.metadata.durationMs,
-                      eventCount: result.metadata.eventCount,
-                      toolCallCount: result.metadata.toolCallCount,
-                    },
-                    status as 'ok' | 'degraded',
-                  ),
+
+                pretty?.cleanup();
+                if (isTTY) {
+                  displaySummary(result);
+                }
+
+                rootSpan.setAttribute('run.id', result.metadata.runId);
+                rootSpan.setAttribute('result', result.metadata.result);
+                rootSpan.setAttribute(
+                  'duration_ms',
+                  result.metadata.durationMs,
                 );
-              }
-            }); // withSpan
+
+                log.info(`Command completed: resume ${slug}`, {
+                  'command.name': 'resume',
+                  'agent.slug': slug,
+                  'run.id': result.metadata.runId,
+                  result: result.metadata.result,
+                  duration_ms: result.metadata.durationMs,
+                });
+
+                const status =
+                  result.metadata.result === 'completed'
+                    ? 'ok'
+                    : result.metadata.result === 'degraded'
+                      ? 'degraded'
+                      : 'error';
+
+                if (status === 'error') {
+                  const errorCode =
+                    result.metadata.result === 'timeout'
+                      ? ErrorCodes.AGENT_TIMEOUT
+                      : ErrorCodes.AGENT_EXECUTION_FAILED;
+                  exitWithEnvelope(
+                    formatError(
+                      'resume',
+                      errorCode,
+                      result.agentResult.output,
+                      {
+                        runDir: result.runDir,
+                        metadata: result.metadata,
+                      },
+                    ),
+                  );
+                } else {
+                  exitWithEnvelope(
+                    formatSuccess(
+                      'resume',
+                      {
+                        slug,
+                        runId: result.metadata.runId,
+                        runDir: result.runDir,
+                        sessionId: result.metadata.sessionId,
+                        resumedFromRunId: session.runId,
+                        originalSessionId: session.sessionId,
+                        result: result.metadata.result,
+                        durationMs: result.metadata.durationMs,
+                        eventCount: result.metadata.eventCount,
+                        toolCallCount: result.metadata.toolCallCount,
+                      },
+                      status as 'ok' | 'degraded',
+                    ),
+                  );
+                }
+              },
+              undefined,
+              getParentContext(),
+            ); // withSpan
           }); // context.with
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);

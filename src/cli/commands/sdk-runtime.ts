@@ -10,6 +10,7 @@
 
 import chalk from 'chalk';
 import { SdkCopilotAdapter } from '../../adapter/index.js';
+import { getTraceparent } from '../../telemetry/index.js';
 import { ErrorCodes, exitWithEnvelope, formatError } from '../output.js';
 
 export interface SdkRuntime {
@@ -77,8 +78,17 @@ export async function createSdkRuntime(
   // Suppress Node.js ExperimentalWarning in SDK subprocess (SQLite warning)
   process.env.NODE_NO_WARNINGS = '1';
 
-  // Create client + adapter
-  const client = new CopilotClient();
+  // Create client + adapter (DD13: pass onGetTraceContext for trace stitching)
+  const client = new (
+    CopilotClient as new (
+      opts?: unknown,
+    ) => { stop(): Promise<unknown> }
+  )({
+    onGetTraceContext: () => {
+      const traceparent = getTraceparent();
+      return traceparent ? { traceparent } : {};
+    },
+  });
   // biome-ignore lint/suspicious/noExplicitAny: CopilotClient doesn't implement our ICopilotClient exactly
   const adapter = new SdkCopilotAdapter(client as any);
 

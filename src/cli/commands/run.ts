@@ -28,7 +28,12 @@ import {
   SYSTEM_OUTPUT_INSTRUCTIONS,
   validateSlug,
 } from '../../runner/index.js';
-import { createLogger, setBaggage, withSpan } from '../../telemetry/index.js';
+import {
+  createLogger,
+  getParentContext,
+  setBaggage,
+  withSpan,
+} from '../../telemetry/index.js';
 import {
   ErrorCodes,
   exitWithEnvelope,
@@ -271,93 +276,101 @@ export function registerRunCommand(program: Command): void {
           });
 
           await context.with(baggageCtx, async () => {
-            await withSpan('minih.cli.command', async (rootSpan) => {
-              rootSpan.setAttribute('command.name', 'run');
-              rootSpan.setAttribute('agent.slug', slug);
-              rootSpan.setAttribute('model', model);
+            await withSpan(
+              'minih.cli.command',
+              async (rootSpan) => {
+                rootSpan.setAttribute('command.name', 'run');
+                rootSpan.setAttribute('agent.slug', slug);
+                rootSpan.setAttribute('model', model);
 
-              const onEvent = pretty
-                ? (e: import('../../adapter/events.js').AgentEvent) =>
-                    pretty.handleEvent(e)
-                : displayEvent;
-              const result = await runAgent(
-                runtime.adapter,
-                definition,
-                config,
-                onEvent,
-                agentsDir,
-              );
-
-              pretty?.cleanup();
-              if (isTTY) {
-                displaySummary(result);
-              }
-
-              rootSpan.setAttribute('run.id', result.metadata.runId);
-              rootSpan.setAttribute('result', result.metadata.result);
-              rootSpan.setAttribute('duration_ms', result.metadata.durationMs);
-              rootSpan.setAttribute(
-                'validated',
-                result.metadata.validated ?? false,
-              );
-
-              log.info(`Command completed: run ${slug}`, {
-                'command.name': 'run',
-                'agent.slug': slug,
-                'run.id': result.metadata.runId,
-                result: result.metadata.result,
-                duration_ms: result.metadata.durationMs,
-              });
-
-              const status =
-                result.metadata.result === 'completed'
-                  ? 'ok'
-                  : result.metadata.result === 'degraded'
-                    ? 'degraded'
-                    : 'error';
-
-              if (status === 'error') {
-                const errorCode =
-                  result.metadata.result === 'timeout'
-                    ? ErrorCodes.AGENT_TIMEOUT
-                    : ErrorCodes.AGENT_EXECUTION_FAILED;
-                printEnvelope(
-                  formatError('run', errorCode, result.agentResult.output, {
-                    runDir: result.runDir,
-                    metadata: result.metadata,
-                  }),
+                const onEvent = pretty
+                  ? (e: import('../../adapter/events.js').AgentEvent) =>
+                      pretty.handleEvent(e)
+                  : displayEvent;
+                const result = await runAgent(
+                  runtime.adapter,
+                  definition,
+                  config,
+                  onEvent,
+                  agentsDir,
                 );
-                process.exitCode = 1;
-              } else {
-                printEnvelope(
-                  formatSuccess(
-                    'run',
-                    {
-                      slug,
-                      runId: result.metadata.runId,
+
+                pretty?.cleanup();
+                if (isTTY) {
+                  displaySummary(result);
+                }
+
+                rootSpan.setAttribute('run.id', result.metadata.runId);
+                rootSpan.setAttribute('result', result.metadata.result);
+                rootSpan.setAttribute(
+                  'duration_ms',
+                  result.metadata.durationMs,
+                );
+                rootSpan.setAttribute(
+                  'validated',
+                  result.metadata.validated ?? false,
+                );
+
+                log.info(`Command completed: run ${slug}`, {
+                  'command.name': 'run',
+                  'agent.slug': slug,
+                  'run.id': result.metadata.runId,
+                  result: result.metadata.result,
+                  duration_ms: result.metadata.durationMs,
+                });
+
+                const status =
+                  result.metadata.result === 'completed'
+                    ? 'ok'
+                    : result.metadata.result === 'degraded'
+                      ? 'degraded'
+                      : 'error';
+
+                if (status === 'error') {
+                  const errorCode =
+                    result.metadata.result === 'timeout'
+                      ? ErrorCodes.AGENT_TIMEOUT
+                      : ErrorCodes.AGENT_EXECUTION_FAILED;
+                  printEnvelope(
+                    formatError('run', errorCode, result.agentResult.output, {
                       runDir: result.runDir,
-                      sessionId: result.metadata.sessionId,
-                      result: result.metadata.result,
-                      durationMs: result.metadata.durationMs,
-                      validated: result.metadata.validated,
-                      validationErrors: result.metadata.validationErrors,
-                      eventCount: result.metadata.eventCount,
-                      toolCallCount: result.metadata.toolCallCount,
-                      ...(result.metadata.velocity && {
-                        velocity: result.metadata.velocity,
-                      }),
-                      ...(result.parsedReport && {
-                        summary: result.parsedReport.summary,
-                        magicWand: result.parsedReport.magicWand,
-                        magicWandTarget: result.parsedReport.magicWandTarget,
-                        difficulties: result.parsedReport.difficulties,
-                      }),
-                    },
-                    status as 'ok' | 'degraded',
-                  ),
-                );
-              }
-            }); // withSpan
+                      metadata: result.metadata,
+                    }),
+                  );
+                  process.exitCode = 1;
+                } else {
+                  printEnvelope(
+                    formatSuccess(
+                      'run',
+                      {
+                        slug,
+                        runId: result.metadata.runId,
+                        runDir: result.runDir,
+                        sessionId: result.metadata.sessionId,
+                        result: result.metadata.result,
+                        durationMs: result.metadata.durationMs,
+                        validated: result.metadata.validated,
+                        validationErrors: result.metadata.validationErrors,
+                        eventCount: result.metadata.eventCount,
+                        toolCallCount: result.metadata.toolCallCount,
+                        ...(result.metadata.velocity && {
+                          velocity: result.metadata.velocity,
+                        }),
+                        ...(result.parsedReport && {
+                          summary: result.parsedReport.summary,
+                          magicWand: result.parsedReport.magicWand,
+                          magicWandTarget: result.parsedReport.magicWandTarget,
+                          difficulties: result.parsedReport.difficulties,
+                        }),
+                      },
+                      status as 'ok' | 'degraded',
+                    ),
+                  );
+                }
+              },
+              undefined,
+              getParentContext(),
+            ); // withSpan
           }); // context.with
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);

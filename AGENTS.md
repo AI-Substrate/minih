@@ -108,7 +108,7 @@ The `verdict: 'active'` filter is load-bearing — `minih status` defaults to "l
 
 **To watch AND chime in live** (FX008): `minih attach code-review-companion` — same TUI plus footer input writes to the outside inbox. Ctrl-C **detaches** without stopping the agent. Multiple operators may attach simultaneously; messages land in arrival order via append-only file semantics.
 
-**Before reporting back to the user, send `control:stop`** and read the farewell envelope at `agents/code-review-companion/runs/<RUN>/output/report.json` — fold any open findings into your final summary. (Power-On-Mode protocol — without this, the auto-harvested retro misses your session's signal.)
+**Before reporting back to the user, send `control:stop`** and read the farewell envelope via the dogfood path — `minih retros --slug code-review-companion` (lists retros across runs) or `minih validate code-review-companion --file <output-path>` after `minih last-run code-review-companion`. **Fold any open findings into your final summary.** (Power-On-Mode protocol — without this, the auto-harvested retro misses your session's signal. Companion F002 reminder: do NOT `cat agents/<slug>/runs/<run>/output/report.json` directly — that contradicts the dogfood rule above. If the CLI surface doesn't expose what you need, file it as a magicWand per the "When the CLI gap matters" procedure rather than bypassing.)
 
 **Common gotchas:**
 - `E122 GH_TOKEN not set` on `minih run` — the spawning shell needs `GH_TOKEN`. Set with `export GH_TOKEN=$(gh auth token)`. The Copilot CLI's runtime doesn't always inherit it; explicit export is reliable.

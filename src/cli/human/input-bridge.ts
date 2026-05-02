@@ -110,7 +110,19 @@ export function createInputBridge(input: InputBridgeInput): InputBridge {
 
   // Coordinated path: writes append to the outside inbox lane. Available
   // both in-process (run/resume --human) and cross-process (attach).
-  if (input.coordinated === true && input.location !== undefined) {
+  // FAIL CLOSED — if `coordinated` is set, never fall through to the SDK
+  // path. Coordinated runs require `location` to write the inbox; without
+  // it, refuse with a descriptive read-only label so the caller can fix
+  // their wiring instead of silently shipping messages to the wrong channel
+  // (which is the bug FX001/FX008 was created to prevent — companion F003).
+  if (input.coordinated === true) {
+    if (input.location === undefined) {
+      return makeRefusingBridge(
+        input,
+        'input read-only — non-coordinated',
+        'coordinated run missing inbox location',
+      );
+    }
     const location = input.location;
     const commandName = input.commandName ?? 'human-tui.input';
     return {

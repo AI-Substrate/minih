@@ -277,8 +277,8 @@ describe('createInputBridge — FX008 capability table (5-row coverage)', () => 
     }
   });
 
-  it('coord without location falls back to read-only (defensive)', () => {
-    const { sender } = fakeSender();
+  it('coord without location FAILS CLOSED — never falls to SDK (companion F003)', async () => {
+    const { sender, calls } = fakeSender();
     const bridge = createInputBridge({
       sender,
       attached: false,
@@ -288,10 +288,15 @@ describe('createInputBridge — FX008 capability table (5-row coverage)', () => 
       runStatus: 'active',
       // location intentionally omitted
     });
-    // Without `location`, can't write the inbox; with sender, SDK path is
-    // available — but the operator's expectation for a coord run is the
-    // inbox. Cleanest: require location, fall through to non-coord path.
-    expect(bridge.capability).toBe('input → session');
+    // FX008 F003 fix: coordinated:true + no location MUST refuse, not
+    // silently route to SessionSender. The whole point of the fix is to
+    // prevent silent footer-input drift.
+    expect(bridge.capability).toBe('input read-only — non-coordinated');
+    expect(bridge.reason).toBe('coordinated run missing inbox location');
+
+    const result = await bridge.submit('would be silently sent to SDK');
+    expect(result.ok).toBe(false);
+    expect(calls).toEqual([]); // sender NEVER called
   });
 
   it('--read-only equivalent (no location) on attached coord → read-only', () => {

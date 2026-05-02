@@ -10,26 +10,26 @@
  * DD11: Reads TRACEPARENT/TRACESTATE env vars for cross-process trace stitching.
  */
 
-import * as os from 'node:os';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { NodeSDK } from '@opentelemetry/sdk-node';
+import { context, propagation } from '@opentelemetry/api';
+import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-proto';
+import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-proto';
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-proto';
 import { resourceFromAttributes } from '@opentelemetry/resources';
+import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
+import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
+import { NodeSDK } from '@opentelemetry/sdk-node';
+import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-node';
 import {
   ATTR_SERVICE_NAME,
   ATTR_SERVICE_VERSION,
+  SEMRESATTRS_HOST_NAME,
   SEMRESATTRS_PROCESS_RUNTIME_NAME,
   SEMRESATTRS_PROCESS_RUNTIME_VERSION,
-  SEMRESATTRS_HOST_NAME,
 } from '@opentelemetry/semantic-conventions';
-import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-node';
-import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
-import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-proto';
-import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-proto';
-import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-proto';
-import { context, propagation } from '@opentelemetry/api';
 import { BaggageCopyProcessor } from './spans.js';
 
 let sdk: NodeSDK | null = null;

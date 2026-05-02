@@ -1,11 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  withSpan,
-  withSpanSync,
-  setBaggage,
+  BaggageCopyProcessor,
   captureContext,
   runInContext,
-  BaggageCopyProcessor,
+  setBaggage,
+  withSpan,
+  withSpanSync,
 } from '../../src/telemetry/spans.js';
 
 describe('telemetry/spans', () => {

@@ -8,33 +8,30 @@
 // Init / lifecycle
 export {
   initTelemetry,
-  shutdownTelemetry,
-  withTelemetry,
   isTelemetryEnabled,
   isVerboseEnabled,
+  shutdownTelemetry,
+  withTelemetry,
 } from './init.js';
-
+export type { Logger, LogLevel } from './logger.js';
 // Logger
 export { createLogger } from './logger.js';
-export type { Logger, LogLevel } from './logger.js';
-
-// Spans
-export {
-  withSpan,
-  withSpanSync,
-  setBaggage,
-  captureContext,
-  runInContext,
-  BaggageCopyProcessor,
-} from './spans.js';
-
 // Metrics
 export {
-  runDuration,
-  runCount,
-  toolCallCount,
   eventCount,
-  validationCount,
   promptTokens,
+  runCount,
+  runDuration,
   sessionDuration,
+  toolCallCount,
+  validationCount,
 } from './metrics.js';
+// Spans
+export {
+  BaggageCopyProcessor,
+  captureContext,
+  runInContext,
+  setBaggage,
+  withSpan,
+  withSpanSync,
+} from './spans.js';

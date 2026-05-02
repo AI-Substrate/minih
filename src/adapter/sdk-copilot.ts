@@ -10,19 +10,19 @@
  *          removed console.log debug noise, added session destroy guard.
  */
 
+import {
+  captureContext,
+  createLogger,
+  runInContext,
+  sessionDuration,
+  withSpan,
+} from '../telemetry/index.js';
 import type {
   CopilotSessionEventLike,
   ICopilotClient,
 } from './copilot-types.js';
 import type { AgentEvent, AgentResult, AgentRunOptions } from './events.js';
 import type { IAgentAdapter } from './interface.js';
-import {
-  withSpan,
-  captureContext,
-  runInContext,
-  createLogger,
-  sessionDuration,
-} from '../telemetry/index.js';
 
 const approveAll = () => ({ kind: 'approved' as const });
 

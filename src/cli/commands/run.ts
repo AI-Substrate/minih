@@ -10,10 +10,9 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { context } from '@opentelemetry/api';
 import chalk from 'chalk';
 import type { Command } from 'commander';
-import { context } from '@opentelemetry/api';
-import { withSpan, setBaggage, createLogger } from '../../telemetry/index.js';
 import type { AgentRunConfig } from '../../runner/index.js';
 import {
   displayEvent,
@@ -29,6 +28,7 @@ import {
   SYSTEM_OUTPUT_INSTRUCTIONS,
   validateSlug,
 } from '../../runner/index.js';
+import { createLogger, setBaggage, withSpan } from '../../telemetry/index.js';
 import {
   ErrorCodes,
   exitWithEnvelope,

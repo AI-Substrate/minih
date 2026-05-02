@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { createLogger } from '../../src/telemetry/logger.js';
 
 describe('telemetry/logger', () => {

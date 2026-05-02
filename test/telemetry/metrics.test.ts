@@ -1,12 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  runDuration,
-  runCount,
-  toolCallCount,
   eventCount,
-  validationCount,
   promptTokens,
+  runCount,
+  runDuration,
   sessionDuration,
+  toolCallCount,
+  validationCount,
 } from '../../src/telemetry/metrics.js';
 
 describe('telemetry/metrics', () => {

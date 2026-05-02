@@ -17,18 +17,17 @@ import { context } from '@opentelemetry/api';
 import type { AgentEvent, AgentResult } from '../adapter/events.js';
 import type { IAgentAdapter } from '../adapter/interface.js';
 import {
-  withSpan,
-  withSpanSync,
-  setBaggage,
   captureContext,
-  runInContext,
   createLogger,
-  isVerboseEnabled,
-  runDuration,
-  runCount,
-  toolCallCount as toolCallMetric,
   eventCount as eventMetric,
   promptTokens,
+  runCount,
+  runDuration,
+  runInContext,
+  setBaggage,
+  toolCallCount as toolCallMetric,
+  withSpan,
+  withSpanSync,
 } from '../telemetry/index.js';
 import { createRunFolder, parseFrontmatter } from './folder.js';
 import type {

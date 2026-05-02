@@ -7,17 +7,17 @@
  */
 
 import {
-  type Span,
   type Context,
-  type SpanOptions,
-  trace,
   context,
   propagation,
+  type Span,
+  type SpanOptions,
   SpanStatusCode,
+  trace,
 } from '@opentelemetry/api';
 import type {
-  SpanProcessor,
   ReadableSpan,
+  SpanProcessor,
 } from '@opentelemetry/sdk-trace-node';
 
 const tracer = trace.getTracer('minih');

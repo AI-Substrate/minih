@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   initTelemetry,
-  shutdownTelemetry,
   isTelemetryEnabled,
+  shutdownTelemetry,
   withTelemetry,
 } from '../../src/telemetry/init.js';
 

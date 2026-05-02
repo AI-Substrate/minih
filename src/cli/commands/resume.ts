@@ -10,9 +10,8 @@
  * a full agent report.
  */
 
-import type { Command } from 'commander';
 import { context } from '@opentelemetry/api';
-import { withSpan, setBaggage, createLogger } from '../../telemetry/index.js';
+import type { Command } from 'commander';
 import type { AgentRunConfig } from '../../runner/index.js';
 import {
   displayEvent,
@@ -27,6 +26,7 @@ import {
   runAgent,
   validateSlug,
 } from '../../runner/index.js';
+import { createLogger, setBaggage, withSpan } from '../../telemetry/index.js';
 import {
   ErrorCodes,
   exitWithEnvelope,

@@ -16,6 +16,7 @@ import { initTelemetry, shutdownTelemetry } from '../telemetry/index.js';
 
 // Initialize telemetry before any command logic (DD1, Option A: top-of-entry-point)
 initTelemetry();
+
 import { registerCheckCommand } from './commands/check.js';
 import { registerConnectCommand } from './commands/connect.js';
 import { registerDifficultiesCommand } from './commands/difficulties.js';

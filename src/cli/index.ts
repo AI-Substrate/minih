@@ -85,4 +85,4 @@ registerDifficultiesCommand(program);
 registerCheckCommand(program);
 registerInitCommand(program);
 
-program.parse();
+await program.parseAsync();

@@ -36,7 +36,7 @@ Every `minih run` and `minih resume` command produces a trace with child spans:
 ```
 minih.cli.command
   └── minih.run.prompt_assembly    (prompt building)
-  └── minh.run.execution           (SDK interaction)
+  └── minih.run.execution          (SDK interaction)
   │     └── minih.adapter.session_create
   │     └── minih.adapter.session_send
   └── minih.run.validation         (output validation)
@@ -111,6 +111,15 @@ If minih detects `TRACEPARENT` and `TRACESTATE` environment variables, it uses t
 - Verify `MINIH_TELEMETRY=true` is set
 - Check that the LGTM container is running: `docker compose ps`
 - Confirm port 4318 is accessible: `curl -s http://localhost:4318/v1/traces`
+- If running inside a devcontainer with Docker-outside-of-Docker, `localhost` won't reach the LGTM container. Use the host gateway IP instead:
+
+```bash
+# Find the host gateway IP
+ip route | grep default | awk '{print $3}'
+
+# Export the correct endpoint (typically 172.17.0.1)
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://172.17.0.1:4318
+```
 
 **Telemetry slowing down CLI?**
 - Shutdown is capped at 2 seconds — should not noticeably delay exit

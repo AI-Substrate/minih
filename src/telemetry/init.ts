@@ -111,7 +111,11 @@ export function initTelemetry(): void {
     logRecordProcessors: [new BatchLogRecordProcessor(logExporter)],
   });
 
-  sdk.start();
+  try {
+    sdk.start();
+  } catch {
+    // Best-effort: keep telemetry non-fatal
+  }
 
   // DD11: Extract TRACEPARENT/TRACESTATE from env for cross-process stitching.
   // Store as parent context — root spans should use getParentContext() so they

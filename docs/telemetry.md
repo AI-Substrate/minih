@@ -61,7 +61,7 @@ Other commands only get telemetry lifecycle (init + flush for logs) but no spans
 | `minih.run.tool_calls` | Histogram | Tool calls per run |
 | `minih.run.events` | Counter | Total events emitted |
 | `minih.validation.count` | Counter | Validation attempts by result |
-| `minih.prompt.tokens` | Histogram | Prompt character count |
+| `minih.prompt.tokens` | Histogram | Prompt token count (GPT tokenizer) |
 | `minih.adapter.session_duration` | Histogram | SDK session duration (ms) |
 
 ### Logs
@@ -136,3 +136,12 @@ export OTEL_EXPORTER_OTLP_ENDPOINT=http://172.17.0.1:4318
 **Want to disable for CI?**
 - Simply don't set `MINIH_TELEMETRY` (default is disabled)
 - Or set `OTEL_SDK_DISABLED=true` as an additional kill switch
+
+## Zero overhead when disabled
+
+When `MINIH_TELEMETRY` is not set (the default), minih guarantees zero telemetry overhead:
+
+- **No eager SDK loading** — OTel SDK modules are only imported when telemetry is enabled
+- **No token counting** — `gpt-tokenizer` is dynamically imported and only invoked when telemetry is active; the `minih.prompt.tokens` metric records 0 otherwise
+- **No-op API** — the `@opentelemetry/api` package ships lightweight no-op implementations that do nothing when no SDK is registered
+- **`minih resume` flush safety** — the resume command uses `printEnvelope()` + `process.exitCode` (not `process.exit()`) so the root span completes and telemetry flushes before the process exits

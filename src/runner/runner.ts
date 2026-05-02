@@ -14,13 +14,13 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { context } from '@opentelemetry/api';
-import { encode } from 'gpt-tokenizer';
 import type { AgentEvent, AgentResult } from '../adapter/events.js';
 import type { IAgentAdapter } from '../adapter/interface.js';
 import {
   captureContext,
   createLogger,
   eventCount as eventMetric,
+  isTelemetryEnabled,
   isVerboseEnabled,
   promptTokens,
   runCount,
@@ -270,7 +270,7 @@ export async function runAgent(
     }
 
     // ── Prompt Assembly Span ──
-    const { finalPrompt, promptTokenCount } = withSpanSync(
+    const finalPrompt = withSpanSync(
       'minih.run.prompt_assembly',
       (assemblySpan) => {
         // Build prompt: full assembly for fresh runs, just the message for resume
@@ -310,9 +310,16 @@ export async function runAgent(
           'instructions.chars': instructions?.length ?? 0,
         });
 
-        return { finalPrompt, promptTokenCount: encode(finalPrompt).length };
+        return finalPrompt;
       },
     ); // end prompt assembly span
+
+    // Token count only when telemetry is active (AC7: zero overhead when disabled)
+    let promptTokenCount = 0;
+    if (isTelemetryEnabled()) {
+      const { encode } = await import('gpt-tokenizer');
+      promptTokenCount = encode(finalPrompt).length;
+    }
 
     // Set runtime environment for the agent (Workshop 007)
     const resolvedAgentsDir = agentsDir ? path.resolve(agentsDir) : '';

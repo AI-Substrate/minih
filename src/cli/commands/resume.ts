@@ -37,6 +37,7 @@ import {
   exitWithEnvelope,
   formatError,
   formatSuccess,
+  printEnvelope,
 } from '../output.js';
 import { createSdkRuntime } from './sdk-runtime.js';
 
@@ -231,7 +232,7 @@ export function registerResumeCommand(program: Command): void {
                     result.metadata.result === 'timeout'
                       ? ErrorCodes.AGENT_TIMEOUT
                       : ErrorCodes.AGENT_EXECUTION_FAILED;
-                  exitWithEnvelope(
+                  printEnvelope(
                     formatError(
                       'resume',
                       errorCode,
@@ -242,8 +243,9 @@ export function registerResumeCommand(program: Command): void {
                       },
                     ),
                   );
+                  process.exitCode = 1;
                 } else {
-                  exitWithEnvelope(
+                  printEnvelope(
                     formatSuccess(
                       'resume',
                       {

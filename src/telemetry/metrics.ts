@@ -21,10 +21,13 @@ function getMeter() {
 let _runDuration: Histogram | undefined;
 export const runDuration = {
   record(value: number, attrs?: Attributes) {
-    (_runDuration ??= getMeter().createHistogram('minih.run.duration', {
-      description: 'Agent run duration',
-      unit: 'ms',
-    })).record(value, attrs);
+    if (!_runDuration) {
+      _runDuration = getMeter().createHistogram('minih.run.duration', {
+        description: 'Agent run duration',
+        unit: 'ms',
+      });
+    }
+    _runDuration.record(value, attrs);
   },
 };
 
@@ -32,10 +35,13 @@ export const runDuration = {
 let _runCount: Counter | undefined;
 export const runCount = {
   add(value: number, attrs?: Attributes) {
-    (_runCount ??= getMeter().createCounter('minih.run.count', {
-      description: 'Total agent runs',
-      unit: '{runs}',
-    })).add(value, attrs);
+    if (!_runCount) {
+      _runCount = getMeter().createCounter('minih.run.count', {
+        description: 'Total agent runs',
+        unit: '{runs}',
+      });
+    }
+    _runCount.add(value, attrs);
   },
 };
 
@@ -43,10 +49,13 @@ export const runCount = {
 let _toolCallCount: Histogram | undefined;
 export const toolCallCount = {
   record(value: number, attrs?: Attributes) {
-    (_toolCallCount ??= getMeter().createHistogram('minih.run.tool_calls', {
-      description: 'Tool calls per run',
-      unit: '{calls}',
-    })).record(value, attrs);
+    if (!_toolCallCount) {
+      _toolCallCount = getMeter().createHistogram('minih.run.tool_calls', {
+        description: 'Tool calls per run',
+        unit: '{calls}',
+      });
+    }
+    _toolCallCount.record(value, attrs);
   },
 };
 
@@ -54,10 +63,13 @@ export const toolCallCount = {
 let _eventCount: Counter | undefined;
 export const eventCount = {
   add(value: number, attrs?: Attributes) {
-    (_eventCount ??= getMeter().createCounter('minih.run.events', {
-      description: 'Total events emitted',
-      unit: '{events}',
-    })).add(value, attrs);
+    if (!_eventCount) {
+      _eventCount = getMeter().createCounter('minih.run.events', {
+        description: 'Total events emitted',
+        unit: '{events}',
+      });
+    }
+    _eventCount.add(value, attrs);
   },
 };
 
@@ -65,10 +77,13 @@ export const eventCount = {
 let _validationCount: Counter | undefined;
 export const validationCount = {
   add(value: number, attrs?: Attributes) {
-    (_validationCount ??= getMeter().createCounter('minih.validation.count', {
-      description: 'Validation attempts',
-      unit: '{validations}',
-    })).add(value, attrs);
+    if (!_validationCount) {
+      _validationCount = getMeter().createCounter('minih.validation.count', {
+        description: 'Validation attempts',
+        unit: '{validations}',
+      });
+    }
+    _validationCount.add(value, attrs);
   },
 };
 
@@ -76,10 +91,13 @@ export const validationCount = {
 let _promptTokens: Histogram | undefined;
 export const promptTokens = {
   record(value: number, attrs?: Attributes) {
-    (_promptTokens ??= getMeter().createHistogram('minih.prompt.tokens', {
-      description: 'Assembled prompt token count',
-      unit: '{tokens}',
-    })).record(value, attrs);
+    if (!_promptTokens) {
+      _promptTokens = getMeter().createHistogram('minih.prompt.tokens', {
+        description: 'Assembled prompt token count',
+        unit: '{tokens}',
+      });
+    }
+    _promptTokens.record(value, attrs);
   },
 };
 
@@ -87,12 +105,15 @@ export const promptTokens = {
 let _sessionDuration: Histogram | undefined;
 export const sessionDuration = {
   record(value: number, attrs?: Attributes) {
-    (_sessionDuration ??= getMeter().createHistogram(
-      'minih.adapter.session_duration',
-      {
-        description: 'SDK session active duration',
-        unit: 'ms',
-      },
-    )).record(value, attrs);
+    if (!_sessionDuration) {
+      _sessionDuration = getMeter().createHistogram(
+        'minih.adapter.session_duration',
+        {
+          description: 'SDK session active duration',
+          unit: 'ms',
+        },
+      );
+    }
+    _sessionDuration.record(value, attrs);
   },
 };

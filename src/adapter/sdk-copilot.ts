@@ -148,7 +148,7 @@ export class SdkCopilotAdapter implements IAgentAdapter {
         sendSpan.setAttribute('prompt.length', prompt.trim().length);
         await session.sendAndWait(
           { prompt: prompt.trim() },
-          options.timeout ? options.timeout * 1000 : undefined,
+          options.timeout ?? undefined,
         );
       }); // end session send span
 

@@ -58,7 +58,7 @@ export function createLogger(moduleName: string): Logger {
       severityNumber: SEVERITY_MAP[level],
       severityText: level.toUpperCase(),
       body: message,
-      attributes: { 'module.name': moduleName, ...attributes },
+      attributes: { ...attributes, 'module.name': moduleName },
     });
   }
 

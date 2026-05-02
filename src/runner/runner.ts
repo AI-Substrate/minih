@@ -21,6 +21,7 @@ import {
   captureContext,
   createLogger,
   eventCount as eventMetric,
+  isVerboseEnabled,
   promptTokens,
   runCount,
   runDuration,
@@ -199,7 +200,7 @@ export async function runAgent(
   // Set baggage for automatic propagation to all child spans (DD5)
   const baggageCtx = setBaggage({
     'minih.agent.slug': definition.slug,
-    'minih.run_id': runId,
+    'minih.run.id': runId,
     ...(config.model ? { 'minih.model': config.model } : {}),
   });
 
@@ -300,6 +301,9 @@ export async function runAgent(
           instructions?.length ?? 0,
         );
         assemblySpan.setAttribute('is_resume', isResume);
+        if (isVerboseEnabled()) {
+          assemblySpan.setAttribute('prompt.body', finalPrompt);
+        }
         log.debug('Prompt assembled', {
           'prompt.chars': finalPrompt.length,
           'preamble.chars': preamble?.length ?? 0,
@@ -534,6 +538,12 @@ export async function runAgent(
             'error.count': allErrors.length,
             'agent.slug': definition.slug,
           });
+          if (isVerboseEnabled()) {
+            valSpan.setAttribute(
+              'validation.errors',
+              JSON.stringify(allErrors),
+            );
+          }
         }
 
         return { systemValidation, userValidation, allErrors, validated };

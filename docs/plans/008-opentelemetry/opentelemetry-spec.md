@@ -157,7 +157,7 @@ async function shutdownTelemetry(): Promise<void> {
 - `tool.output` (tool call results)
 - `validation.errors` (full error messages)
 
-**Implementation note**: `MINIH_TELEMETRY_VERBOSE` is defined and checked in `init.ts` (`isVerboseEnabled()`) but not yet consumed by span/metric recording code. The flag is available for future use.
+**Implementation note**: `MINIH_TELEMETRY_VERBOSE` is checked via `isVerboseEnabled()` in `init.ts` and consumed in `runner.ts` to conditionally attach `prompt.body` and `validation.errors` span attributes.
 
 **Invariant**: Default telemetry output must never contain credentials, tokens, prompt content, or tool output.
 

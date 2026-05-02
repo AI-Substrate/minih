@@ -30,7 +30,7 @@ function run(args: string[]): { stdout: string; exitCode: number } {
   try {
     const stdout = execFileSync('node', [cliPath, ...args], {
       cwd: tmpDir,
-      env: { ...process.env, NO_COLOR: '1' },
+      env: { ...process.env, FORCE_COLOR: undefined, NO_COLOR: '1' },
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
     });

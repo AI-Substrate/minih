@@ -22,7 +22,7 @@ function run(
   try {
     const stdout = execSync(`node ${cliPath} ${args}`, {
       cwd: tmpDir,
-      env: { ...process.env, NO_COLOR: '1', ...env },
+      env: { ...process.env, FORCE_COLOR: undefined, NO_COLOR: '1', ...env },
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
     });
@@ -40,7 +40,7 @@ function runArgs(args: string[]): {
 } {
   const result = spawnSync(process.execPath, [cliPath, ...args], {
     cwd: tmpDir,
-    env: { ...process.env, NO_COLOR: '1' },
+    env: { ...process.env, FORCE_COLOR: undefined, NO_COLOR: '1' },
     encoding: 'utf-8',
   });
   return {
@@ -54,7 +54,7 @@ describe('CLI commands', () => {
   it('root help lists outside coordination commands', () => {
     const help = execSync(`node ${cliPath} --help`, {
       cwd: tmpDir,
-      env: { ...process.env, NO_COLOR: '1' },
+      env: { ...process.env, FORCE_COLOR: undefined, NO_COLOR: '1' },
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
     });
@@ -232,13 +232,13 @@ describe('CLI commands', () => {
   it('check and validate help distinguish file validation from run validation', () => {
     const checkHelp = execSync(`node ${cliPath} check --help`, {
       cwd: tmpDir,
-      env: { ...process.env, NO_COLOR: '1' },
+      env: { ...process.env, FORCE_COLOR: undefined, NO_COLOR: '1' },
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     const validateHelp = execSync(`node ${cliPath} validate --help`, {
       cwd: tmpDir,
-      env: { ...process.env, NO_COLOR: '1' },
+      env: { ...process.env, FORCE_COLOR: undefined, NO_COLOR: '1' },
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
     });

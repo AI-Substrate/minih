@@ -12,10 +12,15 @@ function run(
   args: string[],
   _opts: { input?: string; expectFail?: boolean } = {},
 ): { stdout: Buffer; stderr: string; exitCode: number } {
+  // Strip FORCE_COLOR from the spawn env: when both FORCE_COLOR and NO_COLOR
+  // are set, Node 24+ writes a deprecation warning to stderr that breaks
+  // tests parsing stderr as JSON. Copilot CLI's own runtime sets FORCE_COLOR,
+  // so this leaks unless explicitly stripped here.
+  const { FORCE_COLOR: _fc, ...cleanEnv } = process.env;
   try {
     const stdout = execFileSync('node', [cliPath, ...args], {
       cwd: repoRoot,
-      env: { ...process.env, NO_COLOR: '1' },
+      env: { ...cleanEnv, NO_COLOR: '1' },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     return { stdout, stderr: '', exitCode: 0 };

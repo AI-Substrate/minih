@@ -7,7 +7,7 @@ const cliPath = path.resolve('dist/cli/index.js');
 describe('run help', () => {
   it('points coordinated outside callers to outside context', () => {
     const help = execFileSync('node', [cliPath, 'run', '--help'], {
-      env: { ...process.env, NO_COLOR: '1' },
+      env: { ...process.env, FORCE_COLOR: undefined, NO_COLOR: '1' },
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
     });

@@ -27,7 +27,7 @@ interface RunResult {
 function run(args: string[]): RunResult {
   try {
     const stdout = execFileSync('node', [cliPath, ...args], {
-      env: { ...process.env, NO_COLOR: '1' },
+      env: { ...process.env, FORCE_COLOR: undefined, NO_COLOR: '1' },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     return { stdout, stderr: '', exitCode: 0 };
@@ -197,7 +197,7 @@ describe('view + completed run fallback (Completeness E2)', () => {
         'node',
         [cliPath, '--agents-dir', agentsDir, 'view', 'demo'],
         {
-          env: { ...process.env, NO_COLOR: '1' },
+          env: { ...process.env, FORCE_COLOR: undefined, NO_COLOR: '1' },
           stdio: ['pipe', 'pipe', 'pipe'],
           timeout: 1500,
         },

@@ -99,7 +99,7 @@ function firstDifferencePath(
 function runCli(command: 'doctor' | 'list'): unknown {
   const result = spawnSync(process.execPath, [cliPath, command], {
     cwd: repoRoot,
-    env: { ...process.env, NO_COLOR: '1' },
+    env: { ...process.env, FORCE_COLOR: undefined, NO_COLOR: '1' },
     encoding: 'utf-8',
   });
 

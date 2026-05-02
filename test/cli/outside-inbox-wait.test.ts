@@ -48,7 +48,7 @@ function run(args: string[]): { stdout: string; exitCode: number } {
   try {
     const stdout = execFileSync('node', [cliPath, ...args], {
       cwd: tmpDir,
-      env: { ...process.env, NO_COLOR: '1' },
+      env: { ...process.env, FORCE_COLOR: undefined, NO_COLOR: '1' },
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
     });
@@ -194,7 +194,7 @@ describe('outside-inbox-list --wait — basic behavior', () => {
       ],
       {
         cwd: tmpDir,
-        env: { ...process.env, NO_COLOR: '1' },
+        env: { ...process.env, FORCE_COLOR: undefined, NO_COLOR: '1' },
       },
     );
 
@@ -261,7 +261,10 @@ describe('outside-inbox-list --wait — bare-flag default', () => {
     const proc = spawn(
       'node',
       [cliPath, 'inside', 'inbox', 'list', slug, '--wait'],
-      { cwd: tmpDir, env: { ...process.env, NO_COLOR: '1' } },
+      {
+        cwd: tmpDir,
+        env: { ...process.env, FORCE_COLOR: undefined, NO_COLOR: '1' },
+      },
     );
     setTimeout(() => {
       writeMessage('inside', makeMsg(ULID_M1, 'inside'));
@@ -304,7 +307,7 @@ describe('outside-inbox-list --wait — agent-process death (E123)', () => {
       ],
       {
         cwd: tmpDir,
-        env: { ...process.env, NO_COLOR: '1' },
+        env: { ...process.env, FORCE_COLOR: undefined, NO_COLOR: '1' },
       },
     );
 

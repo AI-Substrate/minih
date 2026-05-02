@@ -73,9 +73,11 @@ function colorForStatus(status: HumanHeaderView['status']): string {
 
 function colorForCapability(cap: InputCapability): string {
   switch (cap) {
-    case 'input available':
+    case 'input → inbox':
+    case 'input → session':
       return 'green';
-    case 'input read-only':
+    case 'input read-only — non-coordinated':
+    case 'input read-only — completed':
       return 'yellow';
     case 'completed':
       return 'gray';

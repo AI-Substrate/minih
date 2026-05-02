@@ -38,43 +38,43 @@ function makeBridge(overrides: Partial<InputBridgeInput> = {}): {
 }
 
 describe('createInputBridge — capability derivation', () => {
-  it('same-process + active + sender → input available', () => {
+  it('same-process + active + sender (non-coord) → input → session', () => {
     const { bridge } = makeBridge();
-    expect(bridge.capability).toBe('input available');
+    expect(bridge.capability).toBe('input → session');
     expect(bridge.reason).toBeUndefined();
   });
 
-  it('attached (cross-process) → input read-only with attached-read-only reason', () => {
+  it('attached (cross-process) non-coord → input read-only — non-coordinated', () => {
     const { bridge } = makeBridge({ attached: true, sender: undefined });
-    expect(bridge.capability).toBe('input read-only');
-    expect(bridge.reason).toBe('attached-read-only');
+    expect(bridge.capability).toBe('input read-only — non-coordinated');
+    expect(bridge.reason).toBe('attached to non-coordinated agent');
   });
 
-  it('no sender (even when not attached) → input read-only', () => {
+  it('no sender + not attached + non-coord → input read-only — non-coordinated', () => {
     const { bridge } = makeBridge({ sender: undefined });
-    expect(bridge.capability).toBe('input read-only');
-    expect(bridge.reason).toBe('attached-read-only');
+    expect(bridge.capability).toBe('input read-only — non-coordinated');
+    expect(bridge.reason).toBe('no write channel available');
   });
 
-  it('runStatus=completed → completed', () => {
+  it('runStatus=completed → input read-only — completed', () => {
     const { bridge } = makeBridge({ runStatus: 'completed' });
-    expect(bridge.capability).toBe('completed');
+    expect(bridge.capability).toBe('input read-only — completed');
     expect(bridge.reason).toBe('run completed');
   });
 
-  it('runStatus=failed → completed (terminal status)', () => {
+  it('runStatus=failed → input read-only — completed (terminal status)', () => {
     const { bridge } = makeBridge({ runStatus: 'failed' });
-    expect(bridge.capability).toBe('completed');
+    expect(bridge.capability).toBe('input read-only — completed');
   });
 
-  it('terminal status overrides attach (even attached completed runs read completed)', () => {
+  it('terminal status overrides attach (completed runs read completed regardless of attach)', () => {
     const { bridge } = makeBridge({ runStatus: 'completed', attached: true });
-    expect(bridge.capability).toBe('completed');
+    expect(bridge.capability).toBe('input read-only — completed');
   });
 });
 
 describe('createInputBridge — submit', () => {
-  it('input-available bridge calls sender.send and returns ok with messageId', async () => {
+  it('input → session bridge calls sender.send and returns ok with messageId', async () => {
     const { bridge, calls } = makeBridge();
     const result: InputSubmitResult = await bridge.submit('hello');
     expect(result.ok).toBe(true);
@@ -84,7 +84,7 @@ describe('createInputBridge — submit', () => {
     expect(calls).toEqual(['hello']);
   });
 
-  it('input-available bridge surfaces sender errors as refusals', async () => {
+  it('input → session bridge surfaces sender errors as refusals', async () => {
     const sender: SessionSender = {
       send: async () => {
         throw new Error('boom');
@@ -102,11 +102,12 @@ describe('createInputBridge — submit', () => {
     }
   });
 
-  it('attached-read-only bridge refuses with attached-read-only', async () => {
+  it('attached non-coord read-only bridge refuses with descriptive reason', async () => {
     const { bridge } = makeBridge({ attached: true, sender: undefined });
     const result = await bridge.submit('hello');
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.reason).toBe('attached-read-only');
+    if (!result.ok)
+      expect(result.reason).toBe('attached to non-coordinated agent');
   });
 
   it('completed bridge refuses with run-completed', async () => {
@@ -120,10 +121,10 @@ describe('createInputBridge — submit', () => {
 describe('createInputBridge — withRunStatus transition', () => {
   it('active → completed flips capability and starts refusing', async () => {
     const { bridge: live, calls } = makeBridge();
-    expect(live.capability).toBe('input available');
+    expect(live.capability).toBe('input → session');
 
     const completed = live.withRunStatus('completed');
-    expect(completed.capability).toBe('completed');
+    expect(completed.capability).toBe('input read-only — completed');
 
     const result = await completed.submit('hello');
     expect(result.ok).toBe(false);
@@ -133,6 +134,6 @@ describe('createInputBridge — withRunStatus transition', () => {
   it('attached read-only stays read-only across non-terminal runStatus changes', () => {
     const { bridge } = makeBridge({ attached: true, sender: undefined });
     const next = bridge.withRunStatus('idle');
-    expect(next.capability).toBe('input read-only');
+    expect(next.capability).toBe('input read-only — non-coordinated');
   });
 });

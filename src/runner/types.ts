@@ -80,11 +80,20 @@ export interface AgentRunConfig {
    * also fire on `onSessionReady`; this callback runs alongside them.
    *
    * The second argument carries the live runDir/runId so the caller can
-   * mount a human-view feed against the run artifacts.
+   * mount a human-view feed against the run artifacts. FX008 (plan 016)
+   * additionally exposes `coordinated` (from frontmatter) and `agentSlug`
+   * so callers can mount a coordination-aware InputBridge that routes
+   * footer input to the outside inbox lane via `appendInboxMessage`
+   * instead of the SDK conversation channel.
    */
   onSessionReady?: (
     sender: import('../adapter/events.js').SessionSender,
-    context: { runDir: string; runId: string },
+    context: {
+      runDir: string;
+      runId: string;
+      coordinated: boolean;
+      agentSlug: string;
+    },
   ) => void;
 }
 

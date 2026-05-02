@@ -29,7 +29,10 @@ export function FooterPane({
   const [lastResult, setLastResult] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState<boolean>(false);
 
-  const canType = bridge.capability === 'input available' && !inputDisabled;
+  const canType =
+    (bridge.capability === 'input → session' ||
+      bridge.capability === 'input → inbox') &&
+    !inputDisabled;
 
   useInput(
     (input, key) => {
@@ -72,9 +75,11 @@ export function FooterPane({
   };
 
   const capColor =
-    bridge.capability === 'input available'
+    bridge.capability === 'input → inbox' ||
+    bridge.capability === 'input → session'
       ? 'green'
-      : bridge.capability === 'input read-only'
+      : bridge.capability === 'input read-only — non-coordinated' ||
+          bridge.capability === 'input read-only — completed'
         ? 'yellow'
         : 'gray';
 

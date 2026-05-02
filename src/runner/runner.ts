@@ -697,8 +697,16 @@ export async function runAgent(
     };
     const startForwarders = (sender: SessionSender): void => {
       // Plan 009 Phase 2 — caller hook (e.g., --human flag) runs alongside.
+      // FX008 (plan 016) — caller now also receives `coordinated` and
+      // `agentSlug` so the InputBridge can route footer input to the
+      // outside inbox lane for coordinated runs.
       try {
-        config.onSessionReady?.(sender, { runDir, runId });
+        config.onSessionReady?.(sender, {
+          runDir,
+          runId,
+          coordinated: coordinationEnabled,
+          agentSlug: definition.slug,
+        });
       } catch (err) {
         handleForwarderError(
           err instanceof Error ? err : new Error(String(err)),

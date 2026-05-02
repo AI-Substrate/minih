@@ -1,5 +1,44 @@
 # Copilot Instructions — minih
 
+## 🛑 Dogfood rule — never read run-dir files directly
+
+**The harness IS the product. We MUST be exemplar users.** That means: NEVER `cat`/`tail`/`grep`/`jq` files under `agents/<slug>/runs/<runId>/` directly. ALWAYS go through the `minih` CLI. Every time you bypass the CLI, you skip a UX gap that real users will hit — and you set a bad pattern in this very document for the next agent reading it.
+
+**This rule is non-negotiable.** If the CLI doesn't expose what you need, that's a missing surface — file it as MW/fix dossier and use `cat` only AFTER raising the gap explicitly with the user. Don't silently bypass.
+
+**Equivalence table** (read left-to-right; if you reach for the left, use the right instead):
+
+| ❌ Direct file access | ✅ Dogfood path |
+|---|---|
+| `cat agents/<slug>/runs/<run>/run.json` | `minih status <slug> --run <run>` |
+| `cat agents/<slug>/runs/<run>/state/inside.json` | `minih inside state get <slug> --run <run>` |
+| `cat agents/<slug>/runs/<run>/state/outside.json` | `minih outside state get <slug> --run <run>` |
+| `cat .../state/{inside,outside}.json` (both at once) | `minih state get <slug> --run <run>` |
+| `cat agents/<slug>/runs/<run>/state/history.ndjson` | (no CLI surface — missing; file as MW) |
+| `cat agents/<slug>/runs/<run>/inbox/inside/messages.ndjson` | `minih inside inbox list <slug> --run <run>` |
+| `cat agents/<slug>/runs/<run>/inbox/outside/messages.ndjson` | `minih outside inbox list <slug> --run <run>` |
+| `tail -f .../events.ndjson` | `minih tail <slug> --run <run>` (follow is default) |
+| `tail .../events.ndjson \| head -N` | `minih tail <slug> --run <run> --snapshot --lines N` |
+| `cat .../output/report.json` | `minih last-run <slug>` then `minih validate <slug> --file <path>`; for inspect, `minih retros --slug <slug>` |
+| `ls agents/<slug>/runs/` | `minih history <slug>` |
+| Reading any prompt assembly | `minih inspect <slug>` |
+
+### When the CLI gap matters
+
+If you find yourself wanting to read a file the CLI doesn't expose:
+1. **Stop.** Don't `cat` silently.
+2. **Raise it** with the user. State the gap precisely: "I want X; minih doesn't expose it."
+3. **File it** as a magicWand or fix dossier in the active plan's deferred-follow-ups section — that's the encode step.
+4. **Then** decide with the user whether to `cat` the file once as an emergency unblock OR to ship the CLI surface first.
+
+The infrastructure improvement IS the work. Going around it is the failure mode.
+
+### Self-check before a `cat`/`jq`/`tail`
+
+Ask: "Could `minih X` answer this?" If yes, use that. If no, the gap is the answer — file it.
+
+---
+
 ## Build, Test, Lint
 
 ```bash
@@ -23,6 +62,53 @@ npx biome check --write .   # Auto-fix lint/format issues
 The backward-compatibility regression for all existing agents is gated behind `MINIH_REGRESSION=1` because it shells out to the built CLI and compares `doctor`/`list` output against the P1 baselines. Run `npm run build` first when invoking that gate directly.
 
 **Own every finding.** Anything `fft` surfaces is ours, regardless of which file it lives in. Don't dismiss a lint warning, type error, or test failure as "pre-existing" or "unrelated to my change" — if our pipeline turns it up, our PR fixes it. If the noise is genuinely out-of-scope for the current change, raise it explicitly with the user before deciding to defer; never commit past it silently. Audit findings (transitive deps) follow the same rule: surface and decide, don't ignore.
+
+### Globally-linked `minih` reflects this checkout
+
+The `minih` binary on `$PATH` is symlinked from `~/.npm-global/bin/minih` to `dist/cli/index.js` in this repo (via `npm link`, set up once by `just install`). That means **every `minih ...` invocation runs whatever is currently in this repo's `dist/`** — no install step needed.
+
+What's NOT automatic: rebuilding `dist/` after source edits. Watching/auto-build is intentionally off. The contract is: **edit source → run `just build` (fast) or `just fft` (full gate) → global `minih` reflects your changes**. If `minih` behaves like an older version, run `just build` first; you don't need to re-link.
+
+```bash
+just build         # tsc + copy schemas (~2s) — quick rebuild during iteration
+just fft           # full gate — required before every commit/push
+```
+
+### Companion-mode is mandatory when editing code
+
+**Whenever you (the AI) are editing source code, a `code-review-companion` MUST be running** as a Power-On-Mode peer. This catches drift, finds bugs, and turns the live feedback loop into a paid-for review pass. See [`docs/how/companion-mode.md`](docs/how/companion-mode.md) for the full protocol.
+
+**Either you or the user may start the companion.** Always check first — don't assume:
+
+```bash
+# Check whether one is already running
+RUN=$(minih status code-review-companion 2>/dev/null | jq -r '.data | select(.verdict == "active") | .runId')
+if [ -z "$RUN" ]; then
+  # No active run — start one. Requires GH_TOKEN in the spawning shell env.
+  export GH_TOKEN=$(gh auth token)   # set this once if you don't have it
+  minih run code-review-companion &
+  sleep 12
+  RUN=$(minih status code-review-companion 2>/dev/null | jq -r '.data.runId')
+fi
+echo "Companion run: $RUN"
+```
+
+The `verdict: 'active'` filter is load-bearing — `minih status` defaults to "latest run" which may be a completed one from a prior session.
+
+**Then brief it once at session start**:
+- Plan/spec/dossier paths
+- The protocol you'll follow (review-request at every commit; fire-and-forget)
+- Hazards specific to this work
+
+**Then ping it at every commit boundary** with `outside inbox send --type task --subject "review-request: <topic> <sha>" --body "Diff: git show <sha>. ..."`. Fire-and-forget; the companion replies only if it finds issues.
+
+**To watch it live** in another terminal: `minih view code-review-companion` — read-only TUI, attaches cross-process, renders inbox + state + transcript.
+
+**Before reporting back to the user, send `control:stop`** and read the farewell envelope at `agents/code-review-companion/runs/<RUN>/output/report.json` — fold any open findings into your final summary. (Power-On-Mode protocol — without this, the auto-harvested retro misses your session's signal.)
+
+**Common gotchas:**
+- `E122 GH_TOKEN not set` on `minih run` — the spawning shell needs `GH_TOKEN`. Set with `export GH_TOKEN=$(gh auth token)`. The Copilot CLI's runtime doesn't always inherit it; explicit export is reliable.
+- `peer.verdict: 'dead'` after the companion has been quiet for >30min — known false positive when it's working a non-coordinated tool call. Verify by checking `currentlyRunningTool` and `selfReportedState` — both being non-null is a strong "it's alive" signal.
 
 ## Architecture
 

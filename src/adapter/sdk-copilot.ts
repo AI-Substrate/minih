@@ -16,6 +16,13 @@ import type {
 } from './copilot-types.js';
 import type { AgentEvent, AgentResult, AgentRunOptions } from './events.js';
 import type { IAgentAdapter } from './interface.js';
+import {
+  withSpan,
+  captureContext,
+  runInContext,
+  createLogger,
+  sessionDuration,
+} from '../telemetry/index.js';
 
 const approveAll = () => ({ kind: 'approved' as const });
 
@@ -39,6 +46,8 @@ export class SdkCopilotAdapter implements IAgentAdapter {
       mcpServers,
     } = options;
 
+    const log = createLogger('adapter');
+
     const validationError = validatePrompt(prompt);
     if (validationError) {
       return {
@@ -50,24 +59,39 @@ export class SdkCopilotAdapter implements IAgentAdapter {
       };
     }
 
-    const session = sessionId
-      ? await this._client.resumeSession(sessionId, {
-          onPermissionRequest: approveAll,
-          ...(options.cwd && { workingDirectory: options.cwd }),
-          ...(model && { model }),
-          ...(reasoningEffort && { reasoningEffort }),
-          ...(configDir && { configDir }),
-          ...(mcpServers && { mcpServers }),
-        })
-      : await this._client.createSession({
-          streaming: !!onEvent,
-          onPermissionRequest: approveAll,
-          ...(options.cwd && { workingDirectory: options.cwd }),
-          ...(model && { model }),
-          ...(reasoningEffort && { reasoningEffort }),
-          ...(configDir && { configDir }),
-          ...(mcpServers && { mcpServers }),
-        });
+    const sessionStart = Date.now();
+
+    // ── Session Create Span ──
+    const session = await withSpan(
+      'minih.adapter.session_create',
+      async (createSpan) => {
+        createSpan.setAttribute('is_resume', !!sessionId);
+        if (model) createSpan.setAttribute('model', model);
+        createSpan.setAttribute('has_mcp', !!mcpServers);
+
+        const s = sessionId
+          ? await this._client.resumeSession(sessionId, {
+              onPermissionRequest: approveAll,
+              ...(options.cwd && { workingDirectory: options.cwd }),
+              ...(model && { model }),
+              ...(reasoningEffort && { reasoningEffort }),
+              ...(configDir && { configDir }),
+              ...(mcpServers && { mcpServers }),
+            })
+          : await this._client.createSession({
+              streaming: !!onEvent,
+              onPermissionRequest: approveAll,
+              ...(options.cwd && { workingDirectory: options.cwd }),
+              ...(model && { model }),
+              ...(reasoningEffort && { reasoningEffort }),
+              ...(configDir && { configDir }),
+              ...(mcpServers && { mcpServers }),
+            });
+
+        createSpan.setAttribute('session.id', s.sessionId);
+        return s;
+      },
+    ); // end session create span
 
     // Emit session_start so the runner can capture sessionId for timeout termination
     if (onEvent) {
@@ -85,38 +109,55 @@ export class SdkCopilotAdapter implements IAgentAdapter {
       let hasStreamedThinking = false;
       let hasStreamedText = false;
 
+      // Capture context before callback registration (Key Finding #02)
+      const eventContext = captureContext();
+
       session.on((event: CopilotSessionEventLike) => {
-        // Suppress duplicate consolidated events.
-        // SDK emits deltas during streaming, then re-emits full consolidated
-        // content after the turn. We skip the duplicates.
-        if (event.type === 'assistant.reasoning_delta') {
-          hasStreamedThinking = true;
-        }
-        if (event.type === 'assistant.message_delta') {
-          hasStreamedText = true;
-        }
-        if (event.type === 'assistant.reasoning' && hasStreamedThinking) {
-          return;
-        }
-        if (event.type === 'assistant.message' && hasStreamedText) {
-          output = event.data?.content ?? '';
-          return;
-        }
+        // Restore context inside callback for span correlation
+        runInContext(eventContext, () => {
+          // Suppress duplicate consolidated events.
+          // SDK emits deltas during streaming, then re-emits full consolidated
+          // content after the turn. We skip the duplicates.
+          if (event.type === 'assistant.reasoning_delta') {
+            hasStreamedThinking = true;
+          }
+          if (event.type === 'assistant.message_delta') {
+            hasStreamedText = true;
+          }
+          if (event.type === 'assistant.reasoning' && hasStreamedThinking) {
+            return;
+          }
+          if (event.type === 'assistant.message' && hasStreamedText) {
+            output = event.data?.content ?? '';
+            return;
+          }
 
-        const agentEvent = translateEvent(event);
-        if (agentEvent && onEvent) {
-          onEvent(agentEvent);
-        }
+          const agentEvent = translateEvent(event);
+          if (agentEvent && onEvent) {
+            onEvent(agentEvent);
+          }
 
-        if (event.type === 'assistant.message') {
-          output = event.data?.content ?? '';
-        }
+          if (event.type === 'assistant.message') {
+            output = event.data?.content ?? '';
+          }
+        }); // end runInContext
       });
 
-      await session.sendAndWait(
-        { prompt: prompt.trim() },
-        options.timeout ? options.timeout * 1000 : undefined,
-      );
+      // ── Session Send Span ──
+      await withSpan('minih.adapter.session_send', async (sendSpan) => {
+        sendSpan.setAttribute('prompt.length', prompt.trim().length);
+        await session.sendAndWait(
+          { prompt: prompt.trim() },
+          options.timeout ? options.timeout * 1000 : undefined,
+        );
+      }); // end session send span
+
+      const sessionMs = Date.now() - sessionStart;
+      sessionDuration.record(sessionMs, { 'session.id': session.sessionId });
+      log.info('SDK session completed', {
+        'session.id': session.sessionId,
+        duration_ms: sessionMs,
+      });
 
       return {
         output,
@@ -128,6 +169,10 @@ export class SdkCopilotAdapter implements IAgentAdapter {
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
+
+      log.error(`SDK session error: ${errorMessage}`, {
+        'session.id': session.sessionId,
+      });
 
       if (onEvent) {
         onEvent({

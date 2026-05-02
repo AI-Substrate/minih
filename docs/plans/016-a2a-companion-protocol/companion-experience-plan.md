@@ -38,6 +38,7 @@ Plan 016 began as A2A protocol research (see `research-dossier.md`). The first a
 | [FX003](./fixes/FX003-driving-from-outside-docs.md) | 2026-05-01 | Document `--wait` / `--after` as the canonical operator pattern | docs | Proposed | Live demo F1 |
 | [FX004](./fixes/FX004-demo-opens-with-state.md) | 2026-05-01 | `demo-companion` walkthrough sets outside state before briefing | docs, agent prompt | Proposed | Live demo F3 |
 | [FX007](./fixes/FX007-wait-for-any-pre-existing.md) | 2026-05-02 | `wait_for_any` returns pre-existing unread inbox messages (MW6) | runner | Proposed | Workshop 002 § 3.3 + companion farewell |
+| [FX008](./fixes/FX008-minih-attach-cross-process-tui.md) | 2026-05-02 | `minih attach` — cross-process read+write TUI; subsumes FX001 | cli, runner | Proposed | Workshop 005 + MW12 |
 
 **Recommended order** (revised post-validation):
 
@@ -71,6 +72,8 @@ Note: parallel parts of FX003 (the new how-to page, AGENTS_README cheat-sheet, s
   - `minih resume --human` — overtakes the SDK session as a fresh boot; not a peer-attach.
 
   **What's needed**: when `view` is attached to a coordinated agent, footer input should write to the outside inbox via `appendInboxMessage` — same routing FX001 designs for `run --human` coordinated mode, just from the cross-process attach. The lane is already file-based and append-only; multiple writers are safe by construction. The flag could be `view --writable` (opt-in initially since interactive cross-process write is a behaviour change) or auto-enable when `coordinated: enabled`. Composes naturally with FX001's input-bridge dual-routing — `view`'s bridge currently fixes capability to `'input read-only'` because `attached: true` AND `sender` is null; the new logic would override that to `'input → inbox'` when the agent is coordinated. Target: `cli/human/input-bridge.ts` + `cli/commands/view.ts`. **The user explicitly named this as the next fix dossier to scope.**
+
+  **STATUS**: Scoped via [workshop 005](./workshops/005-minih-attach-semantics.md) (2026-05-02) — final design uses a NEW `minih attach <slug>` command (not `view --writable`); subsumes FX001 entirely. Implementation dossier: [FX008](./fixes/FX008-minih-attach-cross-process-tui.md).
 
 ## Layout
 

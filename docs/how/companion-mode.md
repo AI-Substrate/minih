@@ -30,7 +30,16 @@ The protocol has five phases:
 
 ### 1. Boot
 
-Start the companion as a normal coordinated run:
+**First time per project**: install the companion via the bundled registry. Idempotent — re-running on an existing install upgrades or reports `unchanged`:
+
+```bash
+minih agent install code-review-companion
+```
+
+If you've authored your own companion or want a third-party one, install via git URL:
+`minih agent install github:owner/repo#main:agents/<your-companion> --yes`. See [`agent-pack.md`](./agent-pack.md) for the full install / upgrade / drift surface.
+
+**Then start a run**:
 
 ```bash
 npx minih run code-review-companion

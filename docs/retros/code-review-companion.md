@@ -86,3 +86,13 @@
 - **magicWand** (target: coordination): Expose the active coordinated agent input parameters, especially idleBudgetMs, through `minih state get` or a dedicated inside MCP context tool so a companion can know exactly when to exit instead of guessing.
 - difficulties:
   - [annoying] coordination: The prompt referenced `input.idleBudgetMs`, but the value was not available through the visible coordination state or inbox context. (workaround: Completed the requested reviews, waited through multiple empty long-poll windows, checked peer state, then exited with idle_budget.)
+
+## 2026-05-03T06:24:56.659Z — code-review-companion / 2026-05-03T16-08-00-909Z-ca43
+
+- runId: 2026-05-03T16-08-00-909Z-ca43
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-05-03T16-08-00-909Z-ca43
+- summary: Reviewed Plan 017 Phase 6 documentation across eight task/fix requests. The companion found eleven substantive issues: user-facing confirmation-prompt and E184 contract drift in the agent-pack how-to, security-model overstatements, runner domain-doc drift around registry fetch behavior, stale plan-spec trust wording, and plan hygiene gaps. All findings were addressed by the final fix commit 7c39fc8; the final verification approved the phase with no open findings.
+- **magicWand** (target: project): Add a `minih review-drift` or `minih grep-contract` helper that safely searches changed docs for old contract phrases without shell-quoting hazards and reports current source-of-truth hits by category.
+- difficulties:
+  - [annoying] debug: A drift-audit grep pattern containing markdown backticks was passed through the shell in double quotes, causing command substitution attempts before grep ran. (workaround: Re-ran the wording sweep with safer single-quoted/literal patterns and avoided backticks in shell-interpreted strings.)
+  - [annoying] coordination: The T6.3 review request referenced commit 982af5c, but the AGENTS.md change it described was actually in the next commit, 26e3184. (workaround: Checked git log and blame for AGENTS.md, then reviewed the real T6.3 commit while noting the SHA mismatch in the summary.)

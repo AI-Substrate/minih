@@ -49,9 +49,13 @@ export function registerAgentCommand(program: Command): void {
   agent
     .command('install <ref>')
     .description(
-      'Install (or upgrade) an agent pack from a local filesystem path. ' +
-        'Remote git URLs and registry slugs ship in Phase 3/4. ' +
-        'URL syntax (designed; fetch lands Phase 3): `github:owner/repo#branch:subpath`, `https://github.com/owner/repo#tag`.',
+      'Install (or upgrade) an agent pack. ' +
+        '`<ref>` is one of: a registry slug (e.g. `code-review-companion` — see `agent list --available`), ' +
+        'an npm-style git URL (`github:owner/repo[#ref][:subpath]`), ' +
+        'a full HTTPS URL (`https://github.com/owner/repo.git[#tag]`), ' +
+        'or a local filesystem path. ' +
+        'Idempotent: re-running upgrades; preserves runs/inbox/state on upgrade. ' +
+        'Full reference: docs/how/agent-pack.md.',
     )
     .option('--as <slug>', 'Install under a different local slug')
     .option(
@@ -66,7 +70,11 @@ export function registerAgentCommand(program: Command): void {
       '--subpath <path>',
       'Override the source subpath (path inside the repo)',
     )
-    .option('--yes', 'Skip confirmation prompts (CI mode)', false)
+    .option(
+      '--yes',
+      'Accepted for forward-compat with the deferred non-registry confirmation prompt; currently a no-op',
+      false,
+    )
     .action(
       async (
         argRef: string,

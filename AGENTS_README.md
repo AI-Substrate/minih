@@ -567,7 +567,16 @@ Don't use companion mode when:
 
 #### 1. Boot
 
-Start the companion as a normal coordinated run:
+**First time per project**: install the canonical companion if you don't have it yet. Idempotent — re-running on an existing install upgrades or reports `unchanged`:
+
+```bash
+# Install the canonical companion from the bundled registry (one command, no clone)
+minih agent install code-review-companion
+```
+
+If `agents/code-review-companion/` already exists in the project, this either upgrades it (when the source has changed) or reports `action: unchanged`. See [`docs/how/agent-pack.md`](./docs/how/agent-pack.md) for the full agent-pack surface.
+
+**Then boot a run**:
 
 ```bash
 # Boot the companion

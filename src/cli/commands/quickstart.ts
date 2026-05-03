@@ -216,7 +216,7 @@ export function registerQuickstartCommand(program: Command): void {
         const msg = err instanceof Error ? err.message : String(err);
         exitWithEnvelope(formatError('quickstart', 'E120', msg));
       } finally {
-        runtime.cleanup();
+        await runtime.cleanup();
       }
     });
 }

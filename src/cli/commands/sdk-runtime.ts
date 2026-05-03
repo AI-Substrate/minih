@@ -8,14 +8,14 @@
  * duplicating ~80 lines of SDK wiring between run.ts and resume.ts.
  */
 
+import { context, propagation } from '@opentelemetry/api';
 import chalk from 'chalk';
 import { SdkCopilotAdapter } from '../../adapter/index.js';
-import { getTraceparent } from '../../telemetry/index.js';
 import { ErrorCodes, exitWithEnvelope, formatError } from '../output.js';
 
 export interface SdkRuntime {
   adapter: SdkCopilotAdapter;
-  cleanup: () => void;
+  cleanup: () => Promise<void>;
 }
 
 /**
@@ -79,15 +79,20 @@ export async function createSdkRuntime(
   process.env.NODE_NO_WARNINGS = '1';
 
   // Create client + adapter (DD13: pass onGetTraceContext for trace stitching)
+  const otlpEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
   const client = new (
     CopilotClient as new (
       opts?: unknown,
     ) => { stop(): Promise<unknown> }
   )({
     onGetTraceContext: () => {
-      const traceparent = getTraceparent();
-      return traceparent ? { traceparent } : {};
+      const carrier: Record<string, string> = {};
+      propagation.inject(context.active(), carrier);
+      return carrier;
     },
+    ...(otlpEndpoint && {
+      telemetry: { otlpEndpoint },
+    }),
   });
   // biome-ignore lint/suspicious/noExplicitAny: CopilotClient doesn't implement our ICopilotClient exactly
   const adapter = new SdkCopilotAdapter(client as any);
@@ -100,10 +105,16 @@ export async function createSdkRuntime(
   };
   process.on('SIGINT', sigintHandler);
 
-  const cleanup = () => {
+  const cleanup = async () => {
     process.removeListener('SIGINT', sigintHandler);
     delete process.env.NODE_NO_WARNINGS;
-    client.stop().catch(() => {});
+    // When telemetry is active, give the CLI's OTel batch exporter time to
+    // flush its pending spans (including the session root span) before we
+    // terminate the process.
+    if (process.env.MINIH_TELEMETRY === 'true') {
+      await new Promise((r) => setTimeout(r, 5000));
+    }
+    await client.stop().catch(() => {});
   };
 
   return { adapter, cleanup };

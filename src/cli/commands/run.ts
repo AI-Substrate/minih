@@ -378,7 +378,7 @@ export function registerRunCommand(program: Command): void {
             formatError('run', ErrorCodes.AGENT_EXECUTION_FAILED, msg),
           );
         } finally {
-          runtime.cleanup();
+          await runtime.cleanup();
         }
       },
     );

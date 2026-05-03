@@ -287,7 +287,7 @@ export function registerResumeCommand(program: Command): void {
             formatError('resume', ErrorCodes.AGENT_EXECUTION_FAILED, msg),
           );
         } finally {
-          runtime.cleanup();
+          await runtime.cleanup();
         }
       },
     );

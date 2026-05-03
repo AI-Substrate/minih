@@ -30,6 +30,13 @@
  *   E147  RESUME_IN_PROGRESS       — resume-intent.lock held by another caller
  *   E148  INBOX_CORRUPT            — inbox file has torn final line
  *   E149  MCP_SPAWN_FAILED         — inside MCP subprocess failed to start
+ *
+ * Plan 017 — agent-pack install/info/list/remove:
+ *   E180  AGENT_PACK_REGISTRY_MISS     — slug not in baked-in registry (and not a git URL)
+ *   E181  AGENT_PACK_FETCH_FAILED      — network/git error pulling source
+ *   E182  AGENT_PACK_INVALID           — downloaded archive missing prompt.md or has wrong shape
+ *   E183  AGENT_PACK_ALREADY_INSTALLED — folder exists locally without `.minih-source.json` (hand-rolled agent)
+ *   E184  AGENT_PACK_SOURCE_MISMATCH   — `.minih-source.json` source URL mismatch
  */
 
 export const ErrorCodes = {
@@ -63,6 +70,12 @@ export const ErrorCodes = {
   // Plan 009 Phase 2 — view command
   AMBIGUOUS_RUN_ID: 'E170',
   RUN_NOT_FOUND: 'E171',
+  // Plan 017 — agent-pack install/info/list/remove
+  AGENT_PACK_REGISTRY_MISS: 'E180',
+  AGENT_PACK_FETCH_FAILED: 'E181',
+  AGENT_PACK_INVALID: 'E182',
+  AGENT_PACK_ALREADY_INSTALLED: 'E183',
+  AGENT_PACK_SOURCE_MISMATCH: 'E184',
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];

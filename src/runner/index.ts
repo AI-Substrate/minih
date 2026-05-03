@@ -1,3 +1,39 @@
+// Plan 017 — agent-pack module (install/info/list/remove + manifest/registry/sidecar/fetcher)
+
+export type {
+  AgentManifestValidationResult,
+  AgentPackManifest,
+  AgentPackManifestFile,
+  AgentPackSource,
+  FetchTarballResult,
+  IAgentPackFetcher,
+  InstallAction,
+  MinihSourceSidecar,
+  ParsedAgentUrl,
+  RegistryCatalog,
+  RegistryEntry,
+} from './agent-pack/index.js';
+export {
+  AGENT_MANIFEST_FILENAME,
+  CANONICAL_AGENT_FILES,
+  checkManifestPath,
+  computeFileChecksums,
+  FakeAgentPackFetcher,
+  GitHubAgentPackFetcher,
+  listRegistryAgents,
+  parseAgentUrl,
+  RUNTIME_DIR_NAMES,
+  readAgentManifest,
+  readRegistryCatalog,
+  readSourceSidecar,
+  renderAgentUrlCanonical,
+  resolveRegistrySlug,
+  SOURCE_SIDECAR_FILENAME,
+  synthesizeImplicitManifest,
+  validateManifest,
+  verifyChecksums,
+  writeSourceSidecar,
+} from './agent-pack/index.js';
 export {
   AtomicWriteCrossFsError,
   writeFileAtomic,

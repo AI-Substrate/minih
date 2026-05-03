@@ -86,11 +86,28 @@ stateDiagram-v2
 | Phase 3 | ✓ done | 2026-05-03 | 2026-05-03 | Real GitHub fetch + tarball extraction (`073b339`) |
 | Phase 4 | ⚠ partial | — | — | install/info/list shipped; remove + confirmation prompt + `--check` flags pending (FX003+) |
 | Phase 5 | ✓ done | 2026-05-03 | 2026-05-03 | Registry seed + dogfood — `code-review-companion` end-to-end verified live in 1.6s; `agent list --available` wired; T011 follow-up registered |
-| Phase 6 | ⏭ next | — | — | Docs + release notes |
+| Phase 6 | ✓ done | 2026-05-03 | 2026-05-03 | Docs phase shipped — `docs/how/agent-pack.md` (~520 LOC), README "Agent Packs" section, AGENTS.md companion-mode install step, AGENTS_README.md getting-started mention, runner Concepts table refresh; companion review caught F001/F002/F003 (HIGH+HIGH+MEDIUM) doc-vs-code drift + all 3 fixed inline before phase close |
 
 ---
 
 ## Flight Log
+
+### 2026-05-03 (Phase 6)
+
+- ✅ **Phase 6 dossier generated** via `/plan-5-v2-phase-tasks-and-brief --phase 6` — 6 tasks (T6.1-T6.6); skipped formal validate-v2 sweep (docs-only, low risk; companion review provides equivalent live coverage)
+- ✅ Companion booted (run `2026-05-03T16-08-00-909Z-ca43`) using lessons from Phase 5 (`mode: async, detach: true`, no output piping)
+- ✅ T6.1 `docs/how/agent-pack.md` authored (~520 LOC) — manifest format, sidecar, security model, error reference, curation, common pitfalls; cross-link to companion-mode.md (no duplication)
+- ✅ Companion T6.1 review fired 3 HIGH/MEDIUM findings (catch-rate vindicating Power-On-Mode):
+  - F001 HIGH: how-to claimed `--yes` skipped a confirmation prompt — but no prompt exists in v1
+  - F002 HIGH: error table claimed E184 was active — no throw site exists; current code returns `upgraded`
+  - F003 MEDIUM: manifest guard claims included drive-letter coverage + "before extract" — both inaccurate (drive-letter is tarball-level; tarball extracts to tmp before manifest validation)
+- ✅ All 3 findings fixed inline (commit `ab53691`) before continuing
+- ✅ T6.2 README "Agent Packs" H2 added after Quick Start (discoverable in first-glance browse)
+- ✅ T6.3 AGENTS.md companion-mode preflight now includes `minih agent install code-review-companion` first-time setup
+- ✅ T6.4 AGENTS_README.md install/getting-started mentions `agent` subcommand; `dist/AGENTS_README.md` rebuilt + verified byte-identical
+- ✅ T6.5 runner Concepts table — refreshed agent-pack-install entry (was P3 stub) + new "Bundled agent registry" entry covering catalog read + slug resolution + curation principle
+- ✅ T6.6 plan progress + flight log + final commit hygiene
+- ⏭ Next: PR `007-backgrounding` → `main` to ship plan 017; FX003 post-merge follow-up; Phase 4 remainder as fix dossiers
 
 ### 2026-05-03 (Phase 5)
 

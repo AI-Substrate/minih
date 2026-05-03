@@ -3,7 +3,7 @@
 **Plan**: [`../../agent-pack-install-plan.md`](../../agent-pack-install-plan.md)
 **Phase**: Phase 6: Docs + release notes
 **Generated**: 2026-05-03
-**Status**: Ready for takeoff
+**Status**: Landed
 
 ---
 
@@ -59,7 +59,7 @@ stateDiagram-v2
     S5 --> S6
     S6 --> [*]
 
-    class S1,S2,S3,S4,S5,S6 pending
+    class S1,S2,S3,S4,S5,S6 done
 ```
 
 **Legend**: grey = pending | yellow = active | red = blocked | green = done
@@ -73,7 +73,7 @@ stateDiagram-v2
 - [x] **Stage 3: AGENTS.md companion install** — replace hand-copy snippet with `minih agent install`
 - [x] **Stage 4: AGENTS_README.md getting started** — paragraph mentioning `agent` subcommand
 - [x] **Stage 5: runner Concepts table** — add agent-pack entry
-- [ ] **Stage 6: Plan progress + flight log + final commit** — Phase 6 → ✅; conventional commit
+- [x] **Stage 6: Plan progress + flight log + final commit** — Phase 6 → ✅; conventional commit
 
 ---
 
@@ -104,4 +104,4 @@ stateDiagram-v2
 - [x] T6.3: AGENTS.md companion-mode install
 - [x] T6.4: AGENTS_README.md getting-started
 - [x] T6.5: runner Concepts table refresh
-- [ ] T6.6: Plan progress + flight log + final commit
+- [x] T6.6: Plan progress + flight log + final commit

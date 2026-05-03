@@ -23,9 +23,11 @@ import {
   type InstallSource,
   installAgentPack,
   listAgents,
+  listRegistryAgents,
   parseAgentUrl,
   parseFrontmatter,
   readAgentManifest,
+  readRegistryCatalog,
   readSourceSidecar,
   resolveAgent,
   validateSlug,
@@ -381,10 +383,45 @@ function registerListSubcommand(agent: Command, program: Command): void {
     .command('list')
     .description(
       'List installed agents in the project, with source-type column ' +
-        '(local / url / registry / hand-rolled).',
+        '(local / url / registry / hand-rolled). Use --available to list ' +
+        'installable agents from the bundled registry catalog instead.',
     )
-    .action(() => {
+    .option(
+      '--available',
+      'List installable agents from the bundled registry catalog (with installed/not-installed status) instead of installed agents.',
+    )
+    .action((opts: { available?: boolean }) => {
       const agentsDir = program.opts().agentsDir ?? 'agents';
+
+      if (opts.available) {
+        const catalog = readRegistryCatalog();
+        const installed = new Set(listAgents(agentsDir).map((a) => a.slug));
+        const entries = listRegistryAgents(catalog).map((entry) => ({
+          slug: entry.slug,
+          description: entry.description,
+          tags: entry.tags ?? [],
+          url: entry.url,
+          ref: entry.ref,
+          subpath: entry.subpath ?? null,
+          since: entry.since ?? null,
+          minihVersion: entry.minihVersion ?? null,
+          installed: installed.has(entry.slug),
+        }));
+
+        if (process.stderr.isTTY) {
+          renderAvailableListHuman(entries);
+        }
+
+        exitWithEnvelope(
+          formatSuccess('agent list', {
+            mode: 'available',
+            agents: entries,
+            count: entries.length,
+          }),
+        );
+        return;
+      }
+
       const agents = listAgents(agentsDir);
 
       const entries = agents.map((def) => {
@@ -614,5 +651,42 @@ function renderListHuman(
   }
   process.stderr.write(
     `\n  ${chalk.dim('Legend:')} ${chalk.dim('📦 local · ☁️ url · 🏪 registry · 👋 hand-rolled · ? unknown')}\n\n`,
+  );
+}
+
+function renderAvailableListHuman(
+  entries: Array<{
+    slug: string;
+    description: string;
+    installed: boolean;
+  }>,
+): void {
+  if (entries.length === 0) {
+    process.stderr.write(
+      chalk.yellow(
+        '\n  No agents in the bundled registry catalog.\n  (This is unusual — the registry should ship at least the canonical companion. Is the build artifact missing?)\n\n',
+      ),
+    );
+    return;
+  }
+
+  process.stderr.write('\n');
+  process.stderr.write(
+    `  ${chalk.bold('Slug'.padEnd(28))} ${chalk.bold('Status'.padEnd(14))} ${chalk.bold('Description')}\n`,
+  );
+  process.stderr.write(
+    `  ${'─'.repeat(28)} ${'─'.repeat(14)} ${'─'.repeat(40)}\n`,
+  );
+  for (const e of entries) {
+    const status = e.installed
+      ? chalk.green('✓ installed')
+      : chalk.dim('  available');
+    const desc = (e.description ?? '').slice(0, 60);
+    process.stderr.write(
+      `  ${chalk.cyan(e.slug.padEnd(28))} ${status.padEnd(14)} ${desc}\n`,
+    );
+  }
+  process.stderr.write(
+    `\n  ${chalk.dim('Install with:')} minih agent install <slug>\n\n`,
   );
 }

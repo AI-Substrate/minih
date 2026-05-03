@@ -1,6 +1,6 @@
 ---
 description: "Long-running coordinated code-review companion that pairs alongside a human or supervising agent."
-tags: [review, quality, coordination, exemplar]
+tags: [companion, review, quality, coordination, exemplar]
 model: gpt-5.5
 timeout: 7200
 coordination: enabled

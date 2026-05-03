@@ -26,7 +26,8 @@
 
 ## Acceptance
 
-- [ ] Resolver filters out manifest-active-but-PID-dead candidates.
-- [ ] Reproduction case works: `minih attach demo-companion` with stale + live runs returns the live one.
-- [ ] MW11 marked RESOLVED.
-- [ ] `just fft` clean.
+- [x] Resolver filters out manifest-active-but-PID-dead candidates.
+- [x] Reproduction case works: `minih attach demo-companion` with stale + live runs returns the live one.
+- [x] MW11 marked RESOLVED.
+- [x] `just fft` clean.
+- [x] **Companion F001 fix (post-validation)**: diagnostics carried through null/fallback paths via new `resolveRunWithDiagnostics()` helper; `attach.ts` and `view.ts` consume it.

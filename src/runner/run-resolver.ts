@@ -81,13 +81,90 @@ export async function resolveRun(
     case 'by-id':
       return resolveById(input.slug, slugDir, input.mode.runId, input);
     case 'latest-active':
-      return resolveLatestActive(input.slug, slugDir, input);
+      return (await resolveLatestActive(input.slug, slugDir, input)).resolved;
     case 'latest-completed':
-      return resolveLatestCompleted(input.slug, slugDir, input);
+      return resolveLatestCompleted(input.slug, slugDir, input, []);
     case 'latest-any': {
-      const active = await resolveLatestActive(input.slug, slugDir, input);
+      // FX009 — `latest-any` falls through to `latest-completed` when no
+      // active runs resolve. Carry forward any active-search diagnostics
+      // (e.g. stale-active-skipped entries) so the operator's downstream
+      // surface can still see WHY active candidates were filtered out.
+      const { resolved: active, diagnostics } = await resolveLatestActive(
+        input.slug,
+        slugDir,
+        input,
+      );
       if (active) return active;
-      return resolveLatestCompleted(input.slug, slugDir, input);
+      return resolveLatestCompleted(input.slug, slugDir, input, diagnostics);
+    }
+  }
+}
+
+/**
+ * Public extension of {@link resolveRun} that exposes the resolver's
+ * diagnostic trail across ALL paths — including `null` (no active run
+ * found) where the underlying `resolveLatestActive` would otherwise
+ * drop them.
+ *
+ * FX009 — surface stale-active-skipped diagnostics to `attach`/`view`
+ * even when the resolver returns null. Without this, the operator sees
+ * `No active run found` with no explanation that stale-active
+ * candidates were filtered.
+ */
+export async function resolveRunWithDiagnostics(
+  input: ResolveRunInput,
+): Promise<{
+  resolved: ResolvedRun | null;
+  diagnostics: ResolverDiagnostic[];
+}> {
+  const agentsDir = input.agentsDir ?? path.join(process.cwd(), 'agents');
+  const slugDir = path.join(agentsDir, input.slug);
+
+  try {
+    const stat = await fs.stat(slugDir);
+    if (!stat.isDirectory()) return { resolved: null, diagnostics: [] };
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return { resolved: null, diagnostics: [] };
+    }
+    throw err;
+  }
+
+  switch (input.mode.kind) {
+    case 'by-id': {
+      const resolved = await resolveById(
+        input.slug,
+        slugDir,
+        input.mode.runId,
+        input,
+      );
+      return { resolved, diagnostics: resolved?.diagnostics ?? [] };
+    }
+    case 'latest-active':
+      return resolveLatestActive(input.slug, slugDir, input);
+    case 'latest-completed': {
+      const resolved = await resolveLatestCompleted(
+        input.slug,
+        slugDir,
+        input,
+        [],
+      );
+      return { resolved, diagnostics: resolved?.diagnostics ?? [] };
+    }
+    case 'latest-any': {
+      const { resolved: active, diagnostics } = await resolveLatestActive(
+        input.slug,
+        slugDir,
+        input,
+      );
+      if (active) return { resolved: active, diagnostics };
+      const completed = await resolveLatestCompleted(
+        input.slug,
+        slugDir,
+        input,
+        diagnostics,
+      );
+      return { resolved: completed, diagnostics };
     }
   }
 }
@@ -113,7 +190,10 @@ async function resolveLatestActive(
   slug: string,
   slugDir: string,
   input: ResolveRunInput,
-): Promise<ResolvedRun | null> {
+): Promise<{
+  resolved: ResolvedRun | null;
+  diagnostics: ResolverDiagnostic[];
+}> {
   const candidates = await listRunDirs(slugDir);
   const active: Array<{
     runId: string;
@@ -168,7 +248,7 @@ async function resolveLatestActive(
     }
   }
 
-  if (active.length === 0) return null;
+  if (active.length === 0) return { resolved: null, diagnostics };
 
   if (active.length > 1) {
     const list: ActiveRunCandidate[] = active.map((a) => ({
@@ -180,8 +260,8 @@ async function resolveLatestActive(
   }
 
   const sole = active[0];
-  if (!sole) return null; // satisfy noUncheckedIndexedAccess
-  return projectActive(
+  if (!sole) return { resolved: null, diagnostics };
+  const resolved = await projectActive(
     slug,
     sole.runId,
     sole.runDir,
@@ -189,18 +269,26 @@ async function resolveLatestActive(
     diagnostics,
     input,
   );
+  return { resolved, diagnostics };
 }
 
 async function resolveLatestCompleted(
   slug: string,
   _slugDir: string,
   input: ResolveRunInput,
+  carriedDiagnostics: ResolverDiagnostic[],
 ): Promise<ResolvedRun | null> {
   // Reuse findRunSession() for completed-only fallback.
   const agentsDir = input.agentsDir ?? path.join(process.cwd(), 'agents');
   const session = findRunSession(slug, agentsDir);
   if (!session) return null;
-  return loadRun(slug, session.runId, session.runDir, input, []);
+  return loadRun(
+    slug,
+    session.runId,
+    session.runDir,
+    input,
+    carriedDiagnostics,
+  );
 }
 
 async function loadRun(

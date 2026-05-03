@@ -20,8 +20,9 @@ import type { Command } from 'commander';
 import {
   MultipleActiveRunsError,
   type ResolvedRun,
+  type ResolverDiagnostic,
   resolveAgent,
-  resolveRun,
+  resolveRunWithDiagnostics,
 } from '../../runner/index.js';
 import { mountHumanApp, pushHumanModel } from '../human/app.js';
 import { createInputBridge } from '../human/input-bridge.js';
@@ -48,12 +49,15 @@ export function registerViewCommand(program: Command): void {
         opts: { run?: string; agentsDir?: string },
       ): Promise<void> => {
         let resolved: ResolvedRun | null = null;
+        let resolverDiagnostics: ResolverDiagnostic[] = [];
         try {
-          resolved = await resolveRunWithFallback(
+          const result = await resolveRunWithFallback(
             slug,
             opts.run,
             opts.agentsDir,
           );
+          resolved = result.resolved;
+          resolverDiagnostics = result.diagnostics;
         } catch (err) {
           if (err instanceof MultipleActiveRunsError) {
             const envelope = formatError(
@@ -75,6 +79,15 @@ export function registerViewCommand(program: Command): void {
           return;
         }
 
+        // FX009 — surface resolver diagnostics BEFORE deciding null vs
+        // resolved, so operators see stale-skip details even when the
+        // resolver returns null.
+        for (const diag of resolverDiagnostics) {
+          process.stderr.write(
+            `[skipped run ${diag.runId}: ${diag.message}]\n`,
+          );
+        }
+
         if (!resolved) {
           const envelope = formatError(
             'view',
@@ -83,6 +96,9 @@ export function registerViewCommand(program: Command): void {
             {
               slug,
               tried: ['latest-active', 'latest-completed'],
+              ...(resolverDiagnostics.length > 0 && {
+                diagnostics: resolverDiagnostics,
+              }),
             },
           );
           exitWithEnvelope(envelope);
@@ -92,15 +108,6 @@ export function registerViewCommand(program: Command): void {
         const runDir = resolved.runDir;
         const runStatus = resolved.manifest?.status ?? 'unknown';
         const isTerminal = runStatus === 'completed' || runStatus === 'failed';
-
-        // FX009 — surface resolver diagnostics (e.g. stale-active runs
-        // skipped by the PID-liveness filter) so operators learn about
-        // them without being blocked. Single dimmed line per diagnostic.
-        for (const diag of resolved.diagnostics) {
-          process.stderr.write(
-            `[skipped run ${diag.runId}: ${diag.message}]\n`,
-          );
-        }
 
         // FX008 — load the agent definition so the bridge resolves to
         // an informative read-only capability label. `view` is read-only
@@ -187,33 +194,23 @@ async function resolveRunWithFallback(
   slug: string,
   runIdFlag: string | undefined,
   agentsDirOverride: string | undefined,
-): Promise<ResolvedRun | null> {
+): Promise<{
+  resolved: ResolvedRun | null;
+  diagnostics: ResolverDiagnostic[];
+}> {
   if (runIdFlag) {
-    return resolveRun({
+    return resolveRunWithDiagnostics({
       slug,
       mode: { kind: 'by-id', runId: runIdFlag },
       agentsDir: agentsDirOverride,
     });
   }
   // Try latest-active first; on miss, fall back to latest-completed.
-  try {
-    const active = await resolveRun({
-      slug,
-      mode: { kind: 'latest-active' },
-      agentsDir: agentsDirOverride,
-    });
-    if (active) return active;
-  } catch (err) {
-    // MultipleActiveRunsError must propagate; "no active run" should fall through.
-    if (err instanceof MultipleActiveRunsError) throw err;
-  }
-  try {
-    return await resolveRun({
-      slug,
-      mode: { kind: 'latest-completed' },
-      agentsDir: agentsDirOverride,
-    });
-  } catch {
-    return null;
-  }
+  // `latest-any` already does this AND carries forward active-search
+  // diagnostics into the completed-run resolution (FX009).
+  return resolveRunWithDiagnostics({
+    slug,
+    mode: { kind: 'latest-any' },
+    agentsDir: agentsDirOverride,
+  });
 }

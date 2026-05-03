@@ -113,7 +113,7 @@ export {
   writeManifest,
 } from './run-manifest.js';
 export type { ResolveRunInput } from './run-resolver.js';
-export { resolveRun } from './run-resolver.js';
+export { resolveRun, resolveRunWithDiagnostics } from './run-resolver.js';
 export {
   computeVelocity,
   MINIH_ENV_KEYS,

@@ -29,8 +29,9 @@ import {
   coordinationRunLocation,
   MultipleActiveRunsError,
   type ResolvedRun,
+  type ResolverDiagnostic,
   resolveAgent,
-  resolveRun,
+  resolveRunWithDiagnostics,
 } from '../../runner/index.js';
 import { mountHumanApp, pushHumanModel } from '../human/app.js';
 import { createInputBridge } from '../human/input-bridge.js';
@@ -66,8 +67,11 @@ export function registerAttachCommand(program: Command): void {
         },
       ): Promise<void> => {
         let resolved: ResolvedRun | null = null;
+        let resolverDiagnostics: ResolverDiagnostic[] = [];
         try {
-          resolved = await resolveAttachRun(slug, opts.run, opts.agentsDir);
+          const result = await resolveAttachRun(slug, opts.run, opts.agentsDir);
+          resolved = result.resolved;
+          resolverDiagnostics = result.diagnostics;
         } catch (err) {
           if (err instanceof MultipleActiveRunsError) {
             exitWithEnvelope(
@@ -91,13 +95,29 @@ export function registerAttachCommand(program: Command): void {
           return;
         }
 
+        // FX009 — surface resolver diagnostics (e.g. stale-active runs
+        // skipped by the PID-liveness filter) BEFORE deciding null vs
+        // resolved, so operators see the skip detail even when the
+        // resolver returns null. Single dimmed line per diagnostic.
+        for (const diag of resolverDiagnostics) {
+          process.stderr.write(
+            `[skipped run ${diag.runId}: ${diag.message}]\n`,
+          );
+        }
+
         if (!resolved) {
           exitWithEnvelope(
             formatError(
               'attach',
               ErrorCodes.RUN_NOT_FOUND,
               `No active run found for "${slug}". Use \`minih view\` for completed runs.`,
-              { slug, tried: ['latest-active'] },
+              {
+                slug,
+                tried: ['latest-active'],
+                ...(resolverDiagnostics.length > 0 && {
+                  diagnostics: resolverDiagnostics,
+                }),
+              },
             ),
           );
           return;
@@ -207,9 +227,12 @@ async function resolveAttachRun(
   slug: string,
   runIdFlag: string | undefined,
   agentsDirOverride: string | undefined,
-): Promise<ResolvedRun | null> {
+): Promise<{
+  resolved: ResolvedRun | null;
+  diagnostics: ResolverDiagnostic[];
+}> {
   if (runIdFlag) {
-    return resolveRun({
+    return resolveRunWithDiagnostics({
       slug,
       mode: { kind: 'by-id', runId: runIdFlag },
       agentsDir: agentsDirOverride,
@@ -218,7 +241,7 @@ async function resolveAttachRun(
   // attach prefers a live run only — fallback to completed makes no sense
   // for a write-mode tool. If no active run exists, the operator should
   // use `view` instead. (View's resolver already covers latest-completed.)
-  return resolveRun({
+  return resolveRunWithDiagnostics({
     slug,
     mode: { kind: 'latest-active' },
     agentsDir: agentsDirOverride,

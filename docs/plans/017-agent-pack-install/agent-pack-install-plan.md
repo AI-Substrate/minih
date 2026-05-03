@@ -333,6 +333,7 @@ No new domains. `agent-pack/` is an internal sub-module of `runner`, exposed via
 | ID | Created | Summary | Domain(s) | Status | Source |
 |----|---------|---------|-----------|--------|--------|
 | FX001 | 2026-05-03 | Local-path install — vertical slice of `minih agent install` (subsumes part of Phase 2 + Phase 4 for the local source branch). URL/registry stub with E182 "not yet available" until Phase 3/4 land. | runner + cli | Complete | User proposal: "what about we upgrade the command to give a local file path" |
+| FX002 | 2026-05-03 | `agent info` + `agent list` — completes the local-install user loop. Reads `.minih-source.json` + `agent.json` + `prompt.md` frontmatter; surfaces per-file drift status; distinguishes minih-installed from hand-rolled. | cli | Complete | User direction: "okay great so what's next" → recommended completing the loop before Phase 3 |
 
 ## Risks (Plan-Level)
 

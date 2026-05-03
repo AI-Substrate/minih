@@ -68,6 +68,13 @@ describe('resolveRun by-id', () => {
 });
 
 describe('resolveRun latest-active', () => {
+  // FX009 — these tests synthesise manifests with PIDs that aren't alive
+  // in the test process; they're testing OTHER resolver behaviours
+  // (multi-active throwing, torn-manifest tolerance, stale-threshold).
+  // Bypass the PID-liveness filter by injecting "always alive". The
+  // dedicated PID-liveness regression test lives further down.
+  const allAlive = () => true;
+
   it('returns the single active run when one exists', async () => {
     const runDir = makeRunFolder('demo', '01HRUN_ACTIVE_SOLO_AAAAAAA');
     await writeManifest(
@@ -82,6 +89,7 @@ describe('resolveRun latest-active', () => {
     const result = await resolveRun({
       slug: 'demo',
       mode: { kind: 'latest-active' },
+      isProcessAlive: allAlive,
     });
     expect(result?.runId).toBe('01HRUN_ACTIVE_SOLO_AAAAAAA');
   });
@@ -115,7 +123,11 @@ describe('resolveRun latest-active', () => {
     );
 
     await expect(
-      resolveRun({ slug: 'demo', mode: { kind: 'latest-active' } }),
+      resolveRun({
+        slug: 'demo',
+        mode: { kind: 'latest-active' },
+        isProcessAlive: allAlive,
+      }),
     ).rejects.toMatchObject({
       name: 'MultipleActiveRunsError',
       candidates: expect.arrayContaining([
@@ -129,6 +141,7 @@ describe('resolveRun latest-active', () => {
     const result = await resolveRun({
       slug: 'demo',
       mode: { kind: 'latest-active' },
+      isProcessAlive: allAlive,
     });
     expect(result).toBeNull();
   });
@@ -152,6 +165,7 @@ describe('resolveRun latest-active', () => {
     const result = await resolveRun({
       slug: 'demo',
       mode: { kind: 'latest-active' },
+      isProcessAlive: allAlive,
     });
     expect(result?.runId).toBe(runIdGood);
     expect(result?.diagnostics.some((d) => d.runId === runIdBad)).toBe(true);
@@ -174,8 +188,122 @@ describe('resolveRun latest-active', () => {
       slug: 'demo',
       mode: { kind: 'latest-active' },
       staleThresholdMs: 1000,
+      isProcessAlive: allAlive,
     });
     expect(result?.liveness).toBe('stale');
+  });
+
+  // FX009 — PID-liveness filter regression. A manifest claiming active
+  // with a dead PID must be skipped, NOT counted toward MultipleActiveRunsError.
+  // Two-run fixture: one fake-live PID, one fake-dead PID. The injected
+  // predicate decides which is which without any platform assumptions.
+  describe('FX009 — PID-liveness filter (resolves MW11)', () => {
+    const FAKE_LIVE_PID = 12345;
+    const FAKE_DEAD_PID = 99999;
+    const isAlive = (pid: number): boolean => pid === FAKE_LIVE_PID;
+
+    it('skips a manifest with status="active" but dead PID and returns the live one', async () => {
+      const liveRunId = '01HRUN_FX009_LIVE_AAAAAAAAAA';
+      const deadRunId = '01HRUN_FX009_DEAD_AAAAAAAAAA';
+      const liveDir = makeRunFolder('demo', liveRunId);
+      const deadDir = makeRunFolder('demo', deadRunId);
+      await writeManifest(
+        liveDir,
+        makeManifest({
+          runDir: liveDir,
+          slug: 'demo',
+          runId: liveRunId,
+          status: 'active',
+          pid: FAKE_LIVE_PID,
+        }),
+      );
+      await writeManifest(
+        deadDir,
+        makeManifest({
+          runDir: deadDir,
+          slug: 'demo',
+          runId: deadRunId,
+          status: 'active',
+          pid: FAKE_DEAD_PID,
+        }),
+      );
+
+      const result = await resolveRun({
+        slug: 'demo',
+        mode: { kind: 'latest-active' },
+        isProcessAlive: isAlive,
+      });
+
+      expect(result?.runId).toBe(liveRunId);
+      // Diagnostic for the skipped stale-active candidate is recorded so
+      // the CLI can surface it (FX009-4).
+      expect(
+        result?.diagnostics.some(
+          (d) =>
+            d.runId === deadRunId &&
+            d.message.includes(`pid ${FAKE_DEAD_PID} is dead`),
+        ),
+      ).toBe(true);
+    });
+
+    it('returns null instead of MultipleActiveRunsError when only stale-active candidates exist', async () => {
+      const dead1 = '01HRUN_FX009_DEAD1_AAAAAAAAA';
+      const dead2 = '01HRUN_FX009_DEAD2_AAAAAAAAA';
+      const dir1 = makeRunFolder('demo', dead1);
+      const dir2 = makeRunFolder('demo', dead2);
+      await writeManifest(
+        dir1,
+        makeManifest({
+          runDir: dir1,
+          slug: 'demo',
+          runId: dead1,
+          status: 'active',
+          pid: FAKE_DEAD_PID,
+        }),
+      );
+      await writeManifest(
+        dir2,
+        makeManifest({
+          runDir: dir2,
+          slug: 'demo',
+          runId: dead2,
+          status: 'active',
+          pid: FAKE_DEAD_PID + 1,
+        }),
+      );
+
+      const result = await resolveRun({
+        slug: 'demo',
+        mode: { kind: 'latest-active' },
+        isProcessAlive: isAlive,
+      });
+
+      expect(result).toBeNull(); // no active candidates left after filter
+    });
+
+    it('does NOT filter manifests where pid is null (freshly-booting runs)', async () => {
+      const runId = '01HRUN_FX009_NOPID_AAAAAAAAA';
+      const dir = makeRunFolder('demo', runId);
+      const m = makeManifest({
+        runDir: dir,
+        slug: 'demo',
+        runId,
+        status: 'starting',
+      });
+      // Force pid:null to simulate a brand-new run that hasn't written its
+      // pid yet. The filter must NOT drop these — let the time-based stale
+      // threshold catch them later if they're truly dead.
+      await writeManifest(dir, { ...m, pid: null as unknown as number });
+
+      const result = await resolveRun({
+        slug: 'demo',
+        mode: { kind: 'latest-active' },
+        // Predicate would reject any pid (always false) — but null pid
+        // never reaches it, so the run still resolves.
+        isProcessAlive: () => false,
+      });
+      expect(result?.runId).toBe(runId);
+    });
   });
 });
 

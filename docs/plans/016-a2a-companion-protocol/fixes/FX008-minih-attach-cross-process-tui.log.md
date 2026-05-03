@@ -90,6 +90,7 @@ Remaining: send `control:stop` to companion, capture farewell, fold any open fin
 
 - **FX008-11**: e2e attach wake assertion. Marker fixture infrastructure deferred. Recommend filing as a separate fix dossier (FX009?) when scoped.
 - **F001 (FX007 race)**: Companion's review of the FX007 dossier surfaced a setup race: pre-render before watcher registration leaves a gap. To address in FX007 implementation phase — change to watch-then-scan (or scan-watch-scan) sequence.
+- **2026-05-03 — Resolver vs detector asymmetry RESOLVED**: live demo of FX008 surfaced that `resolveLatestActive` didn't reuse `detectRunState`'s PID-liveness check. Addressed by [FX009](./FX009-stale-active-resolver-pid-check.md) — `isProcessAlive?` injection on `ResolveRunInput`; resolver filters dead-PID candidates; diagnostic surfaced to stderr by `attach`/`view`.
 
 
 

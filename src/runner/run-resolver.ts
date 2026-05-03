@@ -22,6 +22,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { findRunSession } from './folder.js';
 import { MultipleActiveRunsError } from './human-view-errors.js';
+import { isProcessAliveDefault } from './run-eligibility.js';
 import { ManifestSchemaVersionError, readManifest } from './run-manifest.js';
 import type {
   ActiveRunCandidate,
@@ -49,6 +50,16 @@ export interface ResolveRunInput {
   agentsDir?: string;
   /** Inject "now" for deterministic tests. */
   now?: () => number;
+  /**
+   * Inject a PID liveness predicate for deterministic tests. Defaults to
+   * {@link isProcessAliveDefault} (Node's `process.kill(pid, 0)` probe).
+   *
+   * FX009 — `resolveLatestActive` uses this to filter out manifests that
+   * claim active but whose owning process is dead (crashed `minih run`,
+   * `kill -9`, etc.). Without it, stale `run.json` files block `attach`
+   * and `view` with spurious E170 ambiguous-run errors.
+   */
+  isProcessAlive?: (pid: number) => boolean;
 }
 
 export async function resolveRun(
@@ -138,6 +149,21 @@ async function resolveLatestActive(
       continue;
     }
     if (ACTIVE_STATUSES.has(manifest.status)) {
+      // FX009 — PID-liveness filter. A manifest claiming active is only
+      // really active if its owning process exists. Without this, a
+      // crashed `minih run` (Ctrl-C, kill -9, OOM) leaves status="active"
+      // forever and every later `minih view` / `minih attach` (no --run)
+      // hits MultipleActiveRunsError. The `pid != null` guard handles
+      // freshly-booting runs that haven't written their pid yet — those
+      // pass through and the time-based stale threshold catches them.
+      const isAlive = input.isProcessAlive ?? isProcessAliveDefault;
+      if (manifest.pid != null && !isAlive(manifest.pid)) {
+        diagnostics.push({
+          runId: c.runId,
+          message: `manifest.status="${manifest.status}" but pid ${manifest.pid} is dead — treating as stale`,
+        });
+        continue;
+      }
       active.push({ runId: c.runId, runDir: c.runDir, manifest });
     }
   }

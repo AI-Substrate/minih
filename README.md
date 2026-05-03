@@ -85,6 +85,28 @@ npx minih history my-agent     # List all past runs
 npx minih validate my-agent    # Re-validate latest output against current schema
 ```
 
+## Agent Packs — install curated agents in one command
+
+Don't hand-copy agents between projects. Install them instead:
+
+```bash
+minih agent install code-review-companion           # from the bundled registry
+minih agent install github:owner/repo#main:agents/x # from any public GitHub repo
+minih agent install /path/to/local/agent-folder     # from a local clone
+```
+
+Each install copies the agent's manifest-listed files into `agents/<slug>/`, writes a provenance sidecar (`.minih-source.json`), and is **idempotent** — re-running upgrades from upstream and atomic-swaps changed files while preserving runtime data (`runs/`, `inbox/`, `state/`).
+
+Browse the bundled catalog:
+
+```bash
+minih agent list --available    # what you can install by slug
+minih agent list                # what's already installed (with source-type column)
+minih agent info <slug>         # provenance, manifest, per-file drift status
+```
+
+Full surface — manifest format, security model, error reference, curation — in [`docs/how/agent-pack.md`](docs/how/agent-pack.md).
+
 ## Agent Folder Structure
 
 ```

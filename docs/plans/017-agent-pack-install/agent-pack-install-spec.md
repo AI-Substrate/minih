@@ -32,7 +32,7 @@
 
 - **Auto-discovery from `agents/`**: the registry is the only allowlist. Agents in the source repo that aren't registered stay invisible to install.
 - **Bundling agent files in the npm package**: only the registry catalog ships in `dist/`. Files come from GitHub at install time.
-- **Trust/verification tiers** (à la ANP/NANDA crypto-signed metadata): out of scope for v1. Confirmation prompt + commit sha display is the trust model.
+- **Trust/verification tiers** (à la ANP/NANDA crypto-signed metadata): out of scope for v1. The v1 trust UX is curated registry entries + the URL the user typed + post-install provenance display (`agent info` shows `commitSha`); the interactive confirmation prompt for non-registry URLs is **deferred to Phase 4 remainder** (`--yes` is accepted today as a forward-compat no-op).
 - **Code execution at install time**: even if a manifest lists `scripts/install.sh`, the file is copied — never run.
 - **Post-install hooks, file templating, dependency resolution**: deferred to v2.
 - **`minih agent search <query>`**: deferred to v2; verb is reserved.

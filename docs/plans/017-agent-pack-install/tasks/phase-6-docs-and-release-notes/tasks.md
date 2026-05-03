@@ -153,18 +153,32 @@ _Populated during implementation by plan-6._
 
 ## Acceptance Criteria
 
-- [ ] `docs/how/agent-pack.md` exists, ≥10 sections, ≥1 code block per section
-- [ ] `README.md` has discoverable "Agent Packs" H2 (no scroll past 4 H2s)
-- [ ] `AGENTS.md` companion-mode setup uses `minih agent install` instead of hand-copy
-- [ ] `AGENTS_README.md` install/getting-started mentions `agent` subcommand group
-- [ ] `dist/AGENTS_README.md` rebuilt + matches source
-- [ ] `docs/domains/runner/domain.md` Concepts table has agent-pack entry
-- [ ] All internal markdown links resolve (manual grep + `find` check)
-- [ ] `just fft` green
-- [ ] Final commit uses conventional `docs(plan-017):` prefix
+- [x] `docs/how/agent-pack.md` exists, ≥10 sections, ≥1 code block per section
+- [x] `README.md` has discoverable "Agent Packs" H2 (no scroll past 4 H2s)
+- [x] `AGENTS.md` companion-mode setup uses `minih agent install` instead of hand-copy
+- [x] `AGENTS_README.md` install/getting-started mentions `agent` subcommand group
+- [x] `dist/AGENTS_README.md` rebuilt + matches source
+- [x] `docs/domains/runner/domain.md` Concepts table has agent-pack entry
+- [x] All internal markdown links resolve (manual grep + `find` check)
+- [x] `just fft` green (930 passed | 16 skipped | 0 vulns)
+- [x] Final commit uses conventional `docs(plan-017):` prefix
 
 ---
 
 ## Validation Record
 
-_Skipped — Phase 6 is docs-only, validate-v2 lens analysis adds little signal vs the time cost. Companion review at commit-time provides equivalent coverage._
+_Formal `/validate-v2` lens sweep skipped — Phase 6 is docs-only. Companion review at commit-time provided equivalent coverage and **caught 8 real findings** (3 HIGH + 4 MEDIUM + 1 LOW) across the phase. All addressed inline before phase close. The companion's drift-audit checklist (added in Phase 5 T001 audit) was the load-bearing reviewer here — every finding flagged a doc-vs-code or doc-vs-doc inconsistency that would have shipped silently otherwise._
+
+### Companion findings reconciliation
+
+| ID | Severity | File | Disposition | Fix commit |
+|---|---|---|---|---|
+| F001 | HIGH | docs/how/agent-pack.md | ADDRESSED INLINE — `--yes` reframed as forward-compat no-op; URL section + What-we-do-NOT-do rewritten | `ab53691` |
+| F002 | HIGH | docs/how/agent-pack.md | ADDRESSED INLINE — E184 reframed as "reserved for future strict-mode guard" | `ab53691` |
+| F003 | MEDIUM | docs/how/agent-pack.md | ADDRESSED INLINE — manifest-vs-tarball guard timing clarified; drive-letter coverage moved to tarball-level | `ab53691` |
+| F006 | (duplicate of F007) | — | superseded by F007 | — |
+| F007 | HIGH | docs/how/agent-pack.md | ADDRESSED INLINE — final "Confirmation prompt + commit sha display is the v1 trust UX" sentence rewritten to match the corrected bullet above it | (this commit) |
+| F008 | MEDIUM | docs/domains/runner/domain.md | ADDRESSED INLINE — pre-fetch self-install check qualified as "Registry installs only" since URL path doesn't have it yet | (this commit) |
+| F009 | MEDIUM | docs/domains/runner/domain.md | ADDRESSED INLINE — Fetcher injection seam updated: fetcher passed for `url \|\| registry`, not just `url` | (this commit) |
+| F010 | MEDIUM | docs/plans/017-agent-pack-install/agent-pack-install-spec.md | ADDRESSED INLINE — spec non-goal #3 trust model wording aligned with deferred-prompt reality | (this commit) |
+| F011 | LOW | this file | ADDRESSED INLINE — acceptance criteria checked off + Validation Record populated | (this commit) |

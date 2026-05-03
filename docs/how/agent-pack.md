@@ -261,7 +261,7 @@ You should never see this in non-test sessions. If you do, something is wrong.
 - **No interactive confirmation prompt** on non-registry URL installs (yet). The trust UX is "you trust the curated registry + you trust the URL you typed". A confirmation prompt for non-registry sources is a deferred Phase 4 task — see [Phase 4 partial in the plan](../plans/017-agent-pack-install/agent-pack-install-plan.md). `--yes` is accepted today as a no-op for forward-compat with that future prompt.
 - **No mode-bit honoring** during stream copy — files land as the running user's umask.
 - **No retry on 5xx** — fetch is one-shot. Retry policy is the caller's choice.
-- **No verification tier yet** (e.g. signed metadata). Confirmation prompt + commit sha display is the v1 trust UX.
+- **No verification tier yet** (e.g. signed metadata). The v1 trust UX is curated registry entries + the URL you typed + post-install provenance display (`agent info` shows `commitSha` so you can audit what landed); non-registry URL installs do NOT prompt yet.
 
 ---
 

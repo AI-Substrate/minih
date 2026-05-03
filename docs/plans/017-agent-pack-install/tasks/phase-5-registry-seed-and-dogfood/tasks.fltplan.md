@@ -93,8 +93,8 @@ stateDiagram-v2
 
 <!-- Updated by /plan-6-v2 during implementation: [ ] → [~] → [x] -->
 
-- [~] **Stage 1: Audit prompt portability** — Sweep `prompt.md` + `instructions.md` for minih-internal paths (`agents/code-review-companion/prompt.md`, `agents/code-review-companion/instructions.md`)
-- [ ] **Stage 2: Author agent.json** — The canonical reference manifest with 4 files (`agents/code-review-companion/agent.json` — new file)
+- [x] **Stage 1: Audit prompt portability** — Sweep `prompt.md` + `instructions.md` for minih-internal paths (`agents/code-review-companion/prompt.md`, `agents/code-review-companion/instructions.md`)
+- [~] **Stage 2: Author agent.json** — The canonical reference manifest with 4 files (`agents/code-review-companion/agent.json` — new file)
 - [ ] **Stage 2b: TDD manifest validation** — Unit test runs `validateManifest()` against the canonical file (`test/runner/agent-pack/companion-manifest.test.ts` — new file)
 - [ ] **Stage 3: Verify local install round-trip** — Manual smoke against built CLI (no new files; recorded in `execution.log.md`)
 - [ ] **Stage 4: Author registry seed** — One curated entry, internal-only agents stay out (`src/templates/agents-registry.json` — new file)
@@ -175,8 +175,8 @@ flowchart LR
 
 ## Checklist
 
-- [~] T001: Audit prompt + instructions for fresh-project portability
-- [ ] T002: Author `agents/code-review-companion/agent.json`
+- [x] T001: Audit prompt + instructions for fresh-project portability
+- [~] T002: Author `agents/code-review-companion/agent.json`
 - [ ] T002b: TDD `validateManifest()` unit test for the canonical manifest
 - [ ] T003: Verify FX001 local install round-trip against the new manifest
 - [ ] T004: Create `src/templates/agents-registry.json` with 1 curated entry

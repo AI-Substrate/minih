@@ -77,3 +77,12 @@
 - **magicWand** (target: coordination): Add a companion report-draft tool that derives tasks received, findings sent, summaries, ackOf chains, unresolved peer requests, and final counts from the inbox/state lanes so the farewell JSON can be generated from the coordination ledger instead of manually reconstructed.
 - difficulties:
   - [annoying] test: I initially used the Jest-style --runInBand flag with Vitest while running the focused resolver test, which Vitest rejected as an unknown option. (workaround: Reran the intended focused test with the repository-supported command: npx vitest run test/runner/run-resolver.test.ts.)
+
+## 2026-05-03T05:45:02.320Z — code-review-companion / 2026-05-03T15-37-38-639Z-4b07
+
+- runId: 2026-05-03T15-37-38-639Z-4b07
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-05-03T15-37-38-639Z-4b07
+- summary: Completed post-hoc review of Plan 017 Phase 5 commits 82328d0..23409e5. I sent a REQUEST_CHANGES verdict with one HIGH finding on registry self-install protection running after network fetch, plus one MEDIUM finding on stale registry commit provenance when fetched commits change but manifest-listed files do not.
+- **magicWand** (target: coordination): Expose the active coordinated agent input parameters, especially idleBudgetMs, through `minih state get` or a dedicated inside MCP context tool so a companion can know exactly when to exit instead of guessing.
+- difficulties:
+  - [annoying] coordination: The prompt referenced `input.idleBudgetMs`, but the value was not available through the visible coordination state or inbox context. (workaround: Completed the requested reviews, waited through multiple empty long-poll windows, checked peer state, then exited with idle_budget.)

@@ -635,3 +635,185 @@ describe('installAgentPack — URL source (T006)', () => {
     expect(result.slug).toBe('my-special-agent');
   });
 });
+
+// ============================================================================
+// Phase 5 companion-review fixes — F001 (pre-fetch self-install) + F002 (commitSha refresh)
+// ============================================================================
+
+describe('installAgentPack — registry source (Phase 5 companion-review fixes)', () => {
+  it('F001: pre-fetch E183 collision when target slug already exists hand-rolled (fetcher MUST NOT be called)', async () => {
+    // Create a hand-rolled folder at the target slug, no .minih-source.json.
+    const targetDir = path.join(agentsDir, 'my-pack');
+    fs.mkdirSync(targetDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(targetDir, 'prompt.md'),
+      'hand-rolled local prompt content',
+    );
+
+    // Fetcher would FAIL if called — proves the pre-fetch check is what fired.
+    const fake = new FakeAgentPackFetcher();
+    fake.setFailure('github:foo/bar', 'main', new Error('UNREACHABLE FETCHER'));
+
+    await expect(
+      installAgentPack({
+        source: {
+          type: 'registry',
+          registrySlug: 'my-pack',
+          url: 'github:foo/bar',
+          ref: 'main',
+        },
+        agentsDir,
+        fetcher: fake,
+      }),
+    ).rejects.toThrow(/E183/);
+
+    // Fetcher must NOT have been called — pre-fetch guard fired first.
+    expect(fake.callHistory.length).toBe(0);
+
+    // The hand-rolled prompt MUST still exist untouched.
+    expect(fs.readFileSync(path.join(targetDir, 'prompt.md'), 'utf-8')).toBe(
+      'hand-rolled local prompt content',
+    );
+  });
+
+  it('F001: --as <new-slug> escape hatch lets registry install proceed alongside hand-rolled', async () => {
+    fs.mkdirSync(path.join(agentsDir, 'my-pack'), { recursive: true });
+    fs.writeFileSync(path.join(agentsDir, 'my-pack/prompt.md'), 'hand-rolled');
+
+    const tarball = await makeGithubTarball({
+      repoPrefix: 'foo-bar-aaa1111',
+      files: [{ path: 'prompt.md', body: 'remote' }],
+    });
+    const fake = new FakeAgentPackFetcher();
+    fake.setSuccess('github:foo/bar', 'main', {
+      commitSha: 'a'.repeat(40),
+      tarball,
+    });
+
+    const result = await installAgentPack({
+      source: {
+        type: 'registry',
+        registrySlug: 'my-pack',
+        url: 'github:foo/bar',
+        ref: 'main',
+      },
+      asSlug: 'my-pack-new',
+      agentsDir,
+      fetcher: fake,
+    });
+
+    expect(result.action).toBe('installed');
+    expect(result.slug).toBe('my-pack-new');
+    expect(result.source.type).toBe('registry');
+    if (result.source.type === 'registry') {
+      expect(result.source.registrySlug).toBe('my-pack');
+    }
+
+    // Original hand-rolled untouched.
+    expect(
+      fs.readFileSync(path.join(agentsDir, 'my-pack/prompt.md'), 'utf-8'),
+    ).toBe('hand-rolled');
+  });
+
+  it('F002: registry no-op refreshes sidecar.commitSha when remote sha advanced even with byte-identical files', async () => {
+    // First install: commit=A, file content "x"
+    const tarA = await makeGithubTarball({
+      repoPrefix: 'foo-bar-aaaaaaaa',
+      files: [{ path: 'prompt.md', body: 'x' }],
+    });
+    const fake = new FakeAgentPackFetcher();
+    fake.setSuccess('github:foo/bar', 'main', {
+      commitSha: 'a'.repeat(40),
+      tarball: tarA,
+    });
+
+    const r1 = await installAgentPack({
+      source: {
+        type: 'registry',
+        registrySlug: 'my-pack',
+        url: 'github:foo/bar',
+        ref: 'main',
+      },
+      agentsDir,
+      fetcher: fake,
+    });
+    expect(r1.action).toBe('installed');
+    if (r1.source.type !== 'registry')
+      throw new Error('expected registry source');
+    expect(r1.source.commitSha).toBe('a'.repeat(40));
+
+    // Second install: commit=B, SAME file content "x" — bytes match, sha differs.
+    const tarB = await makeGithubTarball({
+      repoPrefix: 'foo-bar-bbbbbbbb',
+      files: [{ path: 'prompt.md', body: 'x' }],
+    });
+    fake.setSuccess('github:foo/bar', 'main', {
+      commitSha: 'b'.repeat(40),
+      tarball: tarB,
+    });
+
+    const r2 = await installAgentPack({
+      source: {
+        type: 'registry',
+        registrySlug: 'my-pack',
+        url: 'github:foo/bar',
+        ref: 'main',
+      },
+      agentsDir,
+      fetcher: fake,
+    });
+    // Action is still `unchanged` (file bytes match) — that contract holds.
+    expect(r2.action).toBe('unchanged');
+    // BUT the returned source AND on-disk sidecar must show the NEW commitSha.
+    if (r2.source.type !== 'registry')
+      throw new Error('expected registry source');
+    expect(r2.source.commitSha).toBe('b'.repeat(40));
+
+    const sidecarPath = path.join(agentsDir, 'my-pack/.minih-source.json');
+    const sidecar = JSON.parse(fs.readFileSync(sidecarPath, 'utf-8'));
+    expect(sidecar.source.type).toBe('registry');
+    expect(sidecar.source.commitSha).toBe('b'.repeat(40));
+  });
+
+  it('F002: URL no-op also refreshes sidecar.commitSha when remote sha advanced', async () => {
+    const tarA = await makeGithubTarball({
+      repoPrefix: 'foo-bar-aaaaaaaa',
+      files: [{ path: 'prompt.md', body: 'x' }],
+    });
+    const fake = new FakeAgentPackFetcher();
+    fake.setSuccess('github:foo/bar', 'main', {
+      commitSha: 'a'.repeat(40),
+      tarball: tarA,
+    });
+
+    const r1 = await installAgentPack({
+      source: { type: 'url', url: 'github:foo/bar', ref: 'main' },
+      agentsDir,
+      fetcher: fake,
+    });
+    expect(r1.action).toBe('installed');
+
+    const tarB = await makeGithubTarball({
+      repoPrefix: 'foo-bar-bbbbbbbb',
+      files: [{ path: 'prompt.md', body: 'x' }],
+    });
+    fake.setSuccess('github:foo/bar', 'main', {
+      commitSha: 'b'.repeat(40),
+      tarball: tarB,
+    });
+
+    const r2 = await installAgentPack({
+      source: { type: 'url', url: 'github:foo/bar', ref: 'main' },
+      agentsDir,
+      fetcher: fake,
+    });
+    expect(r2.action).toBe('unchanged');
+    if (r2.source.type !== 'url') throw new Error('expected url source');
+    expect(r2.source.commitSha).toBe('b'.repeat(40));
+
+    const sidecar = JSON.parse(
+      fs.readFileSync(path.join(agentsDir, 'bar/.minih-source.json'), 'utf-8'),
+    );
+    expect(sidecar.source.commitSha).toBe('b'.repeat(40));
+  });
+});

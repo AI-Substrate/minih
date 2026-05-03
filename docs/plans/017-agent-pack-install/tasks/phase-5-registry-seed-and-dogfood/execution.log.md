@@ -93,3 +93,33 @@ All 4 round-trip assertions pass.
 
 **Tasks completed under no-companion mode**: T007 (registry-seed unit), T008 (MINIH_E2E headline e2e — 1643ms wall-clock, well within 5s soft budget), T009 (MINIH_REGRESSION baseline + dedupe), T009b (self-install regression — 2/2 green).
 
+
+### Companion DEBUG + post-hoc review — RESCUED 2026-05-03
+
+User direction: **"DEBUG it! it must work!"**
+
+**Root cause of original silent death**: The Power-On-Mode boot used `nohup minih run code-review-companion >/tmp/companion-boot.log 2>&1 &` inside a `mode: sync` bash shell. When that shell got `stop_bash`'d (~45s after boot), the harness terminated the entire process group — even the nohup'd child died. Confirmed by inspecting `events.ndjson` for the dead run: at `05:05:02.801Z`, BOTH MCP servers (`test-echo`, `minih-coordination`) flipped from `connected` → `not_configured` mid-stream during orient — definitive signature of an external `SIGTERM`/process-tree kill, not an internal SDK timeout.
+
+**Fix**: Re-boot with `mode: async, detach: true` and NO output piping (an earlier failed attempt used `| head -50` which SIGPIPE'd the producer once head got 50 lines).
+
+**Resurrected companion**: run `2026-05-03T15-37-38-639Z-4b07`, PID 82729 (later detached); ran clean for 443 seconds; 88 tool calls; verdict `validated:true`.
+
+**Companion findings on Phase 5 (REQUEST_CHANGES)**:
+
+1. **F001 HIGH**: Spec AC11 self-install / collision check fires AFTER `installFromRegistry()` calls the fetcher — a network failure or rate-limit could bypass the local guard. The companion proved it by setting up a hand-rolled `agents/code-review-companion/` and a fake fetcher set to fail; CLI returned a fetch error instead of E183.
+2. **F002 MEDIUM**: `sourcesEquivalent()` ignores `commitSha` for URL/registry sources, AND the no-op branch returns the prior sidecar unchanged when file checksums match. Result: a registry reinstall that fetches a NEWER commit but byte-identical files leaves `.minih-source.json#source.commitSha` stale forever, contradicting the spec/domain claim that `commitSha` drives provenance.
+
+**Both fixes applied inline**:
+- `src/runner/agent-pack/install.ts:installFromRegistry` — pre-fetch E183 collision check (target dir exists without `.minih-source.json`) before any network call.
+- `src/runner/agent-pack/install.ts:installFromStagedDir` — when no-op branch fires AND `commitSha` advanced (URL/registry sources only), refresh the sidecar with the new commitSha + installedAt timestamp before returning `unchanged`. Action stays `unchanged` (file bytes match — that contract holds), but provenance no longer goes stale.
+- New helper `sidecarCommitSha(s)` — typed extractor for commitSha across discriminated source variants.
+- 4 new regression tests in `test/runner/agent-pack/install.test.ts`:
+  - F001: pre-fetch E183 with FakeAgentPackFetcher.setFailure — asserts fetcher.callHistory.length === 0 + hand-rolled file untouched
+  - F001: --as escape hatch lets registry install proceed alongside hand-rolled
+  - F002 (registry): same files, advancing commitSha → action='unchanged' + sidecar refreshed
+  - F002 (URL): same files, advancing commitSha → action='unchanged' + sidecar refreshed
+
+**Companion magicWand (carrying forward as followup-5)**: *"Expose the active coordinated agent input parameters, especially idleBudgetMs, through `minih state get` or a dedicated inside MCP context tool so a companion can know exactly when to exit instead of guessing."* — File as separate fix dossier in coordination domain.
+
+**Final state**: `just fft` GREEN: 930 passed | 16 skipped | 0 vulns | SDK 0.3.0 latest. Companion review VALIDATED (replaces the would-be `/plan-7-v2-code-review` pass).
+

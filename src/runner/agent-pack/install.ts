@@ -134,6 +134,29 @@ async function installFromRegistry(
   opts: InstallOptions,
   fetcher: IAgentPackFetcher,
 ): Promise<InstallResult> {
+  // F001 fix (companion review): self-install / collision protection MUST
+  // fire BEFORE any network call, so a network failure can't bypass spec
+  // AC11. Check that target slug is either empty or already a managed
+  // (`.minih-source.json`-bearing) install — refuse otherwise. The full
+  // sidecar-source-mismatch check happens in `installFromStagedDir` after
+  // the staged tree exists.
+  const slug = opts.asSlug ?? source.registrySlug;
+  const agentsDirAbs = path.resolve(opts.agentsDir);
+  const targetDir = path.join(agentsDirAbs, slug);
+  if (fs.existsSync(targetDir) && !opts.force) {
+    let priorSidecar: MinihSourceSidecar | null = null;
+    try {
+      priorSidecar = readSourceSidecar(targetDir);
+    } catch {
+      priorSidecar = null;
+    }
+    if (priorSidecar === null) {
+      throw new Error(
+        `agent install: target folder exists without .minih-source.json (E183) — looks like a hand-rolled agent at ${targetDir}. Use --as <new-slug> to install alongside, or --force to overwrite (destructive).`,
+      );
+    }
+  }
+
   const { commitSha, tarball } = await fetcher.fetchTarball(
     source.url,
     source.ref,
@@ -155,8 +178,6 @@ async function installFromRegistry(
         `agent install: registry slug "${source.registrySlug}" subpath "${source.subpath ?? ''}" not found in tarball from ${source.url}@${source.ref} (E182). The registry catalog may point at a stale ref or subpath.`,
       );
     }
-
-    const slug = opts.asSlug ?? source.registrySlug;
 
     const sidecarSource: AgentPackSource = {
       type: 'registry',
@@ -392,11 +413,26 @@ async function installFromStagedDir(args: {
         (k) => sourceChecksums[k] === priorSidecar?.fileChecksums[k],
       );
     if (allMatch) {
+      // F002 fix (companion review): for `url`/`registry` sources, content
+      // bytes can match while the upstream commit advanced. The contract
+      // (domain.md + spec) says `commitSha` drives provenance, so when the
+      // remote sha changed we MUST refresh the sidecar even on no-op file
+      // bytes — otherwise `agent info` shows stale provenance forever.
+      const priorSha = sidecarCommitSha(priorSidecar.source);
+      const newSha = sidecarCommitSha(sidecarSource);
+      if (priorSha !== null && newSha !== null && priorSha !== newSha) {
+        const refreshedSidecar: MinihSourceSidecar = {
+          ...priorSidecar,
+          source: sidecarSource,
+          installedAt: new Date().toISOString(),
+        };
+        writeSourceSidecar(targetDir, refreshedSidecar);
+      }
       return {
         action: 'unchanged',
         slug,
         installPath: targetDir,
-        source: cloneSidecarSource(priorSidecar.source),
+        source: cloneSidecarSource(sidecarSource),
         files: filesToCopyList,
       };
     }
@@ -477,6 +513,11 @@ function sourcesEquivalent(a: AgentPackSource, b: AgentPackSource): boolean {
     return a.registrySlug === b.registrySlug;
   }
   return false;
+}
+
+function sidecarCommitSha(s: AgentPackSource): string | null {
+  if (s.type === 'url' || s.type === 'registry') return s.commitSha;
+  return null;
 }
 
 function cloneSidecarSource(s: AgentPackSource): AgentPackSource {

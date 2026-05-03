@@ -91,7 +91,7 @@ minih agent install github:AI-Substrate/minih#main:agents/code-review-companion 
 minih agent install https://github.com/AI-Substrate/minih.git#v1.0.0 --yes
 ```
 
-The `--yes` flag skips the confirmation prompt for non-registry sources (recommended in CI; interactive elsewhere).
+> **Note**: `--yes` is currently a no-op flag accepted for forward-compatibility — v1 does NOT prompt for confirmation on non-registry URLs. The interactive trust prompt is a deferred enhancement; until it lands, all URL installs proceed without prompting. Set `--yes` anyway in CI scripts so they keep working when the prompt arrives.
 
 URL-form sidecar `source.type` is `'url'`. The slug defaults to the subpath leaf (`agents/code-review-companion` → `code-review-companion`) or the repo name when no subpath is given. Override with `--as <new-slug>`.
 
@@ -215,21 +215,22 @@ This lets you answer "have I edited the prompt locally?" or "did upstream change
 
 ### Manifest-level guards
 
-`validateManifest()` rejects every named attack vector before any disk write:
+`validateManifest()` rejects every named attack vector before any files are copied into the installed agent folder:
 
 - **Path traversal**: `..` segments anywhere in `files[].path` → reject.
-- **Absolute paths**: leading `/` or Windows drive letters (`C:`) → reject.
+- **Absolute paths**: leading `/` → reject.
 - **Backslashes**: any `\` in a path → reject (Windows separator confusion).
 - **Null bytes**: → reject.
-- **Runtime-dir denylist**: paths starting with `runs/`, `inbox/`, `state/`, `.git/` → reject. These directories carry runtime state and are never overwritten by install.
+- **Reserved first segments**: paths starting with `runs/`, `inbox/`, `state/`, `.git/` → reject. These directories carry runtime state and are never overwritten by install.
 - **Missing `prompt.md`**: every manifest MUST list `prompt.md`. Else reject.
 - **Duplicate paths in `files[]`**: → reject.
+- **Reserved single-segment paths** (`.`, `..`): → reject.
 
-All checks happen on the in-memory parsed manifest **before** any file is written or extracted.
+> **Note on extraction order**: For URL/registry sources the tarball is extracted to a temp directory FIRST, and the manifest is validated from the extracted tree before anything is copied into the final `agents/<slug>/` install target. The manifest guard protects the install target — the tarball-level guards below protect the extraction step itself. Drive-letter / Windows-absolute path coverage lives at the tarball-level guard, not the manifest-level guard.
 
 ### Tarball-level guards
 
-For URL/registry sources, the extractor (`src/runner/agent-pack/extractor.ts`) layers additional defense:
+For URL/registry sources, the extractor (`src/runner/agent-pack/extractor.ts`) layers additional defense on the extraction step (running BEFORE the manifest validator sees the staged tree):
 
 - **Total size cap**: 10 MB. Tarballs above this are rejected pre-extract via `Content-Length` AND mid-stream byte-count.
 - **Per-entry cap**: 2 MB per file.
@@ -241,6 +242,7 @@ For URL/registry sources, the extractor (`src/runner/agent-pack/extractor.ts`) l
 - **Symbolic links / hard links / devices / FIFOs / sparse files**: rejected.
 - **Setuid / setgid / sticky bits**: rejected.
 - **Unicode-normalized `..`**: NFKC-normalized path segments containing `..` → rejected.
+- **Windows drive letters / UNC**: `C:`-style absolute paths and `\\server\` UNC prefixes → rejected at the extractor (these are tarball-format-level concerns, not manifest concerns).
 - **Top-level prefix**: GitHub tarballs ship as `<repo>-<sha>/...`; the extractor strips this single prefix and rejects mid-stream divergence (e.g. an attacker injecting a second top-level dir).
 
 ### Production-safe injection seam
@@ -256,9 +258,10 @@ You should never see this in non-test sessions. If you do, something is wrong.
 ### What we do NOT do
 
 - **No code execution at install time.** Even if a manifest lists `scripts/install.sh`, the file is copied — never run.
+- **No interactive confirmation prompt** on non-registry URL installs (yet). The trust UX is "you trust the curated registry + you trust the URL you typed". A confirmation prompt for non-registry sources is a deferred Phase 4 task — see [Phase 4 partial in the plan](../plans/017-agent-pack-install/agent-pack-install-plan.md). `--yes` is accepted today as a no-op for forward-compat with that future prompt.
 - **No mode-bit honoring** during stream copy — files land as the running user's umask.
 - **No retry on 5xx** — fetch is one-shot. Retry policy is the caller's choice.
-- **No verification tier yet** (e.g. signed metadata). The trust model is "you trust the curated registry + you trust the URL you typed". Confirmation prompt + commit sha display is the v1 trust UX.
+- **No verification tier yet** (e.g. signed metadata). Confirmation prompt + commit sha display is the v1 trust UX.
 
 ---
 
@@ -270,7 +273,7 @@ You should never see this in non-test sessions. If you do, something is wrong.
 | **E181** | `AGENT_PACK_FETCH_FAILED` | Network failure (timeout, 4xx/5xx, DNS), or production safety check fired (MINIH_AGENT_PACK_FETCHER set without `NODE_ENV=test`). | Check connectivity; verify the URL is correct; for env-var case, unset `MINIH_AGENT_PACK_FETCHER`. |
 | **E182** | `AGENT_PACK_INVALID` | Tarball/manifest violates a security guard (path traversal, missing `prompt.md`, oversized, runtime-dir entry, etc.) OR subpath not found in tarball OR malformed `agent.json`. | The error message names the specific violation. For "subpath not found", the registry catalog may point at a stale subpath — file an upstream issue. |
 | **E183** | `AGENT_PACK_ALREADY_INSTALLED` | Target slug folder exists locally without `.minih-source.json` — looks hand-rolled. | Use `--as <new-slug>` to install alongside, or `--force` to overwrite (DESTRUCTIVE — preserves only `runs/`/`inbox/`/`state/`). |
-| **E184** | `AGENT_PACK_SOURCE_MISMATCH` | Re-installing against a sidecar whose source disagrees with the new install (e.g. swapping registry slug for a URL). | Use `--as <new-slug>` for the new source, or remove the existing install and reinstall. |
+| **E184** | `AGENT_PACK_SOURCE_MISMATCH` | Reserved for "re-install hits a sidecar whose source disagrees with the new install" (e.g. swapping registry slug for a URL). **Not yet emitted in v1** — current behavior reports `action: 'upgraded'` instead. The error code is reserved + documented so future work can plug in a strict-mode guard without renumbering. | Once enforced: use `--as <new-slug>` for the new source, or remove the existing install and reinstall. |
 
 All error messages embed the error code in parentheses (`(E182)`) so log-grepping and automated parsing work uniformly.
 

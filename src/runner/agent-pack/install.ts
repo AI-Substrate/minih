@@ -1,5 +1,8 @@
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
+import { extractTarball } from './extractor.js';
+import type { IAgentPackFetcher } from './fetcher.js';
 import {
   AGENT_MANIFEST_FILENAME,
   readAgentManifest,
@@ -52,6 +55,13 @@ export interface InstallOptions {
   force?: boolean;
   /** Skip confirmation prompts (CLI integration only — runner doesn't prompt). */
   yes?: boolean;
+  /**
+   * Fetcher implementation used when `source.type === 'url'`. Required for
+   * URL installs; ignored for local sources. The CLI composition root is
+   * responsible for passing in a `GitHubAgentPackFetcher` (production) or
+   * a `FakeAgentPackFetcher` (tests).
+   */
+  fetcher?: IAgentPackFetcher;
 }
 
 export interface InstallResult {
@@ -88,13 +98,16 @@ export async function installAgentPack(
   opts: InstallOptions,
 ): Promise<InstallResult> {
   if (opts.source.type === 'url') {
-    throw new Error(
-      'agent install from URL is not yet available in this build (E182). The remote-fetch implementation lands in Phase 3.2 of plan-017. For now, use a local filesystem path: `minih agent install /abs/path/to/agent`.',
-    );
+    if (!opts.fetcher) {
+      throw new Error(
+        'agent install: internal error — fetcher is required for URL source. The CLI composition root must pass `fetcher` to installAgentPack({source:{type:"url"}, fetcher: ...}). See plan-017 Phase 3 T007.',
+      );
+    }
+    return installFromUrl(opts.source, opts, opts.fetcher);
   }
   if (opts.source.type === 'registry') {
     throw new Error(
-      'agent install from registry slug is not yet available in this build (E182). Registry resolution lands in Phase 4 of plan-017. For now, use a local filesystem path: `minih agent install /abs/path/to/agent`.',
+      'agent install from registry slug is not yet available in this build (E182). Registry resolution lands in Phase 4 of plan-017. For now, use `minih agent install github:owner/repo[#ref][:subpath]` or a local filesystem path.',
     );
   }
 
@@ -118,25 +131,154 @@ async function installFromLocal(
     );
   }
 
+  const slug = opts.asSlug ?? path.basename(localPath);
+  const sidecarSource: AgentPackSource = {
+    type: 'local',
+    localPath,
+    resolvedAt: new Date().toISOString(),
+  };
+
+  return installFromStagedDir({
+    stagedSourcePath: localPath,
+    slug,
+    sidecarSource,
+    opts,
+    selfInstallGuardLocalPath: localPath,
+  });
+}
+
+/**
+ * Install via remote URL: fetch tarball → extract to temp dir → optionally
+ * slice into `subpath` → run the same atomic-swap install logic as local
+ * sources but with `sidecar.source.type = 'url'`.
+ *
+ * Tmp dir uses the canonical `minih-agent-pack-` prefix so test cleanup
+ * can scope assertions to entries we own. Always cleaned up via
+ * try/finally — even on extract or copy failure.
+ */
+async function installFromUrl(
+  source: { type: 'url'; url: string; ref: string; subpath?: string },
+  opts: InstallOptions,
+  fetcher: IAgentPackFetcher,
+): Promise<InstallResult> {
+  const { commitSha, tarball } = await fetcher.fetchTarball(
+    source.url,
+    source.ref,
+  );
+
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'minih-agent-pack-'));
+  try {
+    await extractTarball(tarball, tmpRoot);
+
+    const stagedSourcePath = source.subpath
+      ? path.join(tmpRoot, source.subpath)
+      : tmpRoot;
+
+    if (
+      !fs.existsSync(stagedSourcePath) ||
+      !fs.statSync(stagedSourcePath).isDirectory()
+    ) {
+      throw new Error(
+        `agent install: subpath "${source.subpath ?? ''}" not found in tarball from ${source.url}@${source.ref} (E182)`,
+      );
+    }
+
+    const slug =
+      opts.asSlug ??
+      (source.subpath
+        ? path.basename(source.subpath)
+        : extractRepoNameFromUrl(source.url));
+
+    const sidecarSource: AgentPackSource = {
+      type: 'url',
+      url: source.url,
+      ref: source.ref,
+      subpath: source.subpath,
+      commitSha,
+    };
+
+    return installFromStagedDir({
+      stagedSourcePath,
+      slug,
+      sidecarSource,
+      opts,
+    });
+  } finally {
+    try {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    } catch {
+      // Best-effort cleanup; if it fails the OS will eventually clean tmpdir.
+    }
+  }
+}
+
+/**
+ * Derive a default install slug from a URL when no subpath is provided.
+ * Examples:
+ *   `github:foo/my-agent` → `my-agent`
+ *   `https://github.com/foo/my-agent.git` → `my-agent`
+ */
+function extractRepoNameFromUrl(url: string): string {
+  let repoSlug: string;
+  if (url.startsWith('github:')) {
+    repoSlug = url.slice('github:'.length);
+  } else if (url.startsWith('https://github.com/')) {
+    repoSlug = url.slice('https://github.com/'.length);
+  } else {
+    repoSlug = url;
+  }
+  repoSlug = repoSlug.replace(/\.git$/, '').replace(/\/$/, '');
+  const parts = repoSlug.split('/');
+  return parts[parts.length - 1] || 'unnamed-agent';
+}
+
+/**
+ * The shared post-source-resolution install path. Both `installFromLocal`
+ * and `installFromUrl` end up here once they've staged the source files
+ * to a directory on disk.
+ *
+ * Side effects (in order):
+ *   1. Read or synthesize manifest from `stagedSourcePath`
+ *   2. Compute fresh checksums of files-to-copy
+ *   3. Read prior sidecar from `targetDir` if present
+ *   4. Detect collision (existing folder w/o sidecar) → E183 unless `force`
+ *   5. Detect no-op (sidecar source matches AND checksums match) → return 'unchanged'
+ *   6. Atomic per-file copy (tmp + rename)
+ *   7. Surgical sync (delete files in OLD manifest but not NEW)
+ *   8. Write provenance sidecar
+ *
+ * Runtime dirs (`runs/`, `inbox/`, `state/`) are NEVER touched — single
+ * source of truth for the preservation guarantee.
+ */
+async function installFromStagedDir(args: {
+  stagedSourcePath: string;
+  slug: string;
+  sidecarSource: AgentPackSource;
+  opts: InstallOptions;
+  /** When set, refuse if `agentsDir/slug` resolves to this path (self-install protection). */
+  selfInstallGuardLocalPath?: string;
+}): Promise<InstallResult> {
+  const { stagedSourcePath, slug, sidecarSource, opts } = args;
+
   // Read OR synthesize manifest. Both throw on validation failure — no disk
   // writes happen until we have a known-good manifest in hand.
   let manifest: AgentPackManifest;
-  const explicit = readAgentManifest(localPath);
+  const explicit = readAgentManifest(stagedSourcePath);
   if (explicit) {
     manifest = explicit;
   } else {
-    manifest = synthesizeImplicitManifest(localPath);
+    manifest = synthesizeImplicitManifest(stagedSourcePath);
   }
 
-  // Determine install destination + slug.
-  const slug = opts.asSlug ?? path.basename(localPath);
   const agentsDirAbs = path.resolve(opts.agentsDir);
   const targetDir = path.join(agentsDirAbs, slug);
 
-  // Guard: self-install (source path === target path).
-  if (path.resolve(targetDir) === localPath) {
+  if (
+    args.selfInstallGuardLocalPath &&
+    path.resolve(targetDir) === args.selfInstallGuardLocalPath
+  ) {
     throw new Error(
-      `agent install: refusing self-install — source and target are the same path (${localPath}). Use --as <new-slug> to install under a different name.`,
+      `agent install: refusing self-install — source and target are the same path (${args.selfInstallGuardLocalPath}). Use --as <new-slug> to install under a different name.`,
     );
   }
 
@@ -147,7 +289,6 @@ async function installFromLocal(
     try {
       priorSidecar = readSourceSidecar(targetDir);
     } catch {
-      // Malformed sidecar treated as if missing — caller can --force.
       priorSidecar = null;
     }
     if (!priorSidecar && !opts.force) {
@@ -159,22 +300,22 @@ async function installFromLocal(
 
   // Compute fresh checksums BEFORE any writes — needed for upgrade-vs-no-op decision.
   const filePaths = manifest.files.map((f) => f.path);
-  // Manifest files may include `agent.json` itself; if it's NOT listed but exists, we still
-  // copy it (so `info` can re-read). Track this set for atomic-swap.
   const filesToCopy = new Set(filePaths);
   if (
     !filesToCopy.has(AGENT_MANIFEST_FILENAME) &&
-    fs.existsSync(path.join(localPath, AGENT_MANIFEST_FILENAME))
+    fs.existsSync(path.join(stagedSourcePath, AGENT_MANIFEST_FILENAME))
   ) {
     filesToCopy.add(AGENT_MANIFEST_FILENAME);
   }
   const filesToCopyList = [...filesToCopy];
-  const sourceChecksums = computeFileChecksums(localPath, filesToCopyList);
+  const sourceChecksums = computeFileChecksums(
+    stagedSourcePath,
+    filesToCopyList,
+  );
 
-  // No-op detection: matching sidecar source (local + same path) AND every
-  // manifest checksum matches what's recorded.
-  if (priorSidecar && priorSidecar.source.type === 'local') {
-    const samePath = path.resolve(priorSidecar.source.localPath) === localPath;
+  // No-op detection. The sidecar source must match the new source AND
+  // every file checksum must match what's recorded.
+  if (priorSidecar && sourcesEquivalent(priorSidecar.source, sidecarSource)) {
     const allMatch =
       Object.keys(sourceChecksums).every(
         (k) => priorSidecar?.fileChecksums[k] === sourceChecksums[k],
@@ -182,7 +323,7 @@ async function installFromLocal(
       Object.keys(priorSidecar.fileChecksums).every(
         (k) => sourceChecksums[k] === priorSidecar?.fileChecksums[k],
       );
-    if (samePath && allMatch) {
+    if (allMatch) {
       return {
         action: 'unchanged',
         slug,
@@ -193,10 +334,8 @@ async function installFromLocal(
     }
   }
 
-  // Determine whether this is fresh install or upgrade.
   const action: InstallAction = priorSidecar ? 'upgraded' : 'installed';
 
-  // Compute changed files (relevant for upgrade reporting).
   let changedFiles: string[] | undefined;
   if (priorSidecar) {
     changedFiles = filesToCopyList.filter(
@@ -204,11 +343,8 @@ async function installFromLocal(
     );
   }
 
-  // Atomic-swap: write to a temp directory inside the target's parent, then
-  // rename source files atomically into place. Runtime dirs are NEVER touched.
   fs.mkdirSync(targetDir, { recursive: true });
 
-  // For force overwrite, remove non-runtime files first.
   if (priorSidecar === null && opts.force) {
     for (const entry of fs.readdirSync(targetDir, { withFileTypes: true })) {
       if (RUNTIME_PRESERVE.has(entry.name)) continue;
@@ -217,7 +353,6 @@ async function installFromLocal(
     }
   }
 
-  // Surgical sync: remove files present in the OLD manifest but not in the new.
   if (priorSidecar) {
     const oldFiles = Object.keys(priorSidecar.fileChecksums);
     for (const oldFile of oldFiles) {
@@ -228,9 +363,8 @@ async function installFromLocal(
     }
   }
 
-  // Copy each manifest file. Each copy is a tmp+rename for atomicity per-file.
   for (const rel of filesToCopyList) {
-    const src = path.join(localPath, rel);
+    const src = path.join(stagedSourcePath, rel);
     const dst = path.join(targetDir, rel);
     fs.mkdirSync(path.dirname(dst), { recursive: true });
     const tmp = `${dst}.minih-tmp-${process.pid}`;
@@ -238,12 +372,6 @@ async function installFromLocal(
     fs.renameSync(tmp, dst);
   }
 
-  // Write the provenance sidecar last (after all source files are in place).
-  const sidecarSource: AgentPackSource = {
-    type: 'local',
-    localPath,
-    resolvedAt: new Date().toISOString(),
-  };
   const sidecar: MinihSourceSidecar = {
     schemaVersion: '1',
     slug,
@@ -262,6 +390,25 @@ async function installFromLocal(
     files: filesToCopyList,
     changedFiles,
   };
+}
+
+/**
+ * Compare two sidecar source descriptors for "is this the same source?".
+ * Local: same `localPath`. URL: same url/ref/subpath (commitSha is allowed
+ * to differ — that's what triggers an upgrade). Registry: same registrySlug.
+ */
+function sourcesEquivalent(a: AgentPackSource, b: AgentPackSource): boolean {
+  if (a.type !== b.type) return false;
+  if (a.type === 'local' && b.type === 'local') {
+    return path.resolve(a.localPath) === path.resolve(b.localPath);
+  }
+  if (a.type === 'url' && b.type === 'url') {
+    return a.url === b.url && a.ref === b.ref && a.subpath === b.subpath;
+  }
+  if (a.type === 'registry' && b.type === 'registry') {
+    return a.registrySlug === b.registrySlug;
+  }
+  return false;
 }
 
 function cloneSidecarSource(s: AgentPackSource): AgentPackSource {

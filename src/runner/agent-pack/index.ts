@@ -5,7 +5,17 @@
  * Internal helpers stay unexported here.
  */
 
-export type { FetchTarballResult, IAgentPackFetcher } from './fetcher.js';
+// Extractor (Phase 3 — tarball → temp dir with DoS/traversal/symlink defense)
+export type {
+  ExtractOptions,
+  ExtractTarballResult,
+} from './extractor.js';
+export { extractTarball } from './extractor.js';
+export type {
+  FetchTarballResult,
+  GitHubAgentPackFetcherOptions,
+  IAgentPackFetcher,
+} from './fetcher.js';
 // Fetcher seam
 export {
   FakeAgentPackFetcher,

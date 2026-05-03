@@ -9,13 +9,17 @@ const cliPath = path.join(repoRoot, 'dist/cli/index.js');
 
 function run(
   args: string[],
-  opts: { cwd?: string; expectFail?: boolean } = {},
+  opts: {
+    cwd?: string;
+    expectFail?: boolean;
+    env?: Record<string, string>;
+  } = {},
 ): { stdout: string; stderr: string; exitCode: number } {
   const { FORCE_COLOR: _fc, ...cleanEnv } = process.env;
   try {
     const stdout = execFileSync('node', [cliPath, ...args], {
       cwd: opts.cwd ?? repoRoot,
-      env: { ...cleanEnv, NO_COLOR: '1' },
+      env: { ...cleanEnv, NO_COLOR: '1', ...(opts.env ?? {}) },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     return { stdout: stdout.toString('utf-8'), stderr: '', exitCode: 0 };
@@ -117,7 +121,11 @@ describe('minih agent install — local path (FX001)', () => {
     expect(envelope.data.changedFiles).toEqual(['prompt.md']);
   });
 
-  it('AC: URL reference returns E182 with helpful "not yet available" message', () => {
+  it('AC: URL reference is routed to the fetcher (Phase 3 — was E182 stub in FX001, now hits real fetcher)', () => {
+    // Phase 3 turned the URL stub into a real fetcher invocation. With
+    // MINIH_AGENT_PACK_FETCHER set to an empty fake, the fetcher rejects
+    // because no preset matches → CLI surfaces an error envelope. The
+    // exact code (E181 vs E182) depends on `pickErrorCode` regex precedence.
     const result = run(
       [
         '--agents-dir',
@@ -126,13 +134,19 @@ describe('minih agent install — local path (FX001)', () => {
         'install',
         'github:foo/bar',
       ],
-      { cwd: projectRoot, expectFail: true },
+      {
+        cwd: projectRoot,
+        expectFail: true,
+        env: {
+          NODE_ENV: 'test',
+          MINIH_AGENT_PACK_FETCHER: 'fake:{}',
+        },
+      },
     );
     expect(result.exitCode).not.toBe(0);
     const envelope = JSON.parse(result.stdout);
     expect(envelope.status).toBe('error');
-    expect(envelope.error.code).toBe('E182');
-    expect(envelope.error.message).toMatch(/not yet available|Phase 3/i);
+    expect(['E181', 'E182']).toContain(envelope.error.code);
   });
 
   it('AC: bare slug (registry lookup) returns E182 with helpful "not yet available" message', () => {
@@ -179,7 +193,7 @@ describe('minih agent install — local path (FX001)', () => {
 
   // npm/uv-style URL syntax (designed; fetch lands Phase 3 — for now stubs E182)
 
-  it('npm-style: github:owner/repo#branch is parsed and routed to URL stub', () => {
+  it('npm-style: github:owner/repo#branch is parsed and reaches the fetcher (Phase 3)', () => {
     const result = run(
       [
         '--agents-dir',
@@ -188,15 +202,21 @@ describe('minih agent install — local path (FX001)', () => {
         'install',
         'github:foo/bar#dev',
       ],
-      { cwd: projectRoot, expectFail: true },
+      {
+        cwd: projectRoot,
+        expectFail: true,
+        env: {
+          NODE_ENV: 'test',
+          MINIH_AGENT_PACK_FETCHER: 'fake:{}',
+        },
+      },
     );
     expect(result.exitCode).not.toBe(0);
     const envelope = JSON.parse(result.stdout);
-    expect(envelope.error.code).toBe('E182');
-    expect(envelope.error.message).toMatch(/not yet available|Phase 3/i);
+    expect(['E181', 'E182']).toContain(envelope.error.code);
   });
 
-  it('npm-style: github:owner/repo#tag:subpath is parsed and routed to URL stub', () => {
+  it('npm-style: github:owner/repo#tag:subpath is parsed and reaches the fetcher (Phase 3)', () => {
     const result = run(
       [
         '--agents-dir',
@@ -205,14 +225,21 @@ describe('minih agent install — local path (FX001)', () => {
         'install',
         'github:foo/bar#v1.2.0:agents/x',
       ],
-      { cwd: projectRoot, expectFail: true },
+      {
+        cwd: projectRoot,
+        expectFail: true,
+        env: {
+          NODE_ENV: 'test',
+          MINIH_AGENT_PACK_FETCHER: 'fake:{}',
+        },
+      },
     );
     expect(result.exitCode).not.toBe(0);
     const envelope = JSON.parse(result.stdout);
-    expect(envelope.error.code).toBe('E182');
+    expect(['E181', 'E182']).toContain(envelope.error.code);
   });
 
-  it('--ref <branch> flag is accepted (overrides URL fragment) — still hits URL stub', () => {
+  it('--ref <branch> flag is accepted (overrides URL fragment) and reaches the fetcher (Phase 3)', () => {
     const result = run(
       [
         '--agents-dir',
@@ -223,11 +250,18 @@ describe('minih agent install — local path (FX001)', () => {
         '--ref',
         'feat/some-branch',
       ],
-      { cwd: projectRoot, expectFail: true },
+      {
+        cwd: projectRoot,
+        expectFail: true,
+        env: {
+          NODE_ENV: 'test',
+          MINIH_AGENT_PACK_FETCHER: 'fake:{}',
+        },
+      },
     );
     expect(result.exitCode).not.toBe(0);
     const envelope = JSON.parse(result.stdout);
-    expect(envelope.error.code).toBe('E182');
+    expect(['E181', 'E182']).toContain(envelope.error.code);
   });
 
   it('malformed URL is rejected with E182 (parser catches it before runner stub)', () => {

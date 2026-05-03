@@ -340,3 +340,298 @@ describe('installAgentPack — registry/URL stubs (placeholder)', () => {
     ).rejects.toThrow(/not yet available|Phase 3|E182/);
   });
 });
+
+// ============================================================================
+// T006 — URL install tests via FakeAgentPackFetcher
+// ============================================================================
+
+import * as zlib from 'node:zlib';
+import { Pack } from 'tar';
+import { FakeAgentPackFetcher } from '../../../src/runner/agent-pack/fetcher.js';
+
+/**
+ * Build a gzipped tarball that simulates a GitHub-style payload — entries
+ * are wrapped in a `<repo>-<sha>/` top-level dir, optionally with a
+ * subpath underneath.
+ */
+async function makeGithubTarball(opts: {
+  repoPrefix: string;
+  files: Array<{ path: string; body: string }>;
+}): Promise<Buffer> {
+  const stagingRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'minih-install-fixture-'),
+  );
+  try {
+    const stageDir = path.join(stagingRoot, opts.repoPrefix);
+    fs.mkdirSync(stageDir, { recursive: true });
+    const filesArg: string[] = [];
+    for (const f of opts.files) {
+      const abs = path.join(stageDir, f.path);
+      fs.mkdirSync(path.dirname(abs), { recursive: true });
+      fs.writeFileSync(abs, f.body);
+      filesArg.push(`${opts.repoPrefix}/${f.path}`);
+    }
+    const pack = new Pack({ cwd: stagingRoot, portable: true });
+    for (const f of filesArg) pack.write(f);
+    pack.end();
+    const chunks: Buffer[] = [];
+    for await (const chunk of pack) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    return zlib.gzipSync(Buffer.concat(chunks));
+  } finally {
+    fs.rmSync(stagingRoot, { recursive: true, force: true });
+  }
+}
+
+describe('installAgentPack — URL source (T006)', () => {
+  it('(a) URL install with prefilled fake → action=installed + sidecar.source.type=url', async () => {
+    const tarball = await makeGithubTarball({
+      repoPrefix: 'minih-abc1234',
+      files: [{ path: 'prompt.md', body: 'hello' }],
+    });
+    const fake = new FakeAgentPackFetcher();
+    fake.setSuccess('github:foo/my-agent', 'main', {
+      commitSha: 'abc1234567890abcdef1234567890abcdef12345',
+      tarball,
+    });
+
+    const result = await installAgentPack({
+      source: { type: 'url', url: 'github:foo/my-agent', ref: 'main' },
+      agentsDir,
+      fetcher: fake,
+    });
+
+    expect(result.action).toBe('installed');
+    expect(result.slug).toBe('my-agent');
+    expect(result.source.type).toBe('url');
+    if (result.source.type === 'url') {
+      expect(result.source.commitSha).toBe(
+        'abc1234567890abcdef1234567890abcdef12345',
+      );
+    }
+    expect(fs.existsSync(path.join(agentsDir, 'my-agent', 'prompt.md'))).toBe(
+      true,
+    );
+    expect(
+      fs.existsSync(path.join(agentsDir, 'my-agent', '.minih-source.json')),
+    ).toBe(true);
+  });
+
+  it('(b) URL re-install with same content → action=unchanged', async () => {
+    const tarball = await makeGithubTarball({
+      repoPrefix: 'minih-1',
+      files: [{ path: 'prompt.md', body: 'same' }],
+    });
+    const fake = new FakeAgentPackFetcher();
+    fake.setSuccess('github:foo/my-agent', 'main', {
+      commitSha: '0'.repeat(40),
+      tarball,
+    });
+    await installAgentPack({
+      source: { type: 'url', url: 'github:foo/my-agent', ref: 'main' },
+      agentsDir,
+      fetcher: fake,
+    });
+    const result = await installAgentPack({
+      source: { type: 'url', url: 'github:foo/my-agent', ref: 'main' },
+      agentsDir,
+      fetcher: fake,
+    });
+    expect(result.action).toBe('unchanged');
+  });
+
+  it('(c) URL upgrade — fake tarball changes → action=upgraded', async () => {
+    const tarball1 = await makeGithubTarball({
+      repoPrefix: 'minih-1',
+      files: [{ path: 'prompt.md', body: 'v1' }],
+    });
+    const tarball2 = await makeGithubTarball({
+      repoPrefix: 'minih-1',
+      files: [{ path: 'prompt.md', body: 'v2-much-longer-content' }],
+    });
+    const fake = new FakeAgentPackFetcher();
+    fake.setSuccess('github:foo/my-agent', 'main', {
+      commitSha: '1'.repeat(40),
+      tarball: tarball1,
+    });
+    await installAgentPack({
+      source: { type: 'url', url: 'github:foo/my-agent', ref: 'main' },
+      agentsDir,
+      fetcher: fake,
+    });
+    fake.setSuccess('github:foo/my-agent', 'main', {
+      commitSha: '2'.repeat(40),
+      tarball: tarball2,
+    });
+    const result = await installAgentPack({
+      source: { type: 'url', url: 'github:foo/my-agent', ref: 'main' },
+      agentsDir,
+      fetcher: fake,
+    });
+    expect(result.action).toBe('upgraded');
+    expect(result.changedFiles).toContain('prompt.md');
+    expect(
+      fs.readFileSync(path.join(agentsDir, 'my-agent', 'prompt.md'), 'utf-8'),
+    ).toBe('v2-much-longer-content');
+  });
+
+  it('(d) URL with subpath → installs only the slice', async () => {
+    const tarball = await makeGithubTarball({
+      repoPrefix: 'minih-x',
+      files: [
+        { path: 'README.md', body: 'top-level readme' },
+        { path: 'agents/demo/prompt.md', body: 'demo prompt' },
+        {
+          path: 'agents/other/prompt.md',
+          body: 'other prompt that should NOT be installed',
+        },
+      ],
+    });
+    const fake = new FakeAgentPackFetcher();
+    fake.setSuccess('github:org/repo', 'main', {
+      commitSha: '3'.repeat(40),
+      tarball,
+    });
+    const result = await installAgentPack({
+      source: {
+        type: 'url',
+        url: 'github:org/repo',
+        ref: 'main',
+        subpath: 'agents/demo',
+      },
+      agentsDir,
+      fetcher: fake,
+    });
+    expect(result.slug).toBe('demo'); // basename of subpath
+    expect(
+      fs.readFileSync(path.join(agentsDir, 'demo', 'prompt.md'), 'utf-8'),
+    ).toBe('demo prompt');
+    expect(fs.existsSync(path.join(agentsDir, 'other'))).toBe(false);
+    expect(fs.existsSync(path.join(agentsDir, 'demo', 'README.md'))).toBe(
+      false,
+    );
+  });
+
+  it('(e) URL with subpath pointing to non-existent dir → E182', async () => {
+    const tarball = await makeGithubTarball({
+      repoPrefix: 'minih-x',
+      files: [{ path: 'prompt.md', body: 'x' }],
+    });
+    const fake = new FakeAgentPackFetcher();
+    fake.setSuccess('github:org/repo', 'main', {
+      commitSha: '4'.repeat(40),
+      tarball,
+    });
+    await expect(
+      installAgentPack({
+        source: {
+          type: 'url',
+          url: 'github:org/repo',
+          ref: 'main',
+          subpath: 'does/not/exist',
+        },
+        agentsDir,
+        fetcher: fake,
+      }),
+    ).rejects.toThrow(/subpath.*not found.*\(E182\)/);
+  });
+
+  it('(g) URL install + tmp dir cleaned up on success', async () => {
+    const beforeDirs = fs
+      .readdirSync(os.tmpdir())
+      .filter((d) => d.startsWith('minih-agent-pack-'));
+    const tarball = await makeGithubTarball({
+      repoPrefix: 'minih-x',
+      files: [{ path: 'prompt.md', body: 'x' }],
+    });
+    const fake = new FakeAgentPackFetcher();
+    fake.setSuccess('github:foo/my-agent', 'main', {
+      commitSha: '5'.repeat(40),
+      tarball,
+    });
+    await installAgentPack({
+      source: { type: 'url', url: 'github:foo/my-agent', ref: 'main' },
+      agentsDir,
+      fetcher: fake,
+    });
+    const afterDirs = fs
+      .readdirSync(os.tmpdir())
+      .filter((d) => d.startsWith('minih-agent-pack-'));
+    expect(afterDirs.length).toBe(beforeDirs.length);
+  });
+
+  it('(h) URL install + tmp dir cleaned up on extract failure', async () => {
+    const beforeDirs = fs
+      .readdirSync(os.tmpdir())
+      .filter((d) => d.startsWith('minih-agent-pack-'));
+    const fake = new FakeAgentPackFetcher();
+    // Garbage that gunzips fine but is not a valid tar — extractor returns
+    // empty. install will then fail with implicit-manifest error since
+    // there's no prompt.md. Either way, tmp dir must be cleaned.
+    const garbage = zlib.gzipSync(Buffer.alloc(512));
+    fake.setSuccess('github:foo/my-agent', 'main', {
+      commitSha: '6'.repeat(40),
+      tarball: garbage,
+    });
+    await expect(
+      installAgentPack({
+        source: { type: 'url', url: 'github:foo/my-agent', ref: 'main' },
+        agentsDir,
+        fetcher: fake,
+      }),
+    ).rejects.toThrow();
+    const afterDirs = fs
+      .readdirSync(os.tmpdir())
+      .filter((d) => d.startsWith('minih-agent-pack-'));
+    expect(afterDirs.length).toBe(beforeDirs.length);
+  });
+
+  it('(i) URL install when fetcher rejects → E181 from fetcher', async () => {
+    const fake = new FakeAgentPackFetcher();
+    fake.setFailure(
+      'github:foo/my-agent',
+      'main',
+      new Error('synthetic E181 fetch failed'),
+    );
+    await expect(
+      installAgentPack({
+        source: { type: 'url', url: 'github:foo/my-agent', ref: 'main' },
+        agentsDir,
+        fetcher: fake,
+      }),
+    ).rejects.toThrow(/E181|fetch failed/);
+  });
+
+  it('(j) URL install without fetcher opt → composition-root bug guard', async () => {
+    await expect(
+      installAgentPack({
+        source: { type: 'url', url: 'github:foo/my-agent', ref: 'main' },
+        agentsDir,
+        // intentionally no `fetcher`
+      }),
+    ).rejects.toThrow(/internal error.*fetcher is required/);
+  });
+
+  it('(k) slug derivation: URL without subpath uses repo name', async () => {
+    const tarball = await makeGithubTarball({
+      repoPrefix: 'foo-1',
+      files: [{ path: 'prompt.md', body: 'x' }],
+    });
+    const fake = new FakeAgentPackFetcher();
+    fake.setSuccess('github:foo/my-special-agent', 'main', {
+      commitSha: '7'.repeat(40),
+      tarball,
+    });
+    const result = await installAgentPack({
+      source: {
+        type: 'url',
+        url: 'github:foo/my-special-agent',
+        ref: 'main',
+      },
+      agentsDir,
+      fetcher: fake,
+    });
+    expect(result.slug).toBe('my-special-agent');
+  });
+});

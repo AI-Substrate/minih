@@ -1,9 +1,14 @@
 /**
  * `minih agent <verb>` — agent pack management.
  *
- * Plan 017 — FX001 ships the LOCAL-PATH branch of `agent install` only.
- * URL/registry inputs return E182 directing callers to Phase 3/4. Other
- * verbs (`info`, `list`, `remove`) ship in Phase 4.
+ * Plan 017 — Phase 3 lands the URL fetch path. Local-path source still
+ * works (FX001). Registry slug still throws E182 (Phase 4).
+ *
+ * **Fetcher composition root** (T007): defaults to `GitHubAgentPackFetcher`
+ * (real `fetch()`); honors `MINIH_AGENT_PACK_FETCHER=fake:<json>` env var
+ * ONLY when `NODE_ENV === 'test'` so production sets fail loudly. The
+ * `<json>` payload maps `<url>\u0001<ref>` keys to
+ * `{commitSha, tarballBase64}` responses for `FakeAgentPackFetcher`.
  */
 
 import * as fs from 'node:fs';
@@ -12,6 +17,9 @@ import chalk from 'chalk';
 import type { Command } from 'commander';
 import {
   type AgentPackSource,
+  FakeAgentPackFetcher,
+  GitHubAgentPackFetcher,
+  type IAgentPackFetcher,
   type InstallSource,
   installAgentPack,
   listAgents,
@@ -79,6 +87,7 @@ export function registerAgentCommand(program: Command): void {
             asSlug: opts.as,
             force: opts.force,
             yes: opts.yes,
+            fetcher: source.type === 'url' ? resolveFetcher() : undefined,
           });
 
           if (process.stderr.isTTY) {
@@ -154,9 +163,15 @@ function parseRefToInstallSource(
       subpathOverride: opts?.subpathOverride,
     });
     if (parsed.type === 'github' || parsed.type === 'https') {
+      // Canonicalize the URL we pass downstream — the fetcher receives a
+      // stable identity-only form (`github:owner/repo`); ref + subpath
+      // travel as separate fields. Without this, `github:foo/bar#main`
+      // and `https://github.com/foo/bar.git#main` would hit different
+      // fake-fetcher preset keys for the same logical source.
+      const cleanUrl = `github:${parsed.owner}/${parsed.repo}`;
       return {
         type: 'url',
-        url: ref,
+        url: cleanUrl,
         // --ref flag wins over URL-embedded #ref (npm-style override)
         ref: opts?.refOverride ?? parsed.ref,
         subpath: parsed.subpath,
@@ -211,6 +226,96 @@ function pickErrorCode(
   }
   // Fallback — generic invalid input.
   return ErrorCodes.AGENT_PACK_INVALID;
+}
+
+/**
+ * Composition root for the agent-pack fetcher (T007).
+ *
+ * Default: `GitHubAgentPackFetcher` — real `fetch()` against the GitHub
+ * API.
+ *
+ * **Test-only injection seam**: when `MINIH_AGENT_PACK_FETCHER` env var
+ * is set, we honor it ONLY if `NODE_ENV === 'test'`. Otherwise we hard-
+ * fail with E181 to prevent production from silently using a fake fetcher.
+ *
+ * Format: `MINIH_AGENT_PACK_FETCHER=fake:<json>` where `<json>` is a
+ * stringified object: `{ "<url>\u0001<ref>": { commitSha, tarballBase64 } }`.
+ *
+ * On every fake-fetcher invocation, a one-line warning is written to
+ * stderr so a developer never silently runs against the fake.
+ *
+ * Phase 4.10 may add additional hardening (e.g. `--allow-fake-fetcher`
+ * dev flag); the format here stays compatible.
+ */
+function resolveFetcher(): IAgentPackFetcher {
+  const envVal = process.env.MINIH_AGENT_PACK_FETCHER;
+  if (envVal === undefined) {
+    return new GitHubAgentPackFetcher({
+      userAgent: `minih/${getMinihVersion()}`,
+    });
+  }
+
+  // Env var IS set — apply production-safety gate.
+  if (process.env.NODE_ENV !== 'test') {
+    throw new Error(
+      'MINIH_AGENT_PACK_FETCHER is set but NODE_ENV is not "test" — refusing to use a fake fetcher in production (E181). Unset MINIH_AGENT_PACK_FETCHER, or set NODE_ENV=test if you are running a test harness.',
+    );
+  }
+
+  if (!envVal.startsWith('fake:')) {
+    throw new Error(
+      `MINIH_AGENT_PACK_FETCHER value malformed (E181): expected "fake:<json>", got "${envVal.slice(0, 40)}..."`,
+    );
+  }
+  const jsonText = envVal.slice('fake:'.length);
+  let parsed: Record<string, { commitSha: string; tarballBase64: string }>;
+  try {
+    parsed = JSON.parse(jsonText);
+  } catch (err) {
+    throw new Error(
+      `MINIH_AGENT_PACK_FETCHER value malformed (E181): could not parse JSON — ${
+        (err as Error).message
+      }`,
+    );
+  }
+
+  process.stderr.write(
+    `[minih] using FakeAgentPackFetcher (NODE_ENV=test, MINIH_AGENT_PACK_FETCHER set with ${
+      Object.keys(parsed).length
+    } preset response(s))\n`,
+  );
+
+  const fake = new FakeAgentPackFetcher();
+  for (const [key, val] of Object.entries(parsed)) {
+    const sep = key.indexOf('\u0001');
+    if (sep === -1) {
+      throw new Error(
+        `MINIH_AGENT_PACK_FETCHER value malformed (E181): preset key "${key}" missing url\\u0001ref separator`,
+      );
+    }
+    const url = key.slice(0, sep);
+    const ref = key.slice(sep + 1);
+    fake.setSuccess(url, ref, {
+      commitSha: val.commitSha,
+      tarball: Buffer.from(val.tarballBase64, 'base64'),
+    });
+  }
+  return fake;
+}
+
+let cachedMinihVersion: string | null = null;
+function getMinihVersion(): string {
+  if (cachedMinihVersion !== null) return cachedMinihVersion;
+  try {
+    // src/cli/commands/agent.ts → walk up to repo root
+    const here = path.dirname(new URL(import.meta.url).pathname);
+    const pkgPath = path.resolve(here, '..', '..', '..', 'package.json');
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+    cachedMinihVersion = String(pkg.version ?? '0.0.0');
+  } catch {
+    cachedMinihVersion = '0.0.0';
+  }
+  return cachedMinihVersion;
 }
 
 // ─── info / list helpers ─────────────────────────────────────────────────

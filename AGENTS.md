@@ -86,6 +86,12 @@ just fft           # full gate — required before every commit/push
 # Check whether one is already running
 RUN=$(minih status code-review-companion 2>/dev/null | jq -r '.data | select(.verdict == "active") | .runId')
 if [ -z "$RUN" ]; then
+  # First-time setup: install the companion if it isn't in this project yet.
+  # Idempotent — re-running upgrades from upstream.
+  if [ ! -d agents/code-review-companion ]; then
+    minih agent install code-review-companion
+  fi
+
   # No active run — start one. Requires GH_TOKEN in the spawning shell env.
   export GH_TOKEN=$(gh auth token)   # set this once if you don't have it
   minih run code-review-companion &
@@ -94,6 +100,8 @@ if [ -z "$RUN" ]; then
 fi
 echo "Companion run: $RUN"
 ```
+
+`minih agent install` copies the canonical companion's manifest-listed files (prompt, instructions, schemas) into `agents/code-review-companion/` and writes a provenance sidecar. Install once per project; subsequent `install` invocations upgrade idempotently. See [`docs/how/agent-pack.md`](docs/how/agent-pack.md) for the full agent-pack surface.
 
 The `verdict: 'active'` filter is load-bearing — `minih status` defaults to "latest run" which may be a completed one from a prior session.
 

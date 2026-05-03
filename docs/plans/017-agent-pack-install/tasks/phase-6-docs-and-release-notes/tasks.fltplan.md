@@ -70,7 +70,7 @@ stateDiagram-v2
 
 - [x] **Stage 1: Author docs/how/agent-pack.md** — full surface guide (manifest, sidecar, security, errors, pitfalls)
 - [x] **Stage 2: README Agent Packs section** — 3-line demo + cross-link
-- [ ] **Stage 3: AGENTS.md companion install** — replace hand-copy snippet with `minih agent install`
+- [x] **Stage 3: AGENTS.md companion install** — replace hand-copy snippet with `minih agent install`
 - [ ] **Stage 4: AGENTS_README.md getting started** — paragraph mentioning `agent` subcommand
 - [ ] **Stage 5: runner Concepts table** — add agent-pack entry
 - [ ] **Stage 6: Plan progress + flight log + final commit** — Phase 6 → ✅; conventional commit
@@ -101,7 +101,7 @@ stateDiagram-v2
 
 - [x] T6.1: Author `docs/how/agent-pack.md`
 - [x] T6.2: README "Agent Packs" section
-- [ ] T6.3: AGENTS.md companion-mode install
+- [x] T6.3: AGENTS.md companion-mode install
 - [ ] T6.4: AGENTS_README.md getting-started
 - [ ] T6.5: runner Concepts table refresh
 - [ ] T6.6: Plan progress + flight log + final commit

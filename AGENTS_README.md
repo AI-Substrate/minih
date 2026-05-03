@@ -157,6 +157,18 @@ npx minih quickstart
 | **GH_TOKEN** | `export GH_TOKEN=$(gh auth token)` |
 | **@github/copilot-sdk** | `npm install @github/copilot-sdk` (peer dependency) |
 
+### Install curated agents with `minih agent install`
+
+Once `minih` is on `$PATH`, you can install agents from the bundled registry without hand-copying anything:
+
+```bash
+minih agent install code-review-companion        # bundled registry slug
+minih agent list --available                     # what else is installable
+minih agent install github:owner/repo#main:agents/x --yes  # any public repo
+```
+
+Each install copies the manifest-listed files into `agents/<slug>/` and writes a provenance sidecar (`.minih-source.json`) so re-running `install` upgrades idempotently. Full surface — manifest format, security model, error reference — in [`docs/how/agent-pack.md`](./docs/how/agent-pack.md).
+
 ---
 
 ## Your First Agent: Step by Step

@@ -183,7 +183,7 @@ Specifically check:
 - `docs/plans/<plan>/` — spec, plan, workshops, run-files (acceptance language)
 - `docs/domains/<domain>/domain.md` — history rows + concept descriptions
 - `AGENTS_README.md` and any top-level README sections
-- `agents/_shared/preamble.md` AND `src/templates/shared-preamble.md` (these MUST match — bundled to dist)
+- `agents/_shared/preamble.md` AND `src/templates/shared-preamble.md` — in projects that bundle a shared preamble (e.g. minih ships both via `scripts/copy-schemas.js`), these MUST stay in sync. If the project doesn't have either file, skip.
 - `agents/<slug>/prompt.md` for any agent that surfaces the changed concept
 - Test files mentioning the old wording (renaming wording without updating tests = silent drift)
 

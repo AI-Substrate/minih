@@ -79,14 +79,37 @@ stateDiagram-v2
 | Specify | ✓ done | 2026-05-03 | 2026-05-03 | research-dossier + workshop + spec authored |
 | Clarify | ✓ done | 2026-05-03 | 2026-05-03 | All Q1-Q11 resolved (workshop carried most) |
 | Architect | ✓ done | 2026-05-03 | 2026-05-03 | 6-phase plan, 45 tasks, 10 Key Findings, full Validation Record |
-| Phase 1 | ✓ done | 2026-05-03 | 2026-05-03 | Foundations shipped — 74 new tests, just fft green; types + manifest + registry + sidecar + url + fetcher seam + re-exports + E180-E184 |
-| Phase 2 | ⏭ next | — | — | Local install path (FakeAgentPackFetcher) |
+| Phase 1 | ✓ done | 2026-05-03 | 2026-05-03 | Foundations shipped (commit `3bcb001`) |
+| Phase 2 | ⚠ subsumed | 2026-05-03 | 2026-05-03 | Folded into FX001 + FX002 — no separate phase commit |
+| FX001 | ✓ done | 2026-05-03 | 2026-05-03 | Local-path install vertical slice (`a8aa801`) |
+| FX002 | ✓ done | 2026-05-03 | 2026-05-03 | `agent info` + `agent list` (`de40459`/`549aa97`) |
+| Phase 3 | ✓ done | 2026-05-03 | 2026-05-03 | Real GitHub fetch + tarball extraction (`073b339`) |
+| Phase 4 | ⚠ partial | — | — | install/info/list shipped; remove + confirmation prompt + `--check` flags pending (FX003+) |
+| Phase 5 | ✓ done | 2026-05-03 | 2026-05-03 | Registry seed + dogfood — `code-review-companion` end-to-end verified live in 1.6s; `agent list --available` wired; T011 follow-up registered |
+| Phase 6 | ⏭ next | — | — | Docs + release notes |
 
 ---
 
 ## Flight Log
 
-### 2026-05-03
+### 2026-05-03 (Phase 5)
+
+- ✅ **Phase 5 dossier generated** via `/plan-5-v2-phase-tasks-and-brief --phase 5` — T001-T011 (10 tasks; T002b + T009b inserted by validation)
+- ✅ Validate-v2 broad sweep — 4 parallel agents (Source-Truth, Cross-Ref, Completeness, Forward-Compat) — 2 HIGH + 6 MEDIUM fixes applied inline; Forward-Compatibility Matrix shows all consumers green
+- ✅ Companion booted (run `2026-05-03T15-04-50-212Z-e6ee`) but went silent after orient — fell back to no-companion mode mid-phase per plan-6-companion fallback protocol
+- ✅ T001 audit: prompt.md soft-edit on minih-internal drift-audit reference (graceful degradation for non-minih projects)
+- ✅ T002 + T002b: canonical `code-review-companion/agent.json` (4 files, manifestVersion `0.1.0`, tags `[companion, review, coordination, exemplar, quality]`) + 9 unit tests guarding the load-bearing security gate
+- ✅ T003: local-install round-trip verified (install → info → re-install no-op) against existing built CLI
+- ✅ T004 + T005 + T006: bundled registry catalog with 1 curated entry; `scripts/copy-schemas.js` extension; `dist/templates/agents-registry.json` byte-identical with source; `agent list --available` wired (was deferred from Phase 4)
+- ✅ T007: registry-seed unit tests (8 cases) including explicit curation-gate assertion ("smoke-test", "convention-check", etc. MUST NOT be in catalog)
+- ✅ T008: MINIH_E2E headline e2e — `code-review-companion` installed live from real GitHub in **1.6s wall-clock** (well within spec AC1's 5s soft budget)
+- ✅ T009: MINIH_REGRESSION baseline + dedupe assertion via `toMatchInlineSnapshot()`
+- ✅ T009b: Spec AC11 self-install regression — E183 collision when target slug already exists; `--as` escape hatch verified
+- ✅ T010: Domain.md history rows for runner + cli; Phase Index → ✅
+- ✅ T011: Post-merge follow-up registered (FX003 stub for `MINIH_E2E_PREMERGE` flip + `outside.md` authoring)
+- ⏭ Next: `/plan-7-v2-code-review --phase 5 --plan ...` (replaces companion review since companion died) → then `/plan-5-v2-phase-tasks-and-brief --phase 6` (docs)
+
+### 2026-05-03 (Phase 3)
 
 - ✅ Research dossier written (~31 KB) — codebase context, prior plans, foundations confirmed
 - ✅ External research note: 6 competing standards surveyed; Claude Code Plugin Marketplaces selected as conceptual model

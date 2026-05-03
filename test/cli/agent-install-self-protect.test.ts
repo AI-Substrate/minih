@@ -98,9 +98,7 @@ function fakeEnv(
 let projectRoot: string;
 
 beforeEach(() => {
-  projectRoot = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'minih-self-protect-'),
-  );
+  projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'minih-self-protect-'));
   fs.mkdirSync(path.join(projectRoot, 'agents'));
 });
 
@@ -150,23 +148,20 @@ describe('agent install code-review-companion — self-install protection (T009b
       ],
     });
 
-    const result = run(
-      ['agent', 'install', 'code-review-companion'],
-      {
-        cwd: projectRoot,
-        env: {
-          NODE_ENV: 'test',
-          MINIH_AGENT_PACK_FETCHER: fakeEnv([
-            {
-              url: 'github:AI-Substrate/minih',
-              ref: 'main',
-              commitSha: 'deadbee',
-              tarball,
-            },
-          ]),
-        },
+    const result = run(['agent', 'install', 'code-review-companion'], {
+      cwd: projectRoot,
+      env: {
+        NODE_ENV: 'test',
+        MINIH_AGENT_PACK_FETCHER: fakeEnv([
+          {
+            url: 'github:AI-Substrate/minih',
+            ref: 'main',
+            commitSha: 'deadbee',
+            tarball,
+          },
+        ]),
       },
-    );
+    });
 
     expect(result.exitCode).not.toBe(0);
     const envelope = JSON.parse(result.stdout);

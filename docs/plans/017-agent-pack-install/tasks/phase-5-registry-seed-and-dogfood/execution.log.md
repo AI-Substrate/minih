@@ -77,3 +77,19 @@ All 4 round-trip assertions pass.
 
 **Discovery 2 (cosmetic, not blocking)**: `agent info` includes `agent.json` itself in the files list with `description: null` because the manifest doesn't list itself. Future Phase 6 docs note: this is by-design (the manifest is auto-shipped by the installer but doesn't self-reference); a future enhancement could surface `description: 'Agent pack manifest (auto-shipped)'`.
 
+
+### Companion deviation — fell back to no-companion mode mid-phase
+
+**State observed at 2026-05-03T15:20Z**:
+- Companion run `2026-05-03T15-04-50-212Z-e6ee` booted at 15:04:50Z and processed the briefing message.
+- Last event timestamp: `2026-05-03T05:05:02.808Z` (orient streaming text_delta) — went silent ~13 minutes before the first review-request was sent.
+- `minih status code-review-companion` reports `verdict: stale`, `currentlyRunningTool: null`, `selfReportedState: null`, `lastEventAt: null`.
+- `ps aux | grep "minih run code-review-companion"` returns no PID (process died silently).
+- 4 outbound review-request pings + 1 briefing in the outside inbox; ZERO inside messages (no findings, no acks, no progress).
+
+**Diagnosis**: The boot succeeded and orient completed (events.ndjson shows ~600 bytes of text_delta to ~05:05:02Z) but the companion process exited cleanly after orient instead of long-polling on the inbox. Likely a bug in the runner's idle loop or a session-timeout that fired before the first inbox poll.
+
+**Decision**: Per `plan-6-v2-implement-phase-companion` § Step 0 fallback ("If still no active run after two attempts, fall back to no-companion mode: log the deviation in execution.log.md, proceed without companion, and run /plan-7-v2-code-review afterward"), continuing the rest of Phase 5 in no-companion mode. The implementation is fft-validated locally before commit; reviewing post-hoc with `/plan-7-v2-code-review` after the phase lands.
+
+**Tasks completed under no-companion mode**: T007 (registry-seed unit), T008 (MINIH_E2E headline e2e — 1643ms wall-clock, well within 5s soft budget), T009 (MINIH_REGRESSION baseline + dedupe), T009b (self-install regression — 2/2 green).
+

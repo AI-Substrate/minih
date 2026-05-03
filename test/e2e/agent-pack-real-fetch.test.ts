@@ -183,9 +183,7 @@ describeE2e('agent install — real GitHub fetch (T009)', () => {
 
     if (preMerge) {
       expect(envelope.data.source.type).toBe('url');
-      expect(envelope.data.source.subpath).toBe(
-        'agents/code-review-companion',
-      );
+      expect(envelope.data.source.subpath).toBe('agents/code-review-companion');
     } else {
       expect(envelope.data.source.type).toBe('registry');
       expect(envelope.data.source.registrySlug).toBe('code-review-companion');

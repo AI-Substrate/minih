@@ -3,7 +3,7 @@
 **Plan**: [`../../agent-pack-install-plan.md`](../../agent-pack-install-plan.md)
 **Phase**: Phase 5: Registry seed + dogfood — `code-review-companion` end-to-end
 **Generated**: 2026-05-03
-**Status**: Ready for takeoff
+**Status**: Landed
 
 ---
 
@@ -82,7 +82,7 @@ stateDiagram-v2
     S10 --> S11
     S11 --> [*]
 
-    class S1,S2,S2b,S3,S4,S5,S6,S7,S8,S9,S9b,S10,S11 pending
+    class S1,S2,S2b,S3,S4,S5,S6,S7,S8,S9,S9b,S10,S11 done
 ```
 
 **Legend**: grey = pending | yellow = active | red = blocked/needs input | green = done
@@ -94,18 +94,18 @@ stateDiagram-v2
 <!-- Updated by /plan-6-v2 during implementation: [ ] → [~] → [x] -->
 
 - [x] **Stage 1: Audit prompt portability** — Sweep `prompt.md` + `instructions.md` for minih-internal paths (`agents/code-review-companion/prompt.md`, `agents/code-review-companion/instructions.md`)
-- [~] **Stage 2: Author agent.json** — The canonical reference manifest with 4 files (`agents/code-review-companion/agent.json` — new file)
-- [ ] **Stage 2b: TDD manifest validation** — Unit test runs `validateManifest()` against the canonical file (`test/runner/agent-pack/companion-manifest.test.ts` — new file)
-- [ ] **Stage 3: Verify local install round-trip** — Manual smoke against built CLI (no new files; recorded in `execution.log.md`)
-- [ ] **Stage 4: Author registry seed** — One curated entry, internal-only agents stay out (`src/templates/agents-registry.json` — new file)
-- [ ] **Stage 5: Wire build pipeline** — Extend `copy-schemas.js` to ship the registry to `dist/templates/` (`scripts/copy-schemas.js`)
-- [ ] **Stage 6: Verify build artifact** — Confirm `dist/templates/agents-registry.json` exists; `agent list --available` returns the seed (no new files)
-- [ ] **Stage 7: Unit test slug resolves** — Vitest test reads source registry directly + resolves dogfood slug (`test/runner/agent-pack/registry-seed.test.ts` — new file)
-- [ ] **Stage 8: MINIH_E2E headline** — Real GitHub install in tmp project; URL form pre-merge, slug form post-merge (`test/e2e/agent-pack-real-fetch.test.ts` — extend existing)
-- [ ] **Stage 9: MINIH_REGRESSION baseline + duplicate-slug guard** — Snapshot of `agent list --available` output + dedup assertion (`test/cli/agent-list-baseline.test.ts` — new file)
-- [ ] **Stage 9b: Self-install regression** — Verify `agent install code-review-companion` from inside the minih repo refuses (`test/cli/agent-install-self-protect.test.ts` — new file)
-- [ ] **Stage 10: Domain docs + plan progress** — History rows + Phase Index ✅ + plan-level Flight Log entry (`docs/domains/runner/domain.md`, `docs/domains/cli/domain.md`, `docs/plans/017-agent-pack-install/agent-pack-install-plan.md`, `docs/plans/017-agent-pack-install/agent-pack-install.fltplan.md`)
-- [ ] **Stage 11: Post-merge follow-up registration** — FX003 stub for `MINIH_E2E_PREMERGE` flip + `outside.md` authoring (followup tracker)
+- [x] **Stage 2: Author agent.json** — The canonical reference manifest with 4 files (`agents/code-review-companion/agent.json` — new file)
+- [x] **Stage 2b: TDD manifest validation** — Unit test runs `validateManifest()` against the canonical file (`test/runner/agent-pack/companion-manifest.test.ts` — new file)
+- [x] **Stage 3: Verify local install round-trip** — Manual smoke against built CLI (no new files; recorded in `execution.log.md`)
+- [x] **Stage 4: Author registry seed** — One curated entry, internal-only agents stay out (`src/templates/agents-registry.json` — new file)
+- [x] **Stage 5: Wire build pipeline** — Extend `copy-schemas.js` to ship the registry to `dist/templates/` (`scripts/copy-schemas.js`)
+- [x] **Stage 6: Verify build artifact** — Confirm `dist/templates/agents-registry.json` exists; `agent list --available` returns the seed (no new files)
+- [x] **Stage 7: Unit test slug resolves** — Vitest test reads source registry directly + resolves dogfood slug (`test/runner/agent-pack/registry-seed.test.ts` — new file)
+- [x] **Stage 8: MINIH_E2E headline** — Real GitHub install in tmp project; URL form pre-merge, slug form post-merge (`test/e2e/agent-pack-real-fetch.test.ts` — extend existing)
+- [x] **Stage 9: MINIH_REGRESSION baseline + duplicate-slug guard** — Snapshot of `agent list --available` output + dedup assertion (`test/cli/agent-list-baseline.test.ts` — new file)
+- [x] **Stage 9b: Self-install regression** — Verify `agent install code-review-companion` from inside the minih repo refuses (`test/cli/agent-install-self-protect.test.ts` — new file)
+- [x] **Stage 10: Domain docs + plan progress** — History rows + Phase Index ✅ + plan-level Flight Log entry (`docs/domains/runner/domain.md`, `docs/domains/cli/domain.md`, `docs/plans/017-agent-pack-install/agent-pack-install-plan.md`, `docs/plans/017-agent-pack-install/agent-pack-install.fltplan.md`)
+- [x] **Stage 11: Post-merge follow-up registration** — FX003 stub for `MINIH_E2E_PREMERGE` flip + `outside.md` authoring (followup tracker)
 
 ---
 
@@ -149,10 +149,10 @@ flowchart LR
 - [ ] `src/templates/agents-registry.json` exists with exactly 1 entry (`code-review-companion`)
 - [ ] After `npm run build`, `dist/templates/agents-registry.json` exists and matches source byte-for-byte
 - [ ] `<built-cli> agent list --available` (no `MINIH_E2E` needed) returns the seed entry
-- [ ] T003 manual local-install round-trip: `install → info → re-install no-op` works
-- [ ] T007 unit test green: registry parses + slug resolves
-- [ ] T008 MINIH_E2E test green (URL-form pre-merge OR slug-form post-merge)
-- [ ] T009 `MINIH_REGRESSION=1 npm test` green; baseline matches seed
+- [x] T003 manual local-install round-trip: `install → info → re-install no-op` works
+- [x] T007 unit test green: registry parses + slug resolves
+- [x] T008 MINIH_E2E test green (URL-form pre-merge OR slug-form post-merge)
+- [x] T009 `MINIH_REGRESSION=1 npm test` green; baseline matches seed
 - [ ] Spec ACs verified at least once: AC1 (headline install), AC8 (list installed vs available), AC12 (curation enforced — internal agents return E180)
 - [ ] `just fft` green
 - [ ] No internal-only agents leaked into the registry (`smoke-test`, `convention-check`, etc. stay out)
@@ -176,15 +176,15 @@ flowchart LR
 ## Checklist
 
 - [x] T001: Audit prompt + instructions for fresh-project portability
-- [~] T002: Author `agents/code-review-companion/agent.json`
-- [ ] T002b: TDD `validateManifest()` unit test for the canonical manifest
-- [ ] T003: Verify FX001 local install round-trip against the new manifest
-- [ ] T004: Create `src/templates/agents-registry.json` with 1 curated entry
-- [ ] T005: Extend `scripts/copy-schemas.js` to copy registry to `dist/templates/`
-- [ ] T006: Verify `npm run build` produces the bundled registry artifact
-- [ ] T007: Add unit test that registry parses + slug resolves
-- [ ] T008: MINIH_E2E gated headline e2e (URL-form pre-merge / slug-form post-merge) with timing budget
-- [ ] T009: MINIH_REGRESSION-gated baseline + duplicate-slug guard
-- [ ] T009b: Self-install regression (Spec AC11 coverage)
-- [ ] T010: domain.md + plan progress + plan-level Flight Log entry
-- [ ] T011: Post-merge follow-up registration (MINIH_E2E_PREMERGE flip + outside.md authoring)
+- [x] T002: Author `agents/code-review-companion/agent.json`
+- [x] T002b: TDD `validateManifest()` unit test for the canonical manifest
+- [x] T003: Verify FX001 local install round-trip against the new manifest
+- [x] T004: Create `src/templates/agents-registry.json` with 1 curated entry
+- [x] T005: Extend `scripts/copy-schemas.js` to copy registry to `dist/templates/`
+- [x] T006: Verify `npm run build` produces the bundled registry artifact
+- [x] T007: Add unit test that registry parses + slug resolves
+- [x] T008: MINIH_E2E gated headline e2e (URL-form pre-merge / slug-form post-merge) with timing budget
+- [x] T009: MINIH_REGRESSION-gated baseline + duplicate-slug guard
+- [x] T009b: Self-install regression (Spec AC11 coverage)
+- [x] T010: domain.md + plan progress + plan-level Flight Log entry
+- [x] T011: Post-merge follow-up registration (MINIH_E2E_PREMERGE flip + outside.md authoring)

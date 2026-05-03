@@ -78,7 +78,7 @@ No new domains. `agent-pack/` is an internal sub-module of `runner`, exposed via
 | 2 | Local install path with FakeAgentPackFetcher | runner | Implement `installAgentPack`, `removeAgentPack`, `infoAgentPack` end-to-end against the fake; cover atomic-swap, drift detection, runtime-dir preservation | Phase 1 | ⚠️ Subsumed by FX001+FX002 |
 | 3 | Real fetch — GitHub tarball download + extract | runner | Real `IAgentPackFetcher` impl using Node `fetch()`; tarball extractor with security guards (size cap, path traversal, top-level-prefix strip) | Phase 1 | ✅ Complete |
 | 4 | CLI surface + UX | cli | `minih agent install|info|list|remove` subcommands; flag set; confirmation prompt; `minih list` alias; JSON envelope; self-install detection | Phase 2, 3 | ⚠️ Partial (install/info/list shipped via FX001+FX002+P3; remove + confirmation prompt + --check pending) |
-| 5 | Registry seed + dogfood — `code-review-companion` end-to-end | runner + cli | Author `agent.json` for `code-review-companion`; create `agents-registry.json` with one entry; extend `scripts/copy-schemas.js`; manual end-to-end verify in fresh test project | Phase 4 | ⏳ Pending |
+| 5 | Registry seed + dogfood — `code-review-companion` end-to-end | runner + cli | Author `agent.json` for `code-review-companion`; create `agents-registry.json` with one entry; extend `scripts/copy-schemas.js`; manual end-to-end verify in fresh test project | Phase 4 | ✅ Complete (commit pending; T011 follow-up registered for post-merge `MINIH_E2E_PREMERGE` flip + outside.md authoring) |
 | 6 | Docs + release notes | docs | `docs/how/agent-pack.md`; README/AGENTS.md/AGENTS_README.md updates; domain.md history rows; release-please commit messaging | Phase 5 | ⏳ Pending (runner+cli domain.md history rows landed in P1+P3) |
 
 ## Harness Strategy
@@ -334,6 +334,7 @@ No new domains. `agent-pack/` is an internal sub-module of `runner`, exposed via
 |----|---------|---------|-----------|--------|--------|
 | FX001 | 2026-05-03 | Local-path install — vertical slice of `minih agent install` (subsumes part of Phase 2 + Phase 4 for the local source branch). URL/registry stub with E182 "not yet available" until Phase 3/4 land. | runner + cli | Complete | User proposal: "what about we upgrade the command to give a local file path" |
 | FX002 | 2026-05-03 | `agent info` + `agent list` — completes the local-install user loop. Reads `.minih-source.json` + `agent.json` + `prompt.md` frontmatter; surfaces per-file drift status; distinguishes minih-installed from hand-rolled. | cli | Complete | User direction: "okay great so what's next" → recommended completing the loop before Phase 3 |
+| FX003 | 2026-05-03 | Post-Phase-5 follow-ups: (a) drop `MINIH_E2E_PREMERGE` branching once `code-review-companion/agent.json` is on `main`; (b) author `outside.md` + 2 state schemas for `code-review-companion` and bump `manifestVersion` to `0.2.0`. | runner | Proposed (deferred — post-merge) | Phase 5 T011 follow-up |
 
 ## Risks (Plan-Level)
 

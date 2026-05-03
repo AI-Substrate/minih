@@ -149,22 +149,29 @@ describe('minih agent install — local path (FX001)', () => {
     expect(['E181', 'E182']).toContain(envelope.error.code);
   });
 
-  it('AC: bare slug (registry lookup) returns E182 with helpful "not yet available" message', () => {
+  it('AC: bare slug NOT in registry returns E180 with did-you-mean hint', () => {
+    // Phase 5 wired registry resolution. A slug like "code-review-companin"
+    // (typo) misses the registry → E180 + Levenshtein suggestion. The known-
+    // good "code-review-companion" slug is now installable, so we can't use
+    // it here — pick a typo that misses but resembles a registered entry.
     const result = run(
       [
         '--agents-dir',
         path.join(projectRoot, 'agents'),
         'agent',
         'install',
-        'code-review-companion',
+        'code-review-companin',
       ],
       { cwd: projectRoot, expectFail: true },
     );
     expect(result.exitCode).not.toBe(0);
     const envelope = JSON.parse(result.stdout);
     expect(envelope.status).toBe('error');
-    expect(envelope.error.code).toBe('E182');
-    expect(envelope.error.message).toMatch(/not yet available|Phase 4/i);
+    expect(envelope.error.code).toBe('E180');
+    expect(envelope.error.message).toMatch(/not in the bundled registry/i);
+    expect(envelope.error.message).toMatch(
+      /did you mean.*code-review-companion/i,
+    );
   });
 
   it('AC: --as <slug> aliases the install', () => {

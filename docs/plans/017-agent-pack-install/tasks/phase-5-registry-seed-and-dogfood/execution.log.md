@@ -40,3 +40,40 @@
 
 **Commit ping**: pending T001 commit + companion review-request.
 
+
+### T002 — Author agent.json — DONE 2026-05-03
+
+- Authored `agents/code-review-companion/agent.json` with 4 manifest-listed files + version `0.1.0` + tags `[companion, review, coordination, exemplar, quality]`.
+- Per-file descriptions written to be reference-quality (future authors copy this as a template).
+- Validation via T002b confirmed `validateManifest()` accepts the file.
+
+### T002b — TDD validateManifest unit test — DONE 2026-05-03
+
+- New `test/runner/agent-pack/companion-manifest.test.ts` (9 tests; ~120 LOC).
+- Positive cases: parses, validates, lists prompt.md, every file exists on disk, has companion tag, version 0.1.0.
+- Negative regression cases: traversal/runtime-dir/missing-prompt all rejected.
+- All 9 green in 2ms.
+- **Discovery (decision)**: 9 tests is the right size — covers both happy path AND ensures the security guard hasn't regressed since Phase 1 (negative cases are belt-and-braces but cheap).
+
+### T003 — Verify FX001 local-install round-trip — DONE 2026-05-03
+
+Manual test against existing built `dist/` (already includes FX001+FX002+P3):
+
+```bash
+TMP=$(mktemp -d); cd $TMP
+node <repo>/dist/cli/index.js agent install <repo>/agents/code-review-companion --as crc-test --agents-dir agents
+# → action: 'installed', source.type: 'local', 5 files (4 manifest + agent.json itself)
+node <repo>/dist/cli/index.js agent info crc-test --agents-dir agents
+# → manifestVersion: '0.1.0', source.type: 'local', all files status: 'unchanged'
+node <repo>/dist/cli/index.js agent install <repo>/agents/code-review-companion --as crc-test --agents-dir agents
+# → action: 'unchanged' (idempotent)
+node <repo>/dist/cli/index.js agent list --agents-dir agents
+# → ["crc-test"]
+```
+
+All 4 round-trip assertions pass.
+
+**Discovery 1 (consistency)**: prompt.md frontmatter `tags: [review, quality, coordination, exemplar]` was missing `companion` (the most identifying tag). agent.json had it; prompt.md didn't. `agent info` reads from prompt.md frontmatter for tags, so a fresh install would surface inconsistent tags. **Fix applied**: prompt.md frontmatter tags aligned to `[companion, review, quality, coordination, exemplar]`.
+
+**Discovery 2 (cosmetic, not blocking)**: `agent info` includes `agent.json` itself in the files list with `description: null` because the manifest doesn't list itself. Future Phase 6 docs note: this is by-design (the manifest is auto-shipped by the installer but doesn't self-reference); a future enhancement could surface `description: 'Agent pack manifest (auto-shipped)'`.
+

@@ -30,6 +30,7 @@ import {
   readRegistryCatalog,
   readSourceSidecar,
   resolveAgent,
+  resolveRegistrySlug,
   validateSlug,
   verifyChecksums,
 } from '../../runner/index.js';
@@ -79,17 +80,44 @@ export function registerAgentCommand(program: Command): void {
       ) => {
         const agentsDir = program.opts().agentsDir ?? 'agents';
         try {
-          const source = parseRefToInstallSource(argRef, {
+          let source = parseRefToInstallSource(argRef, {
             refOverride: opts.ref,
             subpathOverride: opts.subpath,
           });
+
+          // Resolve registry slug → curated url/ref/subpath via the bundled
+          // catalog. On miss, fail with E180 + Levenshtein suggestions so
+          // the user gets "did you mean" feedback. Phase 5 wiring.
+          if (source.type === 'registry') {
+            const catalog = readRegistryCatalog();
+            const resolved = resolveRegistrySlug(source.registrySlug, catalog);
+            if (resolved.entry === null) {
+              const hint =
+                resolved.suggestions.length > 0
+                  ? ` Did you mean: ${resolved.suggestions.join(', ')}?`
+                  : '';
+              throw new Error(
+                `agent install: slug "${source.registrySlug}" not in the bundled registry catalog (E180).${hint} Run \`minih agent list --available\` to see installable agents, or use a full git URL like \`github:owner/repo#ref:subpath\`.`,
+              );
+            }
+            source = {
+              type: 'registry',
+              registrySlug: source.registrySlug,
+              url: resolved.entry.url,
+              ref: opts.ref ?? resolved.entry.ref,
+              subpath: opts.subpath ?? resolved.entry.subpath,
+            };
+          }
+
+          const needsFetcher =
+            source.type === 'url' || source.type === 'registry';
           const result = await installAgentPack({
             source,
             agentsDir,
             asSlug: opts.as,
             force: opts.force,
             yes: opts.yes,
-            fetcher: source.type === 'url' ? resolveFetcher() : undefined,
+            fetcher: needsFetcher ? resolveFetcher() : undefined,
           });
 
           if (process.stderr.isTTY) {
@@ -214,6 +242,9 @@ function pickErrorCode(
   // Strict precedence: explicit E-code embedded in the error message wins.
   // Source-of-truth errors say "(E182)" / "(E183)" / etc inline so this
   // mapping survives any wording changes.
+  if (/\bE180\b/.test(message)) {
+    return ErrorCodes.AGENT_PACK_REGISTRY_MISS;
+  }
   if (/\bE183\b|already installed|hand-rolled/i.test(message)) {
     return ErrorCodes.AGENT_PACK_ALREADY_INSTALLED;
   }

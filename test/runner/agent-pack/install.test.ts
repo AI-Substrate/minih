@@ -316,17 +316,17 @@ describe('installAgentPack — local source', () => {
   });
 });
 
-describe('installAgentPack — registry/URL stubs (placeholder)', () => {
-  it('rejects URL source with helpful "not yet available" message', async () => {
+describe('installAgentPack — fetcher requirement guards', () => {
+  it('rejects URL source missing fetcher with composition-root error', async () => {
     await expect(
       installAgentPack({
         source: { type: 'url', url: 'github:foo/bar', ref: 'main' },
         agentsDir,
       }),
-    ).rejects.toThrow(/not yet available|Phase 3|E182/);
+    ).rejects.toThrow(/fetcher is required for URL source/);
   });
 
-  it('rejects registry source with helpful "not yet available" message', async () => {
+  it('rejects registry source missing fetcher with composition-root error', async () => {
     await expect(
       installAgentPack({
         source: {
@@ -337,7 +337,7 @@ describe('installAgentPack — registry/URL stubs (placeholder)', () => {
         },
         agentsDir,
       }),
-    ).rejects.toThrow(/not yet available|Phase 3|E182/);
+    ).rejects.toThrow(/fetcher is required for registry source/);
   });
 });
 

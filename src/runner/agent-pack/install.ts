@@ -106,12 +106,80 @@ export async function installAgentPack(
     return installFromUrl(opts.source, opts, opts.fetcher);
   }
   if (opts.source.type === 'registry') {
-    throw new Error(
-      'agent install from registry slug is not yet available in this build (E182). Registry resolution lands in Phase 4 of plan-017. For now, use `minih agent install github:owner/repo[#ref][:subpath]` or a local filesystem path.',
-    );
+    if (!opts.fetcher) {
+      throw new Error(
+        'agent install: internal error — fetcher is required for registry source. The CLI composition root must pass `fetcher` when source.type === "registry". See plan-017 Phase 5.',
+      );
+    }
+    return installFromRegistry(opts.source, opts, opts.fetcher);
   }
 
   return installFromLocal(opts.source, opts);
+}
+
+/**
+ * Install via registry slug: pivot to URL fetch using the registry-resolved
+ * url/ref/subpath, but tag the sidecar source as `'registry'` (with both
+ * `registrySlug` and resolved `commitSha`) so re-install can re-resolve
+ * through the catalog and `agent info` shows the curated origin.
+ */
+async function installFromRegistry(
+  source: {
+    type: 'registry';
+    registrySlug: string;
+    url: string;
+    ref: string;
+    subpath?: string;
+  },
+  opts: InstallOptions,
+  fetcher: IAgentPackFetcher,
+): Promise<InstallResult> {
+  const { commitSha, tarball } = await fetcher.fetchTarball(
+    source.url,
+    source.ref,
+  );
+
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'minih-agent-pack-'));
+  try {
+    await extractTarball(tarball, tmpRoot);
+
+    const stagedSourcePath = source.subpath
+      ? path.join(tmpRoot, source.subpath)
+      : tmpRoot;
+
+    if (
+      !fs.existsSync(stagedSourcePath) ||
+      !fs.statSync(stagedSourcePath).isDirectory()
+    ) {
+      throw new Error(
+        `agent install: registry slug "${source.registrySlug}" subpath "${source.subpath ?? ''}" not found in tarball from ${source.url}@${source.ref} (E182). The registry catalog may point at a stale ref or subpath.`,
+      );
+    }
+
+    const slug = opts.asSlug ?? source.registrySlug;
+
+    const sidecarSource: AgentPackSource = {
+      type: 'registry',
+      registrySlug: source.registrySlug,
+      url: source.url,
+      ref: source.ref,
+      subpath: source.subpath,
+      commitSha,
+    };
+
+    return installFromStagedDir({
+      stagedSourcePath,
+      slug,
+      sidecarSource,
+      opts,
+    });
+  } finally {
+    try {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    } catch {
+      // Best-effort cleanup; if it fails the OS will eventually clean tmpdir.
+    }
+  }
 }
 
 async function installFromLocal(

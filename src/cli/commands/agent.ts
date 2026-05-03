@@ -9,7 +9,11 @@
 import * as path from 'node:path';
 import chalk from 'chalk';
 import type { Command } from 'commander';
-import { type InstallSource, installAgentPack } from '../../runner/index.js';
+import {
+  type InstallSource,
+  installAgentPack,
+  parseAgentUrl,
+} from '../../runner/index.js';
 import {
   ErrorCodes,
   exitWithEnvelope,
@@ -26,22 +30,40 @@ export function registerAgentCommand(program: Command): void {
     .command('install <ref>')
     .description(
       'Install (or upgrade) an agent pack from a local filesystem path. ' +
-        'Remote git URLs and registry slugs ship in Phase 3/4.',
+        'Remote git URLs and registry slugs ship in Phase 3/4. ' +
+        'URL syntax (designed; fetch lands Phase 3): `github:owner/repo#branch:subpath`, `https://github.com/owner/repo#tag`.',
     )
     .option('--as <slug>', 'Install under a different local slug')
     .option(
       '--force',
       'Overwrite an existing folder even if it has no .minih-source.json',
     )
+    .option(
+      '--ref <branch-tag-or-sha>',
+      'Override the source ref (branch/tag/commit) — works like npm `#branch` or uv `@branch`',
+    )
+    .option(
+      '--subpath <path>',
+      'Override the source subpath (path inside the repo)',
+    )
     .option('--yes', 'Skip confirmation prompts (CI mode)', false)
     .action(
       async (
-        ref: string,
-        opts: { as?: string; force?: boolean; yes?: boolean },
+        argRef: string,
+        opts: {
+          as?: string;
+          force?: boolean;
+          ref?: string;
+          subpath?: string;
+          yes?: boolean;
+        },
       ) => {
         const agentsDir = program.opts().agentsDir ?? 'agents';
         try {
-          const source = parseRefToInstallSource(ref);
+          const source = parseRefToInstallSource(argRef, {
+            refOverride: opts.ref,
+            subpathOverride: opts.subpath,
+          });
           const result = await installAgentPack({
             source,
             agentsDir,
@@ -83,13 +105,19 @@ export function registerAgentCommand(program: Command): void {
 /**
  * Map a user-supplied install reference to an `InstallSource`. For FX001
  * scope:
- *   - Absolute path or relative path (`/`, `./`, `../`) → `local`
- *   - Otherwise — let the runner reject with E182 (URL/registry stubs)
+ *   - Absolute path or relative path (`/`, `./`, `../`, Windows drive) → `local`
+ *   - URL forms (`github:`, `gitlab:`, `https://`, `http://`, `git@`) → `url`
+ *     (parsed via `parseAgentUrl`; ref/subpath taken from the URL fragment
+ *     unless explicitly overridden by `--ref` / `--subpath`)
+ *   - Otherwise → registry slug (Phase 4 will resolve)
  *
- * Phase 4 will replace this with a richer parser that routes registry slugs
- * and URLs through their own resolution paths.
+ * `--ref` / `--subpath` flags override the URL-embedded equivalents (matches
+ * npm/uv ergonomics where `#branch` or `@branch` work but a flag wins).
  */
-function parseRefToInstallSource(ref: string): InstallSource {
+function parseRefToInstallSource(
+  ref: string,
+  opts?: { refOverride?: string; subpathOverride?: string },
+): InstallSource {
   if (ref === '') {
     throw new Error('agent install: <ref> argument cannot be empty');
   }
@@ -108,14 +136,30 @@ function parseRefToInstallSource(ref: string): InstallSource {
     ref.startsWith('gitlab:') ||
     ref.startsWith('git@')
   ) {
-    return { type: 'url', url: ref, ref: 'main' };
+    // Parse via the shared URL parser so #ref and ?path= work correctly.
+    // --subpath flag (if provided) overrides the URL fragment.
+    const parsed = parseAgentUrl(ref, {
+      subpathOverride: opts?.subpathOverride,
+    });
+    if (parsed.type === 'github' || parsed.type === 'https') {
+      return {
+        type: 'url',
+        url: ref,
+        // --ref flag wins over URL-embedded #ref (npm-style override)
+        ref: opts?.refOverride ?? parsed.ref,
+        subpath: parsed.subpath,
+      };
+    }
+    // Local path returned by parseAgentUrl — shouldn't happen given the prefix
+    // checks above, but handle defensively.
+    return { type: 'local', localPath: parsed.path };
   }
   // Bare slug — assumed to be a registry lookup.
   return {
     type: 'registry',
     registrySlug: ref,
     url: `<registry:${ref}>`,
-    ref: 'main',
+    ref: opts?.refOverride ?? 'main',
   };
 }
 

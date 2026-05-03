@@ -176,4 +176,74 @@ describe('minih agent install — local path (FX001)', () => {
       false,
     );
   });
+
+  // npm/uv-style URL syntax (designed; fetch lands Phase 3 — for now stubs E182)
+
+  it('npm-style: github:owner/repo#branch is parsed and routed to URL stub', () => {
+    const result = run(
+      [
+        '--agents-dir',
+        path.join(projectRoot, 'agents'),
+        'agent',
+        'install',
+        'github:foo/bar#dev',
+      ],
+      { cwd: projectRoot, expectFail: true },
+    );
+    expect(result.exitCode).not.toBe(0);
+    const envelope = JSON.parse(result.stdout);
+    expect(envelope.error.code).toBe('E182');
+    expect(envelope.error.message).toMatch(/not yet available|Phase 3/i);
+  });
+
+  it('npm-style: github:owner/repo#tag:subpath is parsed and routed to URL stub', () => {
+    const result = run(
+      [
+        '--agents-dir',
+        path.join(projectRoot, 'agents'),
+        'agent',
+        'install',
+        'github:foo/bar#v1.2.0:agents/x',
+      ],
+      { cwd: projectRoot, expectFail: true },
+    );
+    expect(result.exitCode).not.toBe(0);
+    const envelope = JSON.parse(result.stdout);
+    expect(envelope.error.code).toBe('E182');
+  });
+
+  it('--ref <branch> flag is accepted (overrides URL fragment) — still hits URL stub', () => {
+    const result = run(
+      [
+        '--agents-dir',
+        path.join(projectRoot, 'agents'),
+        'agent',
+        'install',
+        'github:foo/bar',
+        '--ref',
+        'feat/some-branch',
+      ],
+      { cwd: projectRoot, expectFail: true },
+    );
+    expect(result.exitCode).not.toBe(0);
+    const envelope = JSON.parse(result.stdout);
+    expect(envelope.error.code).toBe('E182');
+  });
+
+  it('malformed URL is rejected with E182 (parser catches it before runner stub)', () => {
+    const result = run(
+      [
+        '--agents-dir',
+        path.join(projectRoot, 'agents'),
+        'agent',
+        'install',
+        'github:no-slash',
+      ],
+      { cwd: projectRoot, expectFail: true },
+    );
+    expect(result.exitCode).not.toBe(0);
+    const envelope = JSON.parse(result.stdout);
+    expect(envelope.error.code).toBe('E182');
+    expect(envelope.error.message).toMatch(/malformed|github shorthand/i);
+  });
 });

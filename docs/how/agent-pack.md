@@ -100,11 +100,11 @@ URL-form sidecar `source.type` is `'url'`. The slug defaults to the subpath leaf
 Install from any local agent folder. Useful for cross-project development without round-tripping through GitHub:
 
 ```bash
-# Install the canonical companion from your local minih clone into another project
-minih agent install /Users/jordanknight/substrate/minih/agents/code-review-companion
+# Install a local agent into the current project
+minih agent install /path/to/your/local-agent-folder
 
 # Use a different slug to avoid collision
-minih agent install /Users/jordanknight/substrate/minih/agents/code-review-companion --as crc
+minih agent install /path/to/your/local-agent-folder --as my-alias
 ```
 
 Sidecar `source.type` is `'local'` with the absolute path recorded. Re-running `install` against a changed local source detects content drift and atomic-swaps.

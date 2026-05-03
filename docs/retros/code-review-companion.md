@@ -68,3 +68,12 @@
 - difficulties:
   - [annoying] coordination: Human in terminal B could not type into a chat with an agent the AI started in terminal A: minih view was read-only cross-process, outside inbox send wrote blind without the live transcript, and resume --human would take over rather than peer-attach. (workaround: The outside peer filed MW12 and implemented FX008/minih attach during the session; I recorded the difficulty for the ledger.)
   - [annoying] coordination: Final report composition required manually copying findings, counts, and ackOf relationships from the coordination transcript into output/report.json. (workaround: Manually reconstructed tasksReceived, findingsSent, findings[], and coordination notes from the inbox messages before validation.)
+
+## 2026-05-03T00:10:38.477Z — code-review-companion / 2026-05-03T09-55-21-823Z-1c80
+
+- runId: 2026-05-03T09-55-21-823Z-1c80
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-05-03T09-55-21-823Z-1c80
+- summary: Reviewed FX009 through the coordinated inbox. The initial implementation correctly fixed the live-plus-stale resolver failure but had a MEDIUM contract gap where stale-skip diagnostics were lost on null/fallback paths and a LOW flight-plan acceptance drift. The follow-up commit fixed both original findings; final review found one remaining LOW issue where attach prints duplicated stale-skip diagnostics after the diagnostic plumbing refactor.
+- **magicWand** (target: coordination): Add a companion report-draft tool that derives tasks received, findings sent, summaries, ackOf chains, unresolved peer requests, and final counts from the inbox/state lanes so the farewell JSON can be generated from the coordination ledger instead of manually reconstructed.
+- difficulties:
+  - [annoying] test: I initially used the Jest-style --runInBand flag with Vitest while running the focused resolver test, which Vitest rejected as an unknown option. (workaround: Reran the intended focused test with the repository-supported command: npx vitest run test/runner/run-resolver.test.ts.)

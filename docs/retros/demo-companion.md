@@ -23,3 +23,12 @@
 - **magicWand** (target: coordination): Add an explicit idle-budget policy to the demo-companion prompt, such as "after N quiet wait windows, write an idle_budget report," so unattended demo runs finish predictably.
 - difficulties:
   - [degrading] coordination: No outside peer messages arrived, leaving the companion in an otherwise indefinite wait loop. (workaround: Used the schema-supported idle_budget exit after multiple quiet wait windows and a pre-completion inbox check.)
+
+## 2026-05-03T00:12:17.020Z — demo-companion / 2026-05-03T10-00-30-083Z-eb77
+
+- runId: 2026-05-03T10-00-30-083Z-eb77
+- runDir: /Users/jordanknight/substrate/minih/agents/demo-companion/runs/2026-05-03T10-00-30-083Z-eb77
+- summary: Demo companion started, published idle state, waited via bounded coordination polling, sent liveness heartbeats, and closed with no briefing, task, directive, peer-state change, question, or control message received from the outside peer.
+- **magicWand** (target: coordination): Add a coordination-level idle timeout or operator-missing policy to the demo-companion contract, such as 'after N empty waits, write a no-op report and stop' so unattended runs finish intentionally.
+- difficulties:
+  - [degrading] coordination: No outside operator messages arrived, so the scripted demo flow could not exercise briefing, task, question, directive, state flip, or stop primitives. (workaround: Used bounded wait_for_any polling, checked unread inbox directly, sent heartbeats, then wrote a no-op report after the run remained unattended.)

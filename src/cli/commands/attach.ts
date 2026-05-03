@@ -128,15 +128,6 @@ export function registerAttachCommand(program: Command): void {
         const runStatus = resolved.manifest?.status ?? 'unknown';
         const isTerminal = runStatus === 'completed' || runStatus === 'failed';
 
-        // FX009 — surface resolver diagnostics (e.g. stale-active runs
-        // skipped by the PID-liveness filter) so operators learn about
-        // them without being blocked. Single dimmed line per diagnostic.
-        for (const diag of resolved.diagnostics) {
-          process.stderr.write(
-            `[skipped run ${diag.runId}: ${diag.message}]\n`,
-          );
-        }
-
         const agentsDir = path.resolve(opts.agentsDir ?? 'agents');
         let coordinated = false;
         try {

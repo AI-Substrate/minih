@@ -328,6 +328,12 @@ No new domains. `agent-pack/` is an internal sub-module of `runner`, exposed via
 - [ ] **AC14** Network failure is loud — verified Phase 3.2
 - [ ] **AC15** 10 MB tarball cap — verified Phase 3.3
 
+## Fixes
+
+| ID | Created | Summary | Domain(s) | Status | Source |
+|----|---------|---------|-----------|--------|--------|
+| FX001 | 2026-05-03 | Local-path install — vertical slice of `minih agent install` (subsumes part of Phase 2 + Phase 4 for the local source branch). URL/registry stub with E182 "not yet available" until Phase 3/4 land. | runner + cli | Complete | User proposal: "what about we upgrade the command to give a local file path" |
+
 ## Risks (Plan-Level)
 
 | Risk | Likelihood | Impact | Mitigation |

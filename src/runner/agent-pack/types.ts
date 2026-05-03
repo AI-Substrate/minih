@@ -51,29 +51,38 @@ export interface AgentPackManifest {
  * Where a locally-installed agent came from. Embedded in `.minih-source.json`
  * after every install so `agent info` and re-install-as-upgrade can resolve
  * the same source again.
+ *
+ * Discriminated union by `type`:
+ *   - `'registry'` — install resolved a slug via the bundled catalog.
+ *     `registrySlug` is set so re-install can re-resolve through the catalog
+ *     (lets us change the registry's url/ref/subpath over time).
+ *   - `'url'` — install resolved a raw user-provided git URL (no registry hit).
+ *   - `'local'` — install copied from a local filesystem path. No `ref` or
+ *     `commitSha` — drift is detected via per-file checksums in the sidecar.
  */
-export interface AgentPackSource {
-  /**
-   * `'registry'` — install resolved a slug via the bundled catalog.
-   *   `registrySlug` is set so re-install can re-resolve through the catalog
-   *   (lets us change the registry's url/ref/subpath over time).
-   * `'url'` — install resolved a raw user-provided URL (no registry hit).
-   */
-  type: 'registry' | 'url';
-  /** Original slug if `type === 'registry'`. */
-  registrySlug?: string;
-  /** Source URL — npm-style shorthand or full HTTPS. */
-  url: string;
-  /** Branch, tag, or commit sha. Default `'main'`. */
-  ref: string;
-  /** Optional subpath inside the repo (e.g., `agents/code-review-companion`). */
-  subpath?: string;
-  /**
-   * Concrete commit sha resolved at install time — used for "is there an
-   * upgrade available?" checks via `--check-remote`.
-   */
-  commitSha: string;
-}
+export type AgentPackSource =
+  | {
+      type: 'registry';
+      registrySlug: string;
+      url: string;
+      ref: string;
+      subpath?: string;
+      commitSha: string;
+    }
+  | {
+      type: 'url';
+      url: string;
+      ref: string;
+      subpath?: string;
+      commitSha: string;
+    }
+  | {
+      type: 'local';
+      /** Absolute filesystem path the install copied from. */
+      localPath: string;
+      /** ISO-8601 timestamp the local source was last resolved (for `info` display). */
+      resolvedAt: string;
+    };
 
 /**
  * `.minih-source.json` — the install-time provenance sidecar. One per

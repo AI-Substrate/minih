@@ -11,6 +11,13 @@ export {
   FakeAgentPackFetcher,
   GitHubAgentPackFetcher,
 } from './fetcher.js';
+export type {
+  InstallOptions,
+  InstallResult,
+  InstallSource,
+} from './install.js';
+// Install orchestration (FX001 — local source path; URL/registry land in Phase 3/4)
+export { installAgentPack } from './install.js';
 export type { ValidationResult as AgentManifestValidationResult } from './manifest.js';
 // Manifest
 export {

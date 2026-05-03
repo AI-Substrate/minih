@@ -36,12 +36,6 @@ export interface IAgentPackFetcher {
   fetchTarball(url: string, ref: string): Promise<FetchTarballResult>;
 }
 
-interface FakeRecord {
-  callKey: string;
-  url: string;
-  ref: string;
-}
-
 interface FakeResponse {
   kind: 'success';
   result: FetchTarballResult;

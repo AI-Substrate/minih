@@ -12,6 +12,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
+import { registerAgentCommand } from './commands/agent.js';
 import { registerAgentReadmeCommand } from './commands/agent-readme.js';
 import { registerAttachCommand } from './commands/attach.js';
 import { registerCheckCommand } from './commands/check.js';
@@ -90,5 +91,6 @@ registerHarvestCommand(program);
 registerAgentReadmeCommand(program);
 registerViewCommand(program);
 registerAttachCommand(program);
+registerAgentCommand(program);
 
 program.parse();

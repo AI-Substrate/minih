@@ -10,6 +10,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { loadMcpContext, type McpServerContext } from './context.js';
 import { inboxAck, inboxList, inboxSend } from './tools/inbox.js';
+import { permissionStatus } from './tools/permission-status.js';
 import { stateGet, stateSet, stateTransition } from './tools/state.js';
 import { waitForAnyTool } from './tools/wait.js';
 import {
@@ -104,6 +105,8 @@ async function dispatchNormalizedToolCall(
       return toCallToolResult(stateTransition(context, args));
     case 'wait_for_any':
       return toCallToolResult(await waitForAnyTool(context, args));
+    case 'permission_status':
+      return toCallToolResult(permissionStatus(context));
   }
 }
 

@@ -11,6 +11,7 @@ export const MCP_TOOL_NAMES = [
   'state_set',
   'state_transition',
   'wait_for_any',
+  'permission_status',
 ] as const;
 
 export type McpToolName = (typeof MCP_TOOL_NAMES)[number];
@@ -337,6 +338,16 @@ export const TOOL_CONTRACTS: readonly ToolContract[] = [
         },
       },
       required: ['events', 'waitMs'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'permission_status',
+    description:
+      'Return the resolved permission policy for this agent. Read-only; always allowed for coordinated agents. Useful for self-introspection ("what am I allowed to do?") without firing a permission request.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
       additionalProperties: false,
     },
   },

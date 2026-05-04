@@ -253,3 +253,13 @@ export {
   resolveDefaultAllowedRoots,
   UnknownPresetError,
 } from './permissions/index.js';
+
+// Plan 018 — probe module
+export type {
+  AggregateReportOptions,
+  ProbeMatrix,
+  ProbeOutcome,
+  ProbeReport,
+  ScenarioDefinition,
+} from './probe/index.js';
+export { aggregateReport, buildMatrix } from './probe/index.js';

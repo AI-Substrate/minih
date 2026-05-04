@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["scenario", "nonce"],
+  "additionalProperties": false,
+  "properties": {
+    "scenario": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Scenario key from scenarios.json"
+    },
+    "nonce": {
+      "type": "string",
+      "minLength": 8,
+      "description": "Per-run nonce — echoed back verbatim in output."
+    }
+  }
+}

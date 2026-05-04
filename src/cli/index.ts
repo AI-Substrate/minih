@@ -27,6 +27,7 @@ import { registerInspectCommand } from './commands/inspect.js';
 import { registerLastRunCommand } from './commands/last-run.js';
 import { registerListCommand } from './commands/list.js';
 import { registerOutsideCommand } from './commands/outside.js';
+import { registerProbeCommand } from './commands/probe.js';
 import { registerQuickstartCommand } from './commands/quickstart.js';
 import { registerResumeCommand } from './commands/resume.js';
 import { registerRetrosCommand } from './commands/retros.js';
@@ -92,5 +93,6 @@ registerAgentReadmeCommand(program);
 registerViewCommand(program);
 registerAttachCommand(program);
 registerAgentCommand(program);
+registerProbeCommand(program);
 
 program.parse();

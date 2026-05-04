@@ -87,6 +87,11 @@ Replace minih's hard-coded `approveAll` permission posture (4 sites in `src/adap
 | `docs/plans/018-agent-permissions/fixes/FX002-permissions-check.md` | docs | data | NEW — deferred |
 | `docs/plans/018-agent-permissions/fixes/FX003-doctor-severity.md` | docs | data | NEW — deferred |
 | `docs/plans/018-agent-permissions/fixes/FX004-prober-outside-readback.md` | docs | data | NEW — deferred (workshop 004 § Q10) |
+| `docs/plans/018-agent-permissions/fixes/FX008-coordination-write-precondition.md` | docs | data | NEW — proposed (issue #25; ships today) |
+| `docs/plans/018-agent-permissions/fixes/FX009-status-pid-probe.md` | docs | data | NEW — proposed (issue #24; ships today) |
+| `docs/plans/018-agent-permissions/fixes/FX010-restricted-output-auto-narrow.md` | docs | data | NEW — deferred (issue #25 suggested fix #1) |
+| `docs/plans/018-agent-permissions/fixes/FX011-minih-reconcile.md` | docs | data | NEW — deferred (issue #24 split) |
+| `docs/plans/018-agent-permissions/fixes/FX012-provider-stream-aborted.md` | docs | data | NEW — deferred (issue #24 observability) |
 | `agents/permission-prober/{prompt.md,instructions.md,input-schema.json,output-schema.json,scenarios.json,agent.json}` | agent-pack | data + contract (output-schema.json is the report contract) | NEW — workshop 004 prober pack |
 | `src/cli/commands/probe.ts` | cli | internal | NEW — `minih probe` orchestrator |
 | `src/runner/probe/aggregator.ts` | runner | internal | NEW — claim-vs-truth cross-reference; UNTRUSTWORTHY detection |
@@ -260,6 +265,11 @@ Replace minih's hard-coded `approveAll` permission posture (4 sites in `src/adap
 | [x] | T-FX5 | Author `FX005-probe-matrix-trust.md` — pin F005 CLI override merge + rewrite prober scenarios + HTML matrix output + all-presets snapshot (top-10 #1/#3/#4/#7) | `docs/plans/018-agent-permissions/fixes/FX005-probe-matrix-trust.md` | Dossier exists |
 | [x] | T-FX6 | Author `FX006-fs-guard-cross-platform.md` — platform-gated fs-guard regression suite + symlink-disabled fixture + residuals doc (top-10 #5) | `docs/plans/018-agent-permissions/fixes/FX006-fs-guard-cross-platform.md` | Dossier exists |
 | [x] | T-FX7 | Author `FX007-permissions-docs-and-dogfood-adr.md` — coordination ↔ permissions cross-link + dogfood-rule ADR (top-10 #9/#10) | `docs/plans/018-agent-permissions/fixes/FX007-permissions-docs-and-dogfood-adr.md` | Dossier exists |
+| [x] | T-FX8 | Author `FX008-coordination-write-precondition.md` — boot E186 + 5-signal denial + `--allow-coord-write-deny` opt-out + canonical companion frontmatter `write: allow` (issue [#25](https://github.com/AI-Substrate/minih/issues/25)) | `docs/plans/018-agent-permissions/fixes/FX008-coordination-write-precondition.md` | Dossier exists with locked E186 message + Chainglass repro fixture cited |
+| [x] | T-FX9 | Author `FX009-status-pid-probe.md` — `minih status` lifts `isProcessAliveDefault` to gate `verdict: 'active'` on pid liveness; read-only (issue [#24](https://github.com/AI-Substrate/minih/issues/24)) | `docs/plans/018-agent-permissions/fixes/FX009-status-pid-probe.md` | Dossier exists; sister to FX011 reconcile |
+| [x] | T-FX10 | Author `FX010-restricted-output-auto-narrow.md` — `restricted` preset auto-injects `<runDir>/output/` into `allowedRoots` for coord-enabled runs (issue [#25](https://github.com/AI-Substrate/minih/issues/25) suggested fix #1) | `docs/plans/018-agent-permissions/fixes/FX010-restricted-output-auto-narrow.md` | Dossier exists; depends on FX008 landing |
+| [x] | T-FX11 | Author `FX011-minih-reconcile.md` — opt-in idempotent healer rewrites stale `run.json.status: 'active'` to `'crashed'` for dead pids; lock-protected; sister to FX009 (issue [#24](https://github.com/AI-Substrate/minih/issues/24)) | `docs/plans/018-agent-permissions/fixes/FX011-minih-reconcile.md` | Dossier exists |
+| [x] | T-FX12 | Author `FX012-provider-stream-aborted.md` — adapter-side synthetic `provider_stream_aborted` event when SDK promise settles without `streaming_complete`; schema verbatim from Chainglass agent (issue [#24](https://github.com/AI-Substrate/minih/issues/24)) | `docs/plans/018-agent-permissions/fixes/FX012-provider-stream-aborted.md` | Dossier exists with locked schema |
 
 ---
 
@@ -274,7 +284,7 @@ Replace minih's hard-coded `approveAll` permission posture (4 sites in `src/adap
 - [ ] Plan-level Flight Plan kept current (Phases table + Flight Log entries per release)
 - [ ] Domain docs (runner, adapter, cli) updated by R4 close; mcp by R6+S close
 - [ ] Documentation: `docs/how/permissions.md` ships with R1; AGENTS_README + README updated by R4
-- [ ] FX001-FX007 dossiers exist before R6 ships — FX001/FX002/FX003 explicitly required by spec OQs; FX004-FX007 added from top-10 follow-up triage (see § Tasks — Deferred Follow-Up Dossiers and validation record dated 2026-05-04 in each dossier)
+- [ ] FX001-FX012 dossiers exist before R6 ships — FX001/FX002/FX003 explicitly required by spec OQs; FX004-FX007 added from top-10 follow-up triage (see § Tasks — Deferred Follow-Up Dossiers and validation record dated 2026-05-04 in each dossier); FX008-FX012 added from GitHub issue triage 2026-05-04 (issues [#24](https://github.com/AI-Substrate/minih/issues/24) + [#25](https://github.com/AI-Substrate/minih/issues/25)) — converged design with @jakkaj's Chainglass agent across 9 issue comments before dossiers cut
 
 ---
 

@@ -45,6 +45,21 @@ export interface AgentPackManifest {
   type?: 'minih-agent';
   /** The complete pack contents. `prompt.md` MUST be present. */
   files: AgentPackManifestFile[];
+  /**
+   * Plan 018 R3 (manifest 0.2.0) — recommended permissions for new
+   * installs. The interactive `[A]ccept / [F]allback / [Y]olo / [C]ancel`
+   * prompt at install time consults these fields. When absent, install
+   * falls through to the release default with `lockedDefaultReason:
+   * 'minih-default'`.
+   */
+  permissions?: {
+    /** Preset name to recommend on install. */
+    recommended?: string;
+    /** Preset to use if user picks `[F]allback`. Defaults to `'yolo'`. */
+    fallback?: string;
+    /** Free-form explanation surfaced in the install prompt. */
+    rationale?: string;
+  };
 }
 
 /**
@@ -105,6 +120,30 @@ export interface MinihSourceSidecar {
    * drift detection in `agent info` and surgical-sync diffing on upgrade.
    */
   fileChecksums: Record<string, string>;
+  /**
+   * Plan 018 R3 (T-R3.2) — install-time-locked permissions default. Sticky
+   * for the lifetime of this install; NEVER overwritten by later releases
+   * (workshop 003 lossless-preservation invariant).
+   *
+   * Resolution chain consults this BEFORE `minihReleaseDefault` so an agent
+   * installed under R3 (yolo) keeps that policy even after the R6 universal
+   * flip to `restricted`. The only legitimate path to changing
+   * `lockedDefault` is an explicit user `agent install` upgrade or the
+   * deferred FX001 `agent permissions reset` command.
+   */
+  lockedDefault?: string;
+  /** ISO-8601 timestamp of when `lockedDefault` was first written. */
+  lockedDefaultRecordedAt?: string;
+  /**
+   * Why this `lockedDefault` was chosen. Workshop 003 § Q3 enumerates the
+   * canonical reason strings:
+   *   - 'pre-schema-install-grandfathered'  (one-time backfill)
+   *   - 'manifest-recommended'              (R3+ install accepted recommendation)
+   *   - 'manifest-fallback'                 (R3+ install declined recommendation)
+   *   - 'minih-default'                     (R3+ install with no manifest recommendation)
+   *   - 'user-override'                     (user passed --permissions to install)
+   */
+  lockedDefaultReason?: string;
 }
 
 /**

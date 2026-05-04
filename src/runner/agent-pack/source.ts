@@ -16,6 +16,12 @@ const SUPPORTED_SCHEMA_VERSION = '1';
  * Tolerates unknown fields (forward-compat) but rejects unknown
  * `schemaVersion` values with a loud error.
  *
+ * Plan 018 R3 (T-R3.3) — one-time idempotent backfill: if a sidecar is
+ * missing `lockedDefault`, write `'yolo' + 'pre-schema-install-grandfathered'`
+ * on first read. Subsequent reads no-op. **Lossless-preservation invariant**:
+ * sidecars that already carry `lockedDefault` are NEVER overwritten or
+ * modified by any later release.
+ *
  * @throws on malformed JSON, unknown schemaVersion, or missing required
  *   fields.
  */
@@ -55,6 +61,25 @@ export function readSourceSidecar(agentDir: string): MinihSourceSidecar | null {
       throw new Error(
         `${SOURCE_SIDECAR_FILENAME} at ${sidecarPath}: missing required field \`${required}\``,
       );
+    }
+  }
+
+  // Plan 018 R3 — idempotent lockedDefault backfill. Lossless: only write
+  // when ABSENT. Existing values pass through untouched.
+  if (obj.lockedDefault === undefined) {
+    obj.lockedDefault = 'yolo';
+    obj.lockedDefaultRecordedAt = new Date().toISOString();
+    obj.lockedDefaultReason = 'pre-schema-install-grandfathered';
+    // Persist the backfill so future reads no-op. Fail soft — if the
+    // filesystem refuses write (read-only mount, etc.), reads still
+    // return the in-memory backfilled value; subsequent reads will
+    // re-backfill (idempotent).
+    try {
+      const tmpPath = `${sidecarPath}.tmp`;
+      fs.writeFileSync(tmpPath, `${JSON.stringify(obj, null, 2)}\n`);
+      fs.renameSync(tmpPath, sidecarPath);
+    } catch {
+      // best-effort; in-memory shape is correct
     }
   }
 

@@ -42,10 +42,39 @@ const sampleSidecar: MinihSourceSidecar = {
 };
 
 describe('writeSourceSidecar / readSourceSidecar', () => {
-  it('round-trips: write then read returns equal object', () => {
+  it('round-trips: write then read returns equal object (with R3 lockedDefault backfill)', () => {
     writeSourceSidecar(tmpDir, sampleSidecar);
     const loaded = readSourceSidecar(tmpDir);
-    expect(loaded).toEqual(sampleSidecar);
+    // Plan 018 R3 — readSourceSidecar idempotently backfills `lockedDefault`
+    // when missing. Round-trip test verifies the underlying fields are
+    // preserved while accepting the new field is added.
+    expect(loaded).toMatchObject(sampleSidecar);
+    expect(loaded?.lockedDefault).toBe('yolo');
+    expect(loaded?.lockedDefaultReason).toBe(
+      'pre-schema-install-grandfathered',
+    );
+    // Second read should be a no-op (idempotent).
+    const reloaded = readSourceSidecar(tmpDir);
+    expect(reloaded?.lockedDefaultRecordedAt).toBe(
+      loaded?.lockedDefaultRecordedAt,
+    );
+  });
+
+  it('preserves explicit lockedDefault on subsequent reads (lossless invariant)', () => {
+    const sidecar: MinihSourceSidecar = {
+      ...sampleSidecar,
+      lockedDefault: 'restricted',
+      lockedDefaultRecordedAt: '2026-05-03T12:00:00.000Z',
+      lockedDefaultReason: 'manifest-recommended',
+    };
+    writeSourceSidecar(tmpDir, sidecar);
+    const loaded = readSourceSidecar(tmpDir);
+    expect(loaded?.lockedDefault).toBe('restricted');
+    expect(loaded?.lockedDefaultReason).toBe('manifest-recommended');
+    // Re-read — no overwrite.
+    const reloaded = readSourceSidecar(tmpDir);
+    expect(reloaded?.lockedDefault).toBe('restricted');
+    expect(reloaded?.lockedDefaultRecordedAt).toBe('2026-05-03T12:00:00.000Z');
   });
 
   it('returns null when sidecar absent', () => {

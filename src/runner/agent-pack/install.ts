@@ -62,6 +62,18 @@ export interface InstallOptions {
    * a `FakeAgentPackFetcher` (tests).
    */
   fetcher?: IAgentPackFetcher;
+  /**
+   * Plan 018 R3 (T-R3.4) — interactive prompt result for
+   * manifest-recommended permissions. `true` = `[A]ccept`, `false` =
+   * `[F]allback`, `undefined` = no manifest recommendation OR user chose
+   * `[Y]olo` / `[C]ancel` upstream.
+   */
+  permissionsAccept?: boolean;
+  /**
+   * Plan 018 R3 — explicit user override (e.g., `--permissions yolo`).
+   * Wins over `permissionsAccept` when set.
+   */
+  permissionsOverride?: string;
 }
 
 export interface InstallResult {
@@ -476,6 +488,37 @@ async function installFromStagedDir(args: {
     fs.renameSync(tmp, dst);
   }
 
+  // Plan 018 R3 (T-R3.2) — capture lockedDefault on the new sidecar.
+  // Lossless-preservation invariant: if priorSidecar already had
+  // `lockedDefault`, NEVER overwrite it. The only legitimate path to
+  // changing it is FX001 `permissions reset` (deferred).
+  let lockedDefault: string | undefined =
+    priorSidecar?.lockedDefault ?? undefined;
+  let lockedDefaultRecordedAt: string | undefined =
+    priorSidecar?.lockedDefaultRecordedAt ?? undefined;
+  let lockedDefaultReason: string | undefined =
+    priorSidecar?.lockedDefaultReason ?? undefined;
+
+  if (!lockedDefault) {
+    const recommended = manifest.permissions?.recommended;
+    if (opts.permissionsAccept === true && typeof recommended === 'string') {
+      lockedDefault = recommended;
+      lockedDefaultReason = 'manifest-recommended';
+    } else if (opts.permissionsAccept === false && manifest.permissions?.fallback) {
+      lockedDefault = manifest.permissions.fallback;
+      lockedDefaultReason = 'manifest-fallback';
+    } else if (opts.permissionsOverride) {
+      lockedDefault = opts.permissionsOverride;
+      lockedDefaultReason = 'user-override';
+    } else {
+      // No manifest recommendation + no user choice + R3-R4 release default.
+      // Plan 018 R5 (T-R5.2) bumps this to 'restricted' for new installs.
+      lockedDefault = 'yolo';
+      lockedDefaultReason = 'minih-default';
+    }
+    lockedDefaultRecordedAt = new Date().toISOString();
+  }
+
   const sidecar: MinihSourceSidecar = {
     schemaVersion: '1',
     slug,
@@ -483,6 +526,9 @@ async function installFromStagedDir(args: {
     installedAt: new Date().toISOString(),
     manifestVersion: manifest.version,
     fileChecksums: sourceChecksums,
+    ...(lockedDefault !== undefined && { lockedDefault }),
+    ...(lockedDefaultRecordedAt !== undefined && { lockedDefaultRecordedAt }),
+    ...(lockedDefaultReason !== undefined && { lockedDefaultReason }),
   };
   writeSourceSidecar(targetDir, sidecar);
 

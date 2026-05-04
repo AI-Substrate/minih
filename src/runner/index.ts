@@ -221,3 +221,35 @@ export {
   validateOutput,
   validateSystemOutput,
 } from './validator.js';
+
+// Plan 018 — permissions module
+export type {
+  AllowedRootsRule,
+  PermissionDecision,
+  PermissionKind,
+  PermissionOverrides,
+  PermissionPolicy,
+  PermissionPresetName,
+  PolicySources,
+  PresetCatalogEntry,
+  ResolvedPolicy,
+  RootProvenance,
+} from './permissions/index.js';
+export {
+  ALL_PERMISSION_KINDS,
+  AllowedRootsInvalidError,
+  buildPermissionHandler,
+  buildPresetCatalog,
+  canonicalizeRoots,
+  compile as compilePermissionPolicy,
+  extractPathArg,
+  ForbiddenRootError,
+  formatCatalogAsTable,
+  getPreset,
+  isPathAllowed,
+  isPresetName,
+  listPresetNames,
+  minihReleaseDefault,
+  resolveDefaultAllowedRoots,
+  UnknownPresetError,
+} from './permissions/index.js';

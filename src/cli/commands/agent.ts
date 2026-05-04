@@ -40,11 +40,14 @@ import {
   formatError,
   formatSuccess,
 } from '../output.js';
+import { registerPermissionsSubcommands } from './agent-permissions.js';
 
 export function registerAgentCommand(program: Command): void {
   const agent = program
     .command('agent')
     .description('Manage agent packs (install, info, list, remove)');
+
+  registerPermissionsSubcommands(agent, program);
 
   agent
     .command('install <ref>')

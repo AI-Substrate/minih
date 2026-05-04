@@ -52,3 +52,9 @@ export {
   type FireDenialOptions,
   type PermissionErrorPayload,
 } from './error-signal.js';
+
+export {
+  buildPresetCatalog,
+  formatCatalogAsTable,
+  type PresetCatalogEntry,
+} from './catalog.js';

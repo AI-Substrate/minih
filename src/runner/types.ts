@@ -81,6 +81,20 @@ export interface AgentRunConfig {
   /** Tool-name prefixes reserved by internally supplied MCP servers. */
   reservedMcpToolPrefixes?: string[];
   /**
+   * Plan 018 R2 — per-run permission overrides from CLI flags (`--permissions`,
+   * `--allowed-roots`, `--allowed-roots-only`, `--strict-fs`).
+   *
+   * Composed into the `compile()` resolution chain at runner entry. If
+   * `permissions.preset` is set, it wins over frontmatter (CLI > frontmatter
+   * > sidecar > env > release-default). `allowedRoots` is layered as the
+   * top-most layer with the requested mode.
+   */
+  permissionsOverride?: {
+    preset?: import('./permissions/policy.js').PermissionPresetName;
+    allowedRoots?: import('./permissions/policy.js').AllowedRootsRule;
+    strictFs?: boolean;
+  };
+  /**
    * Optional caller hook invoked when the SDK session is ready and a
    * `SessionSender` is available for same-process writes. Plan 009 Phase 2
    * uses this for the `--human` interactive footer. Coordinated forwarders

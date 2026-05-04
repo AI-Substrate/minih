@@ -626,13 +626,23 @@ export async function runAgent(
     // adapter's built-in `approveAll`.
     const sidecarPolicy = readSidecarPermissions(definition.dir);
     const envPolicy = readEnvPermissions();
+    // Plan 018 R2 — CLI-flag overrides win over frontmatter at the preset
+    // level by being injected as the first layer in the resolution chain.
+    const cliOverridePolicy: PermissionPolicy | undefined =
+      config.permissionsOverride?.preset
+        ? { preset: config.permissionsOverride.preset }
+        : undefined;
     const resolvedPolicy: ResolvedPolicy = compilePermissionPolicy({
-      frontmatter: definition.permissions,
+      frontmatter: cliOverridePolicy ?? definition.permissions,
       sidecar: sidecarPolicy,
       env: envPolicy,
       releaseDefault: { preset: 'yolo' },
+      cli: config.permissionsOverride?.allowedRoots,
       cwd: config.cwd ?? process.cwd(),
     });
+    if (config.permissionsOverride?.strictFs) {
+      resolvedPolicy.strictFs = true;
+    }
 
     // Denial state — closure shared with handler `onDeny` callback. The
     // `terminalFired` mutex enforces first-trigger-wins per workshop 002.

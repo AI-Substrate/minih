@@ -74,7 +74,8 @@ export function registerDoctorCommand(program: Command): void {
 
         // Check frontmatter
         const content = fs.readFileSync(promptPath, 'utf-8');
-        const { description, coordination } = parseFrontmatter(content);
+        const { description, coordination, permissions } =
+          parseFrontmatter(content);
         if (!description.trim()) {
           checks.push({
             check: 'frontmatter',
@@ -86,6 +87,24 @@ export function registerDoctorCommand(program: Command): void {
             check: 'frontmatter',
             status: 'pass',
             message: description,
+          });
+        }
+
+        // Plan 018 R2 — permissions check.
+        if (permissions) {
+          checks.push({
+            check: 'permissions',
+            status: 'pass',
+            message: `explicit policy: ${permissions.preset ?? 'object form'}`,
+          });
+        } else {
+          checks.push({
+            check: 'permissions',
+            status: 'warning',
+            message:
+              'no explicit `permissions:` field (running with current default; will flip to `restricted` at R6). Run `minih agent permissions migrate ' +
+              entry.name +
+              ' --dry-run` to preview.',
           });
         }
 

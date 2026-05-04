@@ -105,3 +105,12 @@
 - **magicWand** (target: coordination): Expose the configured idleBudgetMs and elapsed idle timer in `minih status <slug> --run <run>` or `state_get` so long-running coordinated agents can make shutdown decisions without guessing.
 - difficulties:
   - [annoying] coordination: The prompt required comparing elapsed idle time with input.idleBudgetMs, but that configured idle budget was not surfaced in coordination state or status output during the run. (workaround: Used repeated bounded inbox polls and stopped after several empty windows once no scoped review work arrived.)
+
+## 2026-05-04T04:48:29.314Z — code-review-companion / 2026-05-04T14-41-22-322Z-1ec2
+
+- runId: 2026-05-04T14-41-22-322Z-1ec2
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-05-04T14-41-22-322Z-1ec2
+- summary: Oriented on plan 018-agent-permissions and acknowledged the outside briefing for R2-R6/stretch/FX/prober review protocol. No review-request tasks arrived before the idle budget shutdown, so no findings were produced.
+- **magicWand** (target: coordination): Expose the active run input, especially idleBudgetMs, via `minih status <slug> --run <id>` or a dedicated dogfood-safe `minih input get` command so coordinated agents can apply their lifecycle contract precisely without reading run-dir files.
+- difficulties:
+  - [annoying] coordination: Could not determine the configured idle budget through a dogfood-safe CLI/status surface. (workaround: Used repeated empty long-polls plus `minih status` elapsed/run activity as evidence before exiting with idle_budget.)

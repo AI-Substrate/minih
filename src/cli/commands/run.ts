@@ -84,10 +84,29 @@ export function registerRunCommand(program: Command): void {
       'Mount the live human-view TUI to stderr (plan 009; mutually-exclusive with --verbose)',
     )
     .option('--mcp-config <path>', 'MCP config file with mcpServers (JSON)')
+    // Plan 018 R2 — per-run permission overrides
+    .option(
+      '--permissions <preset>',
+      'Override the resolved preset for this run (yolo|trusted|restricted|read-only|network|build-only)',
+    )
+    .option(
+      '--allowed-roots <paths>',
+      'Extend allowedRoots with comma-separated paths (mode: extend)',
+    )
+    .option(
+      '--allowed-roots-only <paths>',
+      'Replace allowedRoots with comma-separated paths (mode: replace)',
+    )
+    .option('--strict-fs', 'Opt into Layer-(b) FS sandbox (Phase 6 stretch)')
+    .option(
+      '--dry-run-permissions',
+      'Resolve and print policy without executing the agent',
+    )
     .addHelpText(
       'after',
       '\nTip: For coordinated agents, run `minih outside context <slug>` first to read the outside-side contract.\n' +
-        '\nAfter the run completes, `minih harvest <slug>` captures the retro into `docs/retros/`.\n',
+        '\nAfter the run completes, `minih harvest <slug>` captures the retro into `docs/retros/`.\n' +
+        '\nPermission troubleshooting: see `docs/how/permissions.md` and `minih agent permissions list-available`.\n',
     )
     .action(
       async (
@@ -102,6 +121,11 @@ export function registerRunCommand(program: Command): void {
           verbose?: boolean;
           human?: boolean;
           mcpConfig?: string;
+          permissions?: string;
+          allowedRoots?: string;
+          allowedRootsOnly?: string;
+          strictFs?: boolean;
+          dryRunPermissions?: boolean;
         },
       ) => {
         const agentsDir = program.opts().agentsDir ?? 'agents';
@@ -201,6 +225,90 @@ export function registerRunCommand(program: Command): void {
           } | null;
         } = { ref: null };
 
+        // Plan 018 R2 — assemble per-run permission overrides from CLI flags.
+        let permissionsOverride: AgentRunConfig['permissionsOverride'] | undefined;
+        if (
+          opts.permissions ||
+          opts.allowedRoots ||
+          opts.allowedRootsOnly ||
+          opts.strictFs
+        ) {
+          permissionsOverride = {};
+          if (opts.permissions) {
+            const validPresets = [
+              'yolo',
+              'trusted',
+              'restricted',
+              'read-only',
+              'network',
+              'build-only',
+            ];
+            if (!validPresets.includes(opts.permissions)) {
+              exitWithEnvelope(
+                formatError(
+                  'run',
+                  ErrorCodes.PERMISSION_PRESET_UNKNOWN,
+                  `Unknown preset "${opts.permissions}". Valid: ${validPresets.join(', ')}`,
+                ),
+              );
+              return;
+            }
+            permissionsOverride.preset =
+              opts.permissions as NonNullable<
+                AgentRunConfig['permissionsOverride']
+              >['preset'];
+          }
+          if (opts.allowedRoots) {
+            permissionsOverride.allowedRoots = {
+              mode: 'extend',
+              roots: opts.allowedRoots.split(',').map((s) => s.trim()),
+            };
+          } else if (opts.allowedRootsOnly) {
+            permissionsOverride.allowedRoots = {
+              mode: 'replace',
+              roots: opts.allowedRootsOnly.split(',').map((s) => s.trim()),
+            };
+          }
+          if (opts.strictFs) {
+            permissionsOverride.strictFs = true;
+          }
+        }
+
+        // Plan 018 R2 — `--dry-run-permissions` prints the resolved policy
+        // without executing the agent.
+        if (opts.dryRunPermissions) {
+          try {
+            const { compilePermissionPolicy } = await import(
+              '../../runner/index.js'
+            );
+            const resolved = compilePermissionPolicy({
+              frontmatter: permissionsOverride?.preset
+                ? { preset: permissionsOverride.preset }
+                : definition.permissions,
+              releaseDefault: { preset: 'yolo' },
+              cli: permissionsOverride?.allowedRoots,
+              cwd: process.cwd(),
+            });
+            exitWithEnvelope(
+              formatSuccess('run', {
+                dryRunPermissions: true,
+                slug,
+                resolved,
+              }),
+            );
+            return;
+          } catch (err) {
+            exitWithEnvelope(
+              formatError(
+                'run',
+                ErrorCodes.PERMISSIONS_FRONTMATTER_INVALID,
+                `Could not resolve permissions: ${(err as Error).message}`,
+              ),
+            );
+            return;
+          }
+        }
+
         const config: AgentRunConfig = {
           slug,
           model,
@@ -210,6 +318,7 @@ export function registerRunCommand(program: Command): void {
             : (definition.timeout ?? DEFAULT_TIMEOUT),
           cwd: process.cwd(),
           params: Object.keys(params).length > 0 ? params : undefined,
+          ...(permissionsOverride && { permissionsOverride }),
           insideMcpServerFactory: ({ runId, runDir, agentSlug, agentsDir }) =>
             buildInsideMcpServerConfig({
               runId,

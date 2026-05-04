@@ -274,7 +274,7 @@ Replace minih's hard-coded `approveAll` permission posture (4 sites in `src/adap
 - [ ] Plan-level Flight Plan kept current (Phases table + Flight Log entries per release)
 - [ ] Domain docs (runner, adapter, cli) updated by R4 close; mcp by R6+S close
 - [ ] Documentation: `docs/how/permissions.md` ships with R1; AGENTS_README + README updated by R4
-- [ ] FX001/FX002/FX003 dossiers exist before R6 ships (fix dossiers don't ship; docs do)
+- [ ] FX001-FX007 dossiers exist before R6 ships — FX001/FX002/FX003 explicitly required by spec OQs; FX004-FX007 added from top-10 follow-up triage (see § Tasks — Deferred Follow-Up Dossiers and validation record dated 2026-05-04 in each dossier)
 
 ---
 

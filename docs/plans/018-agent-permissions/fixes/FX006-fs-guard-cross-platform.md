@@ -56,12 +56,12 @@ Add a § "FS guard limitations" subsection covering:
 
 ## Acceptance criteria
 
-- AC-FX6.1: Test suite skips cleanly on platforms it doesn't target (no false-fails).
+- AC-FX6.1: Test suite skips cleanly on platforms it doesn't target (no false-fails). Skip messages include the platform reason (e.g., `"darwin/linux only — Windows uses different symlink semantics"`).
 - AC-FX6.2: At least 3 Windows-specific test cases (drive letters, reparse, UNC).
-- AC-FX6.3: At least 1 TOCTOU regression locked in (documented best-effort behaviour).
-- AC-FX6.4: Symlink-disabled FS fixture asserts graceful fallback.
-- AC-FX6.5: `docs/how/permissions.md` documents residuals + test pointers.
-- AC-FX6.6: CI matrix includes one Windows runner exercising the platform-gated tests (if not already configured).
+- AC-FX6.3: TOCTOU test asserts the outcome is EITHER `denied` (guard caught the swap) OR `best-effort allow with a logged warning` containing the string `TOCTOU`. Both outcomes are PASS. Test MUST NOT assert a single deterministic outcome. Comment in test file: `// This test is intentionally non-deterministic by design — see FX006 dossier TOCTOU rationale.`
+- AC-FX6.4: When `fs.symlinkSync` (mocked) throws `EPERM`, the guard MUST: (a) treat the path as a non-symlink, (b) proceed to realpath check, and (c) NOT throw or abort the check. Test asserts that a path inside `allowedRoots` is still ALLOWED and a path outside is still DENIED when symlinks are disabled.
+- AC-FX6.5: `docs/how/permissions.md` § "FS guard limitations" exists and contains: (1) a bullet for TOCTOU best-effort, (2) a bullet for platform differences, each linking to `test/runner/permissions/fs-guard-cross-platform.test.ts`, and (3) a bullet for the `openat()` migration path. Link-check pass required.
+- AC-FX6.6: `.github/workflows/` includes a `windows-latest` job that runs `npx vitest run test/runner/permissions/fs-guard-cross-platform.test.ts`. Implementer verifies existing CI config first; if a Windows runner already covers this test file, AC is satisfied with a one-line note in the PR (`already satisfied by <workflow-name>`). FX006 owns the Windows runner config; future fs-guard fixes extend `test/runner/permissions/fs-guard-cross-platform.test.ts` (or sibling files using the same `describe.runIf` gate).
 
 ## Out of scope
 - Adopting `openat()` (Node N/A).
@@ -70,10 +70,27 @@ Add a § "FS guard limitations" subsection covering:
 
 ## Risks
 - Windows CI flakiness (path separators, line-endings) — mitigated by using `path.join` / `path.normalize` everywhere.
-- TOCTOU test is inherently racy — mitigated by retry-with-backoff + accepting either "denied" or "best-effort allow with warning" as PASS.
-- Adding Windows runner inflates CI minutes — accept; this is the only domain that needs it for plan 018.
+- TOCTOU test is inherently racy — mitigated by retry-with-backoff + accepting either "denied" or "best-effort allow with warning" as PASS (encoded in AC-FX6.3).
+- **CI billing change**: adding `windows-latest` to GitHub Actions costs approximately 2× the Linux per-minute rate. The implementer MUST confirm with the repository owner before opening the PR that adds the runner. If the repo is on a free-tier plan, gate the Windows runner on the `fft-gate` trigger (not every push). Document the decision in the PR description.
 
 ## Testing
 - TDD if any code paths added (none expected).
 - Lightweight: platform-gated fixtures with skip-if guards.
 - Manual: run on macOS, Linux, and Windows once before merge; verify skip behaviour.
+
+---
+
+## Validation Record (2026-05-04)
+
+| Agent | Lenses Covered | Issues | Verdict |
+|-------|---------------|--------|---------|
+| Source-Truth | Technical Constraints | 0 (`describe.runIf` is real vitest API; no aspirational fns) | ✅ |
+| Cross-Reference | Integration & Ripple | 0 | ✅ |
+| Completeness | Edge Cases, Deployment & Ops | 1 CRITICAL (AC-FX6.4 vague) + 2 HIGH + 2 MEDIUM → all fixed inline | ❌ → ✅ |
+| Forward-Compatibility | Forward-Compatibility (Test boundary) | 1 LOW (AC-FX6.6 ownership conditional) → fixed inline | ⚠️ → ✅ |
+
+**Lens coverage**: 8/12 (at floor).
+
+**Fixes applied**: AC-FX6.4 reformulated with explicit (a)/(b)/(c) behaviour spec, AC-FX6.3 dual-outcome PASS design encoded in AC, AC-FX6.6 made unconditional with verification step + ownership claim, CI billing approval gate added to Risks, AC-FX6.5 reformulated to require observable § structure with 3 enumerated bullets.
+
+**Overall**: ❌ → ⚠️ VALIDATED WITH FIXES — ready for `/plan-6 --fix FX006` cycle.

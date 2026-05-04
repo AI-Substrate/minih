@@ -3,6 +3,7 @@
 **Status**: DEFERRED (post-R6)
 **Plan**: 018-agent-permissions
 **Origin**: Workshop 004 § Q10.
+**Depends on**: FX005-3 (HTML matrix output) for AC-FX4.3.
 
 ## Motivation
 

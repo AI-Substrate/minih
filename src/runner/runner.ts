@@ -31,7 +31,9 @@ import {
   type InboxForwarder,
 } from './inbox-forwarder.js';
 import {
+  assertCoordWriteAllowed,
   buildPermissionHandler,
+  CoordinationWriteDeniedError,
   compile as compilePermissionPolicy,
   type DenialState,
   fireTerminalDenial,
@@ -682,6 +684,159 @@ export async function runAgent(
       payload: null,
       signalFailures: [],
     };
+
+    // FX008-3 — boot precondition for coord-enabled + write-deny mismatch.
+    // Coordinated agents are contractually required to write
+    // `output/report.json` on exit (workshop 002 § Q1, companion-mode.md).
+    // If the resolved policy denies write, refuse the run synchronously
+    // BEFORE any SDK adapter session is opened. Routes through the existing
+    // 5-signal denial protocol (events.ndjson + run.json + inside-state +
+    // outside-inbox + exit 126).
+    try {
+      assertCoordWriteAllowed(definition, resolvedPolicy, {
+        ...(config.permissionsOverride?.allowCoordWriteDeny !== undefined && {
+          allowCoordWriteDeny: config.permissionsOverride.allowCoordWriteDeny,
+        }),
+        runDir,
+      });
+    } catch (err) {
+      if (err instanceof CoordinationWriteDeniedError) {
+        // Signal 1 — events.ndjson. Synthesise the `permission_denied` event
+        // ourselves because the SDK adapter never starts; events.ndjson
+        // would otherwise have no record of the denial.
+        const occurredAt = new Date().toISOString();
+        const denialEvent = {
+          type: 'permission_denied' as const,
+          timestamp: occurredAt,
+          data: {
+            kind: err.kind,
+            decision: 'deny' as const,
+            message: err.message,
+          },
+        };
+        try {
+          fs.appendFileSync(eventsPath, `${JSON.stringify(denialEvent)}\n`);
+        } catch {
+          // Best-effort — don't let an events.ndjson write failure mask the
+          // denial. Signals 2-4 still fire below.
+        }
+
+        // Signals 3-4 — inside-state + outside-inbox. Reuses the existing
+        // 5-signal machinery (`fireTerminalDenial`) so observers that
+        // subscribe to those surfaces see this denial identically to a
+        // mid-run handler-fired one.
+        fireTerminalDenial(denialState, {
+          runDir,
+          runId,
+          agentSlug: definition.slug,
+          agentsDir,
+          coordinationEnabled,
+          policy: resolvedPolicy,
+          reason: {
+            kind: err.kind,
+            decision: 'deny',
+            message: err.message,
+          },
+          signalFailures: denialState.signalFailures,
+        });
+
+        // Signal 2 — run.json `terminalReason` + `permissionError` snapshot.
+        // Mirrors the post-run write at line ~948 below for handler-fired
+        // denials. Uses `denialState.payload` populated by
+        // `fireTerminalDenial`.
+        if (denialState.payload) {
+          try {
+            await updateManifest(runDir, {
+              status: 'failed',
+              terminalReason: denialState.reason ?? 'permission-denied',
+              permissionError: {
+                kind: denialState.payload.kind,
+                decision: denialState.payload.decision,
+                occurredAt: denialState.payload.occurredAt,
+                message: denialState.payload.message,
+                ...(denialState.payload.toolName !== undefined && {
+                  toolName: denialState.payload.toolName,
+                }),
+                ...(denialState.payload.attemptedPath !== undefined && {
+                  attemptedPath: denialState.payload.attemptedPath,
+                }),
+                ...(denialState.payload.requestId !== undefined && {
+                  requestId: denialState.payload.requestId,
+                }),
+                ...(denialState.payload.toolCallId !== undefined && {
+                  toolCallId: denialState.payload.toolCallId,
+                }),
+                ...(denialState.payload.policyDigest !== undefined && {
+                  policyDigest: denialState.payload.policyDigest,
+                }),
+              },
+              ...(denialState.signalFailures.length > 0 && {
+                coordinationSignals: denialState.signalFailures,
+              }),
+            });
+          } catch {
+            // Best-effort — workshop 002 § Q1 records signal failures but
+            // never throws past them.
+          }
+        }
+
+        // Signal 5 — exit code 126 (POSIX permission-denied). Surfaced via
+        // AgentResult.exitCode; the CLI consumer maps it to process exit.
+        const completedAt = new Date();
+        const earlyExitMetadata: CompletedMetadata = {
+          slug: definition.slug,
+          runId,
+          startedAt: startedAt.toISOString(),
+          completedAt: completedAt.toISOString(),
+          durationMs: completedAt.getTime() - startedAt.getTime(),
+          sessionId: '',
+          result: 'failed',
+          exitCode: 126,
+          validated: false,
+          validationErrors: [],
+          systemValidated: false,
+          userValidated: null,
+          eventCount: 1,
+          toolCallCount: 0,
+          artifacts: [],
+        };
+        try {
+          fs.writeFileSync(
+            path.join(runDir, 'completed.json'),
+            JSON.stringify(earlyExitMetadata, null, 2),
+          );
+        } catch {
+          // best-effort
+        }
+
+        // Mark auto-harvest as done so the `finally` block doesn't write a
+        // second `crashed` stub on top of our explicit denial record.
+        harvestCtx.done.value = true;
+
+        // Clean up runtime environment (Workshop 007) — same as the normal
+        // exit path so a second run in the same process doesn't see stale
+        // env vars.
+        for (const key of MINIH_RUNTIME_ENV_KEYS) {
+          delete process.env[key];
+        }
+
+        return {
+          agentResult: {
+            output: err.message,
+            sessionId: '',
+            status: 'failed',
+            exitCode: 126,
+            tokens: null,
+          },
+          metadata: earlyExitMetadata,
+          validation: null,
+          runDir,
+          parsedReport: null,
+        };
+      }
+      // Unknown error — re-throw so the caller's normal error path handles it.
+      throw err;
+    }
 
     const permissionHandler = isNonDefaultPolicy(resolvedPolicy)
       ? buildPermissionHandler(resolvedPolicy, {

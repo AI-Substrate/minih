@@ -35,7 +35,7 @@ function createAgent(slug: string, options: { coordination?: boolean } = {}) {
   fs.mkdirSync(agentDir, { recursive: true });
   fs.writeFileSync(
     path.join(agentDir, 'prompt.md'),
-    `---\ndescription: "Event-driven test agent"\n${options.coordination ? 'coordination: enabled\n' : ''}---\n\n# ${slug}\n\nDo the thing.`,
+    `---\ndescription: "Event-driven test agent"\n${options.coordination ? 'coordination: enabled\npermissions:\n  preset: yolo\n' : ''}---\n\n# ${slug}\n\nDo the thing.`,
   );
 
   const definition = resolveAgent(slug, tmpDir);

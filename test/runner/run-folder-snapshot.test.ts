@@ -68,7 +68,7 @@ function createCoordinatedAgent(slug: string) {
   fs.mkdirSync(agentDir, { recursive: true });
   fs.writeFileSync(
     path.join(agentDir, 'prompt.md'),
-    `---\ndescription: "${slug} agent"\ncoordination: enabled\n---\n\n# ${slug}\n`,
+    `---\ndescription: "${slug} agent"\ncoordination: enabled\npermissions:\n  preset: yolo\n---\n\n# ${slug}\n`,
   );
   const definition = resolveAgent(slug, tmpDir);
   if (!definition) throw new Error(`expected ${slug} to resolve`);

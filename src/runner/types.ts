@@ -93,6 +93,17 @@ export interface AgentRunConfig {
     preset?: import('./permissions/policy.js').PermissionPresetName;
     allowedRoots?: import('./permissions/policy.js').AllowedRootsRule;
     strictFs?: boolean;
+    /**
+     * FX008-3 — operator opt-out for the coordination-write precondition.
+     * Set by `--allow-coord-write-deny` on `minih run`. Per-invocation only;
+     * intentionally has no env-var fallback so it can never be silently
+     * inherited from a shell config.
+     *
+     * When `true`, a `coordination: enabled` agent whose resolved policy
+     * denies write boots normally (with a stderr deprecation banner).
+     * When unset, the precondition fires E205 at boot.
+     */
+    allowCoordWriteDeny?: boolean;
   };
   /**
    * Optional caller hook invoked when the SDK session is ready and a

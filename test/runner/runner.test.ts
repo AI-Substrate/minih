@@ -487,7 +487,7 @@ describe('runAgent', () => {
   it('sets coordination env vars during coordinated runs and cleans up after', async () => {
     const def = createAgent('coord-env-test', {
       prompt:
-        '---\ndescription: "Coordination env test"\ncoordination: enabled\n---\n\n# Env',
+        '---\ndescription: "Coordination env test"\ncoordination: enabled\npermissions:\n  preset: yolo\n---\n\n# Env',
       schema: null,
       instructions: null,
       preamble: null,

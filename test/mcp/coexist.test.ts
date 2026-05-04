@@ -148,7 +148,7 @@ function createAgent(slug: string, coordination: boolean): AgentDefinition {
   fs.mkdirSync(agentDir, { recursive: true });
   fs.writeFileSync(
     path.join(agentDir, 'prompt.md'),
-    `---\ndescription: "MCP coexistence test"\n${coordination ? 'coordination: enabled\n' : ''}---\n\n# ${slug}\n\nDo the thing.`,
+    `---\ndescription: "MCP coexistence test"\n${coordination ? 'coordination: enabled\npermissions:\n  preset: yolo\n' : ''}---\n\n# ${slug}\n\nDo the thing.`,
   );
   const definition = resolveAgent(slug, tmpDir);
   if (!definition) throw new Error(`expected ${slug} to resolve`);

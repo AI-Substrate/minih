@@ -67,4 +67,35 @@ permissions:
 - AC-FX8.4 (E205 message includes slug + presetName + presetSource + 3 remediations + sidecar reset hint): ✅ — covered by tests (e) + (g).
 - AC-FX8.7 (additive enum — every switch-on-`PermissionDeniedKind` site compiles): ✅ — `npx tsc --noEmit` clean. FX008-3 will run the dedicated handler-extension regression test (FX008-6).
 - AC-FX8.8 (no env-var fallback for opt-out): ✅ — `--allow-coord-write-deny` is per-call only via `options.allowCoordWriteDeny`; the env var (`MINIH_DISABLE_COORD_WRITE_PRECONDITION`) is the SEPARATE ops kill-switch, not the opt-out.
-- AC-FX8.10 (kill-switch banner + bypass): ✅ — covered by test (h) + (h-true) + (h-other).
+## FX008-3 — Wire precondition into runAgent (2026-05-04 08:07Z)
+
+**Stage 3 of 8**
+
+**Files touched**:
+- `src/runner/runner.ts` — imports `assertCoordWriteAllowed` + `CoordinationWriteDeniedError`; precondition call inserted after `updateManifest({permissions:...})` (line 657 area). On `CoordinationWriteDeniedError`: synthesises a `permission_denied` event into events.ndjson (signal 1, since SDK adapter never starts), routes through existing `fireTerminalDenial` for signals 3-4 (inside-state + outside-inbox), writes `status: 'failed'` + `terminalReason` + `permissionError` into run.json (signal 2), writes minimal `completed.json` with `result: 'failed'` + `exitCode: 126` (signal 5), early-returns `AgentRunResult` with the synthetic denial shape. Auto-harvest stub guard (`harvestCtx.done.value = true`) prevents the `finally` block from emitting a duplicate `crashed` stub. Runtime env vars (`MINIH_RUNTIME_ENV_KEYS`) cleaned up on early-exit so subsequent runs in the same process don't see stale state.
+- `src/runner/types.ts` — `AgentRunConfig.permissionsOverride` gains `allowCoordWriteDeny?: boolean` field. Documented as per-invocation only with no env-var fallback.
+
+**Test fixture updates** (4 test files using coord-enabled agents now needed `preset: yolo` to opt out — old default was `yolo`, post-R6 default is `restricted` which now triggers the precondition):
+- `test/runner/run-folder-snapshot.test.ts:71` — coord agent fixture
+- `test/mcp/coexist.test.ts:151` — MCP coexistence agent fixture
+- `test/runner/runner-event-driven.test.ts:38` — event-driven test agent fixture
+- `test/runner/runner.test.ts:490` — coordination env var test fixture
+
+These fixtures use `coordination: enabled` but were not testing permissions; adding `preset: yolo` preserves their pre-FX008 behaviour. This is also the canonical real-world pattern for tests that exercise coord infrastructure without exercising permission policy.
+
+**Verification**:
+- All 4 previously-failing test files now green: 35/35 tests pass.
+- Full quality gate: 1022 tests pass + audit clean (`just fft`).
+- TypeScript strict-mode compile clean.
+- Pre-existing flake (`runner-event-driven.test.ts` "waits for pending forwarder sends") still intermittent under parallel load — known issue, passes 1/1 alone, not introduced by this change.
+
+**Decisions / drift from dossier**:
+- Synthesised events.ndjson event manually since the dossier said "events.ndjson is handled in adapter — assumed already fired" but for FX008's pre-flight failure the SDK adapter never starts. Without the synthetic event, `minih tail` / `minih view` would show the run as `failed` with no event-level explanation. The synthetic event matches the canonical `permission_denied` shape minus SDK-derived fields.
+- `terminalReason` stays `'permission-denied'` (the existing `LiveRunManifest.terminalReason` literal); the new `kind: 'coord-write-deny'` distinguishes this denial within the permissionError payload. Avoids ripple to status/probe consumers that key off terminalReason as the closed value.
+- Test fixture preset selection: chose `yolo` over `permissions.overrides.write: allow` because the affected tests exercise coordination infrastructure (forwarders, snapshots, env vars), not permission policy. `yolo` is the most accurate "tests don't care about permissions" signal.
+
+**AC coverage**:
+- AC-FX8.2 (boot precondition fires for coord+write-deny+no-flag): ✅ — covered by new call site + existing helper unit tests.
+- AC-FX8.3 (5-signal coverage): ✅ — manual signal-1 events.ndjson append + reused fireTerminalDenial for 3+4 + manual run.json write for 2 + exitCode 126 in returned AgentResult for 5.
+- AC-FX8.5 (operator opt-out boots normally): ✅ — `permissionsOverride.allowCoordWriteDeny: true` reaches the helper via the options bag.
+- AC-FX8.6 (coord-disabled bypasses): ✅ — helper's first guard checks `coordEnabled`; returns early when false.

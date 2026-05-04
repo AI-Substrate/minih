@@ -511,9 +511,10 @@ async function installFromStagedDir(args: {
       lockedDefault = opts.permissionsOverride;
       lockedDefaultReason = 'user-override';
     } else {
-      // No manifest recommendation + no user choice + R3-R4 release default.
-      // Plan 018 R5 (T-R5.2) bumps this to 'restricted' for new installs.
-      lockedDefault = 'yolo';
+      // Plan 018 R5 (T-R5.2) — new installs use the current release default.
+      // R1-R4: 'yolo' (no behaviour change). R5+: 'restricted'.
+      // Existing sidecars with lockedDefault are preserved (lossless invariant).
+      lockedDefault = (await import('./../permissions/presets.js')).minihReleaseDefault;
       lockedDefaultReason = 'minih-default';
     }
     lockedDefaultRecordedAt = new Date().toISOString();

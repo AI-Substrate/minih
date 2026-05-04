@@ -4,6 +4,11 @@ tags: [companion, review, quality, coordination, exemplar]
 model: gpt-5.5
 timeout: 7200
 coordination: enabled
+permissions:
+  preset: read-only
+  overrides:
+    shell: allow
+    network: allow
 ---
 
 # Code Review Companion

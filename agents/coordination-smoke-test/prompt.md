@@ -2,6 +2,7 @@
 description: "Dogfood the outside/inside coordination loop with inbox, state, and retrospective evidence"
 tags: [smoke, coordination, mcp]
 coordination: enabled
+permissions: restricted
 ---
 
 # Coordination Smoke Test

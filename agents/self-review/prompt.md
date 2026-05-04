@@ -1,6 +1,7 @@
 ---
 description: "Review a source file for code quality, patterns, and minih conventions"
 tags: [review, quality, code]
+permissions: read-only
 ---
 
 # Self-Review

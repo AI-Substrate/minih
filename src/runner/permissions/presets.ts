@@ -125,8 +125,10 @@ export function isPresetName(name: string): name is PermissionPresetName {
 }
 
 /**
- * The current release default. Plan 018 R1-R5 keeps this as `'yolo'` to
- * preserve backward-compatible behaviour. Flipped to `'restricted'` in R6
- * (T-R6.1) per the rollout in workshop 003.
+ * Plan 018 R6 (T-R6.1) — flipped from `'yolo'` to `'restricted'`. Sidecar
+ * `lockedDefault` overrides this for grandfathered agents (lossless preservation),
+ * so existing installs keep their original `yolo` policy. New `init`-scaffolded
+ * agents and new `agent install` results without manifest recommendations get
+ * `restricted` from this point forward.
  */
-export const minihReleaseDefault: PermissionPresetName = 'yolo';
+export const minihReleaseDefault: PermissionPresetName = 'restricted';

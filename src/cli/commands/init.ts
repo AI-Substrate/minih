@@ -19,6 +19,7 @@ import { assertOutsideContext } from '../preaction-context.js';
 const PROMPT_TEMPLATE = (slug: string, coordinated = false) => `---
 description: "TODO: describe what this agent does"
 tags: []
+permissions: restricted
 ${coordinated ? 'coordination: enabled\n' : ''}---
 
 # ${slug}

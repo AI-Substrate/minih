@@ -1,6 +1,7 @@
 ---
 description: Simulate a brand-new user's first time using minih — create, run, and review an agent via npx.
 tags: [dogfood, fte, onboarding]
+permissions: trusted
 ---
 
 # First-Time Experience Test

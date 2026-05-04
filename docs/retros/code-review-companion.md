@@ -114,3 +114,12 @@
 - **magicWand** (target: coordination): Expose the active run input, especially idleBudgetMs, via `minih status <slug> --run <id>` or a dedicated dogfood-safe `minih input get` command so coordinated agents can apply their lifecycle contract precisely without reading run-dir files.
 - difficulties:
   - [annoying] coordination: Could not determine the configured idle budget through a dogfood-safe CLI/status surface. (workaround: Used repeated empty long-polls plus `minih status` elapsed/run activity as evidence before exiting with idle_budget.)
+
+## 2026-05-04T04:53:33.073Z — code-review-companion / 2026-05-04T14-49-56-336Z-f7d6
+
+- runId: 2026-05-04T14-49-56-336Z-f7d6
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-05-04T14-49-56-336Z-f7d6
+- summary: Oriented on docs/plans/018-agent-permissions, confirmed the active plan is ready for implementation, noted the latest permissions tooling commit and one modified worktree file, then received no review requests before the idle budget elapsed. No code review findings were produced.
+- **magicWand** (target: coordination): Expose the effective idleBudgetMs and initialTask values through a small inside context/status command so long-running coordinated agents can make lifecycle decisions without guessing from prompt text or run artifacts.
+- difficulties:
+  - [annoying] knowledge: Effective idleBudgetMs was mentioned by the companion protocol but not available via inbox/state tooling, making the shutdown threshold ambiguous. (workaround: Used several bounded 30-second idle polls after orientation before treating the run as idle-budget complete.)

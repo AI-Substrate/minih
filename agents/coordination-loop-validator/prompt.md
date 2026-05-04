@@ -3,6 +3,7 @@ description: "Validate the manual outside/inside coordination loop with three mi
 tags: [coordination, validation, harness, worked-example]
 coordination: enabled
 timeout: 900
+permissions: restricted
 ---
 
 # Coordination Loop Validator

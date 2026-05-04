@@ -2,6 +2,7 @@
 description: Validate MCP tools are available in minih agent sessions
 tags: [smoke, mcp, integration]
 timeout: 300
+permissions: restricted
 ---
 
 # MCP Smoke Test

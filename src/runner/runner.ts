@@ -47,6 +47,7 @@ import {
   buildPermissionHandler,
   compile as compilePermissionPolicy,
   fireTerminalDenial,
+  minihReleaseDefault,
   type DenialState,
   type PermissionPolicy,
   type ResolvedPolicy,
@@ -636,7 +637,7 @@ export async function runAgent(
       frontmatter: cliOverridePolicy ?? definition.permissions,
       sidecar: sidecarPolicy,
       env: envPolicy,
-      releaseDefault: { preset: 'yolo' },
+      releaseDefault: { preset: minihReleaseDefault },
       cli: config.permissionsOverride?.allowedRoots,
       cwd: config.cwd ?? process.cwd(),
     });

@@ -4,6 +4,7 @@ tags: [demo, coordination, companion, exemplar]
 model: gpt-5.5
 timeout: 1800
 coordination: enabled
+permissions: restricted
 ---
 
 # Demo Companion

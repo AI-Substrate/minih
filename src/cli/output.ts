@@ -44,6 +44,7 @@
  *   E202  FORBIDDEN_ROOT                   — allowedRoots includes /, /etc, etc.
  *   E203  PERMISSIONS_FRONTMATTER_INVALID  — `permissions:` field has a bad shape
  *   E204  PERMISSION_PRESET_UNKNOWN        — preset name not in the registry
+ *   E205  COORDINATION_WRITE_DENIED        — coord-enabled agent resolved to write:deny preset (FX008)
  */
 
 export const ErrorCodes = {
@@ -89,6 +90,8 @@ export const ErrorCodes = {
   FORBIDDEN_ROOT: 'E202',
   PERMISSIONS_FRONTMATTER_INVALID: 'E203',
   PERMISSION_PRESET_UNKNOWN: 'E204',
+  // Plan 018 — FX008 — coordination write precondition
+  COORDINATION_WRITE_DENIED: 'E205',
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];

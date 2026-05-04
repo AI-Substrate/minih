@@ -552,10 +552,21 @@ export function registerRunCommand(program: Command): void {
                 : 'error';
 
           if (status === 'error') {
-            const errorCode =
-              result.metadata.result === 'timeout'
-                ? ErrorCodes.AGENT_TIMEOUT
-                : ErrorCodes.AGENT_EXECUTION_FAILED;
+            // FX008-4 — route permission denials to dedicated error codes.
+            // `permissionError.kind === 'coord-write-deny'` → E205 (FX008
+            // boot precondition). Any other kind (shell/write/mcp/read/...)
+            // → E200 (the canonical permission-denied code allocated in
+            // Plan 018 R1; previously unwired). Falls through to E120 for
+            // non-permission failures and E123 for timeouts.
+            const permissionKind = result.metadata.permissionError?.kind;
+            let errorCode: string = ErrorCodes.AGENT_EXECUTION_FAILED;
+            if (result.metadata.result === 'timeout') {
+              errorCode = ErrorCodes.AGENT_TIMEOUT;
+            } else if (permissionKind === 'coord-write-deny') {
+              errorCode = ErrorCodes.COORDINATION_WRITE_DENIED;
+            } else if (permissionKind) {
+              errorCode = ErrorCodes.PERMISSION_DENIED;
+            }
             exitWithEnvelope(
               formatError('run', errorCode, result.agentResult.output, {
                 runDir: result.runDir,

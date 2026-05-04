@@ -202,6 +202,18 @@ export interface CompletedMetadata {
   resumedFromRunId?: string;
   /** Velocity data — compounding improvement tracking */
   velocity?: VelocityData;
+  /**
+   * Plan 018 / FX008 — populated when the run failed via the 5-signal
+   * permission-denial protocol. Mirrors `LiveRunManifest.permissionError`
+   * minus path/request fields. The CLI consumes `permissionError.kind` to
+   * route to the appropriate error code (`E200` for SDK-kind denials,
+   * `E205` for `'coord-write-deny'`).
+   */
+  permissionError?: {
+    kind: string;
+    decision: string;
+    message: string;
+  };
 }
 
 /** Result returned from the runner to the CLI command. */

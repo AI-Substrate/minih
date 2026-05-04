@@ -4,7 +4,7 @@
 **Plan**: [agent-permissions-plan.md](../agent-permissions-plan.md)
 **Source issue**: [#25](https://github.com/AI-Substrate/minih/issues/25)
 **Generated**: 2026-05-04
-**Status**: In flight (FX008-1, FX008-2, FX008-3 done — Track A + helper + runAgent wiring)
+**Status**: In flight (FX008-1, FX008-2, FX008-3, FX008-4 done — Track A + helper + runAgent + E205 routing)
 
 ---
 
@@ -57,8 +57,8 @@ stateDiagram-v2
     S4 --> S5
     S5 --> [*]
 
-    class S4,S5 pending
-    class S1,S2,S3 done
+    class S5 pending
+    class S1,S2,S3,S4 done
 ```
 
 **Legend**: grey = pending | yellow = active | red = blocked/needs input | green = done
@@ -72,7 +72,7 @@ stateDiagram-v2
 - [x] **Stage 1: Track A — canonical frontmatter** — add `write: allow` to `permissions.overrides` (`agents/code-review-companion/prompt.md` — existing file, one new line)
 - [x] **Stage 2: Precondition helper** — `assertCoordWriteAllowed()` pure-function with 6 unit tests (`src/runner/permissions/coord-write-precondition.ts` — new file)
 - [x] **Stage 3: Wire into runAgent** — call site after `updateManifest({permissions:...})`; `PermissionDenialReason['kind']` extends with `'coord-write-deny'`; existing `fireTerminalDenial` path drives 5-signal output (`src/runner/runner.ts`, `src/runner/permissions/handler.ts`)
-- [ ] **Stage 4: E205 code + opt-out flag + docs** — register E205; add `--allow-coord-write-deny` to `minih run`; update `docs/how/permissions.md` § Coordinated agents + cross-link from `companion-mode.md` (`src/cli/output.ts`, `src/cli/commands/run.ts`, `src/runner/types.ts`, `docs/how/permissions.md`, `docs/how/companion-mode.md`)
+- [x] **Stage 4: E205 code + opt-out flag + docs** — register E205; add `--allow-coord-write-deny` to `minih run`; update `docs/how/permissions.md` § Coordinated agents + cross-link from `companion-mode.md` (`src/cli/output.ts`, `src/cli/commands/run.ts`, `src/runner/types.ts`, `docs/how/permissions.md`, `docs/how/companion-mode.md`)
 - [ ] **Stage 5: Regression test** — `test/cli/run-coord-write-deny.test.ts` (new) + companion envelope smoke (`test/agents/companion-output-envelope.test.ts` — new); 3 cases per AC-FX8.2/AC-FX8.5/AC-FX8.6
 
 ---
@@ -134,7 +134,7 @@ flowchart LR
 - [x] FX008-1: Add `write: allow` to canonical companion frontmatter
 - [x] FX008-2: Implement `assertCoordWriteAllowed()` precondition + 6 unit tests
 - [x] FX008-3: Wire precondition into `runAgent`; extend `PermissionDenialReason['kind']` additively
-- [ ] FX008-4: Allocate E205; document in `output.ts` and `permissions.md`
+- [x] FX008-4: Allocate E205; document in `output.ts` and `permissions.md`
 - [ ] FX008-5: Add `--allow-coord-write-deny` flag to `minih run`
 - [ ] FX008-6: Regression test `run-coord-write-deny.test.ts` + companion envelope smoke + handler-kind-extension regression
 - [ ] FX008-7: Update `docs/how/permissions.md` + cross-link `docs/how/companion-mode.md` + document `MINIH_DISABLE_COORD_WRITE_PRECONDITION`

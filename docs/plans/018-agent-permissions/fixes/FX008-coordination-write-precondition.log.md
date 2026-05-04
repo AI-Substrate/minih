@@ -98,4 +98,23 @@ These fixtures use `coordination: enabled` but were not testing permissions; add
 - AC-FX8.2 (boot precondition fires for coord+write-deny+no-flag): ✅ — covered by new call site + existing helper unit tests.
 - AC-FX8.3 (5-signal coverage): ✅ — manual signal-1 events.ndjson append + reused fireTerminalDenial for 3+4 + manual run.json write for 2 + exitCode 126 in returned AgentResult for 5.
 - AC-FX8.5 (operator opt-out boots normally): ✅ — `permissionsOverride.allowCoordWriteDeny: true` reaches the helper via the options bag.
-- AC-FX8.6 (coord-disabled bypasses): ✅ — helper's first guard checks `coordEnabled`; returns early when false.
+## FX008-4 — E205 allocation + CLI routing (2026-05-04 08:32Z)
+
+**Stage 4 of 8**
+
+**Files touched**:
+- `src/cli/output.ts` — `ErrorCodes.COORDINATION_WRITE_DENIED = 'E205'` added to the Plan 018 block; comment header (line 47) updated to document the new code.
+- `src/runner/types.ts` — `CompletedMetadata` gains optional `permissionError?: { kind, decision, message }` so the CLI can route on the denial reason without re-reading `run.json`.
+- `src/runner/runner.ts` — both `CompletedMetadata` write sites populate the field: the FX008-3 early-exit path (line ~786) populates from `err` directly; the post-run handler-fired path (line ~1219) populates from `denialState.payload` when `terminalFired`.
+- `src/cli/commands/run.ts` — error-code routing extended (line ~554): `permissionError.kind === 'coord-write-deny'` → `ErrorCodes.COORDINATION_WRITE_DENIED` (E205); any other permission `kind` (shell/write/mcp/read/etc) → `ErrorCodes.PERMISSION_DENIED` (E200, previously allocated but unwired). `AGENT_TIMEOUT` (E123) and `AGENT_EXECUTION_FAILED` (E120) remain the fallback for non-permission failures.
+
+**Bonus harness gift**: E200 was allocated in Plan 018 R1 but never wired up — every permission-denied run was hitting generic E120 `AGENT_EXECUTION_FAILED`. FX008-4's routing fixes that for free, so any future SDK-kind permission denial now surfaces as E200 in the CLI envelope.
+
+**Verification**:
+- Live test: created throwaway coord-enabled agent with `read-only` preset (write-deny), confirmed `minih run` returns `error.code: 'E205'` with the canonical message.
+- Full quality gate: 1022 tests pass + audit clean (`just fft`).
+- TypeScript strict-mode compile clean.
+
+**AC coverage**:
+- AC-FX8.4 (E205 message format incl. provenance + remediations + sidecar reset hint): ✅ — message construction is in FX008-2 helper; FX008-4 just wires the code surfacing.
+- The `output.ts` comment header now lists E205 alongside E200-E204 in the Plan 018 block.

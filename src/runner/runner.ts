@@ -799,6 +799,14 @@ export async function runAgent(
           eventCount: 1,
           toolCallCount: 0,
           artifacts: [],
+          // FX008-4 — surface the denial reason so the CLI can route to
+          // ErrorCodes.COORDINATION_WRITE_DENIED (E205) instead of generic
+          // AGENT_EXECUTION_FAILED (E120).
+          permissionError: {
+            kind: err.kind,
+            decision: 'deny',
+            message: err.message,
+          },
         };
         try {
           fs.writeFileSync(
@@ -1236,6 +1244,18 @@ export async function runAgent(
         resumedFromRunId: config.resumedFromRunId,
       }),
       ...(velocity && { velocity }),
+      // FX008-4 — surface the denial reason so the CLI can route to
+      // ErrorCodes.COORDINATION_WRITE_DENIED (E205) for coord-write-deny
+      // and ErrorCodes.PERMISSION_DENIED (E200) for SDK-kind denials,
+      // instead of falling through to generic AGENT_EXECUTION_FAILED.
+      ...(denialState.terminalFired &&
+        denialState.payload && {
+          permissionError: {
+            kind: denialState.payload.kind,
+            decision: denialState.payload.decision,
+            message: denialState.payload.message,
+          },
+        }),
     };
 
     fs.writeFileSync(

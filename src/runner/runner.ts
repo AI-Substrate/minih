@@ -44,6 +44,14 @@ import {
 } from './run-manifest.js';
 import { readStateLazy } from './state.js';
 import {
+  buildPermissionHandler,
+  compile as compilePermissionPolicy,
+  fireTerminalDenial,
+  type DenialState,
+  type PermissionPolicy,
+  type ResolvedPolicy,
+} from './permissions/index.js';
+import {
   createStateForwarder,
   type StateForwarder,
 } from './state-forwarder.js';
@@ -608,6 +616,51 @@ export async function runAgent(
       );
     }
 
+    // Plan 018 R1 — compile permissions policy. Resolution chain per AC24:
+    // frontmatter → sidecar lockedDefault → env → release default constant.
+    //
+    // R1 keeps backward-compat: agents without explicit `permissions:` get
+    // `releaseDefault.preset = 'yolo'` and behave exactly as before. The
+    // runtime permission handler is only constructed when the resolved
+    // policy is *non-yolo*; un-migrated agents fall through to the
+    // adapter's built-in `approveAll`.
+    const sidecarPolicy = readSidecarPermissions(definition.dir);
+    const envPolicy = readEnvPermissions();
+    const resolvedPolicy: ResolvedPolicy = compilePermissionPolicy({
+      frontmatter: definition.permissions,
+      sidecar: sidecarPolicy,
+      env: envPolicy,
+      releaseDefault: { preset: 'yolo' },
+      cwd: config.cwd ?? process.cwd(),
+    });
+
+    // Denial state — closure shared with handler `onDeny` callback. The
+    // `terminalFired` mutex enforces first-trigger-wins per workshop 002.
+    const denialState: DenialState = {
+      terminalFired: false,
+      exitCode: 0,
+      reason: null,
+      payload: null,
+      signalFailures: [],
+    };
+
+    const permissionHandler = isNonDefaultPolicy(resolvedPolicy)
+      ? buildPermissionHandler(resolvedPolicy, {
+          onDeny: (reason) => {
+            fireTerminalDenial(denialState, {
+              runDir,
+              runId,
+              agentSlug: definition.slug,
+              agentsDir,
+              coordinationEnabled,
+              policy: resolvedPolicy,
+              reason,
+              signalFailures: denialState.signalFailures,
+            });
+          },
+        })
+      : undefined;
+
     // Event tracking
     const stats: RunEventStats = {
       total: 0,
@@ -793,6 +846,7 @@ export async function runAgent(
           onSessionReady: startForwarders,
           configDir: config.configDir ?? config.cwd,
           ...(mcpServers && { mcpServers }),
+          ...(permissionHandler && { permissionHandler }),
         })
         .then(async (result) => {
           // Manifest: status → completing right before terminal-condition wait
@@ -845,6 +899,46 @@ export async function runAgent(
     } finally {
       if (timeoutHandle) clearTimeout(timeoutHandle);
       closeForwarders();
+    }
+
+    // Plan 018 R1 — if a permission denial fired during the run, persist
+    // signals 2 (run.json) here. Signals 3+4 (inside-state, outside-inbox)
+    // already fired inside the handler closure. Mandatory regardless of
+    // whether the SDK reported `failed` or wedged — the denial is the
+    // truth.
+    if (denialState.terminalFired && denialState.payload) {
+      try {
+        await updateManifest(runDir, {
+          status: 'failed',
+          terminalReason: denialState.reason ?? 'permission-denied',
+          permissionError: {
+            kind: denialState.payload.kind,
+            decision: denialState.payload.decision,
+            occurredAt: denialState.payload.occurredAt,
+            message: denialState.payload.message,
+            toolName: denialState.payload.toolName,
+            attemptedPath: denialState.payload.attemptedPath,
+            requestId: denialState.payload.requestId,
+            toolCallId: denialState.payload.toolCallId,
+            policyDigest: denialState.payload.policyDigest,
+          },
+          ...(denialState.signalFailures.length > 0 && {
+            coordinationSignals: denialState.signalFailures,
+          }),
+        });
+      } catch {
+        // best-effort
+      }
+      // Override agentResult to the canonical denial shape.
+      if (agentResult.status !== 'killed') {
+        agentResult = {
+          output: denialState.payload.message,
+          sessionId: agentResult.sessionId,
+          status: 'failed',
+          exitCode: denialState.exitCode,
+          tokens: agentResult.tokens,
+        };
+      }
     }
 
     const completedAt = new Date();
@@ -1287,4 +1381,76 @@ function isRetrospectiveCoordination(
     return null;
   }
   return value as ParsedReport['coordination'];
+}
+
+/**
+ * Read sidecar permission policy (Plan 018 R3 introduces `lockedDefault`).
+ *
+ * R1 stub: looks for `agentDir/.minih-source.json` and returns
+ * `{ preset: lockedDefault }` if the field is present. R3 extends with
+ * `lockedDefaultRecordedAt`/`lockedDefaultReason` and the lossless-preservation
+ * invariant test.
+ */
+function readSidecarPermissions(
+  agentDir: string,
+): PermissionPolicy | undefined {
+  const sidecarPath = path.join(agentDir, '.minih-source.json');
+  if (!fs.existsSync(sidecarPath)) return undefined;
+  try {
+    const raw = JSON.parse(fs.readFileSync(sidecarPath, 'utf-8'));
+    if (raw && typeof raw === 'object') {
+      const lockedDefault = (raw as Record<string, unknown>).lockedDefault;
+      if (typeof lockedDefault === 'string') {
+        return { preset: lockedDefault as PermissionPolicy['preset'] };
+      }
+    }
+  } catch {
+    // malformed sidecar — fall through (doctor surfaces the problem)
+  }
+  return undefined;
+}
+
+/**
+ * Read `MINIH_PERMISSIONS_DEFAULT` env var. Plan 018 R2 (T-R2.9) — escape
+ * hatch for users who want a different default during the rollout.
+ */
+function readEnvPermissions(): PermissionPolicy | undefined {
+  const v = process.env.MINIH_PERMISSIONS_DEFAULT;
+  if (!v) return undefined;
+  const trimmed = v.trim();
+  const validPresets = [
+    'yolo',
+    'trusted',
+    'restricted',
+    'read-only',
+    'network',
+    'build-only',
+  ];
+  if (!validPresets.includes(trimmed)) {
+    throw new Error(
+      `MINIH_PERMISSIONS_DEFAULT must be one of: ${validPresets.join(', ')}; got "${trimmed}"`,
+    );
+  }
+  return { preset: trimmed as PermissionPolicy['preset'] };
+}
+
+/**
+ * True iff the resolved policy MAY produce a denial. Pure-yolo policies
+ * (every kind = allow + no allowedRoots restrictions beyond the default)
+ * fall through to the adapter's built-in `approveAll` for backward-compat.
+ *
+ * R1 conservative test: any non-allow decision OR any explicit
+ * frontmatter-supplied allowedRoots = "non-default".
+ */
+function isNonDefaultPolicy(policy: ResolvedPolicy): boolean {
+  if (policy.presetName !== 'yolo') return true;
+  for (const decision of Object.values(policy.decisions)) {
+    if (decision !== 'allow') return true;
+  }
+  // Default allowedRoots resolution always produces 1 root from git/cwd.
+  // If we have multiple sources contributing, treat as non-default.
+  const explicitSources = policy.rootsResolvedFrom.filter(
+    (p) => p.source !== 'git-root' && p.source !== 'cwd-fallback',
+  );
+  return explicitSources.length > 0;
 }

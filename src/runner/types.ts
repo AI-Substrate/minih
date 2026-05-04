@@ -39,6 +39,13 @@ export interface AgentDefinition {
    * Absent / unset → `{ enabled: false }`.
    */
   coordination?: CoordinationFrontmatter;
+  /**
+   * Parsed `permissions` frontmatter, plan 018 R1. `undefined` when the
+   * field is absent (legacy / un-migrated agents); a `PermissionPolicy` when
+   * explicit. Resolution to a `ResolvedPolicy` happens at runner entry per
+   * AC24 — this is just the raw input.
+   */
+  permissions?: import('./permissions/policy.js').PermissionPolicy;
 }
 
 /** Configuration for a single agent run. */
@@ -315,6 +322,33 @@ export interface LiveRunManifest {
     messages: number;
     errors: number;
   };
+  /**
+   * Plan 018 R1 — recorded once a permission denial fires. Mandatory signal #2
+   * of the 5-signal protocol (workshop 002 § Q1).
+   */
+  terminalReason?: 'permission-denied';
+  /**
+   * Plan 018 R1 — populated alongside `terminalReason: 'permission-denied'`.
+   * Shape mirrors the `permission-error.json` envelope without `meta.contractVersion`
+   * (which is implicit at this layer).
+   */
+  permissionError?: {
+    kind: string;
+    decision: string;
+    occurredAt: string;
+    message: string;
+    toolName?: string;
+    attemptedPath?: string;
+    requestId?: string;
+    toolCallId?: string;
+    policyDigest?: { presetName: string; canonicalRoots: string[] };
+  };
+  /**
+   * Plan 018 R1 — best-effort signals (inside-state, outside-inbox) that
+   * failed to write. Captured here per workshop 002 § Q1 (failures recorded,
+   * never thrown).
+   */
+  coordinationSignals?: Array<{ signal: string; error: string }>;
 }
 
 /** Mode passed to `resolveRun({ slug, mode })`. */

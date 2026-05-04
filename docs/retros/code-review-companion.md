@@ -96,3 +96,12 @@
 - difficulties:
   - [annoying] debug: A drift-audit grep pattern containing markdown backticks was passed through the shell in double quotes, causing command substitution attempts before grep ran. (workaround: Re-ran the wording sweep with safer single-quoted/literal patterns and avoided backticks in shell-interpreted strings.)
   - [annoying] coordination: The T6.3 review request referenced commit 982af5c, but the AGENTS.md change it described was actually in the next commit, 26e3184. (workaround: Checked git log and blame for AGENTS.md, then reviewed the real T6.3 commit while noting the SHA mismatch in the summary.)
+
+## 2026-05-04T04:34:17.653Z — code-review-companion / 2026-05-04T14-25-55-619Z-29ec
+
+- runId: 2026-05-04T14-25-55-619Z-29ec
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-05-04T14-25-55-619Z-29ec
+- summary: Oriented on plan 018-agent-permissions, acknowledged the outside briefing for the full R1-R6 permissions rollout, and remained idle listening for commit-boundary review requests. No review tasks arrived before idle-budget shutdown, so no findings were produced.
+- **magicWand** (target: coordination): Expose the configured idleBudgetMs and elapsed idle timer in `minih status <slug> --run <run>` or `state_get` so long-running coordinated agents can make shutdown decisions without guessing.
+- difficulties:
+  - [annoying] coordination: The prompt required comparing elapsed idle time with input.idleBudgetMs, but that configured idle budget was not surfaced in coordination state or status output during the run. (workaround: Used repeated bounded inbox polls and stopped after several empty windows once no scoped review work arrived.)

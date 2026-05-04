@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://minih.dev/schemas/permission-error.json",
+  "title": "Permission Error Envelope",
+  "description": "Workshop 002 § Q6 — emitted on the `outside` inbox when a coordinated agent is terminated for permission denial. Type-discriminator is `permission-error`.",
+  "type": "object",
+  "required": ["meta", "kind", "decision", "agentSlug", "runId", "occurredAt", "message"],
+  "additionalProperties": false,
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["contractVersion"],
+      "properties": {
+        "contractVersion": { "type": "integer", "const": 1 }
+      },
+      "additionalProperties": false
+    },
+    "kind": {
+      "type": "string",
+      "description": "Permission kind that triggered the denial",
+      "enum": ["shell", "write", "mcp", "read", "url", "custom-tool", "memory", "hook"]
+    },
+    "decision": {
+      "type": "string",
+      "description": "Why minih denied",
+      "enum": ["deny", "prompt-user"]
+    },
+    "agentSlug": { "type": "string", "minLength": 1 },
+    "runId": { "type": "string", "minLength": 1 },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 timestamp"
+    },
+    "message": { "type": "string", "minLength": 1 },
+    "toolName": { "type": "string" },
+    "attemptedPath": {
+      "type": "string",
+      "description": "Path the agent attempted (if path-bearing kind)"
+    },
+    "requestId": { "type": "string" },
+    "toolCallId": { "type": "string" },
+    "policyDigest": {
+      "type": "object",
+      "description": "Resolved-policy snapshot for debugging — preset name + roots",
+      "properties": {
+        "presetName": { "type": "string" },
+        "canonicalRoots": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

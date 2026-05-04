@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://minih.dev/schemas/permission-policy.json",
+  "title": "Agent Permission Policy",
+  "description": "Plan 018 R1 — schema for the `permissions:` field in agent prompt.md frontmatter or in `.minih-source.json` sidecars.",
+  "oneOf": [
+    {
+      "type": "string",
+      "enum": ["yolo", "trusted", "restricted", "read-only", "network", "build-only"],
+      "description": "String form: shorthand for `{ preset: NAME }`"
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "preset": {
+          "type": "string",
+          "enum": ["yolo", "trusted", "restricted", "read-only", "network", "build-only"]
+        },
+        "overrides": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "shell": { "$ref": "#/$defs/decision" },
+            "write": { "$ref": "#/$defs/decision" },
+            "mcp": { "$ref": "#/$defs/decision" },
+            "read": { "$ref": "#/$defs/decision" },
+            "url": { "$ref": "#/$defs/decision" },
+            "network": { "$ref": "#/$defs/decision" },
+            "custom-tool": { "$ref": "#/$defs/decision" },
+            "memory": { "$ref": "#/$defs/decision" },
+            "hook": { "$ref": "#/$defs/decision" }
+          }
+        },
+        "allowedRoots": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["roots"],
+          "properties": {
+            "mode": { "type": "string", "enum": ["extend", "replace"] },
+            "roots": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "decision": {
+      "type": "string",
+      "enum": ["allow", "deny", "prompt-user"]
+    }
+  }
+}

@@ -17,6 +17,47 @@ export interface CopilotSessionEventLike {
   data?: any;
 }
 
+/**
+ * SDK 0.3.0 PermissionRequest kinds (locked to a string-literal union per
+ * Plan 018 finding 01 — drift between SDK minors must surface loudly so
+ * we can decide policy on the new kind explicitly).
+ */
+export type CopilotPermissionKind =
+  | 'shell'
+  | 'write'
+  | 'mcp'
+  | 'read'
+  | 'url'
+  | 'custom-tool'
+  | 'memory'
+  | 'hook';
+
+/**
+ * SDK 0.3.0 PermissionRequest shape (subset minih reads). Full shape lives
+ * in `node_modules/@github/copilot-sdk/dist/types.d.ts:579`.
+ */
+export interface CopilotPermissionRequestLike {
+  kind: CopilotPermissionKind;
+  toolCallId?: string;
+  requestId?: string;
+  toolName?: string;
+  arguments?: unknown;
+}
+
+/**
+ * Subset of `PermissionDecisionRequest['result']` that minih actually
+ * returns. Full union lives in
+ * `node_modules/@github/copilot-sdk/dist/generated/rpc.d.ts:824`.
+ */
+export type CopilotPermissionDecision =
+  | { kind: 'approve-once' }
+  | { kind: 'reject'; feedback?: string };
+
+export type CopilotPermissionHandler = (
+  request: CopilotPermissionRequestLike,
+  invocation: { sessionId: string },
+) => CopilotPermissionDecision | Promise<CopilotPermissionDecision>;
+
 export interface CopilotSessionConfig {
   streaming?: boolean;
   model?: string;
@@ -24,7 +65,7 @@ export interface CopilotSessionConfig {
   workingDirectory?: string;
   configDir?: string;
   mcpServers?: Record<string, unknown>;
-  onPermissionRequest?: () => { kind: string };
+  onPermissionRequest?: CopilotPermissionHandler;
 }
 
 export interface CopilotResumeSessionConfig {
@@ -33,7 +74,7 @@ export interface CopilotResumeSessionConfig {
   workingDirectory?: string;
   configDir?: string;
   mcpServers?: Record<string, unknown>;
-  onPermissionRequest?: () => { kind: string };
+  onPermissionRequest?: CopilotPermissionHandler;
 }
 
 export interface ICopilotSession {

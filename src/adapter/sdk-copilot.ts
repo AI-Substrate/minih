@@ -39,6 +39,7 @@ export class SdkCopilotAdapter implements IAgentAdapter {
       reasoningEffort,
       configDir,
       mcpServers,
+      permissionHandler,
     } = options;
 
     const validationError = validatePrompt(prompt);
@@ -52,9 +53,42 @@ export class SdkCopilotAdapter implements IAgentAdapter {
       };
     }
 
+    // Plan 018 R1 — wrap the user-supplied permissionHandler so we can
+    // emit `permission_denied` events on rejects. Idempotent on requestId.
+    const deniedRequestIds = new Set<string>();
+    const wrappedHandler = permissionHandler
+      ? async (
+          request: Parameters<NonNullable<AgentRunOptions['permissionHandler']>>[0],
+          invocation: { sessionId: string },
+        ) => {
+          const decision = await permissionHandler(request, invocation);
+          if (decision.kind === 'reject') {
+            const id = request.requestId ?? request.toolCallId ?? '';
+            if (!id || !deniedRequestIds.has(id)) {
+              if (id) deniedRequestIds.add(id);
+              if (onEvent) {
+                onEvent({
+                  type: 'permission_denied',
+                  timestamp: new Date().toISOString(),
+                  data: {
+                    kind: request.kind,
+                    decision: 'deny',
+                    toolName: request.toolName,
+                    requestId: request.requestId,
+                    toolCallId: request.toolCallId,
+                    message: decision.feedback ?? `permission denied: ${request.kind}`,
+                  },
+                });
+              }
+            }
+          }
+          return decision;
+        }
+      : approveAll;
+
     const session = sessionId
       ? await this._client.resumeSession(sessionId, {
-          onPermissionRequest: approveAll,
+          onPermissionRequest: wrappedHandler,
           ...(options.cwd && { workingDirectory: options.cwd }),
           ...(model && { model }),
           ...(reasoningEffort && { reasoningEffort }),
@@ -63,7 +97,7 @@ export class SdkCopilotAdapter implements IAgentAdapter {
         })
       : await this._client.createSession({
           streaming: !!onEvent,
-          onPermissionRequest: approveAll,
+          onPermissionRequest: wrappedHandler,
           ...(options.cwd && { workingDirectory: options.cwd }),
           ...(model && { model }),
           ...(reasoningEffort && { reasoningEffort }),

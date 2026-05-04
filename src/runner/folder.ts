@@ -51,6 +51,13 @@ export function validateSlug(slug: string): string | null {
 // just exports `watermarkPath()`.
 // ---------------------------------------------------------------------------
 
+export class InvalidPermissionsFrontmatterError extends Error {
+  constructor(message: string) {
+    super(`invalid permissions frontmatter: ${message}`);
+    this.name = 'InvalidPermissionsFrontmatterError';
+  }
+}
+
 export class InvalidCoordinationFrontmatterError extends Error {
   constructor(message: string) {
     super(`invalid coordination frontmatter: ${message}`);
@@ -237,6 +244,8 @@ export function parseFrontmatter(content: string): {
   timeout?: number;
   /** Always populated (workshop 005:95) — `{enabled:false}` when absent or `disabled`. */
   coordination: CoordinationFrontmatter;
+  /** Plan 018 R1 — `undefined` when absent (legacy agents). */
+  permissions?: import('./permissions/policy.js').PermissionPolicy;
   body: string;
 } {
   content = content.replace(/\r\n/g, '\n');
@@ -258,7 +267,8 @@ export function parseFrontmatter(content: string): {
       const yamlBlock = content.slice(4, content.length - 4);
       const parsed = parseYamlSimple(yamlBlock);
       const coordination = parseCoordinationField(yamlBlock);
-      return { ...parsed, coordination, body: '' };
+      const permissions = parsePermissionsField(yamlBlock);
+      return { ...parsed, coordination, permissions, body: '' };
     }
     return {
       description: '',
@@ -272,7 +282,8 @@ export function parseFrontmatter(content: string): {
   const body = content.slice(endIndex + 5); // skip \n---\n
   const parsed = parseYamlSimple(yamlBlock);
   const coordination = parseCoordinationField(yamlBlock);
-  return { ...parsed, coordination, body };
+  const permissions = parsePermissionsField(yamlBlock);
+  return { ...parsed, coordination, permissions, body };
 }
 
 /** Minimal YAML parser for frontmatter. */
@@ -416,6 +427,198 @@ function parseCoordinationField(yaml: string): CoordinationFrontmatter {
 }
 
 /**
+ * Parse the optional `permissions` frontmatter field. Plan 018 R1.
+ *
+ * Accepted forms (mirrors `parseCoordinationField` shape):
+ *
+ *   `permissions: yolo`       → string form ⇒ `{ preset: 'yolo' }`
+ *   `permissions: trusted`    → ditto
+ *   `permissions:`
+ *     `preset: read-only`
+ *     `overrides:`
+ *       `network: allow`
+ *       `shell: allow`
+ *     `allowedRoots:`
+ *       `mode: extend`
+ *       `roots: ["./repo", "./tmp"]`     ← inline JSON array
+ *
+ * Absent → `undefined`. Unknown preset names / invalid shapes throw
+ * `InvalidPermissionsFrontmatterError` so users see a clear failure at
+ * parse time rather than silent fall-through to a default.
+ */
+function parsePermissionsField(
+  yaml: string,
+): import('./permissions/policy.js').PermissionPolicy | undefined {
+  const lines = yaml.split('\n');
+  const VALID_PRESETS = new Set([
+    'yolo',
+    'trusted',
+    'restricted',
+    'read-only',
+    'network',
+    'build-only',
+  ]);
+  const VALID_KINDS = new Set([
+    'shell',
+    'write',
+    'mcp',
+    'read',
+    'url',
+    'network',
+    'custom-tool',
+    'memory',
+    'hook',
+  ]);
+  const VALID_DECISIONS = new Set(['allow', 'deny', 'prompt-user']);
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const m = line.match(/^permissions:\s*(.*)$/);
+    if (!m) continue;
+
+    const value = m[1].trim();
+
+    // String form: `permissions: <preset>`
+    if (value !== '') {
+      if (!VALID_PRESETS.has(value)) {
+        throw new InvalidPermissionsFrontmatterError(
+          `unknown preset "${value}"; valid: ${[...VALID_PRESETS].join(', ')}`,
+        );
+      }
+      return {
+        preset: value as import('./permissions/policy.js').PermissionPresetName,
+      };
+    }
+
+    // Object form
+    const result: import('./permissions/policy.js').PermissionPolicy = {};
+    let inOverrides = false;
+    let inAllowedRoots = false;
+    const allowedRoots: import('./permissions/policy.js').AllowedRootsRule = {
+      roots: [],
+    };
+
+    for (let j = i + 1; j < lines.length; j++) {
+      const sub = lines[j];
+      // Stop at first non-indented line (next top-level key)
+      if (!sub.match(/^\s/) && sub.trim() !== '') break;
+
+      // Indent depth — 2-space = top-level under `permissions:`, 4-space = nested
+      const topMatch = sub.match(/^  (\S.*)$/);
+      const nestedMatch = sub.match(/^    (\S.*)$/);
+
+      if (topMatch && !nestedMatch) {
+        // Reset section state on new top-level key.
+        inOverrides = false;
+        inAllowedRoots = false;
+        const trimmed = topMatch[1];
+        const presetM = trimmed.match(/^preset:\s*(.+)$/);
+        if (presetM) {
+          const preset = presetM[1].trim().replace(/^["']|["']$/g, '');
+          if (!VALID_PRESETS.has(preset)) {
+            throw new InvalidPermissionsFrontmatterError(
+              `unknown preset "${preset}"; valid: ${[...VALID_PRESETS].join(', ')}`,
+            );
+          }
+          result.preset =
+            preset as import('./permissions/policy.js').PermissionPresetName;
+          continue;
+        }
+        if (trimmed === 'overrides:') {
+          inOverrides = true;
+          result.overrides = result.overrides ?? {};
+          continue;
+        }
+        if (trimmed === 'allowedRoots:') {
+          inAllowedRoots = true;
+          continue;
+        }
+        if (inAllowedRoots) {
+          // Should not reach — top-level inside allowedRoots block is
+          // covered by nestedMatch below.
+        }
+        // Allow `mode:`/`roots:` directly under `allowedRoots:` (2-space).
+        const modeM = trimmed.match(/^mode:\s*(extend|replace)\s*$/);
+        const rootsM = trimmed.match(/^roots:\s*(\[.*\])\s*$/);
+        if ((modeM || rootsM) && !inAllowedRoots) {
+          throw new InvalidPermissionsFrontmatterError(
+            `\`${trimmed}\` only valid under \`allowedRoots:\``,
+          );
+        }
+      }
+
+      if (nestedMatch) {
+        const trimmed = nestedMatch[1];
+
+        if (inOverrides) {
+          const ovM = trimmed.match(/^([a-z][a-z-]*):\s*(\S+)\s*$/);
+          if (!ovM) {
+            throw new InvalidPermissionsFrontmatterError(
+              `bad override line: "${sub}"`,
+            );
+          }
+          const kind = ovM[1];
+          const decision = ovM[2];
+          if (!VALID_KINDS.has(kind)) {
+            throw new InvalidPermissionsFrontmatterError(
+              `unknown override kind "${kind}"`,
+            );
+          }
+          if (!VALID_DECISIONS.has(decision)) {
+            throw new InvalidPermissionsFrontmatterError(
+              `unknown override decision "${decision}" for kind "${kind}"`,
+            );
+          }
+          // Map `network` alias → `url` per workshop 001 § Schema.
+          const realKind = kind === 'network' ? 'url' : kind;
+          (result.overrides as Record<string, string>)[realKind] = decision;
+          continue;
+        }
+
+        if (inAllowedRoots) {
+          const modeM = trimmed.match(/^mode:\s*(extend|replace)\s*$/);
+          if (modeM) {
+            allowedRoots.mode = modeM[1] as 'extend' | 'replace';
+            continue;
+          }
+          const rootsM = trimmed.match(/^roots:\s*(\[.*\])\s*$/);
+          if (rootsM) {
+            try {
+              const parsed = JSON.parse(rootsM[1]);
+              if (
+                !Array.isArray(parsed) ||
+                parsed.some((p) => typeof p !== 'string')
+              ) {
+                throw new InvalidPermissionsFrontmatterError(
+                  `roots must be a JSON string array, got ${rootsM[1]}`,
+                );
+              }
+              allowedRoots.roots = parsed as string[];
+            } catch (err) {
+              if (err instanceof InvalidPermissionsFrontmatterError) throw err;
+              throw new InvalidPermissionsFrontmatterError(
+                `roots: invalid JSON value "${rootsM[1]}" (${(err as Error).message})`,
+              );
+            }
+            continue;
+          }
+          throw new InvalidPermissionsFrontmatterError(
+            `bad allowedRoots line: "${sub}"`,
+          );
+        }
+      }
+    }
+
+    if (inAllowedRoots || allowedRoots.roots.length > 0) {
+      result.allowedRoots = allowedRoots;
+    }
+
+    return result;
+  }
+  return undefined;
+}
+
+/**
  * List all available agent definitions by scanning for prompt.md files.
  * Skips underscore-prefixed folders (_shared, _templates, etc.).
  */
@@ -444,8 +647,15 @@ export function listAgents(agentsDir: string): AgentDefinition[] {
 
     // Parse frontmatter for description and tags
     const promptContent = fs.readFileSync(promptPath, 'utf-8');
-    const { description, tags, model, reasoning, timeout, coordination } =
-      parseFrontmatter(promptContent);
+    const {
+      description,
+      tags,
+      model,
+      reasoning,
+      timeout,
+      coordination,
+      permissions,
+    } = parseFrontmatter(promptContent);
 
     // Require frontmatter with description (per spec clarification)
     if (!description.trim()) continue;
@@ -466,6 +676,7 @@ export function listAgents(agentsDir: string): AgentDefinition[] {
       inputSchemaPath: fs.existsSync(inputSchemaPath) ? inputSchemaPath : null,
       outsideContract: readOutsideContract(entry.name, agentsDir),
       coordination,
+      permissions,
     });
   }
 

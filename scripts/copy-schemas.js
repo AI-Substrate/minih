@@ -13,6 +13,8 @@ for (const file of [
   'outside-state.json',
   'inside-state.json',
   'state-history-entry.json',
+  'permission-error.json',
+  'permission-policy.json',
 ]) {
   copyFileSync(join(src, file), join(dest, file));
 }

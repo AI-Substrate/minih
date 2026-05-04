@@ -171,6 +171,44 @@ describe('FX008 — coord write-deny precondition (CLI regression)', () => {
     expect(runJson.permissions.presetSource).toBe('frontmatter');
     expect(runJson.permissions.decisions.write).toBe('deny');
 
+    // Signal 3 — inside-state. Coordinated agents only; this fixture
+    // is `coordination: enabled` so the runner writes the state file.
+    // F004 (MEDIUM companion finding 2026-05-04): the original landing
+    // commit only asserted signals 1, 2, 5 — leaving signals 3 and 4
+    // (the coordinated surfaces FX008 is meant to protect) unverified.
+    const insideStatePath = path.join(runDir, 'state', 'inside.json');
+    expect(fs.existsSync(insideStatePath)).toBe(true);
+    const insideState = JSON.parse(fs.readFileSync(insideStatePath, 'utf-8'));
+    expect(insideState.status).toBe('error');
+    expect(insideState.data.permissionError).toBeDefined();
+    expect(insideState.data.permissionError.kind).toBe('coord-write-deny');
+    expect(insideState.data.permissionError.message).toContain('E205');
+
+    // Signal 4 — inside-inbox `permission-error` typed message (the
+    // outside lane's view of what the inside is reporting).
+    // `fireTerminalDenial` writes here so observers polling the inbox
+    // (humans via `minih outside inbox list`, orchestrators) see the
+    // denial without grepping events.ndjson.
+    const insideInboxPath = path.join(
+      runDir,
+      'inbox',
+      'inside',
+      'messages.ndjson',
+    );
+    expect(fs.existsSync(insideInboxPath)).toBe(true);
+    const inboundLines = fs
+      .readFileSync(insideInboxPath, 'utf-8')
+      .trim()
+      .split('\n')
+      .filter((l) => l.length > 0);
+    const permError = inboundLines
+      .map((l) => JSON.parse(l))
+      .find((m) => m.type === 'permission-error');
+    expect(permError).toBeDefined();
+    expect(permError.subject).toContain('coord-write-deny');
+    expect(permError.body).toContain('E205');
+    expect(permError.meta.payload.kind).toBe('coord-write-deny');
+
     // Signal 5 — exit code 126 (POSIX permission-denied) on the metadata.
     expect(env.error.details.metadata.exitCode).toBe(126);
     expect(env.error.details.metadata.result).toBe('failed');
@@ -196,12 +234,21 @@ describe('FX008 — coord write-deny precondition (CLI regression)', () => {
       ].join('\n'),
     );
 
-    // No GH_TOKEN: the run will fail with E122 at SDK boot or proceed
-    // through the prompt builder. We only assert it's NOT E205.
-    const result = run(['run', 'no-coord'], { cwd: tmpDir });
+    // F003 HIGH (companion finding 2026-05-04): explicitly scrub GH_TOKEN
+    // so the run cannot boot a real SDK session — otherwise this case
+    // becomes non-deterministic depending on whether the parent shell
+    // exports GH_TOKEN. With GH_TOKEN absent, the SDK boot fails fast
+    // with E122 (missing token), proving the precondition didn't fire.
+    const result = run(['run', 'no-coord'], {
+      cwd: tmpDir,
+      env: { GH_TOKEN: undefined },
+    });
 
     if (result.exitCode !== 0) {
       const env = JSON.parse(result.stdout);
+      // Must NOT be E205. Likely E122 (missing GH_TOKEN) — that's the
+      // expected sentinel proving the run progressed past the FX008
+      // precondition into normal SDK boot.
       expect(env.error?.code).not.toBe('E205');
     }
   });

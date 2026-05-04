@@ -374,7 +374,13 @@ export interface LiveRunManifest {
      * to operators so they can fix the right layer.
      *
      * Optional for forward/backward compat: run.json files written before
-     * FX008 don't have it; readers default to 'release-default' when absent.
+     * FX008 don't have it. **When absent, readers MUST treat provenance as
+     * unknown — do NOT synthesise a fallback label** (a synthesised
+     * `'release-default'` could send operators to the wrong remediation
+     * layer when the real source was a stale frontmatter or sidecar).
+     * Recommended path: fall through to recompile from current sources
+     * when this field is absent. See `permission-status.ts` for the
+     * canonical implementation pattern.
      */
     presetSource?: 'frontmatter' | 'sidecar' | 'env' | 'release-default';
     canonicalRoots: string[];

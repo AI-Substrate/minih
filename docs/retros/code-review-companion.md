@@ -139,3 +139,13 @@
 > - result: failed
 > - magicWand: (unavailable — run terminated as failed)
 > - stderr (last line): permission denied: kind=write blocked by preset/overrides
+
+## 2026-05-04T08:53:28.739Z — code-review-companion / 2026-05-04T18-36-51-531Z-a795
+
+- runId: 2026-05-04T18-36-51-531Z-a795
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-05-04T18-36-51-531Z-a795
+- summary: Reviewed FX008 continuation commits ec4d1d9 and c448268. The early E205 signal-failure handling looked directionally sound, and the final docs improved the E205 operator journey, but the final landing still needs changes: the new CLI regression test times out in this checkout, its claimed 5-signal coverage omits coordinated state/inbox assertions, and stale presetSource provenance wording remains.
+- **magicWand** (target: coordination): Add a dogfood-safe `minih inside context get` or `permission_status`-style lifecycle tool that exposes initialTask, idleBudgetMs, run timing, and output path metadata without reading run-dir files directly.
+- difficulties:
+  - [annoying] knowledge: Effective idleBudgetMs is part of the companion protocol but was not exposed through the inside coordination tools or dogfood-safe minih status surface. (workaround: Stayed alive until the outside actor sent an explicit control:stop, rather than attempting to infer the idle budget from run-dir files.)
+  - [degrading] test: The newly added FX008 CLI regression test timed out in the review environment, despite the commit summary claiming the gate was green. (workaround: Reported the failing narrow command as a HIGH review finding instead of treating the final landing as complete.)

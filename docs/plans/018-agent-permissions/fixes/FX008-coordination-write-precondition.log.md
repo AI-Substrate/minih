@@ -134,4 +134,16 @@ These fixtures use `coordination: enabled` but were not testing permissions; add
 **AC coverage**:
 - AC-FX8.5 (operator opt-out): ✅ — flag is per-invocation, no env-var fallback.
 - AC-FX8.8 (no env-var fallback): ✅ — separately verified by helper unit tests in FX008-2.
-- AC-FX8.9 (anchored stderr banner): ✅ — verified live.
+## Companion findings folded back (2026-05-04 08:36Z) — Power-On-Mode loop validation
+
+The previous companion run (`2026-05-04T17-44-06-832Z-836e`) died from a runtime write-deny mid-flight (it had been booted BEFORE FX008-1 added `write: allow` to the canonical frontmatter, so its OWN policy blocked the farewell envelope). Before dying it produced **5 substantive findings** which validate the companion-mode protocol:
+
+| ID | Severity | Subject | Disposition |
+|---|---|---|---|
+| F001 | LOW | `AC-FX8.1` checkbox in flight plan still unchecked | ✅ Flipped to `[x]` (plus AC-FX8.2..8.8 since they were similarly unchecked) |
+| F002 | MEDIUM | Dossier 5-signal paragraph still says `terminalReason: 'permission-coord-write-deny'` | ✅ Updated paragraph — terminalReason stays `'permission-denied'`, kind is on `permissionError.kind` |
+| F003 | MEDIUM | `permission_status` invents `release-default` provenance for stale runs | ✅ Now falls through to recompile path when `presetSource` absent, instead of inventing a label |
+| F004 | **HIGH** | Early E205 path silently swallows mandatory signal failures (events.ndjson + run.json) | ✅ Failures now recorded in `denialState.signalFailures`; run.json second-write attempt persists at least the signal failure; completed.json failure surfaces as stderr warning |
+| F005 | MEDIUM | FX008-4 marked complete without permissions.md docs | ✅ FX008-4 task table row narrowed — docs/how/permissions.md is FX008-7's responsibility (was previously double-listed) |
+
+**Meta-observation**: F004 caught a real bug where FX008's early-exit path was silently swallowing the very write failures the workshop 002 § Q1 protocol calls "mandatory" — the same observability hole FX008 was designed to close. The companion-mode protocol delivered exactly the kind of mid-implementation course-correction that post-hoc review can't.

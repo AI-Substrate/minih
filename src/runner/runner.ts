@@ -704,6 +704,12 @@ export async function runAgent(
         // Signal 1 — events.ndjson. Synthesise the `permission_denied` event
         // ourselves because the SDK adapter never starts; events.ndjson
         // would otherwise have no record of the denial.
+        //
+        // F004 (HIGH companion finding 2026-05-04): events.ndjson + run.json
+        // are MANDATORY signals per workshop 002 § Q1. If these writes fail,
+        // record the failure in `denialState.signalFailures` so it surfaces
+        // in run.json `coordinationSignals` rather than silently re-creating
+        // the observability hole FX008 was designed to close.
         const occurredAt = new Date().toISOString();
         const denialEvent = {
           type: 'permission_denied' as const,
@@ -716,9 +722,11 @@ export async function runAgent(
         };
         try {
           fs.appendFileSync(eventsPath, `${JSON.stringify(denialEvent)}\n`);
-        } catch {
-          // Best-effort — don't let an events.ndjson write failure mask the
-          // denial. Signals 2-4 still fire below.
+        } catch (appendErr) {
+          denialState.signalFailures.push({
+            signal: 'events.ndjson',
+            error: (appendErr as Error).message ?? String(appendErr),
+          });
         }
 
         // Signals 3-4 — inside-state + outside-inbox. Reuses the existing
@@ -744,6 +752,10 @@ export async function runAgent(
         // Mirrors the post-run write at line ~948 below for handler-fired
         // denials. Uses `denialState.payload` populated by
         // `fireTerminalDenial`.
+        //
+        // F004 — record write failures rather than swallow them. run.json
+        // is mandatory; a swallowed failure produces an envelope-shaped
+        // success even though the canonical record is incomplete.
         if (denialState.payload) {
           try {
             await updateManifest(runDir, {
@@ -774,9 +786,25 @@ export async function runAgent(
                 coordinationSignals: denialState.signalFailures,
               }),
             });
-          } catch {
-            // Best-effort — workshop 002 § Q1 records signal failures but
-            // never throws past them.
+          } catch (manifestErr) {
+            denialState.signalFailures.push({
+              signal: 'run.json',
+              error: (manifestErr as Error).message ?? String(manifestErr),
+            });
+            // Best-effort second write — try to persist at least the signal
+            // failure so post-mortem investigators see something.
+            try {
+              await updateManifest(runDir, {
+                status: 'failed',
+                terminalReason: 'permission-denied',
+                coordinationSignals: denialState.signalFailures,
+              });
+            } catch {
+              // If even this minimal write fails, fall through — the early
+              // exit will still return a failed AgentResult with exit 126,
+              // and the caller (CLI) will surface E205 from the in-memory
+              // err.message even when the on-disk canonical record is empty.
+            }
           }
         }
 
@@ -813,8 +841,15 @@ export async function runAgent(
             path.join(runDir, 'completed.json'),
             JSON.stringify(earlyExitMetadata, null, 2),
           );
-        } catch {
-          // best-effort
+        } catch (writeErr) {
+          // completed.json is a runner artifact (not in workshop 002 § Q1's
+          // mandatory signal set) — surface failure on stderr so post-mortem
+          // tools (`minih history`, `minih retros`) showing this run as
+          // "incomplete" forever has a visible cause, rather than silently
+          // looking like a crash.
+          process.stderr.write(
+            `[minih] Warning: failed to write completed.json for permission-denied early exit: ${(writeErr as Error).message}\n`,
+          );
         }
 
         // Mark auto-harvest as done so the `finally` block doesn't write a

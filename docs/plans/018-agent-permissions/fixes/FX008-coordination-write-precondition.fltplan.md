@@ -112,14 +112,14 @@ flowchart LR
 
 ## Acceptance Criteria
 
-- [ ] **AC-FX8.1** Track A — companion frontmatter `permissions.overrides.write: allow`; envelope writes succeed on idle-budget exit
-- [ ] **AC-FX8.2** Boot precondition fires for `coordination: enabled` + `write: deny` (no opt-out flag)
-- [ ] **AC-FX8.3** 5-signal coverage: events.ndjson + run.json `terminalReason` + inside-state `error` + inside-inbox `permission-error` + exit 126
-- [ ] **AC-FX8.4** Error message includes slug, presetName, source provenance, three remediation paths, and `permissions reset` hint when source is `sidecar.lockedDefault`
-- [ ] **AC-FX8.5** `--allow-coord-write-deny` flag on `minih run` boots normally even when policy denies write
-- [ ] **AC-FX8.6** Coordination-disabled agents with `write: deny` boot normally (precondition only fires for `coordination: enabled`)
-- [ ] **AC-FX8.7** Additive enum extension — `PermissionDenialReason['kind']` adds `'coord-write-deny'` without breaking existing handlers
-- [ ] **AC-FX8.8** Opt-out flag is per-run only — no `MINIH_ALLOW_COORD_WRITE_DENY` env-var fallback
+- [x] **AC-FX8.1** Track A — companion frontmatter `permissions.overrides.write: allow`; envelope writes succeed on idle-budget exit
+- [x] **AC-FX8.2** Boot precondition fires for `coordination: enabled` + `write: deny` (no opt-out flag)
+- [x] **AC-FX8.3** 5-signal coverage: events.ndjson + run.json `terminalReason` + inside-state `error` + inside-inbox `permission-error` + exit 126
+- [x] **AC-FX8.4** Error message includes slug, presetName, source provenance, three remediation paths, and `permissions reset` hint when source is `sidecar.lockedDefault`
+- [x] **AC-FX8.5** `--allow-coord-write-deny` flag on `minih run` boots normally even when policy denies write
+- [x] **AC-FX8.6** Coordination-disabled agents with `write: deny` boot normally (precondition only fires for `coordination: enabled`)
+- [x] **AC-FX8.7** Additive enum extension — `PermissionDenialReason['kind']` adds `'coord-write-deny'` without breaking existing handlers
+- [x] **AC-FX8.8** Opt-out flag is per-run only — no `MINIH_ALLOW_COORD_WRITE_DENY` env-var fallback
 
 ## Goals & Non-Goals
 

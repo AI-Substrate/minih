@@ -131,3 +131,11 @@
 > - result: failed
 > - magicWand: (unavailable — run terminated as failed)
 > - stderr (last line): permission denied: kind=write blocked by preset/overrides
+
+> ⚠️ ## 2026-05-04T08:34:56.231Z — code-review-companion / 2026-05-04T17-44-06-832Z-836e
+>
+> - runId: 2026-05-04T17-44-06-832Z-836e
+> - runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-05-04T17-44-06-832Z-836e
+> - result: failed
+> - magicWand: (unavailable — run terminated as failed)
+> - stderr (last line): permission denied: kind=write blocked by preset/overrides

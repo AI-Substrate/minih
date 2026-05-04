@@ -41,18 +41,22 @@ export function permissionStatus(
   context: McpServerContext,
 ): McpToolResult<PermissionStatusResult> {
   // Primary path — read run.json which the runner wrote at compile time.
+  //
+  // F003 (MEDIUM companion finding 2026-05-04): only trust the run.json
+  // fast path when `presetSource` is present. Older run.json files don't
+  // have it, and inventing a `release-default` label could send operators
+  // to the wrong remediation layer (e.g. they edit the release default
+  // when the real source was a stale frontmatter or sidecar). When
+  // missing, fall through to the recompile path so provenance comes from
+  // the current resolution chain.
   const runJsonPath = path.join(context.runDir, 'run.json');
   if (fs.existsSync(runJsonPath)) {
     try {
       const runJson = JSON.parse(fs.readFileSync(runJsonPath, 'utf-8'));
-      if (runJson?.permissions?.preset) {
+      if (runJson?.permissions?.preset && runJson.permissions.presetSource) {
         const fromManifest: ResolvedPolicy = {
           presetName: runJson.permissions.preset,
-          // FX008 — backwards compat for run.json files written before
-          // presetSource was persisted. Default to 'release-default' since
-          // the safest fallback assumption is that the resolution chain
-          // landed at the bottom layer.
-          presetSource: runJson.permissions.presetSource ?? 'release-default',
+          presetSource: runJson.permissions.presetSource,
           decisions: runJson.permissions.decisions ?? {},
           canonicalRoots: runJson.permissions.canonicalRoots ?? [],
           rootsResolvedFrom: [], // not persisted in run.json

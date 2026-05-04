@@ -46,3 +46,11 @@
 > - result: failed
 > - magicWand: (unavailable — run terminated as failed)
 > - stderr (last line): permission denied: kind=shell blocked by preset/overrides
+
+> ⚠️ ## 2026-05-04T05:19:40.065Z — permission-prober / 2026-05-04T15-18-01-416Z-0be8
+>
+> - runId: 2026-05-04T15-18-01-416Z-0be8
+> - runDir: /Users/jordanknight/substrate/minih/agents/permission-prober/runs/2026-05-04T15-18-01-416Z-0be8
+> - result: failed
+> - magicWand: (unavailable — run terminated as failed)
+> - stderr (last line): permission denied: kind=shell blocked by preset/overrides

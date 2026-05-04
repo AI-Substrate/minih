@@ -3,8 +3,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-  parseFrontmatter,
   InvalidPermissionsFrontmatterError,
+  parseFrontmatter,
 } from '../../../src/runner/folder.js';
 
 function fm(body: string): string {

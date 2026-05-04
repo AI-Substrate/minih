@@ -10,13 +10,14 @@
  * `src/runner/permissions/handler.ts` types + `src/adapter/copilot-types.ts`
  * to match, and snapshot the new shape here.
  */
-import { describe, expect, it } from 'vitest';
+
 import {
   approveAll,
   type PermissionDecisionApproveOnce,
   type PermissionDecisionReject,
   type PermissionRequest,
 } from '@github/copilot-sdk';
+import { describe, expect, it } from 'vitest';
 
 describe('SDK permission shape regression (T-R1.14)', () => {
   it('PermissionRequest.kind union matches our pinned vocabulary', () => {
@@ -46,10 +47,7 @@ describe('SDK permission shape regression (T-R1.14)', () => {
   });
 
   it('approveAll exists and returns approve-once', async () => {
-    const result = await approveAll(
-      { kind: 'shell' },
-      { sessionId: 'test' },
-    );
+    const result = await approveAll({ kind: 'shell' }, { sessionId: 'test' });
     expect(result).toEqual({ kind: 'approve-once' });
   });
 });

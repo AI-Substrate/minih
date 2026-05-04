@@ -10,10 +10,10 @@
  * the orchestrator fires them in parallel and aggregates verdicts.
  */
 
-import * as fs from 'node:fs';
-import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import * as crypto from 'node:crypto';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Command } from 'commander';
 import {
@@ -170,8 +170,7 @@ export function registerProbeCommand(program: Command): void {
           renderMatrixHuman(matrix);
         }
 
-        const success =
-          matrix.failed === 0 && matrix.untrustworthy === 0;
+        const success = matrix.failed === 0 && matrix.untrustworthy === 0;
 
         if (success) {
           exitWithEnvelope(formatSuccess('probe', { matrix }));
@@ -251,16 +250,12 @@ async function runOneScenario(
   const minihBin = path.resolve(probeFileDir, '..', 'index.js');
   const minihPath = fs.existsSync(minihBin) ? minihBin : 'minih';
 
-  spawnSync(
-    process.execPath,
-    [minihPath, ...args, '--agents-dir', agentsDir],
-    {
-      env,
-      encoding: 'utf-8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: 240 * 1000,
-    },
-  );
+  spawnSync(process.execPath, [minihPath, ...args, '--agents-dir', agentsDir], {
+    env,
+    encoding: 'utf-8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 240 * 1000,
+  });
 
   // Discover the runDir via `minih last-run` (dogfood path).
   let runId = 'unknown';
@@ -268,13 +263,7 @@ async function runOneScenario(
   try {
     const lastRun = spawnSync(
       process.execPath,
-      [
-        minihPath,
-        'last-run',
-        'permission-prober',
-        '--agents-dir',
-        agentsDir,
-      ],
+      [minihPath, 'last-run', 'permission-prober', '--agents-dir', agentsDir],
       {
         env,
         encoding: 'utf-8',

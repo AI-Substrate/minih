@@ -58,7 +58,9 @@ export class SdkCopilotAdapter implements IAgentAdapter {
     const deniedRequestIds = new Set<string>();
     const wrappedHandler = permissionHandler
       ? async (
-          request: Parameters<NonNullable<AgentRunOptions['permissionHandler']>>[0],
+          request: Parameters<
+            NonNullable<AgentRunOptions['permissionHandler']>
+          >[0],
           invocation: { sessionId: string },
         ) => {
           const decision = await permissionHandler(request, invocation);
@@ -76,7 +78,8 @@ export class SdkCopilotAdapter implements IAgentAdapter {
                     toolName: request.toolName,
                     requestId: request.requestId,
                     toolCallId: request.toolCallId,
-                    message: decision.feedback ?? `permission denied: ${request.kind}`,
+                    message:
+                      decision.feedback ?? `permission denied: ${request.kind}`,
                   },
                 });
               }

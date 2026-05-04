@@ -129,9 +129,7 @@ describe('buildPermissionHandler — path-bearing kinds', () => {
 
   it('allows non-path-bearing tool args even in path-bearing kind (no path = approved)', () => {
     const tmpRoot = require('node:fs').realpathSync('/tmp');
-    const h = buildPermissionHandler(
-      policyWith({ read: 'allow' }, [tmpRoot]),
-    );
+    const h = buildPermissionHandler(policyWith({ read: 'allow' }, [tmpRoot]));
     const r = h(
       { kind: 'read', requestId: 'r1', arguments: { foo: 'bar' } },
       { sessionId: 's' },

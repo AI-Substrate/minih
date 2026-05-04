@@ -66,7 +66,9 @@ export type PermissionPresetName =
  * Per workshop 001 § Schema, `network` is a synthetic kind that maps to
  * `url` in the SDK — we accept either spelling in frontmatter for ergonomics.
  */
-export type PermissionOverrides = Partial<Record<PermissionKind, PermissionDecision>>;
+export type PermissionOverrides = Partial<
+  Record<PermissionKind, PermissionDecision>
+>;
 
 /**
  * Filesystem allow-list rule. The composition mode controls how multiple
@@ -102,7 +104,13 @@ export interface PermissionPolicy {
  */
 export interface RootProvenance {
   root: string;
-  source: 'harness' | 'frontmatter' | 'env' | 'cli' | 'git-root' | 'cwd-fallback';
+  source:
+    | 'harness'
+    | 'frontmatter'
+    | 'env'
+    | 'cli'
+    | 'git-root'
+    | 'cwd-fallback';
   reason: string;
 }
 
@@ -140,7 +148,7 @@ export interface ResolvedPolicy {
  * preset registry. See `compile()` in this file.
  */
 export function applyPreset(
-  presetName: PermissionPresetName,
+  _presetName: PermissionPresetName,
   presetDecisions: Record<PermissionKind, PermissionDecision>,
 ): Record<PermissionKind, PermissionDecision> {
   // Defensive copy — prevents callers from mutating the registry's source-of-truth tables.

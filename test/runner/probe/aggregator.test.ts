@@ -32,7 +32,7 @@ function writeRunArtifacts(opts: {
   fs.mkdirSync(path.join(runDir, 'output'), { recursive: true });
   fs.writeFileSync(
     path.join(runDir, 'events.ndjson'),
-    opts.events.map((e) => JSON.stringify(e)).join('\n') + '\n',
+    `${opts.events.map((e) => JSON.stringify(e)).join('\n')}\n`,
   );
   fs.writeFileSync(
     path.join(runDir, 'run.json'),
@@ -119,9 +119,7 @@ describe('aggregator — trust gates', () => {
       report: {
         nonce: 'abc12345',
         claimedPolicy: { presetName: 'restricted' },
-        probes: [
-          { name: 'shell whoami', outcome: 'denied' },
-        ],
+        probes: [{ name: 'shell whoami', outcome: 'denied' }],
       },
     });
     const result = aggregateReport({

@@ -226,7 +226,9 @@ export function registerRunCommand(program: Command): void {
         } = { ref: null };
 
         // Plan 018 R2 — assemble per-run permission overrides from CLI flags.
-        let permissionsOverride: AgentRunConfig['permissionsOverride'] | undefined;
+        let permissionsOverride:
+          | AgentRunConfig['permissionsOverride']
+          | undefined;
         if (
           opts.permissions ||
           opts.allowedRoots ||
@@ -253,10 +255,9 @@ export function registerRunCommand(program: Command): void {
               );
               return;
             }
-            permissionsOverride.preset =
-              opts.permissions as NonNullable<
-                AgentRunConfig['permissionsOverride']
-              >['preset'];
+            permissionsOverride.preset = opts.permissions as NonNullable<
+              AgentRunConfig['permissionsOverride']
+            >['preset'];
           }
           if (opts.allowedRoots) {
             permissionsOverride.allowedRoots = {

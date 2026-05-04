@@ -7,8 +7,16 @@
       "expectedPreset": "yolo",
       "permissionsOverride": "yolo",
       "probes": [
-        { "name": "read /etc/hostname", "kind": "read", "expected": "succeeded" },
-        { "name": "write /tmp/$NONCE.txt", "kind": "write", "expected": "succeeded" },
+        {
+          "name": "read /etc/hostname",
+          "kind": "read",
+          "expected": "succeeded"
+        },
+        {
+          "name": "write /tmp/$NONCE.txt",
+          "kind": "write",
+          "expected": "succeeded"
+        },
         { "name": "shell whoami", "kind": "shell", "expected": "succeeded" }
       ]
     },
@@ -17,7 +25,11 @@
       "permissionsOverride": "restricted",
       "probes": [
         { "name": "read /etc/hostname", "kind": "read", "expected": "denied" },
-        { "name": "write /tmp/$NONCE.txt", "kind": "write", "expected": "denied" },
+        {
+          "name": "write /tmp/$NONCE.txt",
+          "kind": "write",
+          "expected": "denied"
+        },
         { "name": "shell whoami", "kind": "shell", "expected": "denied" }
       ]
     },
@@ -26,7 +38,11 @@
       "permissionsOverride": "read-only",
       "probes": [
         { "name": "read project files", "kind": "read", "expected": "denied" },
-        { "name": "write outside roots", "kind": "write", "expected": "denied" },
+        {
+          "name": "write outside roots",
+          "kind": "write",
+          "expected": "denied"
+        },
         { "name": "shell ls", "kind": "shell", "expected": "denied" }
       ]
     },
@@ -34,9 +50,17 @@
       "expectedPreset": "network",
       "permissionsOverride": "network",
       "probes": [
-        { "name": "GET https://api.github.com/zen", "kind": "url", "expected": "succeeded" },
+        {
+          "name": "GET https://api.github.com/zen",
+          "kind": "url",
+          "expected": "succeeded"
+        },
         { "name": "shell whoami", "kind": "shell", "expected": "denied" },
-        { "name": "write /tmp/$NONCE.txt", "kind": "write", "expected": "denied" }
+        {
+          "name": "write /tmp/$NONCE.txt",
+          "kind": "write",
+          "expected": "denied"
+        }
       ]
     },
     "trusted-fs-escape": {
@@ -44,9 +68,21 @@
       "permissionsOverride": "trusted",
       "allowedRootsOnly": "/tmp",
       "probes": [
-        { "name": "write /tmp/$NONCE.txt (in roots)", "kind": "write", "expected": "succeeded" },
-        { "name": "write /etc/passwd (out of roots)", "kind": "write", "expected": "denied" },
-        { "name": "read /tmp/$NONCE.txt", "kind": "read", "expected": "succeeded" }
+        {
+          "name": "write /tmp/$NONCE.txt (in roots)",
+          "kind": "write",
+          "expected": "succeeded"
+        },
+        {
+          "name": "write /etc/passwd (out of roots)",
+          "kind": "write",
+          "expected": "denied"
+        },
+        {
+          "name": "read /tmp/$NONCE.txt",
+          "kind": "read",
+          "expected": "succeeded"
+        }
       ]
     },
     "restricted-coordinated": {
@@ -55,14 +91,22 @@
       "coordination": true,
       "probes": [
         { "name": "shell whoami", "kind": "shell", "expected": "denied" },
-        { "name": "permission_status MCP", "kind": "mcp", "expected": "succeeded" }
+        {
+          "name": "permission_status MCP",
+          "kind": "mcp",
+          "expected": "succeeded"
+        }
       ]
     },
     "network-preset": {
       "expectedPreset": "network",
       "permissionsOverride": "network",
       "probes": [
-        { "name": "GET https://example.com", "kind": "url", "expected": "succeeded" },
+        {
+          "name": "GET https://example.com",
+          "kind": "url",
+          "expected": "succeeded"
+        },
         { "name": "shell whoami", "kind": "shell", "expected": "denied" }
       ]
     },
@@ -71,7 +115,11 @@
       "envOverride": "trusted",
       "probes": [
         { "name": "shell whoami", "kind": "shell", "expected": "succeeded" },
-        { "name": "write /tmp/$NONCE.txt", "kind": "write", "expected": "succeeded" }
+        {
+          "name": "write /tmp/$NONCE.txt",
+          "kind": "write",
+          "expected": "succeeded"
+        }
       ]
     },
     "implicit-default-yolo": {

@@ -19,16 +19,15 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-
-import type { InboxMessage, InsideState } from '../types.js';
 import {
   type CoordinationRunLocation,
   inboxLanePath,
   stateFilePath,
 } from '../folder.js';
+import type { InboxMessage, InsideState } from '../types.js';
 import { ulid } from '../ulid.js';
-import type { ResolvedPolicy } from './policy.js';
 import type { PermissionDenialReason } from './handler.js';
+import type { ResolvedPolicy } from './policy.js';
 
 export interface PermissionErrorPayload {
   meta: { contractVersion: 1 };
@@ -153,7 +152,10 @@ export function fireOutsideInboxSignal(
       subject: `Permission denied: kind=${payload.kind}${payload.toolName ? ` tool=${payload.toolName}` : ''}`,
       body: payload.message,
       ts: payload.occurredAt,
-      meta: { contractVersion: 1, payload: payload as unknown as Record<string, unknown> },
+      meta: {
+        contractVersion: 1,
+        payload: payload as unknown as Record<string, unknown>,
+      },
     };
     const target = inboxLanePath(location, 'outside');
     fs.mkdirSync(path.dirname(target), { recursive: true });

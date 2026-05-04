@@ -123,8 +123,6 @@ describe('compile — allowedRoots composition', () => {
       releaseDefault: { preset: 'yolo' },
       cwd: tmp,
     });
-    expect(r.canonicalRoots).toEqual([
-      fs.realpathSync(path.join(tmp, 'only')),
-    ]);
+    expect(r.canonicalRoots).toEqual([fs.realpathSync(path.join(tmp, 'only'))]);
   });
 });

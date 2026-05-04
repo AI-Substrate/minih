@@ -113,9 +113,49 @@ export {
   derivePeerActivity,
   derivePeerVerdict,
 } from './peer-activity.js';
+// Plan 018 — permissions module
+export type {
+  AllowedRootsRule,
+  PermissionDecision,
+  PermissionKind,
+  PermissionOverrides,
+  PermissionPolicy,
+  PermissionPresetName,
+  PolicySources,
+  PresetCatalogEntry,
+  ResolvedPolicy,
+  RootProvenance,
+} from './permissions/index.js';
+export {
+  ALL_PERMISSION_KINDS,
+  AllowedRootsInvalidError,
+  buildPermissionHandler,
+  buildPresetCatalog,
+  canonicalizeRoots,
+  compile as compilePermissionPolicy,
+  extractPathArg,
+  ForbiddenRootError,
+  formatCatalogAsTable,
+  getPreset,
+  isPathAllowed,
+  isPresetName,
+  listPresetNames,
+  minihReleaseDefault,
+  resolveDefaultAllowedRoots,
+  UnknownPresetError,
+} from './permissions/index.js';
 export type { PreambleAssemblyInput } from './preamble-builder.js';
 export { buildInsidePreamble } from './preamble-builder.js';
 export { PrettyDisplay } from './pretty.js';
+// Plan 018 — probe module
+export type {
+  AggregateReportOptions,
+  ProbeMatrix,
+  ProbeOutcome,
+  ProbeReport,
+  ScenarioDefinition,
+} from './probe/index.js';
+export { aggregateReport, buildMatrix } from './probe/index.js';
 export type {
   AcquireLockOptions,
   AcquireLockResult,
@@ -221,45 +261,3 @@ export {
   validateOutput,
   validateSystemOutput,
 } from './validator.js';
-
-// Plan 018 — permissions module
-export type {
-  AllowedRootsRule,
-  PermissionDecision,
-  PermissionKind,
-  PermissionOverrides,
-  PermissionPolicy,
-  PermissionPresetName,
-  PolicySources,
-  PresetCatalogEntry,
-  ResolvedPolicy,
-  RootProvenance,
-} from './permissions/index.js';
-export {
-  ALL_PERMISSION_KINDS,
-  AllowedRootsInvalidError,
-  buildPermissionHandler,
-  buildPresetCatalog,
-  canonicalizeRoots,
-  compile as compilePermissionPolicy,
-  extractPathArg,
-  ForbiddenRootError,
-  formatCatalogAsTable,
-  getPreset,
-  isPathAllowed,
-  isPresetName,
-  listPresetNames,
-  minihReleaseDefault,
-  resolveDefaultAllowedRoots,
-  UnknownPresetError,
-} from './permissions/index.js';
-
-// Plan 018 — probe module
-export type {
-  AggregateReportOptions,
-  ProbeMatrix,
-  ProbeOutcome,
-  ProbeReport,
-  ScenarioDefinition,
-} from './probe/index.js';
-export { aggregateReport, buildMatrix } from './probe/index.js';

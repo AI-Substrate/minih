@@ -504,7 +504,10 @@ async function installFromStagedDir(args: {
     if (opts.permissionsAccept === true && typeof recommended === 'string') {
       lockedDefault = recommended;
       lockedDefaultReason = 'manifest-recommended';
-    } else if (opts.permissionsAccept === false && manifest.permissions?.fallback) {
+    } else if (
+      opts.permissionsAccept === false &&
+      manifest.permissions?.fallback
+    ) {
       lockedDefault = manifest.permissions.fallback;
       lockedDefaultReason = 'manifest-fallback';
     } else if (opts.permissionsOverride) {
@@ -514,7 +517,8 @@ async function installFromStagedDir(args: {
       // Plan 018 R5 (T-R5.2) — new installs use the current release default.
       // R1-R4: 'yolo' (no behaviour change). R5+: 'restricted'.
       // Existing sidecars with lockedDefault are preserved (lossless invariant).
-      lockedDefault = (await import('./../permissions/presets.js')).minihReleaseDefault;
+      lockedDefault = (await import('./../permissions/presets.js'))
+        .minihReleaseDefault;
       lockedDefaultReason = 'minih-default';
     }
     lockedDefaultRecordedAt = new Date().toISOString();

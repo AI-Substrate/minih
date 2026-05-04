@@ -7,7 +7,6 @@
  */
 
 import * as fs from 'node:fs';
-import * as path from 'node:path';
 import type { Command } from 'commander';
 import {
   buildPresetCatalog,
@@ -16,10 +15,10 @@ import {
   isPresetName,
   listAgents,
   listPresetNames,
+  type PermissionPolicy,
+  type PermissionPresetName,
   parseFrontmatter,
   resolveAgent,
-  type PermissionPresetName,
-  type PermissionPolicy,
 } from '../../runner/index.js';
 import {
   ErrorCodes,
@@ -64,77 +63,72 @@ export function registerPermissionsSubcommands(
   perms
     .command('list <slug>')
     .description(
-      'Show an agent\'s declared permissions (raw frontmatter). With `--effective`, shows the resolved policy after the 4-layer override chain.',
+      "Show an agent's declared permissions (raw frontmatter). With `--effective`, shows the resolved policy after the 4-layer override chain.",
     )
     .option(
       '--effective',
       'Resolve through frontmatter→sidecar→env→release-default and show the final policy',
     )
     .option('--json', 'Output as JSON envelope')
-    .action(
-      (
-        slug: string,
-        opts: { effective?: boolean; json?: boolean },
-      ) => {
-        const agentsDir = program.opts().agentsDir ?? 'agents';
-        const def = resolveAgent(slug, agentsDir);
-        if (!def) {
+    .action((slug: string, opts: { effective?: boolean; json?: boolean }) => {
+      const agentsDir = program.opts().agentsDir ?? 'agents';
+      const def = resolveAgent(slug, agentsDir);
+      if (!def) {
+        exitWithEnvelope(
+          formatError(
+            'agent permissions list',
+            ErrorCodes.AGENT_NOT_FOUND,
+            `Agent "${slug}" not found.`,
+          ),
+        );
+        return;
+      }
+
+      if (opts.effective) {
+        try {
+          const resolved = compilePermissionPolicy({
+            frontmatter: def.permissions,
+            releaseDefault: { preset: 'yolo' },
+            cwd: process.cwd(),
+          });
+          exitWithEnvelope(
+            formatSuccess('agent permissions list', {
+              slug,
+              effective: resolved,
+              resolutionChain: {
+                frontmatter: def.permissions ?? null,
+                sidecar: null,
+                env: process.env.MINIH_PERMISSIONS_DEFAULT
+                  ? { preset: process.env.MINIH_PERMISSIONS_DEFAULT }
+                  : null,
+                releaseDefault: { preset: 'yolo' },
+              },
+            }),
+          );
+        } catch (err) {
           exitWithEnvelope(
             formatError(
               'agent permissions list',
-              ErrorCodes.AGENT_NOT_FOUND,
-              `Agent "${slug}" not found.`,
+              ErrorCodes.PERMISSIONS_FRONTMATTER_INVALID,
+              `Could not resolve effective policy: ${(err as Error).message}`,
             ),
           );
-          return;
         }
+        return;
+      }
 
-        if (opts.effective) {
-          try {
-            const resolved = compilePermissionPolicy({
-              frontmatter: def.permissions,
-              releaseDefault: { preset: 'yolo' },
-              cwd: process.cwd(),
-            });
-            exitWithEnvelope(
-              formatSuccess('agent permissions list', {
-                slug,
-                effective: resolved,
-                resolutionChain: {
-                  frontmatter: def.permissions ?? null,
-                  sidecar: null,
-                  env: process.env.MINIH_PERMISSIONS_DEFAULT
-                    ? { preset: process.env.MINIH_PERMISSIONS_DEFAULT }
-                    : null,
-                  releaseDefault: { preset: 'yolo' },
-                },
-              }),
-            );
-          } catch (err) {
-            exitWithEnvelope(
-              formatError(
-                'agent permissions list',
-                ErrorCodes.PERMISSIONS_FRONTMATTER_INVALID,
-                `Could not resolve effective policy: ${(err as Error).message}`,
-              ),
-            );
-          }
-          return;
-        }
-
-        exitWithEnvelope(
-          formatSuccess('agent permissions list', {
-            slug,
-            permissions: def.permissions ?? null,
-          }),
-        );
-      },
-    );
+      exitWithEnvelope(
+        formatSuccess('agent permissions list', {
+          slug,
+          permissions: def.permissions ?? null,
+        }),
+      );
+    });
 
   perms
     .command('set <slug> <preset>')
     .description(
-      'Write `permissions: <preset>` into the agent\'s prompt.md frontmatter. Idempotent — same preset twice is a no-op diff.',
+      "Write `permissions: <preset>` into the agent's prompt.md frontmatter. Idempotent — same preset twice is a no-op diff.",
     )
     .action((slug: string, preset: string) => {
       const agentsDir = program.opts().agentsDir ?? 'agents';
@@ -159,7 +153,10 @@ export function registerPermissionsSubcommands(
         );
         return;
       }
-      const result = writePermissionsField(def.promptPath, preset as PermissionPresetName);
+      const result = writePermissionsField(
+        def.promptPath,
+        preset as PermissionPresetName,
+      );
       exitWithEnvelope(
         formatSuccess('agent permissions set', {
           slug,
@@ -173,7 +170,7 @@ export function registerPermissionsSubcommands(
   perms
     .command('clear <slug>')
     .description(
-      'Remove the `permissions:` field from the agent\'s prompt.md frontmatter.',
+      "Remove the `permissions:` field from the agent's prompt.md frontmatter.",
     )
     .action((slug: string) => {
       const agentsDir = program.opts().agentsDir ?? 'agents';
@@ -233,14 +230,17 @@ export function registerPermissionsSubcommands(
 
         const targets = opts.all
           ? listAgents(agentsDir).filter((d) => !d.permissions)
-          : [resolveAgent(slug!, agentsDir)].filter(
-              (d): d is NonNullable<typeof d> => d !== null,
-            );
+          : slug
+            ? [resolveAgent(slug, agentsDir)].filter(
+                (d): d is NonNullable<typeof d> => d !== null,
+              )
+            : [];
 
         const actions = targets.map((def) => {
-          const recommended = opts.preset && isPresetName(opts.preset)
-            ? (opts.preset as PermissionPresetName)
-            : recommendPreset(def.tags, def.slug);
+          const recommended =
+            opts.preset && isPresetName(opts.preset)
+              ? (opts.preset as PermissionPresetName)
+              : recommendPreset(def.tags, def.slug);
           return {
             slug: def.slug,
             recommended,
@@ -301,10 +301,7 @@ export function registerPermissionsSubcommands(
     );
 }
 
-function recommendPreset(
-  tags: string[],
-  slug: string,
-): PermissionPresetName {
+function recommendPreset(tags: string[], slug: string): PermissionPresetName {
   // Workshop 003 § Q6 heuristic table.
   const tagSet = new Set(tags.map((t) => t.toLowerCase()));
   const slugLower = slug.toLowerCase();
@@ -317,7 +314,11 @@ function recommendPreset(
   ) {
     return 'read-only';
   }
-  if (tagSet.has('build') || tagSet.has('lint') || slugLower.includes('build')) {
+  if (
+    tagSet.has('build') ||
+    tagSet.has('lint') ||
+    slugLower.includes('build')
+  ) {
     return 'trusted';
   }
   if (tagSet.has('coordination') || tagSet.has('inspector')) {
@@ -341,7 +342,11 @@ function reasoningFor(tags: string[], slug: string): string {
   ) {
     return 'review/companion → read-only (workshop 003 heuristic)';
   }
-  if (tagSet.has('build') || tagSet.has('lint') || slugLower.includes('build')) {
+  if (
+    tagSet.has('build') ||
+    tagSet.has('lint') ||
+    slugLower.includes('build')
+  ) {
     return 'build/lint → trusted (needs shell+write, no custom-tool/memory/hook)';
   }
   if (tagSet.has('coordination') || tagSet.has('inspector')) {
@@ -362,7 +367,11 @@ function writePermissionsField(
   const raw = fs.readFileSync(promptPath, 'utf-8');
   const fm = parseFrontmatter(raw);
 
-  if (fm.permissions?.preset === preset && !fm.permissions.overrides && !fm.permissions.allowedRoots) {
+  if (
+    fm.permissions?.preset === preset &&
+    !fm.permissions.overrides &&
+    !fm.permissions.allowedRoots
+  ) {
     return { changed: false, previous: fm.permissions };
   }
 

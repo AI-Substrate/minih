@@ -4,7 +4,15 @@
   "title": "Permission Error Envelope",
   "description": "Workshop 002 § Q6 — emitted on the `outside` inbox when a coordinated agent is terminated for permission denial. Type-discriminator is `permission-error`.",
   "type": "object",
-  "required": ["meta", "kind", "decision", "agentSlug", "runId", "occurredAt", "message"],
+  "required": [
+    "meta",
+    "kind",
+    "decision",
+    "agentSlug",
+    "runId",
+    "occurredAt",
+    "message"
+  ],
   "additionalProperties": false,
   "properties": {
     "meta": {
@@ -18,7 +26,16 @@
     "kind": {
       "type": "string",
       "description": "Permission kind that triggered the denial",
-      "enum": ["shell", "write", "mcp", "read", "url", "custom-tool", "memory", "hook"]
+      "enum": [
+        "shell",
+        "write",
+        "mcp",
+        "read",
+        "url",
+        "custom-tool",
+        "memory",
+        "hook"
+      ]
     },
     "decision": {
       "type": "string",

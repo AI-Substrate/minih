@@ -504,8 +504,8 @@ function parsePermissionsField(
       if (!sub.match(/^\s/) && sub.trim() !== '') break;
 
       // Indent depth — 2-space = top-level under `permissions:`, 4-space = nested
-      const topMatch = sub.match(/^  (\S.*)$/);
-      const nestedMatch = sub.match(/^    (\S.*)$/);
+      const topMatch = sub.match(/^ {2}(\S.*)$/);
+      const nestedMatch = sub.match(/^ {4}(\S.*)$/);
 
       if (topMatch && !nestedMatch) {
         // Reset section state on new top-level key.

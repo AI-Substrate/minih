@@ -6,9 +6,15 @@
   "type": "minih-agent",
   "files": [
     { "path": "prompt.md", "description": "Inside agent prompt." },
-    { "path": "input-schema.json", "description": "Input params: scenario + nonce." },
+    {
+      "path": "input-schema.json",
+      "description": "Input params: scenario + nonce."
+    },
     { "path": "output-schema.json", "description": "Probe report shape." },
-    { "path": "scenarios.json", "description": "10-scenario data-driven matrix." }
+    {
+      "path": "scenarios.json",
+      "description": "10-scenario data-driven matrix."
+    }
   ],
   "permissions": {
     "recommended": "read-only",

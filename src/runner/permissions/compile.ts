@@ -11,6 +11,7 @@
  */
 
 import { canonicalizeRoots, resolveDefaultAllowedRoots } from './fs-guard.js';
+import type { PermissionPresetName } from './policy.js';
 import {
   applyOverrides,
   applyPreset,
@@ -18,12 +19,7 @@ import {
   type PolicySources,
   type ResolvedPolicy,
 } from './policy.js';
-import {
-  getPreset,
-  isPresetName,
-  minihReleaseDefault,
-} from './presets.js';
-import type { PermissionPresetName } from './policy.js';
+import { getPreset, isPresetName, minihReleaseDefault } from './presets.js';
 
 /**
  * Resolve which preset wins after walking the resolution chain.
@@ -47,7 +43,10 @@ function resolvePreset(sources: PolicySources): {
     return { presetName: sources.env.preset, source: 'env' };
   }
   if (sources.releaseDefault.preset) {
-    return { presetName: sources.releaseDefault.preset, source: 'release-default' };
+    return {
+      presetName: sources.releaseDefault.preset,
+      source: 'release-default',
+    };
   }
   return { presetName: minihReleaseDefault, source: 'release-default' };
 }
@@ -62,7 +61,9 @@ export function compile(sources: PolicySources): ResolvedPolicy {
     // Belt-and-braces — `resolvePreset` constrains the type, but a
     // sidecar/env value could carry a stale preset name from a prior
     // release.
-    throw new Error(`unknown preset name in resolution chain: ${String(presetName)}`);
+    throw new Error(
+      `unknown preset name in resolution chain: ${String(presetName)}`,
+    );
   }
   const baseline = applyPreset(presetName, getPreset(presetName));
 

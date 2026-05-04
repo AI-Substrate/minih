@@ -5,6 +5,36 @@
  * file rather than reaching into individual files.
  */
 
+export {
+  buildPresetCatalog,
+  formatCatalogAsTable,
+  type PresetCatalogEntry,
+} from './catalog.js';
+export { compile } from './compile.js';
+export {
+  buildPermissionErrorPayload,
+  type DenialState,
+  type FireDenialOptions,
+  fireTerminalDenial,
+  type PermissionErrorPayload,
+} from './error-signal.js';
+
+export {
+  AllowedRootsInvalidError,
+  canonicalizeRoots,
+  extractPathArg,
+  ForbiddenRootError,
+  isPathAllowed,
+  resolveDefaultAllowedRoots,
+} from './fs-guard.js';
+
+export {
+  buildPermissionHandler,
+  type PermissionDenialReason,
+  type PermissionHandlerCallbacks,
+  type SdkPermissionDecision,
+  type SdkPermissionRequestLike,
+} from './handler.js';
 export type {
   AllowedRootsRule,
   PermissionDecision,
@@ -17,7 +47,6 @@ export type {
   RootProvenance,
 } from './policy.js';
 export { ALL_PERMISSION_KINDS } from './policy.js';
-
 export {
   getPreset,
   isPresetName,
@@ -25,36 +54,3 @@ export {
   minihReleaseDefault,
   UnknownPresetError,
 } from './presets.js';
-
-export {
-  AllowedRootsInvalidError,
-  ForbiddenRootError,
-  canonicalizeRoots,
-  extractPathArg,
-  isPathAllowed,
-  resolveDefaultAllowedRoots,
-} from './fs-guard.js';
-
-export {
-  buildPermissionHandler,
-  type PermissionDenialReason,
-  type PermissionHandlerCallbacks,
-  type SdkPermissionDecision,
-  type SdkPermissionRequestLike,
-} from './handler.js';
-
-export { compile } from './compile.js';
-
-export {
-  buildPermissionErrorPayload,
-  fireTerminalDenial,
-  type DenialState,
-  type FireDenialOptions,
-  type PermissionErrorPayload,
-} from './error-signal.js';
-
-export {
-  buildPresetCatalog,
-  formatCatalogAsTable,
-  type PresetCatalogEntry,
-} from './catalog.js';

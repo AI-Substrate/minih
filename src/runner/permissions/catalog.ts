@@ -5,13 +5,13 @@
  * Pure: no IO, returns plain data; CLI command formats.
  */
 
-import { ALL_PERMISSION_KINDS } from './policy.js';
-import { getPreset, listPresetNames } from './presets.js';
 import type {
   PermissionDecision,
   PermissionKind,
   PermissionPresetName,
 } from './policy.js';
+import { ALL_PERMISSION_KINDS } from './policy.js';
+import { getPreset, listPresetNames } from './presets.js';
 
 const PRESET_DESCRIPTIONS: Record<PermissionPresetName, string> = {
   yolo: 'Allow everything. Legacy default — flips to restricted at R6.',
@@ -56,9 +56,11 @@ export function formatCatalogAsTable(catalog: PresetCatalogEntry[]): string {
   );
   const fmt = (cells: string[]): string =>
     cells.map((c, i) => c.padEnd(widths[i])).join(' | ');
-  return [fmt(headers), widths.map((w) => '-'.repeat(w)).join('-+-'), ...rows.map(fmt)].join(
-    '\n',
-  );
+  return [
+    fmt(headers),
+    widths.map((w) => '-'.repeat(w)).join('-+-'),
+    ...rows.map(fmt),
+  ].join('\n');
 }
 
 function decisionGlyph(d: PermissionDecision): string {

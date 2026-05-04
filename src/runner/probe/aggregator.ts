@@ -26,7 +26,10 @@ function readPermissionDeniedTruth(runDir: string): {
 } {
   const eventsPath = path.join(runDir, 'events.ndjson');
   if (!fs.existsSync(eventsPath)) return { count: 0, kinds: [] };
-  const lines = fs.readFileSync(eventsPath, 'utf-8').split('\n').filter(Boolean);
+  const lines = fs
+    .readFileSync(eventsPath, 'utf-8')
+    .split('\n')
+    .filter(Boolean);
   const kinds: string[] = [];
   for (const line of lines) {
     try {
@@ -91,13 +94,15 @@ export interface AggregateReportOptions {
 export function aggregateReport(opts: AggregateReportOptions): ProbeReport {
   const truth = readRunJson(opts.runDir);
   const denied = readPermissionDeniedTruth(opts.runDir);
-  const reportRaw = readReport(opts.runDir) as
-    | {
-        nonce?: string;
-        claimedPolicy?: { presetName?: string; decisions?: Record<string, string>; canonicalRoots?: string[] };
-        probes?: ProbeOutcome[];
-      }
-    | null;
+  const reportRaw = readReport(opts.runDir) as {
+    nonce?: string;
+    claimedPolicy?: {
+      presetName?: string;
+      decisions?: Record<string, string>;
+      canonicalRoots?: string[];
+    };
+    probes?: ProbeOutcome[];
+  } | null;
 
   const untrustReasons: string[] = [];
 
@@ -113,8 +118,7 @@ export function aggregateReport(opts: AggregateReportOptions): ProbeReport {
     );
     const expectedSomeDenials = expectedDenialKinds.size > 0;
     const truthHasDenials =
-      denied.count > 0 ||
-      truth.terminalReason === 'permission-denied';
+      denied.count > 0 || truth.terminalReason === 'permission-denied';
 
     if (expectedSomeDenials && truthHasDenials) {
       return {

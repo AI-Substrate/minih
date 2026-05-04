@@ -137,7 +137,10 @@ export function buildPermissionHandler(
         request.toolName ?? kind,
         request.arguments,
       );
-      if (candidatePath && !isPathAllowed(candidatePath, policy.canonicalRoots)) {
+      if (
+        candidatePath &&
+        !isPathAllowed(candidatePath, policy.canonicalRoots)
+      ) {
         return denyOnce({
           kind,
           decision: 'deny',

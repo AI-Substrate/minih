@@ -21,7 +21,15 @@ import * as path from 'node:path';
 import type { AllowedRootsRule, RootProvenance } from './policy.js';
 
 /** Roots that are NEVER allowed even if the user explicitly lists them. */
-const FORBIDDEN_ROOTS = ['/', '/etc', '/usr', '/bin', '/sbin', '/System', '/Windows'];
+const FORBIDDEN_ROOTS = [
+  '/',
+  '/etc',
+  '/usr',
+  '/bin',
+  '/sbin',
+  '/System',
+  '/Windows',
+];
 
 /** Roots we'll accept but warn about. */
 const WARNING_ROOTS = [os.homedir(), '/tmp', '/var/tmp'];
@@ -160,7 +168,9 @@ export function resolveDefaultAllowedRoots(cwd: string): {
  */
 function canonicalizeRoot(root: string): string {
   if (!root || typeof root !== 'string') {
-    throw new AllowedRootsInvalidError(`Empty/non-string root: ${JSON.stringify(root)}`);
+    throw new AllowedRootsInvalidError(
+      `Empty/non-string root: ${JSON.stringify(root)}`,
+    );
   }
   const abs = path.isAbsolute(root) ? root : path.resolve(root);
 
@@ -292,10 +302,7 @@ export function isPathAllowed(
  *
  * Workshop 001 § Q7 documents the limitations.
  */
-export function extractPathArg(
-  toolName: string,
-  args: unknown,
-): string | null {
+export function extractPathArg(toolName: string, args: unknown): string | null {
   if (args == null || typeof args !== 'object') return null;
   const obj = args as Record<string, unknown>;
 
@@ -306,7 +313,14 @@ export function extractPathArg(
   }
 
   // Common file-ops: read/write/edit/create
-  for (const candidate of ['file', 'path', 'filePath', 'targetPath', 'targetDir', 'cwd']) {
+  for (const candidate of [
+    'file',
+    'path',
+    'filePath',
+    'targetPath',
+    'targetDir',
+    'cwd',
+  ]) {
     if (typeof obj[candidate] === 'string') return obj[candidate] as string;
   }
 

@@ -4,16 +4,15 @@
  * Real .git fixtures + real symlink trees in tmpdir(). Cleaned up via
  * afterEach. Cross-platform stubs not present (T-R1.5 follow-up).
  */
-import { execSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   AllowedRootsInvalidError,
-  ForbiddenRootError,
   canonicalizeRoots,
   extractPathArg,
+  ForbiddenRootError,
   isPathAllowed,
   resolveDefaultAllowedRoots,
 } from '../../../src/runner/permissions/fs-guard.js';
@@ -140,12 +139,12 @@ describe('isPathAllowed', () => {
   it('denies symlink that escapes the root', () => {
     const work = path.join(tmp, 'work');
     fs.mkdirSync(work);
-    const escape = path.join(work, 'escape-link');
-    fs.symlinkSync('/etc', escape);
+    const escapeLink = path.join(work, 'escape-link');
+    fs.symlinkSync('/etc', escapeLink);
     // escape-link/passwd → resolves to /etc/passwd which is outside tmp
-    expect(isPathAllowed(path.join(escape, 'passwd'), [fs.realpathSync(tmp)])).toBe(
-      false,
-    );
+    expect(
+      isPathAllowed(path.join(escapeLink, 'passwd'), [fs.realpathSync(tmp)]),
+    ).toBe(false);
   });
 
   it('denies broken symlinks (ELOOP / ENOENT chains)', () => {

@@ -6,7 +6,14 @@
   "oneOf": [
     {
       "type": "string",
-      "enum": ["yolo", "trusted", "restricted", "read-only", "network", "build-only"],
+      "enum": [
+        "yolo",
+        "trusted",
+        "restricted",
+        "read-only",
+        "network",
+        "build-only"
+      ],
       "description": "String form: shorthand for `{ preset: NAME }`"
     },
     {
@@ -15,7 +22,14 @@
       "properties": {
         "preset": {
           "type": "string",
-          "enum": ["yolo", "trusted", "restricted", "read-only", "network", "build-only"]
+          "enum": [
+            "yolo",
+            "trusted",
+            "restricted",
+            "read-only",
+            "network",
+            "build-only"
+          ]
         },
         "overrides": {
           "type": "object",

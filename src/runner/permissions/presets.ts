@@ -36,7 +36,8 @@ function uniformDecision(
   };
 }
 
-const yolo: Record<PermissionKind, PermissionDecision> = uniformDecision('allow');
+const yolo: Record<PermissionKind, PermissionDecision> =
+  uniformDecision('allow');
 
 const trusted: Record<PermissionKind, PermissionDecision> = {
   shell: 'allow',
@@ -89,7 +90,10 @@ const PRESETS = Object.freeze({
   network: Object.freeze(network),
   'build-only': Object.freeze(buildOnly),
 }) as Readonly<
-  Record<PermissionPresetName, Readonly<Record<PermissionKind, PermissionDecision>>>
+  Record<
+    PermissionPresetName,
+    Readonly<Record<PermissionKind, PermissionDecision>>
+  >
 >;
 
 export class UnknownPresetError extends Error {

@@ -30,6 +30,15 @@ import {
   createInboxForwarder,
   type InboxForwarder,
 } from './inbox-forwarder.js';
+import {
+  buildPermissionHandler,
+  compile as compilePermissionPolicy,
+  type DenialState,
+  fireTerminalDenial,
+  minihReleaseDefault,
+  type PermissionPolicy,
+  type ResolvedPolicy,
+} from './permissions/index.js';
 import { buildInsidePreamble } from './preamble-builder.js';
 import {
   appendRetroEntry,
@@ -43,15 +52,6 @@ import {
   writeManifest,
 } from './run-manifest.js';
 import { readStateLazy } from './state.js';
-import {
-  buildPermissionHandler,
-  compile as compilePermissionPolicy,
-  fireTerminalDenial,
-  minihReleaseDefault,
-  type DenialState,
-  type PermissionPolicy,
-  type ResolvedPolicy,
-} from './permissions/index.js';
 import {
   createStateForwarder,
   type StateForwarder,
@@ -629,10 +629,10 @@ export async function runAgent(
     const envPolicy = readEnvPermissions();
     // Plan 018 R2 — CLI-flag overrides win over frontmatter at the preset
     // level by being injected as the first layer in the resolution chain.
-    const cliOverridePolicy: PermissionPolicy | undefined =
-      config.permissionsOverride?.preset
-        ? { preset: config.permissionsOverride.preset }
-        : undefined;
+    const cliOverridePolicy: PermissionPolicy | undefined = config
+      .permissionsOverride?.preset
+      ? { preset: config.permissionsOverride.preset }
+      : undefined;
     const resolvedPolicy: ResolvedPolicy = compilePermissionPolicy({
       frontmatter: cliOverridePolicy ?? definition.permissions,
       sidecar: sidecarPolicy,

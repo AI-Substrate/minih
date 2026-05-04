@@ -75,3 +75,13 @@
 - difficulties:
   - [degrading] knowledge: The prompt required calling the `permission_status` MCP tool, but that tool was not directly exposed in the harness tool list for this run. (workaround: Used `minih status permission-prober --run <runId>` as the nearest observable claimed-policy surface.)
   - [degrading] data: The yolo-baseline scenario's `read /etc/hostname` probe is not portable to this Darwin host because that path does not exist here. (workaround: Recorded the probe honestly as an `error` with the missing-path reason instead of treating it as a denial or a success.)
+
+## 2026-05-04T06:01:26.495Z — permission-prober / 2026-05-04T15-59-30-134Z-0655
+
+- runId: 2026-05-04T15-59-30-134Z-0655
+- runDir: /Users/jordanknight/substrate/minih/agents/permission-prober/runs/2026-05-04T15-59-30-134Z-0655
+- summary: I recorded the claimed policy from permission_status, observed that minih status reported a yolo runtime permission set, and then attempted every yolo-baseline probe. The write probe to /tmp/da6223644a53270f.txt and the shell whoami probe both succeeded, while the read probe errored because /etc/hostname does not exist on this Darwin host; the run snapshot ended with terminalReason null and no permissionError.
+- **magicWand** (target: minih): Make permission_status reflect the same effective permission resolution that minih status reports, including runtime permission overrides, so the probe's claimed policy matches the runner's recorded truth source.
+- difficulties:
+  - [degrading] data: The yolo-baseline scenario hard-codes /etc/hostname as the read probe target, but that path does not exist on this Darwin host, so the read probe measured a platform-specific file-missing error instead of an allow/deny decision. (workaround: I attempted the exact read and reported the resulting error honestly.)
+  - [degrading] debug: permission_status claimed a read-only preset while minih status for the same run reported yolo permissions, making it unclear which permission surface represented the effective runtime policy. (workaround: I captured both sources separately and treated the mismatch itself as a finding.)

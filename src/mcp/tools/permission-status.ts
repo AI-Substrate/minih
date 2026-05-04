@@ -5,9 +5,9 @@
  * policy as JSON so coordinated agents can self-introspect their permissions
  * without firing a permission request through the SDK.
  *
- * Pure read; no FS guard interaction (tools registered on the inside MCP
- * server are exempt from the FS guard — they're internal coordination
- * primitives, not user-facing file I/O).
+ * Reads `run.json.permissions` (written by runner.ts at compile-time, F002)
+ * which is the canonical source of truth. Falls back to recomputing from
+ * frontmatter only if run.json is missing the field (e.g., stale runs).
  */
 
 import * as fs from 'node:fs';
@@ -26,8 +26,10 @@ export interface PermissionStatusResult {
   agentSlug: string;
   /** Full resolved policy (preset + decisions + roots + provenance). */
   resolved: ResolvedPolicy;
-  /** Snapshot of layered sources for debuggability. */
-  resolutionChain: {
+  /** Where the resolved policy came from. */
+  source: 'run.json' | 'recompiled-from-frontmatter';
+  /** Snapshot of layered sources for debuggability (recompile path only). */
+  resolutionChain?: {
     frontmatter: unknown;
     sidecar: unknown;
     env: unknown;
@@ -38,6 +40,41 @@ export interface PermissionStatusResult {
 export function permissionStatus(
   context: McpServerContext,
 ): McpToolResult<PermissionStatusResult> {
+  // Primary path — read run.json which the runner wrote at compile time.
+  const runJsonPath = path.join(context.runDir, 'run.json');
+  if (fs.existsSync(runJsonPath)) {
+    try {
+      const runJson = JSON.parse(fs.readFileSync(runJsonPath, 'utf-8'));
+      if (runJson?.permissions?.preset) {
+        const fromManifest: ResolvedPolicy = {
+          presetName: runJson.permissions.preset,
+          decisions: runJson.permissions.decisions ?? {},
+          canonicalRoots: runJson.permissions.canonicalRoots ?? [],
+          rootsResolvedFrom: [], // not persisted in run.json
+          ...(runJson.permissions.strictFs && { strictFs: true }),
+          ...(runJson.permissions.mcpAllowedServers && {
+            mcpAllowedServers: runJson.permissions.mcpAllowedServers,
+          }),
+          ...(runJson.permissions.customToolAllowedNames && {
+            customToolAllowedNames: runJson.permissions.customToolAllowedNames,
+          }),
+        };
+        const result: PermissionStatusResult = {
+          agentSlug: context.agentSlug,
+          resolved: fromManifest,
+          source: 'run.json',
+        };
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+          structuredContent: result,
+        };
+      }
+    } catch {
+      // fall through to recompile path
+    }
+  }
+
+  // Fallback — recompile from frontmatter (loses CLI/env overrides).
   const promptPath = path.join(context.agentDir, 'prompt.md');
   if (!fs.existsSync(promptPath)) {
     throw new McpToolError(
@@ -49,7 +86,6 @@ export function permissionStatus(
   const promptContent = fs.readFileSync(promptPath, 'utf-8');
   const { permissions: frontmatterPolicy } = parseFrontmatter(promptContent);
 
-  // Sidecar (best-effort)
   const sidecarPath = path.join(context.agentDir, '.minih-source.json');
   let sidecarLockedDefault: { preset: string } | undefined;
   if (fs.existsSync(sidecarPath)) {
@@ -59,11 +95,10 @@ export function permissionStatus(
         sidecarLockedDefault = { preset: sidecar.lockedDefault };
       }
     } catch {
-      // bad sidecar — fall through; doctor surfaces the problem
+      // bad sidecar — fall through
     }
   }
 
-  // Env
   const envPolicy = process.env.MINIH_PERMISSIONS_DEFAULT
     ? { preset: process.env.MINIH_PERMISSIONS_DEFAULT as never }
     : undefined;
@@ -87,6 +122,7 @@ export function permissionStatus(
   const result: PermissionStatusResult = {
     agentSlug: context.agentSlug,
     resolved,
+    source: 'recompiled-from-frontmatter',
     resolutionChain: {
       frontmatter: frontmatterPolicy ?? null,
       sidecar: sidecarLockedDefault ?? null,

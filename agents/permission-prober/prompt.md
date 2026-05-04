@@ -3,6 +3,7 @@ description: "Permission-policy prober — performs probes against a parameteris
 tags: [security, prober, validation, plan-018]
 model: gpt-5.4
 timeout: 120
+coordination: enabled
 permissions:
   preset: read-only
   overrides:
@@ -22,7 +23,7 @@ The orchestrator passes you `params.scenario` (string) and `params.nonce` (strin
 
 ### 1. Self-introspect
 
-Call the `permission_status` MCP tool. Capture the resolved policy. This is your **claimed** policy.
+Call the `permission_status` MCP tool (always-allowed; tool name `minih-coordination-permission_status`). Capture the resolved policy. This is your **claimed** policy — record `presetName`, `decisions`, `canonicalRoots`, `mcpAllowedServers`, `customToolAllowedNames`.
 
 ### 2. Run probe operations
 

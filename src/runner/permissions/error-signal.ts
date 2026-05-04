@@ -136,8 +136,13 @@ export function fireInsideStateSignal(
 }
 
 /**
- * Best-effort append of a `permission-error` typed message to the outside
- * inbox. Coordinated agents only.
+ * Best-effort append of a `permission-error` typed message to the inside
+ * lane (where messages FROM the inside agent live; outside readers see them
+ * via `minih outside inbox list <slug>`). Coordinated agents only.
+ *
+ * Workshop 002 § Q1 calls signal #4 the "outside inbox" but the canonical
+ * lane convention is `sender === lane`: messages from the inside agent are
+ * written to `inbox/inside/messages.ndjson` (validated by `inbox-poll.ts`).
  */
 export function fireOutsideInboxSignal(
   location: CoordinationRunLocation,
@@ -157,12 +162,14 @@ export function fireOutsideInboxSignal(
         payload: payload as unknown as Record<string, unknown>,
       },
     };
-    const target = inboxLanePath(location, 'outside');
+    // Write to INSIDE lane — sender === lane invariant per inbox-poll.ts.
+    // Outside readers see this via `minih outside inbox list <slug>`.
+    const target = inboxLanePath(location, 'inside');
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.appendFileSync(target, `${JSON.stringify(message)}\n`);
   } catch (err) {
     signalFailures.push({
-      signal: 'outside-inbox',
+      signal: 'inside-inbox',
       error: (err as Error).message ?? String(err),
     });
   }

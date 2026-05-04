@@ -627,14 +627,21 @@ export async function runAgent(
     // adapter's built-in `approveAll`.
     const sidecarPolicy = readSidecarPermissions(definition.dir);
     const envPolicy = readEnvPermissions();
-    // Plan 018 R2 — CLI-flag overrides win over frontmatter at the preset
-    // level by being injected as the first layer in the resolution chain.
-    const cliOverridePolicy: PermissionPolicy | undefined = config
+    // Plan 018 R2 + companion F005 — CLI `--permissions <preset>` overrides
+    // ONLY the preset layer. The frontmatter's `overrides` and `allowedRoots`
+    // survive (they encode agent-author intent that the per-run flag
+    // shouldn't silently discard).
+    const cliPresetOverride: PermissionPolicy | undefined = config
       .permissionsOverride?.preset
-      ? { preset: config.permissionsOverride.preset }
+      ? definition.permissions
+        ? {
+            ...definition.permissions,
+            preset: config.permissionsOverride.preset,
+          }
+        : { preset: config.permissionsOverride.preset }
       : undefined;
     const resolvedPolicy: ResolvedPolicy = compilePermissionPolicy({
-      frontmatter: cliOverridePolicy ?? definition.permissions,
+      frontmatter: cliPresetOverride ?? definition.permissions,
       sidecar: sidecarPolicy,
       env: envPolicy,
       releaseDefault: { preset: minihReleaseDefault },
@@ -644,6 +651,23 @@ export async function runAgent(
     if (config.permissionsOverride?.strictFs) {
       resolvedPolicy.strictFs = true;
     }
+
+    // Plan 018 AC1 + companion F002 — record resolved permissions in run.json
+    // immediately after compile.
+    await updateManifest(runDir, {
+      permissions: {
+        preset: resolvedPolicy.presetName,
+        canonicalRoots: resolvedPolicy.canonicalRoots,
+        decisions: resolvedPolicy.decisions as unknown as Record<string, string>,
+        ...(resolvedPolicy.mcpAllowedServers !== undefined && {
+          mcpAllowedServers: resolvedPolicy.mcpAllowedServers,
+        }),
+        ...(resolvedPolicy.customToolAllowedNames !== undefined && {
+          customToolAllowedNames: resolvedPolicy.customToolAllowedNames,
+        }),
+        ...(resolvedPolicy.strictFs && { strictFs: true }),
+      },
+    });
 
     // Denial state — closure shared with handler `onDeny` callback. The
     // `terminalFired` mutex enforces first-trigger-wins per workshop 002.

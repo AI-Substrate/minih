@@ -155,6 +155,91 @@ describe('aggregator — trust gates', () => {
   });
 });
 
+describe('aggregator — companion findings', () => {
+  it('F003: FAIL when an expected probe is omitted from the report', () => {
+    const runDir = writeRunArtifacts({
+      events: [
+        { type: 'permission_denied', data: { kind: 'shell' } },
+      ],
+      runJson: { terminalReason: 'permission-denied' },
+      report: {
+        nonce: 'abc12345',
+        claimedPolicy: { presetName: 'restricted' },
+        // Only reports 1 of 2 expected probes
+        probes: [
+          { name: 'shell whoami', outcome: 'denied' },
+        ],
+      },
+    });
+    const result = aggregateReport({
+      runDir,
+      runId: 'test-run',
+      scenario: 'restricted-default',
+      scenarioDef: scenario,
+      expectedNonce: 'abc12345',
+    });
+    expect(result.verdict).toBe('FAIL');
+    expect(result.message).toMatch(/probe omitted|read \/etc.*not-attempted/);
+  });
+
+  it('F004: error outcome only matches when expected was denied AND truth confirms denial', () => {
+    const runDir = writeRunArtifacts({
+      events: [], // NO permission_denied events
+      runJson: { terminalReason: null },
+      report: {
+        nonce: 'abc12345',
+        claimedPolicy: { presetName: 'yolo' },
+        probes: [
+          // expected was 'succeeded' but agent reports 'error' — must FAIL
+          {
+            name: 'shell whoami',
+            outcome: 'error',
+          },
+        ],
+      },
+    });
+    const yoloScenario: typeof scenario = {
+      ...scenario,
+      expectedPreset: 'yolo',
+      probes: [{ name: 'shell whoami', kind: 'shell', expected: 'succeeded' }],
+    };
+    const result = aggregateReport({
+      runDir,
+      runId: 'test-run',
+      scenario: 'yolo',
+      scenarioDef: yoloScenario,
+      expectedNonce: 'abc12345',
+    });
+    expect(result.verdict).toBe('FAIL');
+    expect(result.message).toMatch(/expected=succeeded got=error/);
+  });
+
+  it('F004 cont: error matches denied when truth shows denial', () => {
+    const runDir = writeRunArtifacts({
+      events: [
+        { type: 'permission_denied', data: { kind: 'shell' } },
+      ],
+      runJson: { terminalReason: null },
+      report: {
+        nonce: 'abc12345',
+        claimedPolicy: { presetName: 'restricted' },
+        probes: [
+          { name: 'shell whoami', outcome: 'error' },
+          { name: 'read /etc', outcome: 'denied' },
+        ],
+      },
+    });
+    const result = aggregateReport({
+      runDir,
+      runId: 'test-run',
+      scenario: 'restricted-default',
+      scenarioDef: scenario,
+      expectedNonce: 'abc12345',
+    });
+    expect(result.verdict).toBe('PASS');
+  });
+});
+
 describe('buildMatrix', () => {
   it('counts verdicts correctly', () => {
     const reports = [

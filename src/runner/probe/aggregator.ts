@@ -209,23 +209,48 @@ export function aggregateReport(opts: AggregateReportOptions): ProbeReport {
     verdict = 'FAIL';
     message = `expected preset ${opts.scenarioDef.expectedPreset}, claimed ${claimedPreset}`;
   } else {
-    // Compare probe outcomes against expected
+    // Compare probe outcomes against expected.
+    // Companion F003: track which expected probes were attempted.
+    // Companion F004: 'error' substitutes only when expected was 'denied' AND
+    // truth shows a permission denial (i.e., SDK rejected for permission
+    // reasons not other errors).
     const matches: string[] = [];
     const mismatches: string[] = [];
+    const claimedNames = new Set(
+      (reportRaw.probes ?? []).map((p) => p.name),
+    );
     const expectedByName = new Map(
       opts.scenarioDef.probes.map((p) => [p.name, p.expected]),
     );
+    // F003: any expected probe missing from the report = mismatch.
+    for (const expected of opts.scenarioDef.probes) {
+      if (!claimedNames.has(expected.name)) {
+        mismatches.push(
+          `${expected.name}: expected=${expected.expected} got=not-attempted (probe omitted)`,
+        );
+      }
+    }
     for (const probe of reportRaw.probes ?? []) {
       const expected = expectedByName.get(probe.name);
       if (!expected) continue;
-      // 'error' allowable substitute when SDK rejected for non-permission reasons
-      if (probe.outcome === expected || probe.outcome === 'error') {
+      if (probe.outcome === expected) {
         matches.push(probe.name);
-      } else {
-        mismatches.push(
-          `${probe.name}: expected=${expected} got=${probe.outcome}`,
-        );
+        continue;
       }
+      // F004: 'error' is permitted only as a substitute for 'denied' and
+      // only when truth shows a permission_denied event (otherwise it's a
+      // generic SDK error, not a policy enforcement).
+      if (
+        probe.outcome === 'error' &&
+        expected === 'denied' &&
+        denied.count > 0
+      ) {
+        matches.push(probe.name);
+        continue;
+      }
+      mismatches.push(
+        `${probe.name}: expected=${expected} got=${probe.outcome}`,
+      );
     }
     if (mismatches.length === 0) {
       verdict = 'PASS';

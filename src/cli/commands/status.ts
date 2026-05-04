@@ -149,6 +149,22 @@ export function registerStatusCommand(program: Command): void {
       const runDir = path.join(runsDir, runId);
       const eventsPath = path.join(runDir, 'events.ndjson');
       const completedPath = path.join(runDir, 'completed.json');
+      const runJsonPath = path.join(runDir, 'run.json');
+
+      // Plan 018 — surface resolved permissions from run.json (per AC1).
+      let permissions: unknown = null;
+      let terminalReason: string | null = null;
+      let permissionError: unknown = null;
+      if (fs.existsSync(runJsonPath)) {
+        try {
+          const rj = JSON.parse(fs.readFileSync(runJsonPath, 'utf-8'));
+          permissions = rj.permissions ?? null;
+          terminalReason = rj.terminalReason ?? null;
+          permissionError = rj.permissionError ?? null;
+        } catch {
+          // ignore — run.json may be torn during throttled writes
+        }
+      }
 
       // Determine liveness
       let verdict: 'active' | 'stale' | 'completed' | 'failed' | 'unknown';
@@ -262,6 +278,9 @@ export function registerStatusCommand(program: Command): void {
           eventCount,
           toolCallCount,
           turns,
+          permissions,
+          terminalReason,
+          permissionError,
         }),
       );
     });

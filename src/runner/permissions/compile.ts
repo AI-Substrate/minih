@@ -70,14 +70,28 @@ export function compile(sources: PolicySources): ResolvedPolicy {
   // Frontmatter overrides win over sidecar/env overrides — preset is
   // unitary but overrides can stack (frontmatter applied last).
   let decisions = baseline;
+  let mcpAllowedServers: string[] | undefined;
+  let customToolAllowedNames: string[] | undefined;
   if (sources.env?.overrides) {
-    decisions = applyOverrides(decisions, sources.env.overrides);
+    const r = applyOverrides(decisions, sources.env.overrides);
+    decisions = r.decisions;
+    mcpAllowedServers = r.mcpAllowedServers ?? mcpAllowedServers;
+    customToolAllowedNames =
+      r.customToolAllowedNames ?? customToolAllowedNames;
   }
   if (sources.sidecar?.overrides) {
-    decisions = applyOverrides(decisions, sources.sidecar.overrides);
+    const r = applyOverrides(decisions, sources.sidecar.overrides);
+    decisions = r.decisions;
+    mcpAllowedServers = r.mcpAllowedServers ?? mcpAllowedServers;
+    customToolAllowedNames =
+      r.customToolAllowedNames ?? customToolAllowedNames;
   }
   if (sources.frontmatter?.overrides) {
-    decisions = applyOverrides(decisions, sources.frontmatter.overrides);
+    const r = applyOverrides(decisions, sources.frontmatter.overrides);
+    decisions = r.decisions;
+    mcpAllowedServers = r.mcpAllowedServers ?? mcpAllowedServers;
+    customToolAllowedNames =
+      r.customToolAllowedNames ?? customToolAllowedNames;
   }
 
   // allowedRoots: 4-source merge per workshop 001 § Q5.
@@ -103,5 +117,7 @@ export function compile(sources: PolicySources): ResolvedPolicy {
     canonicalRoots,
     rootsResolvedFrom,
     strictFs: false,
+    ...(mcpAllowedServers !== undefined && { mcpAllowedServers }),
+    ...(customToolAllowedNames !== undefined && { customToolAllowedNames }),
   };
 }

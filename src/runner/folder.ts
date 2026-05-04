@@ -551,27 +551,72 @@ function parsePermissionsField(
         const trimmed = nestedMatch[1];
 
         if (inOverrides) {
-          const ovM = trimmed.match(/^([a-z][a-z-]*):\s*(\S+)\s*$/);
+          const ovM = trimmed.match(/^([a-z][a-z-]*):\s*(.+)\s*$/);
           if (!ovM) {
             throw new InvalidPermissionsFrontmatterError(
               `bad override line: "${sub}"`,
             );
           }
           const kind = ovM[1];
-          const decision = ovM[2];
+          const valueStr = ovM[2].trim();
           if (!VALID_KINDS.has(kind)) {
             throw new InvalidPermissionsFrontmatterError(
               `unknown override kind "${kind}"`,
             );
           }
-          if (!VALID_DECISIONS.has(decision)) {
-            throw new InvalidPermissionsFrontmatterError(
-              `unknown override decision "${decision}" for kind "${kind}"`,
-            );
-          }
           // Map `network` alias → `url` per workshop 001 § Schema.
           const realKind = kind === 'network' ? 'url' : kind;
-          (result.overrides as Record<string, string>)[realKind] = decision;
+          // AC2 — accept inline JSON object literal for `mcp` /
+          // `custom-tool` allowlists.
+          if (valueStr.startsWith('{') && valueStr.endsWith('}')) {
+            if (kind !== 'mcp' && kind !== 'custom-tool') {
+              throw new InvalidPermissionsFrontmatterError(
+                `object-form override only valid for mcp / custom-tool, got "${kind}"`,
+              );
+            }
+            try {
+              const parsed = JSON.parse(valueStr);
+              if (
+                kind === 'mcp' &&
+                Array.isArray(parsed.allowedServers) &&
+                parsed.allowedServers.every(
+                  (s: unknown) => typeof s === 'string',
+                )
+              ) {
+                (result.overrides as Record<string, unknown>).mcp = {
+                  allowedServers: parsed.allowedServers,
+                };
+                continue;
+              }
+              if (
+                kind === 'custom-tool' &&
+                Array.isArray(parsed.allowedNames) &&
+                parsed.allowedNames.every(
+                  (s: unknown) => typeof s === 'string',
+                )
+              ) {
+                (result.overrides as Record<string, unknown>)['custom-tool'] = {
+                  allowedNames: parsed.allowedNames,
+                };
+                continue;
+              }
+              throw new InvalidPermissionsFrontmatterError(
+                `${kind}: object-form override must include allowedServers (mcp) or allowedNames (custom-tool) as a string array`,
+              );
+            } catch (err) {
+              if (err instanceof InvalidPermissionsFrontmatterError) throw err;
+              throw new InvalidPermissionsFrontmatterError(
+                `${kind}: invalid JSON object "${valueStr}" (${(err as Error).message})`,
+              );
+            }
+          }
+          // Scalar decision form.
+          if (!VALID_DECISIONS.has(valueStr)) {
+            throw new InvalidPermissionsFrontmatterError(
+              `unknown override decision "${valueStr}" for kind "${kind}"`,
+            );
+          }
+          (result.overrides as Record<string, string>)[realKind] = valueStr;
           continue;
         }
 

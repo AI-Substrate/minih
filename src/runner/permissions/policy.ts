@@ -60,6 +60,22 @@ export type PermissionPresetName =
   | 'build-only';
 
 /**
+ * Per-kind override value. Most overrides are scalar decisions
+ * (allow/deny/prompt-user). For `mcp` and `custom-tool`, AC2 also accepts
+ * an object form with allowlists:
+ *
+ *   `mcp: { allowedServers: ['minih-coordination'] }`
+ *   `custom-tool: { allowedNames: ['my-tool'] }`
+ *
+ * The decision for these kinds becomes `allow` when allowlist is non-empty;
+ * the runtime gate then narrows to the listed servers/tools.
+ */
+export type PermissionOverrideValue =
+  | PermissionDecision
+  | { allowedServers: string[] }
+  | { allowedNames: string[] };
+
+/**
  * Per-kind override map. Layered on top of a preset's baseline decisions.
  * `undefined` for a kind = "no override; preset's value wins".
  *
@@ -67,7 +83,7 @@ export type PermissionPresetName =
  * `url` in the SDK — we accept either spelling in frontmatter for ergonomics.
  */
 export type PermissionOverrides = Partial<
-  Record<PermissionKind, PermissionDecision>
+  Record<PermissionKind, PermissionOverrideValue>
 >;
 
 /**
@@ -138,6 +154,17 @@ export interface ResolvedPolicy {
    * this field.
    */
   strictFs?: boolean;
+  /**
+   * AC2/AC33 — per-server MCP allowlist when `mcp` decision is `allow` AND
+   * the override carries `allowedServers`. `undefined` = `mcp` allow is
+   * unrestricted. Empty array = `mcp` is denied (effective deny).
+   */
+  mcpAllowedServers?: string[];
+  /**
+   * AC2/AC33 — per-name `custom-tool` allowlist. Same semantics as
+   * `mcpAllowedServers`.
+   */
+  customToolAllowedNames?: string[];
 }
 
 /**
@@ -158,21 +185,50 @@ export function applyPreset(
 /**
  * Apply per-kind overrides on top of a baseline. Workshop 001 § Schema
  * defines `network` as an alias for `url`; we honour that here.
+ *
+ * AC2 — object-form overrides with allowlists are extracted into the
+ * separate `allowlists` output; the kind decision becomes `allow` when
+ * the allowlist is non-empty (acts as a narrow allow rather than blanket).
  */
 export function applyOverrides(
   baseline: Record<PermissionKind, PermissionDecision>,
   overrides: PermissionOverrides | undefined,
-): Record<PermissionKind, PermissionDecision> {
-  if (!overrides) return baseline;
+): {
+  decisions: Record<PermissionKind, PermissionDecision>;
+  mcpAllowedServers?: string[];
+  customToolAllowedNames?: string[];
+} {
+  if (!overrides) return { decisions: baseline };
   const result = { ...baseline };
-  for (const [kind, decision] of Object.entries(overrides) as [
+  let mcpAllowedServers: string[] | undefined;
+  let customToolAllowedNames: string[] | undefined;
+  for (const [kind, value] of Object.entries(overrides) as [
     PermissionKind,
-    PermissionDecision,
+    PermissionOverrideValue,
   ][]) {
-    if (decision === undefined) continue;
-    result[kind] = decision;
+    if (value === undefined) continue;
+    if (typeof value === 'string') {
+      // Scalar decision form
+      result[kind] = value as PermissionDecision;
+      continue;
+    }
+    // Object form: allowlist (only valid for mcp / custom-tool)
+    if (kind === 'mcp' && 'allowedServers' in value) {
+      mcpAllowedServers = value.allowedServers;
+      result.mcp = value.allowedServers.length > 0 ? 'allow' : 'deny';
+      continue;
+    }
+    if (kind === 'custom-tool' && 'allowedNames' in value) {
+      customToolAllowedNames = value.allowedNames;
+      result['custom-tool'] = value.allowedNames.length > 0 ? 'allow' : 'deny';
+      continue;
+    }
   }
-  return result;
+  return {
+    decisions: result,
+    ...(mcpAllowedServers !== undefined && { mcpAllowedServers }),
+    ...(customToolAllowedNames !== undefined && { customToolAllowedNames }),
+  };
 }
 
 /**

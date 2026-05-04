@@ -123,3 +123,11 @@
 - **magicWand** (target: coordination): Expose the effective idleBudgetMs and initialTask values through a small inside context/status command so long-running coordinated agents can make lifecycle decisions without guessing from prompt text or run artifacts.
 - difficulties:
   - [annoying] knowledge: Effective idleBudgetMs was mentioned by the companion protocol but not available via inbox/state tooling, making the shutdown threshold ambiguous. (workaround: Used several bounded 30-second idle polls after orientation before treating the run as idle-budget complete.)
+
+> ⚠️ ## 2026-05-04T05:30:29.954Z — code-review-companion / 2026-05-04T15-22-27-530Z-0247
+>
+> - runId: 2026-05-04T15-22-27-530Z-0247
+> - runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-05-04T15-22-27-530Z-0247
+> - result: failed
+> - magicWand: (unavailable — run terminated as failed)
+> - stderr (last line): permission denied: kind=write blocked by preset/overrides

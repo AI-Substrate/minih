@@ -336,6 +336,20 @@ export interface LiveRunManifest {
     messages: number;
     errors: number;
   };
+  /** Plan 018 R6 — flipped from `'yolo'` to `'restricted'` per AC-R6.1. */
+  /**
+   * Plan 018 AC1 — recorded preset and policy snapshot. Mandatory: written
+   * immediately after policy resolution so operators / `permission_status`
+   * / probe truth surfaces have an audit trail even if the run wedges.
+   */
+  permissions?: {
+    preset: string;
+    canonicalRoots: string[];
+    decisions?: Record<string, string>;
+    mcpAllowedServers?: string[];
+    customToolAllowedNames?: string[];
+    strictFs?: boolean;
+  };
   /**
    * Plan 018 R1 — recorded once a permission denial fires. Mandatory signal #2
    * of the 5-signal protocol (workshop 002 § Q1).

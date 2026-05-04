@@ -117,4 +117,21 @@ These fixtures use `coordination: enabled` but were not testing permissions; add
 
 **AC coverage**:
 - AC-FX8.4 (E205 message format incl. provenance + remediations + sidecar reset hint): ✅ — message construction is in FX008-2 helper; FX008-4 just wires the code surfacing.
-- The `output.ts` comment header now lists E205 alongside E200-E204 in the Plan 018 block.
+## FX008-5 — `--allow-coord-write-deny` CLI flag (2026-05-04 08:34Z)
+
+**Stage 5 of 8** (note: stages 4 and 5 are bundled in the original flight plan diagram; FX008-4 finished the E205 routing and FX008-5 adds the operator opt-out flag).
+
+**Files touched**:
+- `src/cli/commands/run.ts` — added `.option('--allow-coord-write-deny', ...)` with explicit help text warning. Plumbed through to `permissionsOverride.allowCoordWriteDeny` when the flag is set.
+
+**Verification**:
+- Live test: synthetic coord-enabled agent with `read-only` preset.
+  * Without flag → exit code 1, error `E205 COORDINATION_WRITE_DENIED`.
+  * With `--allow-coord-write-deny` → past the precondition, into a real SDK boot, with stderr banner: `[minih] Warning: --allow-coord-write-deny set; canonical session record will not be persisted (slug='coord-deny', preset='read-only').`
+- Banner matches the regex anchor `^\[minih\] Warning: --allow-coord-write-deny set; canonical session record will not be persisted` per AC-FX8.9.
+- Full quality gate: 1022 tests pass + audit clean (`just fft`).
+
+**AC coverage**:
+- AC-FX8.5 (operator opt-out): ✅ — flag is per-invocation, no env-var fallback.
+- AC-FX8.8 (no env-var fallback): ✅ — separately verified by helper unit tests in FX008-2.
+- AC-FX8.9 (anchored stderr banner): ✅ — verified live.

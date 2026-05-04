@@ -135,7 +135,7 @@ flowchart LR
 - [x] FX008-2: Implement `assertCoordWriteAllowed()` precondition + 6 unit tests
 - [x] FX008-3: Wire precondition into `runAgent`; extend `PermissionDenialReason['kind']` additively
 - [x] FX008-4: Allocate E205; document in `output.ts` and `permissions.md`
-- [ ] FX008-5: Add `--allow-coord-write-deny` flag to `minih run`
+- [x] FX008-5: Add `--allow-coord-write-deny` flag to `minih run`
 - [ ] FX008-6: Regression test `run-coord-write-deny.test.ts` + companion envelope smoke + handler-kind-extension regression
 - [ ] FX008-7: Update `docs/how/permissions.md` + cross-link `docs/how/companion-mode.md` + document `MINIH_DISABLE_COORD_WRITE_PRECONDITION`
 - [ ] FX008-8: Wire `MINIH_DISABLE_COORD_WRITE_PRECONDITION` env-var ops kill-switch

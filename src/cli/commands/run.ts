@@ -102,6 +102,10 @@ export function registerRunCommand(program: Command): void {
       '--dry-run-permissions',
       'Resolve and print policy without executing the agent',
     )
+    .option(
+      '--allow-coord-write-deny',
+      'Per-invocation opt-out for the FX008 boot precondition. Lets a coordinated agent run even when its policy denies write — operator acknowledges the canonical farewell envelope (output/report.json) cannot be persisted. Emits a stderr deprecation banner on every use. No env-var fallback (intentional).',
+    )
     .addHelpText(
       'after',
       '\nTip: For coordinated agents, run `minih outside context <slug>` first to read the outside-side contract.\n' +
@@ -126,6 +130,7 @@ export function registerRunCommand(program: Command): void {
           allowedRootsOnly?: string;
           strictFs?: boolean;
           dryRunPermissions?: boolean;
+          allowCoordWriteDeny?: boolean;
         },
       ) => {
         const agentsDir = program.opts().agentsDir ?? 'agents';
@@ -233,7 +238,8 @@ export function registerRunCommand(program: Command): void {
           opts.permissions ||
           opts.allowedRoots ||
           opts.allowedRootsOnly ||
-          opts.strictFs
+          opts.strictFs ||
+          opts.allowCoordWriteDeny
         ) {
           permissionsOverride = {};
           if (opts.permissions) {
@@ -272,6 +278,9 @@ export function registerRunCommand(program: Command): void {
           }
           if (opts.strictFs) {
             permissionsOverride.strictFs = true;
+          }
+          if (opts.allowCoordWriteDeny) {
+            permissionsOverride.allowCoordWriteDeny = true;
           }
         }
 

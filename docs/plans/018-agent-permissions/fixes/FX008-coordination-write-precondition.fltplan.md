@@ -4,7 +4,7 @@
 **Plan**: [agent-permissions-plan.md](../agent-permissions-plan.md)
 **Source issue**: [#25](https://github.com/AI-Substrate/minih/issues/25)
 **Generated**: 2026-05-04
-**Status**: Ready for takeoff
+**Status**: In flight (FX008-1 done — Track A canonical frontmatter)
 
 ---
 
@@ -12,7 +12,7 @@
 
 **Problem**: Coordinated agents (`coordination: enabled`) booted under any preset that denies `write` are structurally broken — they can't write the canonical farewell envelope at `output/report.json`, but minih boots them anyway and lets them burn 7200 s of timeout before exiting cleanly with no envelope. Operators see no signal until ~14 minutes after a useless briefing, when manual pid-diagnosis reveals the silent failure.
 
-**Fix**: At runner boot — immediately after `compile()` resolves the permission policy — refuse to start any `coordination: enabled` run whose resolved policy denies `write`, unless operator passes `--allow-coord-write-deny`. Failure fires the existing 5-signal denial protocol with new error code E186 and an actionable remediation message. Plus: add `write: allow` to the canonical `code-review-companion/prompt.md` overrides so fresh installs and upgrades stop tripping the guard.
+**Fix**: At runner boot — immediately after `compile()` resolves the permission policy — refuse to start any `coordination: enabled` run whose resolved policy denies `write`, unless operator passes `--allow-coord-write-deny`. Failure fires the existing 5-signal denial protocol with new error code E205 and an actionable remediation message. Plus: add `write: allow` to the canonical `code-review-companion/prompt.md` overrides so fresh installs and upgrades stop tripping the guard.
 
 ---
 
@@ -21,7 +21,7 @@
 | Domain | Relationship | What Changes |
 |--------|-------------|-------------|
 | `runner` (permissions) | owns precondition | New `assertCoordWriteAllowed()` helper; called from `runAgent` |
-| `cli` | exposes operator opt-out | `--allow-coord-write-deny` flag on `minih run`; E186 error code |
+| `cli` | exposes operator opt-out | `--allow-coord-write-deny` flag on `minih run`; E205 error code |
 | `agents/code-review-companion` | canonical pack update | One-line frontmatter override (Track A) |
 
 **Domains we depend on (no changes)**:
@@ -47,7 +47,7 @@ stateDiagram-v2
     state "1: Track A frontmatter" as S1
     state "2: Precondition helper" as S2
     state "3: Wire into runAgent" as S3
-    state "4: E186 + flag + docs" as S4
+    state "4: E205 + flag + docs" as S4
     state "5: Regression test" as S5
 
     [*] --> S1
@@ -57,7 +57,8 @@ stateDiagram-v2
     S4 --> S5
     S5 --> [*]
 
-    class S1,S2,S3,S4,S5 pending
+    class S2,S3,S4,S5 pending
+    class S1 done
 ```
 
 **Legend**: grey = pending | yellow = active | red = blocked/needs input | green = done
@@ -68,10 +69,10 @@ stateDiagram-v2
 
 <!-- Updated by /plan-6-v2 during implementation: [ ] → [~] → [x] -->
 
-- [ ] **Stage 1: Track A — canonical frontmatter** — add `write: allow` to `permissions.overrides` (`agents/code-review-companion/prompt.md` — existing file, one new line)
+- [x] **Stage 1: Track A — canonical frontmatter** — add `write: allow` to `permissions.overrides` (`agents/code-review-companion/prompt.md` — existing file, one new line)
 - [ ] **Stage 2: Precondition helper** — `assertCoordWriteAllowed()` pure-function with 6 unit tests (`src/runner/permissions/coord-write-precondition.ts` — new file)
 - [ ] **Stage 3: Wire into runAgent** — call site after `updateManifest({permissions:...})`; `PermissionDenialReason['kind']` extends with `'coord-write-deny'`; existing `fireTerminalDenial` path drives 5-signal output (`src/runner/runner.ts`, `src/runner/permissions/handler.ts`)
-- [ ] **Stage 4: E186 code + opt-out flag + docs** — register E186; add `--allow-coord-write-deny` to `minih run`; update `docs/how/permissions.md` § Coordinated agents + cross-link from `companion-mode.md` (`src/cli/output.ts`, `src/cli/commands/run.ts`, `src/runner/types.ts`, `docs/how/permissions.md`, `docs/how/companion-mode.md`)
+- [ ] **Stage 4: E205 code + opt-out flag + docs** — register E205; add `--allow-coord-write-deny` to `minih run`; update `docs/how/permissions.md` § Coordinated agents + cross-link from `companion-mode.md` (`src/cli/output.ts`, `src/cli/commands/run.ts`, `src/runner/types.ts`, `docs/how/permissions.md`, `docs/how/companion-mode.md`)
 - [ ] **Stage 5: Regression test** — `test/cli/run-coord-write-deny.test.ts` (new) + companion envelope smoke (`test/agents/companion-output-envelope.test.ts` — new); 3 cases per AC-FX8.2/AC-FX8.5/AC-FX8.6
 
 ---
@@ -130,10 +131,11 @@ flowchart LR
 
 ## Checklist
 
-- [ ] FX008-1: Add `write: allow` to canonical companion frontmatter
+- [x] FX008-1: Add `write: allow` to canonical companion frontmatter
 - [ ] FX008-2: Implement `assertCoordWriteAllowed()` precondition + 6 unit tests
 - [ ] FX008-3: Wire precondition into `runAgent`; extend `PermissionDenialReason['kind']` additively
-- [ ] FX008-4: Allocate E186; document in `output.ts` and `permissions.md`
+- [ ] FX008-4: Allocate E205; document in `output.ts` and `permissions.md`
 - [ ] FX008-5: Add `--allow-coord-write-deny` flag to `minih run`
-- [ ] FX008-6: Regression test `run-coord-write-deny.test.ts` + companion envelope smoke
-- [ ] FX008-7: Update `docs/how/permissions.md` + cross-link `docs/how/companion-mode.md`
+- [ ] FX008-6: Regression test `run-coord-write-deny.test.ts` + companion envelope smoke + handler-kind-extension regression
+- [ ] FX008-7: Update `docs/how/permissions.md` + cross-link `docs/how/companion-mode.md` + document `MINIH_DISABLE_COORD_WRITE_PRECONDITION`
+- [ ] FX008-8: Wire `MINIH_DISABLE_COORD_WRITE_PRECONDITION` env-var ops kill-switch

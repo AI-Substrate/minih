@@ -9,6 +9,7 @@ permissions:
   overrides:
     shell: allow
     network: allow
+    write: allow
 ---
 
 # Code Review Companion

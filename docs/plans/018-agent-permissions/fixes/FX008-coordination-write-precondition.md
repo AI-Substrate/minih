@@ -24,7 +24,7 @@ Two-track resolution. Both ship together under FX008 — they share the dossier 
 
 **Track A — canonical companion `write: allow` override (FX008-1).** One-line addition to `agents/code-review-companion/prompt.md` frontmatter `permissions.overrides`. Forward-going default for fresh installs and upgrades.
 
-**Track B — runner boot precondition (FX008-2 .. FX008-5).** After `compile()` resolves the policy in `runAgent` (`src/runner/runner.ts:643-667`), assert: `!(definition.coordination?.enabled === true && resolvedPolicy.decisions.write === 'deny')` unless the operator passed `--allow-coord-write-deny`. Failure refuses to start the SDK session and fires the existing 5-signal denial protocol (`src/runner/permissions/error-signal.ts:188`) with new error code `E186 COORDINATION_WRITE_DENIED`. Operators see an actionable message naming the slug, the resolved preset, the provenance source (frontmatter / sidecar / env / release-default), and three remediation paths — all within seconds of `minih run`, before any tokens are spent.
+**Track B — runner boot precondition (FX008-2 .. FX008-5).** After `compile()` resolves the policy in `runAgent` (`src/runner/runner.ts:643-667`), assert: `!(definition.coordination?.enabled === true && resolvedPolicy.decisions.write === 'deny')` unless the operator passed `--allow-coord-write-deny`. Failure refuses to start the SDK session and fires the existing 5-signal denial protocol (`src/runner/permissions/error-signal.ts:188`) with new error code `E205 COORDINATION_WRITE_DENIED`. Operators see an actionable message naming the slug, the resolved preset, the provenance source (frontmatter / sidecar / env / release-default), and three remediation paths — all within seconds of `minih run`, before any tokens are spent.
 
 The 5-signal protocol guarantees the failure is visible across all canonical surfaces: events.ndjson, run.json (`terminalReason: 'permission-coord-write-deny'`), inside-state (`status: 'error'` + `permissionError`), inside-inbox (`type: 'permission-error'` message readable via `minih outside inbox list`), exit code 126. Existing orchestrator polling on `verdict` or inbox `permission-error` types catches the failure with no contract change.
 
@@ -56,7 +56,7 @@ const operatorOptedOut = !!config.permissionsOverride?.allowCoordWriteDeny;
 
 if (coordEnabled && writeDenied && !operatorOptedOut) {
   throw new MinihError(
-    'E186',
+    'E205',
     formatCoordWriteDeniedMessage({ slug, presetName, source, ... })
   );
 }
@@ -116,7 +116,7 @@ Update the `output.ts` comment header to reference E205 in the Plan 018 enumerat
 Use Chainglass agent's dead run as the canonical FX008 regression fixture:
 
 - Source: `agents/code-review-companion/runs/2026-05-04T16-16-02-885Z-9355/`
-- Properties: `run.json` records `permissions.preset: 'restricted'`, `coordination: enabled` agent, exit happened cleanly without `output/report.json`. Re-running `minih run` against the same prompt+sidecar combination on FX008 HEAD MUST refuse at boot with E186; that's the assertion.
+- Properties: `run.json` records `permissions.preset: 'restricted'`, `coordination: enabled` agent, exit happened cleanly without `output/report.json`. Re-running `minih run` against the same prompt+sidecar combination on FX008 HEAD MUST refuse at boot with E205; that's the assertion.
 - Capture as `test/cli/run-coord-write-deny.test.ts` with a synthesised mini-fixture that mirrors the policy shape (no need to ship the real 2.4 MB run dir).
 
 ## Domain Impact
@@ -124,11 +124,11 @@ Use Chainglass agent's dead run as the canonical FX008 regression fixture:
 | Domain | Relationship | What Changes |
 |--------|-------------|-------------|
 | `runner` | owns the precondition | New `assertCoordWriteAllowed()` helper in `src/runner/permissions/`; called from `runAgent` after `compile()` |
-| `runner/permissions` | error code surfaced via `MinihError` | E186 message-formatter; provenance-aware text |
+| `runner/permissions` | error code surfaced via `MinihError` | E205 message-formatter; provenance-aware text |
 | `cli` | exposes operator opt-out | `--allow-coord-write-deny` flag on `minih run`; error code registered |
 | `agents/code-review-companion` | canonical pack update | Frontmatter `permissions.overrides.write: allow` |
 
-**Import direction unchanged**: cli → runner → adapter (E186 formatter is a runner export consumed by cli's exit-with-envelope path). The precondition itself runs entirely in runner; cli only emits the formatted message.
+**Import direction unchanged**: cli → runner → adapter (E205 formatter is a runner export consumed by cli's exit-with-envelope path). The precondition itself runs entirely in runner; cli only emits the formatted message.
 
 **Domain contract change**: NONE. The 5-signal denial protocol is reused as-is; we add a NEW _kind_ (`coord-write-deny`) to the existing `PermissionDenialReason['kind']` union but no consumer must change to keep working — generic error-handling paths still fire.
 
@@ -136,7 +136,7 @@ Use Chainglass agent's dead run as the canonical FX008 regression fixture:
 
 | Status | ID | Task | Domain | Path(s) | Done When | Notes |
 |--------|-----|------|--------|---------|-----------|-------|
-| [ ] | FX008-1 | Track A — add `write: allow` to canonical companion frontmatter `permissions.overrides`. | agents | `agents/code-review-companion/prompt.md` | Diff is exactly one new line under `permissions.overrides`; frontmatter still parses; `minih doctor code-review-companion` still green | Track A; ships forward-going only — existing stale installs pick it up via `minih agent install code-review-companion` upgrade |
+| [x] | FX008-1 | Track A — add `write: allow` to canonical companion frontmatter `permissions.overrides`. | agents | `agents/code-review-companion/prompt.md` | Diff is exactly one new line under `permissions.overrides`; frontmatter still parses; `minih doctor code-review-companion` still green | Track A; ships forward-going only — existing stale installs pick it up via `minih agent install code-review-companion` upgrade |
 | [ ] | FX008-2 | Implement `assertCoordWriteAllowed(definition, resolvedPolicy, options)` precondition helper. **Helper signature accepts an `options` bag with `runDir?: string`** (forward-compat with FX010-4's `canWriteUnderOutput(policy, runDir)` refactor — FX010 swaps the trigger condition without widening the signature). | runner | `src/runner/permissions/coord-write-precondition.ts` (new), exported from `src/runner/permissions/index.ts` | Pure function; no IO; throws `MinihError('E205', formatted)` when triggered; covered by 6 unit tests (coord-on+write-deny+no-flag → throws; coord-off+write-deny → noop; coord-on+write-allow → noop; coord-on+write-deny+flag → noop; non-yolo provenance → message includes source; yolo presence allowed → noop). **Type extension**: `ResolvedPolicy` gains `presetSource: 'frontmatter' \| 'sidecar' \| 'env' \| 'release-default'` field; `compile()` propagates from `resolvePreset()`. | Workshop 002 § Q1 5-signal protocol re-used; no duplicate signal-firing logic |
 | [ ] | FX008-3 | Wire precondition into `runAgent`. **Type widening**: introduce `PermissionDeniedKind = PermissionKind \| 'coord-write-deny'` as a NEW union (do NOT extend `PermissionKind` itself). Update `PermissionDenialReason.kind` (`src/runner/permissions/handler.ts:42`) to use `PermissionDeniedKind`; update `AgentPermissionDeniedEvent.data.kind` in `src/adapter/events.ts` (lines 183-191) to match. `PermissionKind` remains the strict 8-value union for preset-decision indexing. | runner | `src/runner/runner.ts` (after `updateManifest({permissions:...})`, lines ~643-673), `src/runner/permissions/handler.ts`, `src/adapter/events.ts` | Call site present; existing 5-signal `fireTerminalDenial(...)` invoked with `kind: 'coord-write-deny'`; `denialState.reason = 'permission-denied'`; `exitCode = 126`; events.ndjson + run.json + inside-state + inside-inbox all populated. New union `PermissionDeniedKind` introduced in handler.ts; `events.ts:183-191` event payload kind updated to match; existing handlers that switch on the 8-value `PermissionKind` continue to work via type-narrowing default branch | Workshop 002 § Q1 enum extension contract — additive at the wider union level; preset registry stays closed |
 | [ ] | FX008-4 | Allocate `E205 COORDINATION_WRITE_DENIED` error code; document in `output.ts` and `permissions.md`. | cli | `src/cli/output.ts` (ErrorCodes — extend existing E200+ Plan 018 block), `docs/how/permissions.md` § Errors + § Coordinated agents | `ErrorCodes.E205` exported alongside E200-E204; doctor and run can format it; comment header in `output.ts` updated; docs entry has full message template + remediation steps + `--allow-coord-write-deny` warning + `MINIH_DISABLE_COORD_WRITE_PRECONDITION` rollback note | Sits at the next available slot in the Plan 018 E200+ block; E186 was an authoring error (E184 is `AGENT_PACK_SOURCE_MISMATCH`, not reserved) |

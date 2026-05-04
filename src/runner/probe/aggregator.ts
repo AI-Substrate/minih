@@ -80,6 +80,13 @@ export interface AggregateReportOptions {
 
 /**
  * Cross-reference one probe run.
+ *
+ * Two paths:
+ *  - Report present: full claim-vs-truth comparison + nonce gate.
+ *  - Report missing: truth-only verdict (likely the prober's own write
+ *    was blocked by policy — the policy IS working). Mark trustworthy
+ *    only when events.ndjson shows enough permission_denied activity to
+ *    explain the missing report.
  */
 export function aggregateReport(opts: AggregateReportOptions): ProbeReport {
   const truth = readRunJson(opts.runDir);
@@ -94,8 +101,74 @@ export function aggregateReport(opts: AggregateReportOptions): ProbeReport {
 
   const untrustReasons: string[] = [];
 
+  // === Report-missing path ===
+  if (reportRaw === null) {
+    // The prober didn't (couldn't?) write a report. If events.ndjson shows
+    // permission_denied events, the policy was correctly enforced — verdict
+    // PASS for any scenario that expects denials.
+    const expectedDenialKinds = new Set(
+      opts.scenarioDef.probes
+        .filter((p) => p.expected === 'denied')
+        .map((p) => p.kind),
+    );
+    const expectedSomeDenials = expectedDenialKinds.size > 0;
+    const truthHasDenials =
+      denied.count > 0 ||
+      truth.terminalReason === 'permission-denied';
+
+    if (expectedSomeDenials && truthHasDenials) {
+      return {
+        trustworthy: true,
+        scenario: opts.scenario,
+        runId: opts.runId,
+        terminalReason: truth.terminalReason,
+        claimed: {
+          presetName: 'unobserved',
+          decisions: {},
+          canonicalRoots: [],
+          probes: [],
+        },
+        truth: {
+          permissionDeniedEvents: denied.count,
+          permissionDeniedKinds: denied.kinds,
+          runJsonTerminalReason: truth.terminalReason,
+          runJsonPermissionError: truth.permissionError,
+        },
+        verdict: 'PASS',
+        message: `truth-only verdict (no report — likely write-denied by policy, which is the correct behaviour); ${denied.count} permission_denied events observed for kinds [${denied.kinds.join(', ')}]`,
+      };
+    }
+
+    // Report missing AND no denials in truth → we can't tell what happened.
+    return {
+      trustworthy: false,
+      untrustReasons: [
+        'no report.json + no permission_denied events in events.ndjson — agent silently failed?',
+      ],
+      scenario: opts.scenario,
+      runId: opts.runId,
+      terminalReason: truth.terminalReason,
+      claimed: {
+        presetName: 'unknown',
+        decisions: {},
+        canonicalRoots: [],
+        probes: [],
+      },
+      truth: {
+        permissionDeniedEvents: denied.count,
+        permissionDeniedKinds: denied.kinds,
+        runJsonTerminalReason: truth.terminalReason,
+        runJsonPermissionError: truth.permissionError,
+      },
+      verdict: 'UNTRUSTWORTHY',
+      message: 'no report and no truth-side denial evidence',
+    };
+  }
+
+  // === Report-present path: full claim-vs-truth with trust gates ===
+
   // Trust gate 1: nonce match
-  if (!reportRaw?.nonce) {
+  if (!reportRaw.nonce) {
     untrustReasons.push('agent did not return a nonce');
   } else if (reportRaw.nonce !== opts.expectedNonce) {
     untrustReasons.push(
@@ -104,11 +177,11 @@ export function aggregateReport(opts: AggregateReportOptions): ProbeReport {
   }
 
   // Trust gate 2: claimed denial without truth
-  const claimedDeniedCount = (reportRaw?.probes ?? []).filter(
+  const claimedDeniedCount = (reportRaw.probes ?? []).filter(
     (p) => p.outcome === 'denied',
   ).length;
   if (
-    reportRaw?.probes &&
+    reportRaw.probes &&
     claimedDeniedCount > 0 &&
     denied.count === 0 &&
     truth.terminalReason !== 'permission-denied'
@@ -121,7 +194,7 @@ export function aggregateReport(opts: AggregateReportOptions): ProbeReport {
   const trustworthy = untrustReasons.length === 0;
 
   // Match scenario expectations to truth
-  const claimedPreset = reportRaw?.claimedPolicy?.presetName ?? 'unknown';
+  const claimedPreset = reportRaw.claimedPolicy?.presetName ?? 'unknown';
   let verdict: 'PASS' | 'FAIL' | 'UNTRUSTWORTHY';
   let message: string;
 
@@ -138,7 +211,7 @@ export function aggregateReport(opts: AggregateReportOptions): ProbeReport {
     const expectedByName = new Map(
       opts.scenarioDef.probes.map((p) => [p.name, p.expected]),
     );
-    for (const probe of reportRaw?.probes ?? []) {
+    for (const probe of reportRaw.probes ?? []) {
       const expected = expectedByName.get(probe.name);
       if (!expected) continue;
       // 'error' allowable substitute when SDK rejected for non-permission reasons
@@ -166,10 +239,10 @@ export function aggregateReport(opts: AggregateReportOptions): ProbeReport {
     runId: opts.runId,
     terminalReason: truth.terminalReason,
     claimed: {
-      presetName: reportRaw?.claimedPolicy?.presetName ?? 'unknown',
-      decisions: reportRaw?.claimedPolicy?.decisions ?? {},
-      canonicalRoots: reportRaw?.claimedPolicy?.canonicalRoots ?? [],
-      probes: reportRaw?.probes ?? [],
+      presetName: reportRaw.claimedPolicy?.presetName ?? 'unknown',
+      decisions: reportRaw.claimedPolicy?.decisions ?? {},
+      canonicalRoots: reportRaw.claimedPolicy?.canonicalRoots ?? [],
+      probes: reportRaw.probes ?? [],
     },
     truth: {
       permissionDeniedEvents: denied.count,

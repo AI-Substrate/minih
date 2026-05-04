@@ -370,6 +370,53 @@ Injected into every agent before their specific prompt. This is your agent onboa
 
 ---
 
+## Permissions
+
+> Plan 018 — fine-grained permission policies replace the legacy `approveAll` posture.
+
+Add a `permissions:` field to your agent's `prompt.md` frontmatter:
+
+```yaml
+---
+description: My agent
+permissions: read-only
+---
+```
+
+Six built-in presets:
+
+| Preset      | shell | write | read | mcp | url | custom-tool | memory | hook |
+|-------------|-------|-------|------|-----|-----|-------------|--------|------|
+| `yolo`      | ✅    | ✅    | ✅   | ✅  | ✅  | ✅          | ✅     | ✅   |
+| `trusted`   | ✅    | ✅    | ✅   | ✅  | ✅  | ❌          | ❌     | ❌   |
+| `restricted`| ❌    | ❌    | ✅   | ✅  | ❌  | ❌          | ❌     | ❌   |
+| `read-only` | ❌    | ❌    | ✅   | ✅  | ❌  | ❌          | ❌     | ❌   |
+| `network`   | ❌    | ❌    | ✅   | ✅  | ✅  | ❌          | ❌     | ❌   |
+| `build-only`| ✅    | ✅    | ✅   | ❌  | ❌  | ❌          | ❌     | ❌   |
+
+Object form supports `overrides` and `allowedRoots`:
+
+```yaml
+permissions:
+  preset: read-only
+  overrides:
+    network: allow         # `network` is alias for `url`
+    shell: allow
+  allowedRoots:
+    mode: extend
+    roots: ["./repo", "./tmp"]
+```
+
+**On denial**: the agent terminates with exit code `126`, `terminalReason: 'permission-denied'` in `run.json`, and (for coordinated agents) a `permission-error` typed message on the outside inbox. Idempotent on `requestId`.
+
+**Resolution chain**: frontmatter → `.minih-source.json` sidecar `lockedDefault` → `MINIH_PERMISSIONS_DEFAULT` env var → release default (`restricted` since R6).
+
+**Inside MCP tool**: coordinated agents can call `permission_status` to self-introspect their resolved policy without firing a permission request.
+
+**Full reference**: [`docs/how/permissions.md`](docs/how/permissions.md).
+
+---
+
 ## Coordination-aware agents
 
 Coordinated agents have a two-sided workflow:

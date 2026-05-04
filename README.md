@@ -2,7 +2,7 @@
 
 *The miniest self-improving agent harness.*
 
-> **⚠️ WARNING: minih runs agents in YOLO mode.** Agents have unrestricted tool access — they can read, write, and execute anything on your machine. There is no sandbox, no tool allowlist, no confirmation prompt. A plan to support tool restrictions exists but is not yet implemented. **Use at your own risk.** Run in containers or throwaway environments if you're executing untrusted agents.
+> **As of plan 018 (R6): agents now run with `restricted` permissions by default** — read+MCP only, no shell/write/network. Existing installs are grandfathered via sidecar `lockedDefault`. Override per-run with `--permissions yolo` (legacy posture) or per-agent with `permissions:` frontmatter. See [`docs/how/permissions.md`](docs/how/permissions.md).
 
 Define AI agents as folders containing `prompt.md` + optional schemas + instructions, then run them against `@github/copilot-sdk`. Every agent produces structured retrospective feedback — what worked, what was confusing, and a **magic wand** wish for what should change. This feedback loop makes both the agents and the harness better over time.
 

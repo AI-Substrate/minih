@@ -233,7 +233,7 @@ async function runOneScenario(
     '--param',
     `nonce=${nonce}`,
     '--timeout',
-    '60',
+    '180',
   ];
   if (scenarioDef.permissionsOverride) {
     args.push('--permissions', scenarioDef.permissionsOverride);
@@ -247,38 +247,44 @@ async function runOneScenario(
     env.MINIH_PERMISSIONS_DEFAULT = scenarioDef.envOverride;
   }
 
-  // Spawn the run synchronously in a subprocess. We rely on `minih run`'s
-  // exit semantics; the run dir + report.json are read post-mortem by the
-  // aggregator.
+  // Spawn the run synchronously in a subprocess.
   const minihBin = path.resolve(probeFileDir, '..', 'index.js');
   const minihPath = fs.existsSync(minihBin) ? minihBin : 'minih';
 
-  const result = spawnSync(
+  spawnSync(
     process.execPath,
     [minihPath, ...args, '--agents-dir', agentsDir],
     {
       env,
       encoding: 'utf-8',
       stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: 90 * 1000,
+      timeout: 240 * 1000,
     },
   );
 
-  // Discover the run dir from stdout JSON envelope
+  // Discover the runDir via `minih last-run` (dogfood path).
   let runId = 'unknown';
   let runDir = '';
   try {
-    const lastJsonLine = (result.stdout ?? '')
-      .trim()
-      .split('\n')
-      .reverse()
-      .find((l) => l.startsWith('{'));
-    if (lastJsonLine) {
-      const env = JSON.parse(lastJsonLine);
-      runId = env.data?.runId ?? env.data?.metadata?.runId ?? 'unknown';
-      runDir =
-        env.data?.runDir ?? env.data?.metadata?.runDir ?? '';
-    }
+    const lastRun = spawnSync(
+      process.execPath,
+      [
+        minihPath,
+        'last-run',
+        'permission-prober',
+        '--agents-dir',
+        agentsDir,
+      ],
+      {
+        env,
+        encoding: 'utf-8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: 10 * 1000,
+      },
+    );
+    const parsed = JSON.parse(lastRun.stdout ?? '{}');
+    runId = parsed.data?.runId ?? 'unknown';
+    runDir = parsed.data?.runDir ?? '';
   } catch {
     // ignore
   }

@@ -65,3 +65,13 @@
   - [degrading] knowledge: The prompt required calling the permission_status MCP tool, but that tool was not exposed in the harness tool list. (workaround: Inspected the source wiring and used the run.json permissions snapshot as the nearest observable claimed-policy surface.)
   - [degrading] config: Bash commands did not inherit MINIH_RUN_DIR or MINIH_OUTPUT_PATH even though the run preamble said those environment variables were set. (workaround: Used the literal run.json and report.json paths from the prompt instead of environment variables.)
   - [annoying] knowledge: The prompt mandated minih check, but the installed CLI advertised minih validate instead. (workaround: Tried minih check once, then used minih validate to perform the schema validation step.)
+
+## 2026-05-04T05:45:15.373Z — permission-prober / 2026-05-04T15-43-42-506Z-ba76
+
+- runId: 2026-05-04T15-43-42-506Z-ba76
+- runDir: /Users/jordanknight/substrate/minih/agents/permission-prober/runs/2026-05-04T15-43-42-506Z-ba76
+- summary: I inspected the current run's permission snapshot through `minih status`, which reported a yolo policy with read, write, shell, MCP, URL, custom-tool, memory, and hook all allowed, then attempted the three yolo-baseline probes. Writing `/tmp/2239c72cd793e830.txt` and running `whoami` both succeeded, while the `read /etc/hostname` probe errored because that file does not exist on this macOS host rather than because of a permission denial. The run snapshot after probing still showed `terminalReason: null` and `permissionError: null`.
+- **magicWand** (target: minih): Add a first-class, always-available dogfood surface for the current run's resolved permission policy that matches `permission_status`, so probe agents do not need to infer the claimed policy from `minih status` or source knowledge.
+- difficulties:
+  - [degrading] knowledge: The prompt required calling the `permission_status` MCP tool, but that tool was not directly exposed in the harness tool list for this run. (workaround: Used `minih status permission-prober --run <runId>` as the nearest observable claimed-policy surface.)
+  - [degrading] data: The yolo-baseline scenario's `read /etc/hostname` probe is not portable to this Darwin host because that path does not exist here. (workaround: Recorded the probe honestly as an `error` with the missing-path reason instead of treating it as a denial or a success.)

@@ -120,6 +120,92 @@ NOT adversarial**.
 | `E202` | `FORBIDDEN_ROOT` | `allowedRoots` includes `/`, `/etc`, etc. |
 | `E203` | `PERMISSIONS_FRONTMATTER_INVALID` | Bad shape in `permissions:` field |
 | `E204` | `PERMISSION_PRESET_UNKNOWN` | Preset name not in the registry |
+| `E205` | `COORDINATION_WRITE_DENIED` | Coordinated agent's resolved policy denies `write` (FX008 boot precondition) |
+
+## Coordinated agents
+
+A `coordination: enabled` agent is contractually required to write
+`output/report.json` on `control:stop` or idle-budget exit (workshop
+002 § Q1, [`docs/how/companion-mode.md`](./companion-mode.md)). If its
+resolved policy denies `write`, the run cannot persist its canonical
+farewell envelope — the run looks "completed" but every consumer of
+`output/report.json` finds the file absent.
+
+`minih run` enforces this at boot. When `coordination: enabled` and
+`decisions.write === 'deny'`, the runner refuses to start the SDK
+session and fires the standard 5-signal denial protocol with
+**`E205 COORDINATION_WRITE_DENIED`**. Sample message:
+
+```
+E205 COORDINATION_WRITE_DENIED — Coordinated agent 'my-coord-agent' resolved to preset
+'read-only' which denies write. Coordinated agents MUST write
+output/report.json on exit (workshop 002 § Q1, docs/how/companion-mode.md).
+
+Resolved from: frontmatter
+
+Remediations (pick one):
+  1. Add `write: allow` to the agent's frontmatter `permissions.overrides`.
+     Edit:  <agentDir>/prompt.md
+  2. Pick a preset that allows write at the same source layer:
+     `trusted` (allows shell+write+url) or `yolo` (allows everything).
+  3. Pass --allow-coord-write-deny when running the agent (operator
+     acknowledges the run cannot persist its envelope; you must be sure).
+```
+
+`Resolved from:` names which layer of the resolution chain
+(`frontmatter` / `sidecar` / `env` / `release-default`) supplied the
+preset, so operators edit the right place. If the source is `sidecar`,
+the message also suggests `minih agent permissions reset <slug>` (FX001)
+to clear sticky lockedDefault values.
+
+### `--allow-coord-write-deny` (per-invocation opt-out)
+
+```bash
+minih run <slug> --allow-coord-write-deny
+```
+
+Boots the run despite the structural inability to ship
+`output/report.json`. Per-invocation only — there is **no env-var
+fallback** for this opt-out (intentional: it must never be silently
+inherited from a shell config).
+
+Every successful invocation with the flag set emits an anchored stderr
+banner so operator usage is traceable in shell history / CI logs:
+
+```
+[minih] Warning: --allow-coord-write-deny set; canonical session record will not be persisted (slug='X', preset='Y').
+```
+
+You almost certainly don't want this. Use it only for legitimately
+read-only coordinated agents that intentionally don't persist a
+farewell envelope (rare).
+
+### `MINIH_DISABLE_COORD_WRITE_PRECONDITION` (ops emergency rollback)
+
+If an upstream change to FX008 produces a regression for an entire
+fleet of coordinated agents, ops can set this env var as a temporary
+rollback path that doesn't require a code deployment:
+
+```bash
+export MINIH_DISABLE_COORD_WRITE_PRECONDITION=1
+minih run <slug>
+```
+
+Accepts `1` or case-insensitive `true`. Any other value (including
+absent) leaves the precondition active.
+
+When the kill-switch bypasses, every fire emits an anchored stderr
+banner naming the agent, so an ops-wide search of CI / agent logs
+quickly enumerates affected runs:
+
+```
+[minih] Warning: MINIH_DISABLE_COORD_WRITE_PRECONDITION is set; coord agent 'X' booted with write-deny policy. Re-enables silent-failure mode FX008 was designed to eliminate.
+```
+
+**Use only as a temporary rollback mechanism.** It re-enables exactly
+the silent-failure surface FX008 was designed to eliminate. The right
+remedy is to land a fix or revert the upstream change, not to keep the
+kill-switch on.
 
 ## Companion preset
 
@@ -162,6 +248,7 @@ minih run <slug> --allowed-roots <p1,p2>          # extend
 minih run <slug> --allowed-roots-only <p1,p2>     # replace
 minih run <slug> --strict-fs                       # opt-in Layer-(b) FS sandbox
 minih run <slug> --dry-run-permissions             # resolve without running
+minih run <slug> --allow-coord-write-deny          # FX008 opt-out (see § Coordinated agents)
 ```
 
 ## Migration path

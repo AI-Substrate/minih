@@ -134,7 +134,52 @@ These fixtures use `coordination: enabled` but were not testing permissions; add
 **AC coverage**:
 - AC-FX8.5 (operator opt-out): ✅ — flag is per-invocation, no env-var fallback.
 - AC-FX8.8 (no env-var fallback): ✅ — separately verified by helper unit tests in FX008-2.
-## Companion findings folded back (2026-05-04 08:36Z) — Power-On-Mode loop validation
+## FX008-6, 7, 8 — Regression test + docs + kill-switch (2026-05-04 08:48Z)
+
+**Stages 5-8 of 8 — FX008 complete.**
+
+**FX008-6 — CLI regression test**:
+- New file: `test/cli/run-coord-write-deny.test.ts` (2 cases). Spawns the built CLI against synthesised throwaway agent dirs.
+- Case (a): coord-enabled + read-only → E205 envelope + 5-signal coverage. Verifies CLI envelope shape, error code, message body (slug, preset, source, three remediation paths, workshop + companion-mode citations); run.json (status, terminalReason, permissionError.kind/decision/message, policyDigest, presetSource); events.ndjson (synthesised permission_denied event); CompletedMetadata.exitCode/result/permissionError.
+- Case AC-FX8.6: coord-disabled + read-only → no E205. Verifies the precondition is coord-only.
+- Cases (b-e) — flag, write-allow, env-var kill-switch — covered by 15 unit tests in `test/runner/permissions/coord-write-precondition.test.ts`. Those tests don't traverse the SDK boot path so the helper-level seam is the right boundary.
+- Handler-extension regression: implicit via `npx tsc --noEmit` cleanliness — every switch on `PermissionDeniedKind` compiles with the new `'coord-write-deny'` arm. No dedicated test file because a TS compile error would fail `just fft` immediately.
+
+**FX008-7 — docs**:
+- Added `## Coordinated agents` § to `docs/how/permissions.md` between Companion preset and Config-discovery exemption sections. Documents: workshop 002 § Q1 contract; FX008 boot precondition; full E205 message template; `Resolved from:` provenance; `--allow-coord-write-deny` flag with banner regex; `MINIH_DISABLE_COORD_WRITE_PRECONDITION` env-var kill-switch with banner regex and "Use only as a temporary rollback mechanism" warning.
+- Added E205 row to the Error codes table.
+- Added `--allow-coord-write-deny` row to the CLI surface listing.
+- Cross-link added to `docs/how/companion-mode.md` § "What is companion mode?" — explicit "every companion-mode agent MUST resolve to a policy that permits write" callout pointing to the permissions.md anchor.
+
+**FX008-8 — env-var kill-switch**:
+- Already implemented in FX008-2 (`isCoordWritePreconditionDisabled()` + bypass logic in `assertCoordWriteAllowed`); covered by unit tests h, h-true, h-other, "flag wins over kill-switch".
+- FX008-8 confirmed end-to-end via live test — synthetic coord agent + `MINIH_DISABLE_COORD_WRITE_PRECONDITION=1` boots past the precondition + emits anchored stderr banner.
+
+**Verification**:
+- 1024 tests pass + audit clean (`just fft`).
+- TypeScript strict-mode compile clean.
+- Live tests on stale companion install (home-improvement) hit E205 in 62ms before being upgraded — the 14-minute silent failure has become a sub-second actionable error.
+
+**AC coverage (FX008 complete — 10/10)**:
+- AC-FX8.1 ✅ Track A frontmatter
+- AC-FX8.2 ✅ Boot precondition fires
+- AC-FX8.3 ✅ 5-signal coverage
+- AC-FX8.4 ✅ Error message format
+- AC-FX8.5 ✅ Operator opt-out flag
+- AC-FX8.6 ✅ Coord-disabled bypass
+- AC-FX8.7 ✅ Additive enum extension
+- AC-FX8.8 ✅ No env-var fallback for opt-out
+- AC-FX8.9 ✅ Anchored stderr opt-out banner
+- AC-FX8.10 ✅ Env-var kill-switch + anchored bypass banner
+
+**FX008 commit ledger**:
+- `c7210c6` FX008-1 — Track A canonical companion frontmatter
+- `66c8618` FX008-2 — assertCoordWriteAllowed helper + 15 unit tests + presetSource
+- `29307e4` FX008-3 — wire precondition into runAgent + 5-signal denial
+- `2cdfe42` FX008-4 — E205 allocation + CLI routing
+- `9600dca` FX008-5 — --allow-coord-write-deny CLI flag
+- `ec4d1d9` companion findings F001-F005 inline fixes
+- (this commit) FX008-6, 7, 8 — regression test + docs + kill-switch landing
 
 The previous companion run (`2026-05-04T17-44-06-832Z-836e`) died from a runtime write-deny mid-flight (it had been booted BEFORE FX008-1 added `write: allow` to the canonical frontmatter, so its OWN policy blocked the farewell envelope). Before dying it produced **5 substantive findings** which validate the companion-mode protocol:
 

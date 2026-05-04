@@ -8,7 +8,7 @@ This guide documents the protocol so it works the same way across projects, not 
 
 ## What is companion mode?
 
-A **companion** is a coordinated minih agent that:
+A companion is a coordinated minih agent that:
 
 1. Boots once at the start of a work session.
 2. Long-polls the inbox for messages from the outside operator (you / your orchestrator).
@@ -19,6 +19,8 @@ A **companion** is a coordinated minih agent that:
 The canonical implementation is `agents/code-review-companion/` — a reviewer that follows you through commits and reviews each one as you ship. The pattern generalises to other watchers (e.g. a security companion, a docs-drift companion, a metrics watcher).
 
 The opposite pattern — **one-shot agents** — boot, do one task, write output, exit. Companion mode is for work that's longer than one task.
+
+> ⚠️ **Permission requirement**: every companion-mode agent MUST resolve to a policy that permits `write` (so it can ship `output/report.json` at step 5). `minih run` enforces this at boot via the FX008 precondition; agents whose resolved policy denies write are refused with [`E205 COORDINATION_WRITE_DENIED`](./permissions.md#coordinated-agents). If you're authoring a coordination-enabled agent, set `permissions.overrides.write: allow` (or pick a write-permitting preset). See [`permissions.md § Coordinated agents`](./permissions.md#coordinated-agents) for the full message format and remediation paths.
 
 ---
 

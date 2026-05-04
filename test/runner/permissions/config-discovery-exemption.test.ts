@@ -25,6 +25,7 @@ describe('AC34 — config-discovery exemption', () => {
     // future SDK change that does fire a request would surface in a fft run.
     const policy: ResolvedPolicy = {
       presetName: 'read-only',
+      presetSource: 'frontmatter',
       decisions: {
         shell: 'deny',
         write: 'deny',

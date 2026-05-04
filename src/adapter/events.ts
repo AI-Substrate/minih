@@ -180,6 +180,16 @@ export interface AgentUserPromptEvent extends AgentEventBase {
 export interface AgentPermissionDeniedEvent extends AgentEventBase {
   type: 'permission_denied';
   data: {
+    /**
+     * Closed superset of the SDK's `PermissionRequest.kind` union plus
+     * minih-internal synthetic kinds.
+     *
+     * SDK kinds (8): shell, write, mcp, read, url, custom-tool, memory, hook
+     * Synthetic kinds (FX008+): coord-write-deny
+     *
+     * Listed inline (not imported from runner/permissions) to keep the
+     * adapter→runner import direction one-way.
+     */
     kind:
       | 'shell'
       | 'write'
@@ -188,7 +198,8 @@ export interface AgentPermissionDeniedEvent extends AgentEventBase {
       | 'url'
       | 'custom-tool'
       | 'memory'
-      | 'hook';
+      | 'hook'
+      | 'coord-write-deny';
     /** Why minih denied — `'deny'` (preset/overrides) or `'prompt-user'` (FX002 stub). */
     decision: 'deny' | 'prompt-user';
     toolName?: string;

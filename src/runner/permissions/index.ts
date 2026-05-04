@@ -12,13 +12,19 @@ export {
 } from './catalog.js';
 export { compile } from './compile.js';
 export {
+  assertCoordWriteAllowed,
+  CoordinationWriteDeniedError,
+  type CoordWritePreconditionOptions,
+  formatCoordWriteDeniedMessage,
+  isCoordWritePreconditionDisabled,
+} from './coord-write-precondition.js';
+export {
   buildPermissionErrorPayload,
   type DenialState,
   type FireDenialOptions,
   fireTerminalDenial,
   type PermissionErrorPayload,
 } from './error-signal.js';
-
 export {
   AllowedRootsInvalidError,
   canonicalizeRoots,
@@ -27,10 +33,10 @@ export {
   isPathAllowed,
   resolveDefaultAllowedRoots,
 } from './fs-guard.js';
-
 export {
   buildPermissionHandler,
   type PermissionDenialReason,
+  type PermissionDeniedKind,
   type PermissionHandlerCallbacks,
   type SdkPermissionDecision,
   type SdkPermissionRequestLike,

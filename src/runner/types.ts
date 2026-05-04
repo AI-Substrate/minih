@@ -344,6 +344,16 @@ export interface LiveRunManifest {
    */
   permissions?: {
     preset: string;
+    /**
+     * Plan 018 R6 / FX008 — provenance label for `preset`. Captures which
+     * resolution layer (frontmatter | sidecar | env | release-default)
+     * supplied the preset name. FX008's E205 error message surfaces this
+     * to operators so they can fix the right layer.
+     *
+     * Optional for forward/backward compat: run.json files written before
+     * FX008 don't have it; readers default to 'release-default' when absent.
+     */
+    presetSource?: 'frontmatter' | 'sidecar' | 'env' | 'release-default';
     canonicalRoots: string[];
     decisions?: Record<string, string>;
     mcpAllowedServers?: string[];

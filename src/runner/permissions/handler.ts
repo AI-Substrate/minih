@@ -37,9 +37,26 @@ export type SdkPermissionDecision =
   | { kind: 'approve-once' }
   | { kind: 'reject'; feedback?: string };
 
+/**
+ * Wider union of denial kinds — superset of `PermissionKind`.
+ *
+ * `PermissionKind` is the closed 8-value SDK union (used to index preset
+ * decision tables and stay pinned to SDK 0.3.0 shape). FX008 introduces
+ * one new denial kind that is structurally NOT a per-tool permission
+ * request but DOES travel through the denial protocol: `'coord-write-deny'`.
+ *
+ * To avoid re-shaping the preset registry / decision matrix, we keep
+ * `PermissionKind` as-is (used for indexing) and use this wider union
+ * everywhere the denial reason or event payload carries the kind label.
+ *
+ * Future-compat: any new "synthetic" denial reason that isn't a real SDK
+ * permission kind should be added here, NOT to `PermissionKind`.
+ */
+export type PermissionDeniedKind = PermissionKind | 'coord-write-deny';
+
 /** Reason payload passed to `onDeny`. Used by the 5-signal denial chain. */
 export interface PermissionDenialReason {
-  kind: PermissionKind;
+  kind: PermissionDeniedKind;
   decision: PermissionDecision;
   toolName?: string;
   attemptedPath?: string;

@@ -48,6 +48,11 @@ export function permissionStatus(
       if (runJson?.permissions?.preset) {
         const fromManifest: ResolvedPolicy = {
           presetName: runJson.permissions.preset,
+          // FX008 — backwards compat for run.json files written before
+          // presetSource was persisted. Default to 'release-default' since
+          // the safest fallback assumption is that the resolution chain
+          // landed at the bottom layer.
+          presetSource: runJson.permissions.presetSource ?? 'release-default',
           decisions: runJson.permissions.decisions ?? {},
           canonicalRoots: runJson.permissions.canonicalRoots ?? [],
           rootsResolvedFrom: [], // not persisted in run.json

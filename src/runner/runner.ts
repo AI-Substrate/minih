@@ -657,6 +657,7 @@ export async function runAgent(
     await updateManifest(runDir, {
       permissions: {
         preset: resolvedPolicy.presetName,
+        presetSource: resolvedPolicy.presetSource,
         canonicalRoots: resolvedPolicy.canonicalRoots,
         decisions: resolvedPolicy.decisions as unknown as Record<
           string,

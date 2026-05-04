@@ -142,6 +142,13 @@ export interface RootProvenance {
 export interface ResolvedPolicy {
   /** The preset that produced the baseline decisions. */
   presetName: PermissionPresetName;
+  /**
+   * Which resolution layer supplied `presetName`. FX008 surfaces this in the
+   * E205 error message so operators see whether to fix the agent's
+   * frontmatter, the sidecar `lockedDefault`, the `MINIH_PERMISSIONS_DEFAULT`
+   * env var, or rely on `minih agent permissions reset`.
+   */
+  presetSource: 'frontmatter' | 'sidecar' | 'env' | 'release-default';
   /** Total per-kind decision map after preset+overrides composition. */
   decisions: Record<PermissionKind, PermissionDecision>;
   /** Canonicalized, deduped, absolute roots. */

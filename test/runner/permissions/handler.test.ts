@@ -20,6 +20,7 @@ function policyWith(
 ): ResolvedPolicy {
   return {
     presetName: 'restricted',
+    presetSource: 'release-default',
     decisions: {
       shell: 'deny',
       write: 'deny',

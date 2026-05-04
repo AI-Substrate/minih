@@ -56,7 +56,7 @@ function resolvePreset(sources: PolicySources): {
  * empty/forbidden roots — see fs-guard.ts errors).
  */
 export function compile(sources: PolicySources): ResolvedPolicy {
-  const { presetName } = resolvePreset(sources);
+  const { presetName, source: presetSource } = resolvePreset(sources);
   if (!isPresetName(presetName)) {
     // Belt-and-braces — `resolvePreset` constrains the type, but a
     // sidecar/env value could carry a stale preset name from a prior
@@ -110,6 +110,7 @@ export function compile(sources: PolicySources): ResolvedPolicy {
 
   return {
     presetName,
+    presetSource,
     decisions,
     canonicalRoots,
     rootsResolvedFrom,

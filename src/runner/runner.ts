@@ -658,7 +658,10 @@ export async function runAgent(
       permissions: {
         preset: resolvedPolicy.presetName,
         canonicalRoots: resolvedPolicy.canonicalRoots,
-        decisions: resolvedPolicy.decisions as unknown as Record<string, string>,
+        decisions: resolvedPolicy.decisions as unknown as Record<
+          string,
+          string
+        >,
         ...(resolvedPolicy.mcpAllowedServers !== undefined && {
           mcpAllowedServers: resolvedPolicy.mcpAllowedServers,
         }),

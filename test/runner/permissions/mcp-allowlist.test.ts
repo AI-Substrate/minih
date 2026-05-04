@@ -8,8 +8,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { compile } from '../../../src/runner/permissions/compile.js';
 import { parseFrontmatter } from '../../../src/runner/folder.js';
+import { compile } from '../../../src/runner/permissions/compile.js';
 
 let tmp: string;
 

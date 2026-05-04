@@ -253,10 +253,13 @@ Replace minih's hard-coded `approveAll` permission posture (4 sites in `src/adap
 
 | Status | ID | Task | Path | Done When |
 |---|---|---|---|---|
-| [ ] | T-FX1 | Author `FX001-permissions-reset.md` — `minih agent permissions reset <slug>` clears sidecar `lockedDefault` (per OQ4) | `docs/plans/018-agent-permissions/fixes/FX001-permissions-reset.md` | Dossier exists with motivation, scope, ACs |
-| [ ] | T-FX2 | Author `FX002-permissions-check.md` — `minih agent permissions check <slug>` dry-runs and records attempted denials (per OQ6) | `docs/plans/018-agent-permissions/fixes/FX002-permissions-check.md` | Dossier exists |
-| [ ] | T-FX3 | Author `FX003-doctor-severity.md` — escalate doctor severity at R6+N if user feedback warrants (per OQ7) | `docs/plans/018-agent-permissions/fixes/FX003-doctor-severity.md` | Dossier exists |
-| [ ] | T-FX4 | Author `FX004-prober-outside-readback.md` — additional prober scenarios that validate outside-CLI rendering of `permission-error` lines (per workshop 004 § Q10) | `docs/plans/018-agent-permissions/fixes/FX004-prober-outside-readback.md` | Dossier exists |
+| [x] | T-FX1 | Author `FX001-permissions-reset.md` — `minih agent permissions reset <slug>` clears sidecar `lockedDefault` (per OQ4) **+ unified audit-trail for all permissions edits (top-10 #2/#8)** | `docs/plans/018-agent-permissions/fixes/FX001-permissions-reset.md` | Dossier exists with motivation, scope, ACs |
+| [x] | T-FX2 | Author `FX002-permissions-check.md` — `minih agent permissions check <slug>` dry-runs and records attempted denials (per OQ6) | `docs/plans/018-agent-permissions/fixes/FX002-permissions-check.md` | Dossier exists |
+| [x] | T-FX3 | Author `FX003-doctor-severity.md` — `--strict-permissions` opt-in bridge (top-10 #6) + escalate doctor severity at R6+N if user feedback warrants (per OQ7) | `docs/plans/018-agent-permissions/fixes/FX003-doctor-severity.md` | Dossier exists |
+| [x] | T-FX4 | Author `FX004-prober-outside-readback.md` — additional prober scenarios that validate outside-CLI rendering of `permission-error` lines (per workshop 004 § Q10) | `docs/plans/018-agent-permissions/fixes/FX004-prober-outside-readback.md` | Dossier exists |
+| [x] | T-FX5 | Author `FX005-probe-matrix-trust.md` — pin F005 CLI override merge + rewrite prober scenarios + HTML matrix output + all-presets snapshot (top-10 #1/#3/#4/#7) | `docs/plans/018-agent-permissions/fixes/FX005-probe-matrix-trust.md` | Dossier exists |
+| [x] | T-FX6 | Author `FX006-fs-guard-cross-platform.md` — platform-gated fs-guard regression suite + symlink-disabled fixture + residuals doc (top-10 #5) | `docs/plans/018-agent-permissions/fixes/FX006-fs-guard-cross-platform.md` | Dossier exists |
+| [x] | T-FX7 | Author `FX007-permissions-docs-and-dogfood-adr.md` — coordination ↔ permissions cross-link + dogfood-rule ADR (top-10 #9/#10) | `docs/plans/018-agent-permissions/fixes/FX007-permissions-docs-and-dogfood-adr.md` | Dossier exists |
 
 ---
 

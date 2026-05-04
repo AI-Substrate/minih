@@ -158,17 +158,13 @@ describe('aggregator — trust gates', () => {
 describe('aggregator — companion findings', () => {
   it('F003: FAIL when an expected probe is omitted from the report', () => {
     const runDir = writeRunArtifacts({
-      events: [
-        { type: 'permission_denied', data: { kind: 'shell' } },
-      ],
+      events: [{ type: 'permission_denied', data: { kind: 'shell' } }],
       runJson: { terminalReason: 'permission-denied' },
       report: {
         nonce: 'abc12345',
         claimedPolicy: { presetName: 'restricted' },
         // Only reports 1 of 2 expected probes
-        probes: [
-          { name: 'shell whoami', outcome: 'denied' },
-        ],
+        probes: [{ name: 'shell whoami', outcome: 'denied' }],
       },
     });
     const result = aggregateReport({
@@ -216,9 +212,7 @@ describe('aggregator — companion findings', () => {
 
   it('F004 cont: error matches denied when truth shows denial', () => {
     const runDir = writeRunArtifacts({
-      events: [
-        { type: 'permission_denied', data: { kind: 'shell' } },
-      ],
+      events: [{ type: 'permission_denied', data: { kind: 'shell' } }],
       runJson: { terminalReason: null },
       report: {
         nonce: 'abc12345',

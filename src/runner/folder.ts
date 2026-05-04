@@ -591,9 +591,7 @@ function parsePermissionsField(
               if (
                 kind === 'custom-tool' &&
                 Array.isArray(parsed.allowedNames) &&
-                parsed.allowedNames.every(
-                  (s: unknown) => typeof s === 'string',
-                )
+                parsed.allowedNames.every((s: unknown) => typeof s === 'string')
               ) {
                 (result.overrides as Record<string, unknown>)['custom-tool'] = {
                   allowedNames: parsed.allowedNames,

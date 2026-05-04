@@ -216,9 +216,7 @@ export function aggregateReport(opts: AggregateReportOptions): ProbeReport {
     // reasons not other errors).
     const matches: string[] = [];
     const mismatches: string[] = [];
-    const claimedNames = new Set(
-      (reportRaw.probes ?? []).map((p) => p.name),
-    );
+    const claimedNames = new Set((reportRaw.probes ?? []).map((p) => p.name));
     const expectedByName = new Map(
       opts.scenarioDef.probes.map((p) => [p.name, p.expected]),
     );

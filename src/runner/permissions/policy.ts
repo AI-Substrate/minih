@@ -221,7 +221,6 @@ export function applyOverrides(
     if (kind === 'custom-tool' && 'allowedNames' in value) {
       customToolAllowedNames = value.allowedNames;
       result['custom-tool'] = value.allowedNames.length > 0 ? 'allow' : 'deny';
-      continue;
     }
   }
   return {

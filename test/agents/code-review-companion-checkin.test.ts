@@ -17,9 +17,10 @@
  * separate (and intentionally manual / dogfood-validated; see Q10 in the
  * spec's clarifications).
  */
-import Ajv2020 from 'ajv/dist/2020.js';
+
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import Ajv2020 from 'ajv/dist/2020.js';
 import { describe, expect, it } from 'vitest';
 
 const COMPANION_DIR = path.resolve('agents/code-review-companion');
@@ -198,12 +199,8 @@ describe('plan 019 — prompt.md check-in heuristic content', () => {
   });
 
   it('AC11 — both check-in body texts are present', () => {
-    expect(promptText).toContain(
-      "I've been oriented and idle since boot",
-    );
-    expect(promptText).toContain(
-      "I'm idle since my last task completed",
-    );
+    expect(promptText).toContain("I've been oriented and idle since boot");
+    expect(promptText).toContain("I'm idle since my last task completed");
   });
 
   it('AC11 — both exit reasons are present (no_engagement + idle_budget)', () => {
@@ -234,7 +231,8 @@ describe('plan 019 — prompt.md check-in heuristic content', () => {
     // Verify the engagement reset block contains all three counter resets in
     // a contiguous span (anti-regression: a future edit that splits or
     // accidentally drops a reset breaks the protocol).
-    const engagementResetBlock = /awaitingFirstContact = false[\s\S]{0,200}emptyPollStreak = 0[\s\S]{0,200}sentCheckInThisStreak = false/;
+    const engagementResetBlock =
+      /awaitingFirstContact = false[\s\S]{0,200}emptyPollStreak = 0[\s\S]{0,200}sentCheckInThisStreak = false/;
     expect(promptText).toMatch(engagementResetBlock);
   });
 
@@ -251,7 +249,8 @@ describe('plan 019 — prompt.md check-in heuristic content', () => {
     // looking for the body text and checking the guards appear within a
     // reasonable window above it (the same `else if not awaitingFirstContact`
     // block).
-    const postTaskGuards = /hasCompletedTask[\s\S]{0,400}lastTaskId != null[\s\S]{0,400}I'm idle since my last task completed/;
+    const postTaskGuards =
+      /hasCompletedTask[\s\S]{0,400}lastTaskId != null[\s\S]{0,400}I'm idle since my last task completed/;
     expect(promptText).toMatch(postTaskGuards);
   });
 

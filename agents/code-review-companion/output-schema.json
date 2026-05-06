@@ -14,7 +14,7 @@
         "endedAt": { "type": "string" },
         "exitReason": {
           "type": "string",
-          "enum": ["stop_requested", "idle_budget", "timeout", "error"]
+          "enum": ["stop_requested", "idle_budget", "no_engagement", "timeout", "error"]
         },
         "messageCounts": {
           "type": "object",

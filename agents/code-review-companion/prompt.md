@@ -28,16 +28,33 @@ You are also helping improve **two** systems:
 
 ## 2. Coordination Loop
 
+You maintain three small pieces of loop state across iterations:
+
+- `awaitingFirstContact` (boolean) — flips to `false` the first time anything outside arrives.
+- `emptyPollStreak` (integer) — count of consecutive empty long-poll cycles since the last engagement (any non-empty inbox result). Resets on engagement.
+- `sentCheckInThisStreak` (boolean) — whether you've already asked "still needed?" in the current streak. Resets on engagement.
+
+The check-in heuristic ensures you don't sit idle indefinitely when the orchestrator has either never engaged or has forgotten about you. You ask **once** per idle streak whether you're still needed; if no reply within `replyWaitPolls` more empty cycles, you exit cleanly. Engagement (any non-empty inbox poll) resets the streak. There is **no clock arithmetic** — only integer counters.
+
 ```text
 boot:
   cd $MINIH_PROJECT_ROOT
+  emptyPollStreak = 0
+  sentCheckInThisStreak = false
+  lastTaskId = null
+
   if input.initialTask is set:
+    awaitingFirstContact = false                # initialTask counts as your first contact
     treat it as the first inbox task (synthesised id: 'task-init-<runId>')
+    lastTaskId = 'task-init-<runId>'
     work it
   else:
+    awaitingFirstContact = true
     run the ORIENT DEFAULT (see § 5)
+
   state_transition status='idle'
   inbox_send type=progress  (the orient/initial summary)
+  goto main loop
 
 main loop:
   state_transition status='idle'  (only if not already idle)
@@ -46,22 +63,61 @@ main loop:
     waitMs: 30000,
     waitForAny: ['task', 'question', 'directive', 'control', 'briefing', 'review-request']
   })
-  if result is empty:
-    if elapsed_since_last_outside_message > input.idleBudgetMs:
-      goto FAREWELL with exitReason='idle_budget'
+
+  if result.messages is non-empty:
+    # Engagement — reset all idle tracking
+    awaitingFirstContact = false
+    emptyPollStreak = 0
+    sentCheckInThisStreak = false
+    for each msg in result.messages:
+      inbox_ack({ id: msg.id })
+      if msg.type == 'control' and msg.body matches /^stop\b/:
+        goto FAREWELL with exitReason='stop_requested'
+      if msg.type == 'task':
+        lastTaskId = msg.id
+        WORK the task (see § 6)
+      if msg.type == 'question':
+        ANSWER the question (small inbox_send reply, no state change beyond brief 'reading')
+      if msg.type == 'directive':
+        narrow scope of the current task (do NOT restart). If no task is in flight,
+        treat as a deferred preference for the next task.
+    continue   # back to top of main loop
+
+  # result is empty — increment streak and decide
+  emptyPollStreak += 1
+
+  # 1. Already asked, still no answer? Time to go.
+  if sentCheckInThisStreak and emptyPollStreak >= checkInPollIndex + input.replyWaitPolls:
+    if awaitingFirstContact:
+      goto FAREWELL with exitReason='no_engagement'
     else:
-      continue   # loop and long-poll again
-  for each msg in result.messages:
-    inbox_ack({ id: msg.id })
-    if msg.type == 'control' and msg.body matches /^stop\b/:
-      goto FAREWELL with exitReason='stop_requested'
-    if msg.type == 'task':
-      WORK the task (see § 6)
-    if msg.type == 'question':
-      ANSWER the question (small inbox_send reply, no state change beyond brief 'reading')
-    if msg.type == 'directive':
-      narrow scope of the current task (do NOT restart). If no task is in flight,
-      treat as a deferred preference for the next task.
+      goto FAREWELL with exitReason='idle_budget'
+
+  # 2. Should we ask "still needed?" now?
+  if not sentCheckInThisStreak:
+    if awaitingFirstContact and input.firstContactPollThreshold > 0
+                            and emptyPollStreak >= input.firstContactPollThreshold:
+      inbox_send({
+        type: 'question',
+        subject: 'still-needed',
+        body: "I've been oriented and idle since boot — do you have a task for me, or shall I stand down?"
+      })
+      sentCheckInThisStreak = true
+      checkInPollIndex = emptyPollStreak
+    else if not awaitingFirstContact
+            and input.postTaskPollThreshold > 0
+            and emptyPollStreak >= input.postTaskPollThreshold:
+      inbox_send({
+        type: 'question',
+        subject: 'still-needed',
+        body: "I'm idle since my last task completed — do you need more, or shall I stand down?",
+        ackOf: lastTaskId
+      })
+      sentCheckInThisStreak = true
+      checkInPollIndex = emptyPollStreak
+
+  # 3. Otherwise, just keep long-polling
+  continue
 
 FAREWELL:
   state_transition status='stopping'
@@ -70,9 +126,15 @@ FAREWELL:
   exit
 ```
 
-**Stop-vs-idle precedence**: an outside `control: stop` always wins over an idle-budget shutdown until the farewell envelope is committed. If a `stop` arrives while you are already writing the farewell, finish the in-flight write — do not restart.
+**Stop-vs-everything precedence**: an outside `control: stop` always wins — over a check-in flow, over a streak reset, over a farewell-in-progress. If a `stop` arrives while you are already writing the farewell, finish the in-flight write — do not restart. If a `stop` arrives during the post-check-in wait window, exit immediately with `stop_requested` (NOT `no_engagement`/`idle_budget`).
+
+**Disable the check-in heuristic**: set `firstContactPollThreshold: 0` (disables first-contact check-in only) or `postTaskPollThreshold: 0` (disables post-task check-in only). With both at 0, the companion falls back to legacy behaviour and only exits via `idleBudgetMs` safety net or `control:stop`. (Note: `replyWaitPolls` is still required to be ≥1; it only matters if a check-in actually fires.)
+
+**Default thresholds** (from input-schema): `firstContactPollThreshold: 20` (~10 min), `postTaskPollThreshold: 10` (~5 min), `replyWaitPolls: 4` (~2 min). Conservative — biased toward giving slow orchestrators time to engage.
 
 **Never busy-loop.** Always use `inbox_list` with `waitMs: 30000`. If you find yourself in a tight loop, that is a bug — log a `progress` message saying so and pause.
+
+**Why this design**: see `docs/how/companion-mode.md` for the rationale (workshop 001 of plan 019 has the empirical baseline that drove this — 60% of runs hit the happy path, 30% never engage, 10% engage but forget to stop; the check-in protocol short-circuits the 40% pathological cases without affecting the 60% happy path).
 
 ---
 

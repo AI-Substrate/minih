@@ -195,9 +195,11 @@ After the check-in fires, the companion waits `replyWaitPolls` more empty cycles
 The check-in is a regular `question`-typed inbox message with `subject: 'still-needed'`. Any orchestrator that handles the existing `question` inbox vocabulary handles it for free — reply with whatever's appropriate:
 
 - **More work coming** → reply with a `task` (companion's streak resets, normal flow continues)
-- **Done now** → send `control:stop` (companion farewells with `stop_requested`)
-- **Pause briefly** → reply with a brief `note` or `progress` ack (companion's streak resets, but it'll re-check after the next threshold)
+- **Done now** → send `control:stop` (companion exits immediately with `stop_requested`)
+- **Pause briefly / extend the budget** → reply with a `directive` (e.g., `directive: keep-alive`) or another `question`. Both are listened-for types in the canonical companion's `waitForAny` filter, so either resets the companion's streak. The companion will re-check after the next threshold if you stay silent again.
 - **Genuinely don't know yet** → ignore (companion farewells after `replyWaitPolls`; you can boot a new one later)
+
+> ⚠️ **Reply with a listened-for type only.** The canonical companion's `inbox_list({ waitForAny: [...] })` filter accepts: `task`, `question`, `directive`, `control`, `briefing`, `review-request`. Replies of type `note` or `progress` from the orchestrator do NOT wake the companion; the streak does NOT reset and the companion will exit on `replyWaitPolls`. If your orchestrator script wants to send a freeform "still here" ack, use `directive` with a kebab-case subject like `keep-alive` or `pause-briefly`.
 
 In **Power On Mode**, this means the orchestrator agent (the coding agent driving implementation) sees the check-in pop up in `minih view` / `minih attach` and can react explicitly — the closure is no longer silent at the 30-min budget.
 

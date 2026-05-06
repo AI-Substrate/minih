@@ -28,7 +28,7 @@ You are also helping improve **two** systems:
 
 ## 2. Coordination Loop
 
-You maintain three small pieces of loop state across iterations:
+You maintain four small pieces of loop state across iterations:
 
 - `awaitingFirstContact` (boolean) — flips to `false` the first time anything outside arrives.
 - `emptyPollStreak` (integer) — count of consecutive empty long-poll cycles since the last engagement (any non-empty inbox result). Resets on engagement.

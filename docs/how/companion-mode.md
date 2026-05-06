@@ -184,7 +184,7 @@ The companion tracks a small integer counter (`emptyPollStreak`) — the number 
 | `postTaskPollThreshold` | 10 polls (~5 min) | After completing at least one task + this many empty polls | `idle_budget` |
 | `replyWaitPolls` | 4 polls (~2 min) | Companion waits this many more empty cycles after a check-in before farewelling | n/a (it's a wait window) |
 
-After the check-in fires, the companion waits `replyWaitPolls` more empty cycles. If the orchestrator replies with anything (task / question / control:stop), the streak resets and the companion stays alive. If no reply, the companion farewells with the appropriate `exitReason`.
+After the check-in fires, the companion waits `replyWaitPolls` more empty cycles. If the orchestrator replies with a listened-for **non-stop** message (`task`, `question`, `directive`, `briefing`, `review-request`), the streak resets and the companion stays alive. If the reply is `control:stop`, the companion exits immediately with `stop_requested` (the streak doesn't matter — stop wins). If no reply at all, the companion farewells with the appropriate `exitReason` (`no_engagement` for first-contact, `idle_budget` for post-task).
 
 **One check-in per idle window.** A second empty streak after a fresh task gets a fresh check-in; consecutive empty polls without engagement do NOT get a second nag.
 

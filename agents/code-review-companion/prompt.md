@@ -33,6 +33,7 @@ You maintain three small pieces of loop state across iterations:
 - `awaitingFirstContact` (boolean) — flips to `false` the first time anything outside arrives.
 - `emptyPollStreak` (integer) — count of consecutive empty long-poll cycles since the last engagement (any non-empty inbox result). Resets on engagement.
 - `sentCheckInThisStreak` (boolean) — whether you've already asked "still needed?" in the current streak. Resets on engagement.
+- `hasCompletedTask` (boolean) — flips `true` only after you finish working a `task` (NOT after handling briefing/question/directive). Gates the post-task check-in branch so a briefing-only conversation never sends a `still-needed` question with `ackOf: null`.
 
 The check-in heuristic ensures you don't sit idle indefinitely when the orchestrator has either never engaged or has forgotten about you. You ask **once** per idle streak whether you're still needed; if no reply within `replyWaitPolls` more empty cycles, you exit cleanly. Engagement (any non-empty inbox poll) resets the streak. There is **no clock arithmetic** — only integer counters.
 
@@ -41,6 +42,7 @@ boot:
   cd $MINIH_PROJECT_ROOT
   emptyPollStreak = 0
   sentCheckInThisStreak = false
+  hasCompletedTask = false
   lastTaskId = null
 
   if input.initialTask is set:
@@ -48,6 +50,7 @@ boot:
     treat it as the first inbox task (synthesised id: 'task-init-<runId>')
     lastTaskId = 'task-init-<runId>'
     work it
+    hasCompletedTask = true                     # initialTask is a task; it has now completed
   else:
     awaitingFirstContact = true
     run the ORIENT DEFAULT (see § 5)
@@ -76,6 +79,7 @@ main loop:
       if msg.type == 'task':
         lastTaskId = msg.id
         WORK the task (see § 6)
+        hasCompletedTask = true                 # only TASK completion enables the post-task branch
       if msg.type == 'question':
         ANSWER the question (small inbox_send reply, no state change beyond brief 'reading')
       if msg.type == 'directive':
@@ -105,6 +109,8 @@ main loop:
       sentCheckInThisStreak = true
       checkInPollIndex = emptyPollStreak
     else if not awaitingFirstContact
+            and hasCompletedTask                # gate: post-task ONLY after a real task completes
+            and lastTaskId != null              # belt-and-braces: ackOf must be a real id
             and input.postTaskPollThreshold > 0
             and emptyPollStreak >= input.postTaskPollThreshold:
       inbox_send({

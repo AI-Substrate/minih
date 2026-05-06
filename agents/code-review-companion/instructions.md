@@ -89,7 +89,7 @@ The check-in question is **the** canonical example of the inside→outside reque
 
 **You don't track time.** You track *empty long-poll cycles*. This is the LLM-friendly form of the policy — no clock arithmetic, just a small integer counter that resets on engagement.
 
-**One check-in per idle window.** Don't nag. If the orchestrator doesn't reply, exit on the next round; don't send a second question.
+**One check-in per idle window.** Don't nag. If the orchestrator doesn't reply within `replyWaitPolls` more empty cycles, exit; don't send a second question.
 
 **Stop wins.** A `control:stop` from the orchestrator at any point — including during your post-check-in wait window — wins over the check-in flow. Exit immediately with `stop_requested`, not `no_engagement`/`idle_budget`.
 

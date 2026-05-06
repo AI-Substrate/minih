@@ -188,6 +188,7 @@ describe('plan 019 — prompt.md check-in heuristic content', () => {
     expect(promptText).toContain('awaitingFirstContact');
     expect(promptText).toContain('emptyPollStreak');
     expect(promptText).toContain('sentCheckInThisStreak');
+    expect(promptText).toContain('hasCompletedTask');
   });
 
   it('AC11 — references all three input-schema threshold fields', () => {
@@ -235,5 +236,62 @@ describe('plan 019 — prompt.md check-in heuristic content', () => {
     // accidentally drops a reset breaks the protocol).
     const engagementResetBlock = /awaitingFirstContact = false[\s\S]{0,200}emptyPollStreak = 0[\s\S]{0,200}sentCheckInThisStreak = false/;
     expect(promptText).toMatch(engagementResetBlock);
+  });
+
+  it('AC4 / Q8 — post-task check-in is gated on hasCompletedTask AND non-null lastTaskId (F002 fix)', () => {
+    // The bug F002 caught: post-task branch fires after any non-empty
+    // engagement (briefing, question, directive) flips awaitingFirstContact
+    // to false. Guard MUST require an actual completed task before sending
+    // the post-task check-in with ackOf: lastTaskId. Otherwise ackOf would
+    // reference null.
+    expect(promptText).toContain('hasCompletedTask');
+    expect(promptText).toContain('lastTaskId != null');
+    // The post-task branch (the one with the post-task body text) must
+    // include the hasCompletedTask + lastTaskId != null guards. Verify by
+    // looking for the body text and checking the guards appear within a
+    // reasonable window above it (the same `else if not awaitingFirstContact`
+    // block).
+    const postTaskGuards = /hasCompletedTask[\s\S]{0,400}lastTaskId != null[\s\S]{0,400}I'm idle since my last task completed/;
+    expect(promptText).toMatch(postTaskGuards);
+  });
+
+  it('AC4 / Q8 — post-task check-in sets ackOf: lastTaskId', () => {
+    expect(promptText).toMatch(/ackOf:\s*lastTaskId/);
+  });
+
+  it('Q8 — first-contact check-in does NOT set ackOf (no task to reference)', () => {
+    // Find the first-contact body text and verify the surrounding
+    // inbox_send call does NOT include an ackOf field.
+    const firstContactBlock = promptText.match(
+      /inbox_send\(\{[\s\S]{0,400}I've been oriented[\s\S]{0,400}\}\)/,
+    );
+    expect(firstContactBlock).not.toBeNull();
+    expect(firstContactBlock?.[0]).not.toContain('ackOf');
+  });
+
+  it('boot block resets all loop-state counters to initial values', () => {
+    // Anti-regression: boot must explicitly initialise every counter the
+    // main loop reads, otherwise the pseudocode reads as 'use undefined value'
+    // which an LLM may interpret unpredictably.
+    const bootBlock = /^boot:[\s\S]+?goto main loop/m;
+    const match = promptText.match(bootBlock);
+    expect(match).not.toBeNull();
+    const boot = match?.[0] ?? '';
+    expect(boot).toContain('emptyPollStreak = 0');
+    expect(boot).toContain('sentCheckInThisStreak = false');
+    expect(boot).toContain('hasCompletedTask = false');
+    expect(boot).toContain('lastTaskId = null');
+  });
+
+  it('initialTask path sets awaitingFirstContact = false AND hasCompletedTask = true', () => {
+    // The initialTask is treated as the first inbox task — completing it
+    // should both flip awaitingFirstContact (engagement) and set
+    // hasCompletedTask (so the post-task branch becomes eligible).
+    const initialTaskBlock = /if input\.initialTask is set:[\s\S]{0,500}else:/;
+    const match = promptText.match(initialTaskBlock);
+    expect(match).not.toBeNull();
+    const block = match?.[0] ?? '';
+    expect(block).toContain('awaitingFirstContact = false');
+    expect(block).toContain('hasCompletedTask = true');
   });
 });

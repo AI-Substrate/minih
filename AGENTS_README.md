@@ -606,7 +606,7 @@ Don't use companion mode when:
 
 - The work is one task and one output. Use a normal one-shot agent.
 - You need a synchronous gate (operator blocks on agent verdict). Use a one-shot or invert the pattern.
-- You can't afford the idle compute cost. Companion mode keeps a session alive for the duration; the budget is bounded by `idleBudgetMs` (default 30 min) but it is non-zero.
+- You can't afford the idle compute cost. Companion mode keeps a session alive for the duration; the cost is bounded by the check-in protocol (see [`docs/how/companion-mode.md` § Lifecycle and check-in protocol](docs/how/companion-mode.md#lifecycle-and-check-in-protocol) — typically ~5-10 min after the orchestrator goes silent) and ultimately by `idleBudgetMs` (default 30 min) as the safety net, but is non-zero.
 
 ### The Power On Mode protocol
 
@@ -789,9 +789,9 @@ This means a companion can react to operator state-flips ("outside set status to
 
 1. The farewell is the canonical "everything I have to say" record. The companion may have findings that only surface in the final summary, not during live review.
 2. Auto-harvest captures the retro for the project ledger only on run completion. Without the stop, the companion's `magicWand` and `difficulties` never reach `docs/retros/<slug>.md`.
-3. It closes the loop deterministically. Without a stop, the companion idles for up to its `idleBudgetMs` (default 30 min) before self-terminating — wasted compute, fuzzy session boundary.
+3. It closes the loop deterministically. Without a stop, the companion's check-in protocol (see [`docs/how/companion-mode.md` § Lifecycle and check-in protocol](docs/how/companion-mode.md#lifecycle-and-check-in-protocol)) sends a `still-needed` question after a configurable empty-poll streak and self-terminates with `no_engagement` or `idle_budget` if no reply. That's still wasted polling cycles (~5-10 min depending on threshold) plus a fuzzy session boundary — explicit `control:stop` remains the cleanest exit.
 
-The pattern: orchestrator owns the lifecycle; the companion's idle budget is a safety net, not the primary exit condition.
+The pattern: orchestrator owns the lifecycle; the check-in protocol is a fast-failure path, not the primary exit condition.
 
 ### Upgrading an existing one-shot agent to companion mode
 
@@ -810,7 +810,7 @@ coordination: enabled  # ← add this if missing
 ---
 ```
 
-If your agent was previously a one-shot, also bump `timeout` (most companions sit idle far longer than a one-shot agent runs — 7200s = 2h is a reasonable default; the *real* lifetime is bounded by `idleBudgetMs`, not `timeout`).
+If your agent was previously a one-shot, also bump `timeout` (most companions sit idle far longer than a one-shot agent runs — 7200s = 2h is a reasonable default; the *real* lifetime is bounded by the check-in protocol or `idleBudgetMs` safety net, not `timeout`).
 
 #### Step 2: Add the long-poll loop and stop-handling to the prompt body
 

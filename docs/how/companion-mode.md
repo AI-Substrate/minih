@@ -72,7 +72,7 @@ Protocol:
 Hazards to watch: <list>"
 ```
 
-The companion long-polls with `waitForAny: ['task', 'question', 'directive', 'control', 'briefing', 'review-request']`. As long as one of those types arrives within its idle budget (default 30 minutes), it stays alive.
+The companion long-polls with `waitForAny: ['task', 'question', 'directive', 'control', 'briefing', 'review-request']`. As long as one of those types arrives within its check-in protocol's wait windows (see [Lifecycle and check-in protocol](#lifecycle-and-check-in-protocol) below), it stays alive.
 
 ### 3. Review at every commit boundary
 
@@ -136,9 +136,9 @@ Three reasons:
 
 1. **The farewell envelope is the canonical "everything I have to say" record.** The companion may have findings or insights only surfaced in the farewell, not during live review.
 2. **Auto-harvest captures the retro for the project ledger.** The companion's `magicWand` and `difficulties` get appended to `docs/retros/<slug>.md` automatically (when minih's auto-harvest is on, which is the default). This is part of how the harness improves itself across sessions — but it only fires when the run completes.
-3. **It closes the loop deterministically.** Without a stop signal, the companion idles for up to its `idleBudgetMs` (default 30 min) before self-terminating. That's wasted compute and a fuzzy session boundary.
+3. **It closes the loop deterministically.** Without a stop signal, the companion now uses a check-in protocol (introduced in plan 019) that asks the orchestrator "still needed?" after a configurable empty-poll streak; if no reply, it exits cleanly with `no_engagement` (first-contact) or `idle_budget` (post-task). See [Lifecycle and check-in protocol](#lifecycle-and-check-in-protocol). Without `control:stop` you still pay extra polling cycles before the check-in fires (typically ~5-10 minutes vs the ~30 min `idleBudgetMs` safety net of older companions), so an explicit `control:stop` remains the cleanest exit.
 
-The pattern: orchestrator owns the lifecycle; the companion's idle budget is a safety net, not the primary exit condition.
+The pattern: orchestrator owns the lifecycle; the companion's check-in protocol is a fast-failure path, not the primary exit condition.
 
 ---
 
@@ -148,7 +148,7 @@ The companion's `prompt.md` defines which control signals it recognises. The can
 
 | Signal | Body match | Effect |
 |---|---|---|
-| `control: stop` | `^stop\b` | Transition to `stopping`, write farewell envelope, exit. **Always wins** over an idle-budget shutdown until the farewell envelope is committed. |
+| `control: stop` | `^stop\b` | Transition to `stopping`, write farewell envelope, exit. **Always wins** over the check-in protocol — including during the post-check-in wait window. Exits with `stop_requested`, never `no_engagement`/`idle_budget`. |
 | `control: pause for <duration>` | starts with `pause for` | Implementation-defined (companion-specific). |
 
 A future signal worth considering — surfaced as a magicWand in plan 014's run:
@@ -156,6 +156,68 @@ A future signal worth considering — surfaced as a magicWand in plan 014's run:
 > `control: drain` — distinct from `stop`. Tells the companion: "we're winding down, prepare your farewell, but don't exit yet in case something else comes up." Reduces idle token spend in Power On Mode sessions where the orchestrator finishes implementation but reads docs / writes plans for several minutes before sending `stop`.
 
 This is not a standard signal in v1 — capture it as a project follow-up if companion-mode usage scales.
+
+---
+
+## Lifecycle and check-in protocol
+
+> Introduced in **plan 019** ([spec](../plans/019-runner-idle-nudge/runner-idle-nudge-spec.md), [workshop with empirical baseline](../plans/019-runner-idle-nudge/workshops/001-idle-nudge-use-cases.md)). Replaces the older "compare elapsed-since-last-message against `idleBudgetMs`" prompt branch that 4+ companion retros independently flagged as confusing.
+
+The canonical companion (`code-review-companion`) uses an **inside-asks-outside check-in** protocol to avoid wasted compute when the orchestrator forgets to `control:stop`. The runner is uninvolved — this is purely a prompt-level convention the companion's `prompt.md` § 2 implements.
+
+### Why a check-in instead of a runner-side nudge?
+
+Workshop 001 surveyed 10 recent canonical companion runs:
+- **60% happy path** — orchestrator sent `control:stop` cleanly
+- **30% never-engaged** — orchestrator booted the companion then never sent any message (`tasksReceived: 0`)
+- **10% engaged-then-forgot** — orchestrator sent tasks, got findings, then forgot to stop
+
+The "stall" is always on the **outside**, never on the inside (idle is healthy — the companion is doing exactly what the prompt says). The inside companion can't fix outside discipline directly, but it CAN ask: "are you still there?" If yes → reply with a `task` or `control:stop` (either resets the streak or ends the run). If no → the companion exits cleanly after a brief wait.
+
+### Two thresholds, one heuristic
+
+The companion tracks a small integer counter (`emptyPollStreak`) — the number of consecutive empty long-poll cycles since the last engagement. When the counter exceeds a configured threshold, the companion sends ONE `still-needed` question:
+
+| Threshold | Default | When it fires | Exit if unanswered |
+|---|---|---|---|
+| `firstContactPollThreshold` | 20 polls (~10 min) | After orient + this many empty polls with **zero** outside engagement | `no_engagement` |
+| `postTaskPollThreshold` | 10 polls (~5 min) | After completing at least one task + this many empty polls | `idle_budget` |
+| `replyWaitPolls` | 4 polls (~2 min) | Companion waits this many more empty cycles after a check-in before farewelling | n/a (it's a wait window) |
+
+After the check-in fires, the companion waits `replyWaitPolls` more empty cycles. If the orchestrator replies with anything (task / question / control:stop), the streak resets and the companion stays alive. If no reply, the companion farewells with the appropriate `exitReason`.
+
+**One check-in per idle window.** A second empty streak after a fresh task gets a fresh check-in; consecutive empty polls without engagement do NOT get a second nag.
+
+**`control:stop` always wins.** If the orchestrator replies with `control:stop` during the wait window, the companion exits with `stop_requested`, not `no_engagement`/`idle_budget`.
+
+### How orchestrators respond to a check-in
+
+The check-in is a regular `question`-typed inbox message with `subject: 'still-needed'`. Any orchestrator that handles the existing `question` inbox vocabulary handles it for free — reply with whatever's appropriate:
+
+- **More work coming** → reply with a `task` (companion's streak resets, normal flow continues)
+- **Done now** → send `control:stop` (companion farewells with `stop_requested`)
+- **Pause briefly** → reply with a brief `note` or `progress` ack (companion's streak resets, but it'll re-check after the next threshold)
+- **Genuinely don't know yet** → ignore (companion farewells after `replyWaitPolls`; you can boot a new one later)
+
+In **Power On Mode**, this means the orchestrator agent (the coding agent driving implementation) sees the check-in pop up in `minih view` / `minih attach` and can react explicitly — the closure is no longer silent at the 30-min budget.
+
+### Configuring the protocol
+
+Per-run, via the standard `--input` JSON:
+
+```bash
+# tighter, faster cleanup
+minih run code-review-companion --input '{"firstContactPollThreshold": 10, "postTaskPollThreshold": 5, "replyWaitPolls": 2}'
+
+# disable check-in protocol entirely (legacy idleBudgetMs-only behavior)
+minih run code-review-companion --input '{"firstContactPollThreshold": 0, "postTaskPollThreshold": 0}'
+```
+
+`idleBudgetMs` is still supported and still acts as the absolute upper bound on idle time. Under the check-in protocol it rarely fires — but it remains the safety net for cases where the check-in path is disabled or doesn't behave as expected.
+
+### Inside-asks-outside as a general capability
+
+The check-in is the **canonical example** of a broader pattern: the inside companion can use `inbox_send({ type: 'question', ... })` to ask the orchestrator about anything — scope clarifications, status confirmations, budget requests. The lifecycle check-in is just the most common instance of this. Companion authors may add other inside-initiated questions to their prompts when the conversation pattern is useful.
 
 ---
 
@@ -168,7 +230,7 @@ Companion-mode agents SHOULD emit a farewell envelope structurally similar to:
   "session": {
     "startedAt": "ISO-8601",
     "endedAt": "ISO-8601",
-    "exitReason": "stop_requested | idle_budget | timeout | error",
+    "exitReason": "stop_requested | idle_budget | no_engagement | timeout | error",
     "messageCounts": {
       "tasksReceived": 0,
       "findingsSent": 0,

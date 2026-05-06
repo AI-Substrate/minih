@@ -121,6 +121,7 @@ The `verdict: 'active'` filter is load-bearing — `minih status` defaults to "l
 **Common gotchas:**
 - `E122 GH_TOKEN not set` on `minih run` — the spawning shell needs `GH_TOKEN`. Set with `export GH_TOKEN=$(gh auth token)`. The Copilot CLI's runtime doesn't always inherit it; explicit export is reliable.
 - `peer.verdict: 'dead'` after the companion has been quiet for >30min — known false positive when it's working a non-coordinated tool call. Verify by checking `currentlyRunningTool` and `selfReportedState` — both being non-null is a strong "it's alive" signal.
+- **Companion check-in question** (plan 019): if you booted a companion and it sends you a `question:'still-needed'` message asking "do you have a task, or shall I stand down?" — that's the new check-in protocol. Reply with a `task` to keep it alive, `control:stop` to release it cleanly, or ignore it (companion will exit with `no_engagement` or `idle_budget` after `replyWaitPolls`). See [`docs/how/companion-mode.md` § Lifecycle and check-in protocol](docs/how/companion-mode.md#lifecycle-and-check-in-protocol).
 
 ## Architecture
 

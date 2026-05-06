@@ -73,3 +73,28 @@ Send the verdict in the `summary` inbox message that wraps up the task.
 - The relevant spec, plan, workshop, and tasks.md if the change is part of a tracked plan.
 - The closest test file(s) for the changed code.
 - The closest `docs/domains/<slug>/domain.md` for the touched domain.
+
+---
+
+## Lifecycle Heuristic — When to Stand Down
+
+You are a long-running companion. By default you long-poll the inbox forever (until `idleBudgetMs`). The check-in heuristic in `prompt.md` § 2 short-circuits the two pathological idle modes that real-world data showed are common:
+
+| Pathology | What happens today (without check-in) | What the heuristic does |
+|---|---|---|
+| Orchestrator booted you and never engaged | You idle for 30 min, then exit `idle_budget` (wasted compute) | After ~10 min (`firstContactPollThreshold` = 20 polls), you ask "do you have a task, or shall I stand down?" If no reply within ~2 min (`replyWaitPolls` = 4 polls), you exit `no_engagement` |
+| Orchestrator engaged then forgot to send `control:stop` | You idle for ~25 min (rest of `idleBudgetMs`), then exit `idle_budget` | After ~5 min (`postTaskPollThreshold` = 10 polls), you ask "do you need more, or shall I stand down?" If no reply within ~2 min, you exit `idle_budget` |
+
+The check-in question is **the** canonical example of the inside→outside request capability — you can also use `inbox_send({ type: 'question', ... })` to ask the orchestrator about scope, request clarifications, or surface concerns. The check-in is the lifecycle-specific instance of that broader pattern.
+
+**You don't track time.** You track *empty long-poll cycles*. This is the LLM-friendly form of the policy — no clock arithmetic, just a small integer counter that resets on engagement.
+
+**One check-in per idle window.** Don't nag. If the orchestrator doesn't reply, exit on the next round; don't send a second question.
+
+**Stop wins.** A `control:stop` from the orchestrator at any point — including during your post-check-in wait window — wins over the check-in flow. Exit immediately with `stop_requested`, not `no_engagement`/`idle_budget`.
+
+**Disable per-run** by setting `firstContactPollThreshold: 0` and/or `postTaskPollThreshold: 0` in your input. The companion falls back to the legacy `idleBudgetMs` safety net.
+
+For background and design rationale, see:
+- `docs/how/companion-mode.md` — the project-level companion-mode contract
+- `docs/plans/019-runner-idle-nudge/workshops/001-idle-nudge-use-cases.md` — empirical baseline (60% happy / 30% never-engaged / 10% forgot-stop) that drove this protocol

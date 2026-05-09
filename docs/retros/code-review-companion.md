@@ -149,3 +149,29 @@
 - difficulties:
   - [annoying] knowledge: Effective idleBudgetMs is part of the companion protocol but was not exposed through the inside coordination tools or dogfood-safe minih status surface. (workaround: Stayed alive until the outside actor sent an explicit control:stop, rather than attempting to infer the idle budget from run-dir files.)
   - [degrading] test: The newly added FX008 CLI regression test timed out in the review environment, despite the commit summary claiming the gate was green. (workaround: Reported the failing narrow command as a HIGH review finding instead of treating the final landing as complete.)
+
+## 2026-05-06T21:54:14.031Z — code-review-companion / 2026-05-07T07-27-42-890Z-09c6
+
+- runId: 2026-05-07T07-27-42-890Z-09c6
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-05-07T07-27-42-890Z-09c6
+- summary: Reviewed the full plan 019 companion idle check-in protocol implementation across schema, prompt, instructions, docs, tests, fix bundles, and final drain. Sent seven findings plus one T006 deferral pushback; the findings covered schema/spec mismatch, prompt post-task gating, workshop vocabulary drift, instruction timing drift, orchestrator reply type drift, missing regression coverage, and residual wording drift. The peer reported all findings were folded before stop, and the final phase state is suitable to ship after the last F007 fold.
+- **magicWand** (target: coordination): Add a coordination workbench view that shows open findings by ack chain and whether a later task/commit claims each one was folded, so final-drain reviews can verify unresolved items without manually re-reading every prior inbox message.
+- difficulties:
+  - [annoying] debug: Targeted rg searches using brace globs over absolute paths sometimes reported no matches even when the same files contained matching text visible via focused reads. (workaround: Used direct view calls for the relevant current sections and narrower rg/path combinations for drift checks.)
+
+> ⚠️ ## 2026-05-06T22:31:43.977Z — code-review-companion / 2026-05-07T08-31-43-922Z-bdd6
+>
+> - runId: 2026-05-07T08-31-43-922Z-bdd6
+> - runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-05-07T08-31-43-922Z-bdd6
+> - result: failed
+> - magicWand: (unavailable — run terminated as failed)
+> - stderr (last line): Input parameter validation failed:
+
+## 2026-05-06T22:40:43.213Z — code-review-companion / 2026-05-07T08-36-36-851Z-feed
+
+- runId: 2026-05-07T08-36-36-851Z-feed
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-05-07T08-36-36-851Z-feed
+- summary: Completed the requested smoke-test review: oriented successfully on plan 019, accepted the task as first engagement to reset the idle/check-in streak, echoed the loop-state counters, sent a zero-finding summary, and stopped on outside control.
+- **magicWand** (target: minih): Add a first-class minih CLI recipe for starting a coordinated agent with typed JSON input overrides, e.g. a documented `minih run <slug> --input-json '{...}'` path that is easy for orchestrators to use for tight-threshold lifecycle smoke tests.
+- difficulties:
+  - [annoying] knowledge: The orient default asks for the most recently modified phase folder under tasks, but the active plan has no tasks folder, so the expected status source was absent. (workaround: Used the plan spec, flight plan, workshop, and recent git history as the orient source of truth.)

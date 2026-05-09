@@ -158,6 +158,12 @@ None.
 
 > All v1/v2 questions resolved by the v3 reframe. Workshop 001 surfaced 5 candidate v3 questions; clarify session 2026-05-05 resolved all of them. See `## Clarifications` for answers. No remaining open questions for plan-3 architecture.
 
+## Fixes
+
+| ID | Created | Summary | Domain(s) | Status | Source |
+|----|---------|---------|-----------|--------|--------|
+| [FX001](fixes/FX001-typed-param-coercion.md) | 2026-05-07 | Auto-coerce `-p key=value` values via JSON.parse so integer/boolean schema fields work; unblocks AC8 dogfood recipe | cli + runner | Proposed | `mw-typed-input-params` followup + companion magicWand from smoke run `2026-05-07T08-36-36-851Z-feed` |
+
 ## Workshop Opportunities
 
 The two design workshops already exist:

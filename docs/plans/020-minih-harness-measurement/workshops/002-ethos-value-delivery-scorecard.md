@@ -10,6 +10,7 @@
 - [`../research-dossier.md`](../research-dossier.md)
 - [`001-literature-traceability-matrix.md`](001-literature-traceability-matrix.md)
 - Perplexity deep-research refinement pass, 2026-05-09, over DORA, Accelerate, SPACE, ESSP, DX/DevEx, Goodhart's Law, and AI productivity measurement
+- `/Users/jordanknight/repos/posts/content/2026/2026-04-faster-legacy-modifications-agent-harness-doc.md`
 - `/Users/jordanknight/repos/Measuring-HVE/docs/articles/measurement-architecture/01-better-questions.md`
 - `/Users/jordanknight/repos/Measuring-HVE/docs/articles/measurement-architecture/04-beyond-dora.md`
 - `/Users/jordanknight/repos/Measuring-HVE/docs/articles/measurement-architecture/06-verified-useful-work.md`
@@ -55,7 +56,7 @@ Intent
 
 The reason for existence is **value delivery**, not code generation. MiniH should help teams answer: "Did this system become easier to enter, safer to change, easier to understand, and better at producing trustworthy evidence?"
 
-The Perplexity refinement pass sharpened one phrase: MiniH should treat measurement as **calibrated learning**, not control. The goal is not to prove that agents are busy or operators are productive. The goal is to calibrate claims against evidence: "we trust this proof" against false-pass rate, "we encoded learning" against recurrence, and "we are faster" against proof depth and downstream rework.
+MiniH should treat measurement as **calibrated learning**, not control. The goal is not to prove that agents are busy or operators are productive. The goal is to calibrate claims against evidence: "we trust this proof" against false-pass rate, "we encoded learning" against recurrence, and "we are faster" against proof depth and downstream rework.
 
 ### MiniH should optimize for
 
@@ -121,6 +122,21 @@ MiniH should be described as a professional agent system that improves value del
 > Measure the system's ability to produce verified useful work per unit of human attention, segmented by task type and proof level.
 
 This deliberately avoids "AI made developers faster." Faster at what? Typing? Drafting? Creating review burden? MiniH's claim should be stronger and harder to game: validated work and validated learning are becoming cheaper, safer, and more repeatable.
+
+### Customer harness example
+
+The customer harness article is a concrete example of this thesis. It frames the real problem as making a 15-year-old, high-value legacy accounting platform accessible to rapid experimentation, not rewriting it or merely generating more code (`2026-04-faster-legacy-modifications-agent-harness-doc.md:13-24`). The harness was named and treated as a first-class product - a CLI with build/run/health/seed/test verbs and proof recipes - because naming made it measurable, improvable, and discussable (`:25-35`).
+
+The experiment measured four axes that map cleanly into MiniH's scorecard:
+
+| Customer experiment axis | MiniH translation |
+|---|---|
+| Difficulty | difficulty ledger, recurrence, expert escalation, cognitive-load proxies |
+| Mitigation | encoded mitigation rate, magic-wand closure, mitigation verification |
+| Velocity | Time to Validated Evidence, Time to Verified Working Context, segmented by task/proof level |
+| Value | evidence-backed findings, proof quality, decisions that change platform understanding |
+
+The important phrase from that article is **encode, don't document**. The customer example moved from a painful first iteration to fast later iterations because each difficulty became a harness command, pre-flight check, recipe, or proof path instead of another piece of tribal knowledge (`:59-85`, `:95-107`). That is the practical meaning of "the harness is the product": every task is an exercise that should leave the development infrastructure better than it found it.
 
 ### Audience-specific wording
 

@@ -184,3 +184,12 @@
 - **magicWand** (target: project): Add a minih-facing plan-orient command that summarizes the active plan folder regardless of whether it is in spec/plan/tasks form or research/workshop form, so companions do not need to infer plan status from directory shape.
 - difficulties:
   - [annoying] knowledge: The active plan did not contain the spec, plan, or tasks files expected by the companion orient default, because it is still a research/workshop handover. (workaround: Listed the actual plan folder contents and used the handover, research dossier, latest workshop, and recent git history for orientation.)
+
+## 2026-05-09T05:01:54.409Z — code-review-companion / 2026-05-09T14-52-26-645Z-eb0d
+
+- runId: 2026-05-09T14-52-26-645Z-eb0d
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-05-09T14-52-26-645Z-eb0d
+- summary: Reviewed commit 36501f3 at the requested commit boundary, focusing on runner manifest update serialization, timeout cleanup, and deterministic forwarder test changes. I sent an APPROVE summary with zero findings after targeted runner tests passed, and stopped when requested by the outside peer.
+- **magicWand** (target: project): Add a short project-local test command cheat sheet for common narrow gates, including the supported serial or non-serial Vitest invocation if one exists, so reviewers do not try unsupported flags.
+- difficulties:
+  - [annoying] test: The first targeted test command used an unsupported Vitest flag, --runInBand, which caused an immediate CLI option error. (workaround: Reran the same targeted test files with the repository-supported command: npx vitest run test/runner/run-manifest.test.ts test/runner/runner-event-driven.test.ts.)

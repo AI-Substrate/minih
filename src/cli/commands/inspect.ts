@@ -22,6 +22,7 @@ import {
   formatError,
   formatSuccess,
 } from '../output.js';
+import { parseParamFlags } from '../param-parser.js';
 
 interface PromptSection {
   label: string;
@@ -115,14 +116,15 @@ export function registerInspectCommand(program: Command): void {
           content: `Write your final JSON report to: ${outputPath}`,
         });
 
-        // 4. Input params
-        const params: Record<string, string> = {};
-        for (const p of opts.param ?? []) {
-          const eq = p.indexOf('=');
-          if (eq >= 1) params[p.slice(0, eq)] = p.slice(eq + 1);
-        }
+        // 4. Input params (auto-coerces JSON values per FX001).
+        const { params } = parseParamFlags(opts.param ?? []);
+        // inspect intentionally tolerates malformed entries (skips them silently)
+        // since this is a read-only preview command — keep that behavior.
         if (Object.keys(params).length > 0) {
-          const lines = Object.entries(params).map(([k, v]) => `${k}: ${v}`);
+          const lines = Object.entries(params).map(
+            ([k, v]) =>
+              `${k}: ${typeof v === 'string' ? v : (JSON.stringify(v) ?? String(v))}`,
+          );
           sections.push({
             label: 'INPUT PARAMS',
             source: '--param flags',

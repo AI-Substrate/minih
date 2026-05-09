@@ -37,6 +37,7 @@ import {
   formatSuccess,
 } from '../output.js';
 import { assertOutsideContext } from '../preaction-context.js';
+import { parseParamFlags } from '../param-parser.js';
 import { createSdkRuntime } from './sdk-runtime.js';
 
 /**
@@ -182,20 +183,16 @@ export function registerRunCommand(program: Command): void {
           return; // TypeScript flow — exitWithEnvelope is never, but after the guard
         }
 
-        // Parse --param key=value pairs
-        const params: Record<string, string> = {};
-        for (const p of opts.param ?? []) {
-          const eq = p.indexOf('=');
-          if (eq < 1) {
-            exitWithEnvelope(
-              formatError(
-                'run',
-                ErrorCodes.INVALID_ARGS,
-                `Invalid --param format: "${p}". Expected key=value.`,
-              ),
-            );
-          }
-          params[p.slice(0, eq)] = p.slice(eq + 1);
+        // Parse --param key=value pairs (auto-coerces JSON values per FX001).
+        const { params, invalidEntry } = parseParamFlags(opts.param ?? []);
+        if (invalidEntry !== null) {
+          exitWithEnvelope(
+            formatError(
+              'run',
+              ErrorCodes.INVALID_ARGS,
+              `Invalid --param format: "${invalidEntry}". Expected key=value.`,
+            ),
+          );
         }
 
         const DEFAULT_MODEL = 'claude-opus-4.6';

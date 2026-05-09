@@ -93,9 +93,7 @@ describe('parseParamFlags — JSON auto-coercion', () => {
   });
 
   it('returns Object.create(null) (prototype-pollution hardening)', () => {
-    const { params } = parseParamFlags([
-      'k={"__proto__":{"polluted":"oops"}}',
-    ]);
+    const { params } = parseParamFlags(['k={"__proto__":{"polluted":"oops"}}']);
     // The parsed JSON object has __proto__ as a regular property, NOT on the
     // prototype chain (modern JSON.parse semantics in Node 14+).
     // The harden-by-Object.create(null) check is on the OUTER params map:

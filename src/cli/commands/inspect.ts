@@ -40,7 +40,7 @@ export function registerInspectCommand(program: Command): void {
       '-p, --param <key=value>',
       'Input parameter (repeatable). Values are JSON-parsed when possible: ' +
         '-p count=3 yields integer 3; -p enabled=true yields boolean true; ' +
-        '-p obj=\'{"k":1}\' yields an object. Strings that aren\'t valid ' +
+        "-p obj='{\"k\":1}' yields an object. Strings that aren't valid " +
         'JSON pass through as-is. To force a literal string of digits or ' +
         'true/false/null, use quoted JSON: -p val=\'"3"\'.',
       (val: string, acc: string[]) => {

@@ -175,3 +175,12 @@
 - **magicWand** (target: minih): Add a first-class minih CLI recipe for starting a coordinated agent with typed JSON input overrides, e.g. a documented `minih run <slug> --input-json '{...}'` path that is easy for orchestrators to use for tight-threshold lifecycle smoke tests.
 - difficulties:
   - [annoying] knowledge: The orient default asks for the most recently modified phase folder under tasks, but the active plan has no tasks folder, so the expected status source was absent. (workaround: Used the plan spec, flight plan, workshop, and recent git history as the orient source of truth.)
+
+## 2026-05-09T00:28:40.534Z — code-review-companion / 2026-05-09T10-25-25-419Z-8784
+
+- runId: 2026-05-09T10-25-25-419Z-8784
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-05-09T10-25-25-419Z-8784
+- summary: Oriented on plan 020-minih-harness-measurement, found it is currently research/workshop-only with no feature spec or task phase yet, sent the required idle check-in, and stood down after no outside task or reply arrived.
+- **magicWand** (target: project): Add a minih-facing plan-orient command that summarizes the active plan folder regardless of whether it is in spec/plan/tasks form or research/workshop form, so companions do not need to infer plan status from directory shape.
+- difficulties:
+  - [annoying] knowledge: The active plan did not contain the spec, plan, or tasks files expected by the companion orient default, because it is still a research/workshop handover. (workaround: Listed the actual plan folder contents and used the handover, research dossier, latest workshop, and recent git history for orientation.)

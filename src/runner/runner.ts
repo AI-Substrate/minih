@@ -909,8 +909,37 @@ export async function runAgent(
     };
     let activeSessionId = '';
     const stderrLines: string[] = [];
+    let timedOut = false;
+    const timeoutMs = (config.timeout ?? 300) * 1000;
+    const manifestUpdates = new Set<Promise<void>>();
+    let manifestUpdateError: Error | null = null;
+
+    const trackManifestUpdate = (update: Promise<void>): void => {
+      const tracked = update.catch((err: unknown) => {
+        manifestUpdateError =
+          manifestUpdateError ??
+          (err instanceof Error ? err : new Error(String(err)));
+      });
+      manifestUpdates.add(tracked);
+      void tracked.finally(() => {
+        manifestUpdates.delete(tracked);
+      });
+    };
+
+    const drainTrackedManifestUpdates = async (): Promise<void> => {
+      while (manifestUpdates.size > 0) {
+        await Promise.all([...manifestUpdates]);
+      }
+      if (manifestUpdateError) {
+        const error = manifestUpdateError;
+        manifestUpdateError = null;
+        throw error;
+      }
+    };
 
     const handleEvent = (event: AgentEvent): void => {
+      if (timedOut) return;
+
       stats.total++;
       switch (event.type) {
         case 'tool_call':
@@ -936,10 +965,12 @@ export async function runAgent(
             activeSessionId = event.data.sessionId;
             // Immediate (non-throttled) — sessionId + active is the answer
             // attach-by-id needs as fast as possible.
-            void updateManifest(runDir, {
-              sessionId: event.data.sessionId,
-              status: 'active',
-            });
+            trackManifestUpdate(
+              updateManifest(runDir, {
+                sessionId: event.data.sessionId,
+                status: 'active',
+              }),
+            );
           }
           break;
       }
@@ -948,17 +979,19 @@ export async function runAgent(
       fs.appendFileSync(eventsPath, `${JSON.stringify(event)}\n`);
 
       // Throttled counter patch — coalesces per-event tick to avoid disk thrash.
-      void updateManifest(
-        runDir,
-        {
-          counters: {
-            events: stats.total,
-            toolCalls: stats.toolCalls,
-            messages: stats.messages,
-            errors: stats.errors,
+      trackManifestUpdate(
+        updateManifest(
+          runDir,
+          {
+            counters: {
+              events: stats.total,
+              toolCalls: stats.toolCalls,
+              messages: stats.messages,
+              errors: stats.errors,
+            },
           },
-        },
-        { throttleMs: 250 },
+          { throttleMs: 250 },
+        ),
       );
 
       if (onEvent) onEvent(event);
@@ -966,8 +999,8 @@ export async function runAgent(
 
     // Execute agent with timeout
     let agentResult: AgentResult;
-    let timedOut = false;
-    const timeoutMs = (config.timeout ?? 300) * 1000;
+    let adapterSettled = false;
+    let runPromise: Promise<AgentResult> | undefined;
 
     let inboxForwarder: InboxForwarder | null = null;
     let stateForwarder: StateForwarder | null = null;
@@ -1072,7 +1105,7 @@ export async function runAgent(
         config.reservedMcpToolPrefixes ?? [],
       );
 
-      const runPromise = adapter
+      runPromise = adapter
         .run({
           prompt: finalPrompt,
           sessionId: config.sessionId,
@@ -1086,13 +1119,18 @@ export async function runAgent(
           ...(permissionHandler && { permissionHandler }),
         })
         .then(async (result) => {
+          adapterSettled = true;
+          if (timedOut) return result;
+          await drainTrackedManifestUpdates();
+          if (timedOut) return result;
           // Manifest: status → completing right before terminal-condition wait
           // (workshop 002 §Write points).
           await updateManifest(runDir, { status: 'completing' });
-          const terminal = await awaitTerminalCondition(
-            result,
-            pendingForwarderCount,
+          if (timedOut) return result;
+          const terminal = await awaitTerminalCondition(result, () =>
+            timedOut ? 0 : pendingForwarderCount(),
           );
+          if (timedOut) return terminal;
           if (forwarderErrors.length > 0) throw forwarderErrors[0];
           if (terminal.status === 'completed') {
             inboxForwarder?.commit();
@@ -1114,6 +1152,14 @@ export async function runAgent(
           await adapter.terminate(activeSessionId);
         } catch {
           /* best-effort */
+        }
+        closeForwarders();
+        if (adapterSettled && runPromise) {
+          try {
+            await runPromise;
+          } catch {
+            /* timeout result is already canonical */
+          }
         }
         agentResult = {
           output: `Agent timed out after ${config.timeout ?? 300}s`,
@@ -1301,6 +1347,7 @@ export async function runAgent(
     // Final manifest patch — flush any pending throttled counters and mark
     // the run completed/failed so attach commands can render an honest
     // capability label even before they read completed.json.
+    await drainTrackedManifestUpdates();
     await flushManifestThrottled(runDir);
     await updateManifest(runDir, {
       status: resultStatus === 'completed' ? 'completed' : 'failed',

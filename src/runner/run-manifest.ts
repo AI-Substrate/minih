@@ -5,9 +5,10 @@
  * from run-folder creation onward, not just at completion. Phase 2's
  * `view` command reads this; Phase 1 wires writes from runner.ts.
  *
- * Threading model: the runner is single-process, single-writer. Throttle
- * exists to avoid disk thrash on per-event counter updates; status and
- * sessionId patches bypass throttle (correctness > throughput).
+ * Threading model: callers may schedule manifest updates from async event
+ * handlers, so writes are serialized per runDir. Throttle exists to avoid
+ * disk thrash on per-event counter updates; status and sessionId patches
+ * bypass throttle (correctness > throughput).
  *
  * POSIX-only — `writeFileAtomicAsync` is POSIX-only by repo policy
  * (`atomic-write.ts` header). Windows is out of scope.
@@ -31,6 +32,7 @@ interface ThrottleState {
   timer: NodeJS.Timeout | null;
 }
 const throttleStates = new Map<string, ThrottleState>();
+const writeQueues = new Map<string, Promise<void>>();
 
 function manifestPath(runDir: string): string {
   return path.join(runDir, MANIFEST_FILENAME);
@@ -46,7 +48,9 @@ export async function writeManifest(
     schemaVersion: SUPPORTED_SCHEMA_VERSION,
     updatedAt: manifest.updatedAt ?? new Date().toISOString(),
   };
-  await writeFileAtomicAsync(target, `${JSON.stringify(next, null, 2)}\n`);
+  await enqueueManifestWrite(runDir, () =>
+    writeFileAtomicAsync(target, `${JSON.stringify(next, null, 2)}\n`),
+  );
 }
 
 export async function readManifest(
@@ -93,7 +97,7 @@ export async function updateManifest(
   if (isImmediate || options.throttleMs == null) {
     // Flush any pending throttled patch first to preserve counter ordering.
     await flushThrottled(runDir);
-    await applyPatch(runDir, patch);
+    await enqueueManifestWrite(runDir, () => applyPatch(runDir, patch));
     return;
   }
 
@@ -106,7 +110,11 @@ export async function updateManifest(
   throttleStates.set(runDir, state);
   if (state.timer == null) {
     state.timer = setTimeout(() => {
-      void flushThrottled(runDir);
+      void flushThrottled(runDir).catch((err: unknown) => {
+        queueMicrotask(() => {
+          throw err;
+        });
+      });
     }, options.throttleMs);
     // setTimeout returns a Timeout that prevents process exit; let it stay.
   }
@@ -125,7 +133,27 @@ export async function flushThrottled(runDir: string): Promise<void> {
     clearTimeout(state.timer);
     state.timer = null;
   }
-  await applyPatch(runDir, patch);
+  await enqueueManifestWrite(runDir, () => applyPatch(runDir, patch));
+}
+
+async function enqueueManifestWrite(
+  runDir: string,
+  write: () => Promise<void>,
+): Promise<void> {
+  const previous = writeQueues.get(runDir) ?? Promise.resolve();
+  const run = previous.catch(() => undefined).then(write);
+  const settled = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  writeQueues.set(runDir, settled);
+  try {
+    await run;
+  } finally {
+    if (writeQueues.get(runDir) === settled) {
+      writeQueues.delete(runDir);
+    }
+  }
 }
 
 function mergePatch(
@@ -179,6 +207,7 @@ export function __resetThrottleStateForTest(): void {
     if (state.timer) clearTimeout(state.timer);
   }
   throttleStates.clear();
+  writeQueues.clear();
 }
 
 export { ManifestSchemaVersionError };

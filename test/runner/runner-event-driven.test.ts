@@ -79,6 +79,19 @@ function locationForRun(slug: string, runDir: string) {
   return coordinationRunLocation(slug, tmpDir, path.basename(runDir));
 }
 
+async function waitForCondition(
+  condition: () => boolean,
+  description: string,
+): Promise<void> {
+  const deadline = Date.now() + 1000;
+  while (!condition()) {
+    if (Date.now() > deadline) {
+      throw new Error(`Timed out waiting for ${description}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
 class SeededFakeAgentAdapter extends FakeAgentAdapter {
   constructor(
     options: ConstructorParameters<typeof FakeAgentAdapter>[0],
@@ -415,7 +428,10 @@ describe('runAgent event-driven terminal flow', () => {
       return result;
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 25));
+    await waitForCondition(
+      () => adapter.prompts.length === 1,
+      'pending forwarder send to start',
+    );
     expect(adapter.prompts).toHaveLength(1);
     expect(settled).toBe(false);
 

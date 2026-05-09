@@ -173,4 +173,28 @@ describe('updateManifest throttling', () => {
     const read = await readManifest(runDir);
     expect(read?.sessionId).toBe('sess-immediate');
   });
+
+  it('serializes overlapping immediate patches without dropping fields', async () => {
+    const m0 = makeManifest({ runDir, status: 'active', sessionId: null });
+    await writeManifest(runDir, m0);
+
+    await Promise.all([
+      updateManifest(runDir, { sessionId: 'sess-overlap' }),
+      updateManifest(runDir, { status: 'completing' }),
+      updateManifest(runDir, {
+        control: {
+          available: true,
+          kind: 'file-command-lane',
+          commandLanePath: 'commands.ndjson',
+        },
+      }),
+    ]);
+
+    const read = await readManifest(runDir);
+    expect(read?.sessionId).toBe('sess-overlap');
+    expect(read?.status).toBe('completing');
+    expect(read?.control.available).toBe(true);
+    expect(read?.control.kind).toBe('file-command-lane');
+    expect(read?.control.commandLanePath).toBe('commands.ndjson');
+  });
 });

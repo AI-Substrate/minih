@@ -55,7 +55,7 @@ export interface AgentRunConfig {
   reasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh';
   timeout?: number;
   cwd?: string;
-  params?: Record<string, string>;
+  params?: Record<string, unknown>;
   /** Session ID to resume — if set, uses resumeSession() instead of createSession() */
   sessionId?: string;
   /** Run ID of the original run being resumed */

@@ -39,6 +39,19 @@ import {
 import { assertOutsideContext } from '../preaction-context.js';
 import { createSdkRuntime } from './sdk-runtime.js';
 
+/**
+ * Format a typed param value for display in preflight banner / paramsHint.
+ *
+ * Strings render as themselves (no surrounding quotes — preflight is plain
+ * text). Anything else (number, boolean, object, array, null) renders via
+ * `JSON.stringify` so the user sees a faithful representation of what the
+ * agent's input-schema receives. Plan 019 FX001.
+ */
+function formatParamValue(v: unknown): string {
+  if (typeof v === 'string') return v;
+  return JSON.stringify(v) ?? String(v);
+}
+
 export function registerRunCommand(program: Command): void {
   program
     .command('run <slug>')
@@ -423,7 +436,7 @@ export function registerRunCommand(program: Command): void {
           displayPreflight('Agent definition', true, definition.dir);
           if (config.params) {
             for (const [k, v] of Object.entries(config.params)) {
-              displayPreflight(`param:${k}`, true, v);
+              displayPreflight(`param:${k}`, true, formatParamValue(v));
             }
           }
           process.stderr.write('\n');
@@ -453,7 +466,7 @@ export function registerRunCommand(program: Command): void {
             'Write your final JSON report to: <run-dir>/output/report.json';
           const paramsHint = config.params
             ? `## Input Parameters\n\n${Object.entries(config.params)
-                .map(([k, v]) => `${k}: ${v}`)
+                .map(([k, v]) => `${k}: ${formatParamValue(v)}`)
                 .join('\n')}`
             : null;
           const assembledPrompt = buildInsidePreamble({

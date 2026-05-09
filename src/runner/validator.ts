@@ -94,10 +94,16 @@ function formatErrors(
 /**
  * Validate input parameters against an input schema.
  * Used by the runner before prompt assembly to fail fast.
+ *
+ * Values may be of any JSON-compatible type — integer, boolean, string,
+ * object, or array. AJV (with the schema declared in the agent's
+ * `input-schema.json`) is the source of truth for which type each field
+ * must be. The CLI parser (`-p key=value`) auto-coerces by attempting
+ * JSON.parse on each value (FX001 of plan 019).
  */
 export function validateInput(
   schemaPath: string,
-  params: Record<string, string>,
+  params: Record<string, unknown>,
 ): ValidationResult {
   if (!fs.existsSync(schemaPath)) {
     return {

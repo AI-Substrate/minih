@@ -205,14 +205,14 @@ In **Power On Mode**, this means the orchestrator agent (the coding agent drivin
 
 ### Configuring the protocol
 
-> ⚠️ **CLI gap (current limitation)**: there is **no working CLI surface** for per-run threshold overrides as of plan 019 landing. `minih run --param key=value` passes string-typed values; the integer-typed threshold fields fail input-schema validation with `E120`. No `--input <json>` flag exists. Tracked as `mw-typed-input-params` followup; behavioural smoke testing of the check-in firing path uses the canonical defaults (20/10/4 polls ≈ 10/5/2 min) until that gap closes. The recipes below describe the *intended* surface once typed input lands.
+Per-run, via the standard `-p key=value` flag (values are JSON-parsed where possible):
 
 ```bash
-# (intended, post-mw-typed-input-params) tighter, faster cleanup
-minih run code-review-companion --input-json '{"firstContactPollThreshold": 10, "postTaskPollThreshold": 5, "replyWaitPolls": 2}'
+# tighter, faster cleanup
+minih run code-review-companion -p firstContactPollThreshold=10 -p postTaskPollThreshold=5 -p replyWaitPolls=2
 
-# (intended) disable check-in protocol entirely (legacy idleBudgetMs-only behavior)
-minih run code-review-companion --input-json '{"firstContactPollThreshold": 0, "postTaskPollThreshold": 0}'
+# disable check-in protocol entirely (legacy idleBudgetMs-only behavior)
+minih run code-review-companion -p firstContactPollThreshold=0 -p postTaskPollThreshold=0
 ```
 
 `idleBudgetMs` is still supported and still acts as the absolute upper bound on idle time. Under the check-in protocol it rarely fires — but it remains the safety net for cases where the check-in path is disabled or doesn't behave as expected.

@@ -122,7 +122,7 @@ None.
 
 7. **AC7 — Single check-in per idle streak**: A companion that has fired a first-contact check-in does NOT fire a second one in the same streak even if many more empty polls accumulate. Engagement (any non-empty inbox result) resets the flag and re-enables future check-ins. **Verification**: T005 anti-split regex protects the engagement-reset block contiguity; behavioural single-shot dogfood-validated.
 
-8. **AC8 — Configurable thresholds work**: A companion run with `firstContactPollThreshold: 3`, `postTaskPollThreshold: 2`, `replyWaitPolls: 1` (whatever input mechanism currently works) fires its check-ins at the configured intervals (3 polls, 2 polls) and exits after 1 poll without reply. **Verification**: schema accepts tight values (T005). **⚠️ Behavioural verification is currently blocked** by the `mw-typed-input-params` followup — `minih run --param key=value` only passes strings, so integer-typed fields like the three thresholds fail input-schema validation with E120 at boot. No `--input <json>` flag exists yet. Until the typed-input gap closes, the canonical companion's defaults (20/10/4 polls = ~10/5/2 min) are the only thresholds users can reach from the CLI; behavioural verification of the check-in firing happens organically across real companion runs as those default thresholds elapse. Smoke verification on commit `e8292f1` confirmed the new prompt loads, orients, and tracks all four loop-state counters by name (engagement-reset path verified live); the actual check-in-firing path verifies on natural usage.
+8. **AC8 — Configurable thresholds work**: A companion run with `-p firstContactPollThreshold=3 -p postTaskPollThreshold=2 -p replyWaitPolls=1` fires its check-ins at the configured intervals (3 polls, 2 polls) and exits after 1 poll without reply. **Verification**: schema accepts tight values (T005) + parser auto-coerces typed values (FX001 `parseParamFlags` + tests in `test/cli/run-typed-params.test.ts`). **Behavioural verification** confirmed live in run `2026-05-09T10-25-25-419Z-8784` (commit `f42852a`): boots cleanly with `-p` integer values; first-contact check-in fires after ~90s; farewells with `no_engagement` after `replyWaitPolls=1` wait window; total runtime 3min 15s; output validates against the new schema.
 
 9. **AC9 — Disable via threshold=0**: A companion run with `firstContactPollThreshold: 0` does NOT fire the first-contact check-in at all (legacy behaviour). Same for `postTaskPollThreshold: 0`. The companion falls back to the existing `idleBudgetMs` safety-net exit. This is the "revert to old behaviour" escape hatch.
 
@@ -162,7 +162,7 @@ None.
 
 | ID | Created | Summary | Domain(s) | Status | Source |
 |----|---------|---------|-----------|--------|--------|
-| [FX001](fixes/FX001-typed-param-coercion.md) | 2026-05-07 | Auto-coerce `-p key=value` values via JSON.parse so integer/boolean schema fields work; unblocks AC8 dogfood recipe | cli + runner | Proposed | `mw-typed-input-params` followup + companion magicWand from smoke run `2026-05-07T08-36-36-851Z-feed` |
+| [FX001](fixes/FX001-typed-param-coercion.md) | 2026-05-07 | Auto-coerce `-p key=value` values via JSON.parse so integer/boolean schema fields work; unblocks AC8 dogfood recipe | cli + runner | **Complete (2026-05-09)** | `mw-typed-input-params` followup + companion magicWand from smoke run `2026-05-07T08-36-36-851Z-feed` |
 
 ## Workshop Opportunities
 

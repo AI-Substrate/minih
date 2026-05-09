@@ -318,7 +318,7 @@ The runner sets these during agent execution where the execution environment exp
 | `MINIH_INSTRUCTIONS_PATH` | Path to instructions.md (if exists) |
 | `MINIH_PREAMBLE_PATH` | Path to preamble.md (if exists) |
 | `MINIH_HAS_INPUT_SCHEMA` | `true` if input-schema.json exists, else `false` |
-| `MINIH_PARAMS` | JSON-encoded input parameters |
+| `MINIH_PARAMS` | JSON-encoded input parameters. Values may be of any JSON type — strings, numbers, booleans, objects, arrays — depending on what each schema field declares and how the orchestrator passed them via `-p key=value`. |
 
 **Default model**: `claude-opus-4.6`. Override with `MINIH_DEFAULT_MODEL` env var or `--model` flag.
 

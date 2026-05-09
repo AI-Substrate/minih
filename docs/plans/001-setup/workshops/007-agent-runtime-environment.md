@@ -98,7 +98,7 @@ The runner sets environment variables before executing the agent. The CLI detect
 | `MINIH_INSTRUCTIONS_PATH` | runner | Absolute path to instructions.md, or empty | Agent: can re-read its own identity/rules mid-run |
 | `MINIH_PREAMBLE_PATH` | runner | Absolute path to _shared/preamble.md, or empty | Agent: can inspect what preamble was injected |
 | `MINIH_HAS_INPUT_SCHEMA` | runner | `true` or `false` | Agent: quick check without filesystem scan |
-| `MINIH_PARAMS` | runner | JSON string of input params (e.g., `{"file_path":"/src/main.ts"}`) or `{}` | Agent: can re-read its own params programmatically |
+| `MINIH_PARAMS` | runner | JSON string of input params (e.g., `{"file_path":"/src/main.ts","count":3,"enabled":true}`) or `{}`. Values are typed per the agent's `input-schema.json` — may be strings, numbers, booleans, objects, or arrays. The CLI's `-p key=value` flag auto-coerces JSON values; an agent reading `MINIH_PARAMS` should not assume string values (Plan 019 FX001). | Agent: can re-read its own params programmatically |
 
 ---
 

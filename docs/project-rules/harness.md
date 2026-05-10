@@ -128,6 +128,7 @@ test -s scratch/evidence/harness-list.json
 |------|------|--------|--------------------------|
 | 2026-05-10 | 020-minih-harness-measurement | Created MiniH engineering harness contract for Boot -> Interact -> Observe measurement prerequisite. | L0 -> L2 |
 | 2026-05-10 | 020-minih-harness-measurement | Validated Boot with `just build`, Interact with `minih doctor`/`minih list`, and Observe with redirected JSON evidence in `scratch/evidence/`. | L2 -> L2 |
+| 2026-05-10 | 020-minih-harness-measurement | Used the engineering harness to validate Phase 1 contracts with focused measurement/schema tests and the full `just fft` gate. | L2 -> L2 |
 
 <!-- USER CONTENT START -->
 <!-- Project-specific harness notes, custom boot sequences, domain-specific setup -->

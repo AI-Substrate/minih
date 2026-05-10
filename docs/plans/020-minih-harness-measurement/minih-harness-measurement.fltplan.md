@@ -3,7 +3,7 @@
 **Spec**: [minih-harness-measurement-spec.md](./minih-harness-measurement-spec.md)
 **Plan**: [minih-harness-measurement-plan.md](./minih-harness-measurement-plan.md)
 **Generated**: 2026-05-10
-**Status**: Ready
+**Status**: Phase 1 landed
 
 ---
 
@@ -108,7 +108,7 @@ flowchart LR
 
     S[Specify]:::done --> P[Plan]:::done
     P --> P0[Phase 0: Harness]:::done
-    P0 --> P1[Phase 1: Contracts]:::ready
+    P0 --> P1[Phase 1: Contracts]:::done
     P1 --> P2[Phase 2: Facts]:::ready
     P2 --> P3[Phase 3: CLI]:::ready
     P3 --> P4[Phase 4: Agents]:::ready
@@ -128,7 +128,7 @@ flowchart LR
 | Phase | Title | Tasks | CS | Status |
 |-------|-------|-------|----|--------|
 | 0 | Build Harness Contract | 4 | CS-2 | Complete |
-| 1 | Measurement Domain Contracts | 6 | CS-4 | Ready |
+| 1 | Measurement Domain Contracts | 9 | CS-4 | Complete |
 | 2 | Runner Measurement Facts | 6 | CS-5 | Pending |
 | 3 | CLI Measurement Surface | 6 | CS-4 | Pending |
 | 4 | Cited Interpretation Agents | 5 | CS-4 | Pending |
@@ -168,4 +168,6 @@ flowchart LR
 
 <!-- Updated by /plan-6 and /plan-6a after each phase completes -->
 
-Phase 0 harness contract completed with `docs/project-rules/harness.md`; Phase 1 dossier is ready for implementation validation.
+Phase 0 harness contract completed with `docs/project-rules/harness.md`; Phase 1 measurement contracts are complete and Phase 2 is ready for tasking.
+
+Phase 1 landed with proof-level helpers, metric registry, authority/redaction constants, six measurement schemas, schema contract tests, and an updated measurement domain contract. Full gate `just fft` passed before each commit boundary.

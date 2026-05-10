@@ -67,6 +67,28 @@ export type RedactionPosture =
   | 'redacted-export'
   | 'aggregate-only';
 
+export type MissingDataReason =
+  | 'not-applicable'
+  | 'not-collected'
+  | 'not-configured'
+  | 'redacted';
+
+export type MeasurementDataStatus =
+  | 'available'
+  | 'missing'
+  | 'not-applicable'
+  | 'not-configured'
+  | 'redacted';
+
+export type MeasurementSchemaVersion = '1';
+
+export type ForbiddenMeasurementView =
+  | 'composite-productivity-score'
+  | 'individual-productivity-score'
+  | 'inferred-sentiment-from-telemetry'
+  | 'stack-ranking'
+  | 'unsupported-causal-claim';
+
 export type MetricTraceabilityLevel = 'L1' | 'L2' | 'L3' | 'L4';
 
 export type MetricCategory =
@@ -106,4 +128,22 @@ export interface MetricDefinition {
   sourceRefs: readonly string[];
   caveats: readonly string[];
   reportingPhrase: string;
+}
+
+export interface MeasurementAuthorityContract {
+  authority: MeasurementAuthority;
+  sourceOfTruth: string;
+  mayInterpret: readonly string[];
+  defaultRedactionPosture: RedactionPosture;
+  createsRunnerFacts: boolean;
+  canOverrideRunnerFacts: boolean;
+}
+
+export interface MeasurementRedactionContract {
+  posture: RedactionPosture;
+  exportable: boolean;
+  requiresProvenance: boolean;
+  allowsIndividualRows: boolean;
+  minimumGroupSize?: number;
+  description: string;
 }

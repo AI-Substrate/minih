@@ -17,15 +17,16 @@ Planned runtime files live in their owning domains; measurement defines the sema
 | File | Classification | Purpose |
 |------|----------------|---------|
 | `docs/domains/measurement/domain.md` | contract | Conceptual measurement boundary and contracts |
-| `src/runner/measurement/types.ts` | planned contract | Measurement and proof types consumed by CLI |
-| `src/runner/measurement/metric-registry.ts` | planned contract | Metric IDs, traceability levels, framework mappings, and caveats |
-| `src/runner/measurement/proof-levels.ts` | planned internal | L0-L6 proof-level helpers and threshold rules |
-| `src/schemas/measurement-event.json` | planned contract | Factual measurement event schema |
-| `src/schemas/proof-summary.json` | planned contract | Proof summary and artifact inventory schema |
-| `src/schemas/measurement-classification.json` | planned cli contract | Evidence-cited classifier output schema |
-| `src/schemas/measurement-scorecard.json` | planned contract | Balanced local scorecard schema |
-| `src/schemas/pulse-aggregate.json` | planned runner/cli contract | Team/system aggregate pulse schema |
-| `src/schemas/benchmark-catalog.json` | planned runner contract | Benchmark catalogue schema |
+| `src/runner/measurement/types.ts` | contract | Measurement, proof, authority, redaction, and metric types consumed by CLI |
+| `src/runner/measurement/authority.ts` | contract | Authority classes, redaction postures, missing-data vocabulary, and forbidden measurement views |
+| `src/runner/measurement/metric-registry.ts` | contract | Metric IDs, traceability levels, framework mappings, and caveats |
+| `src/runner/measurement/proof-levels.ts` | contract | L0-L6 proof-level helpers and threshold rules |
+| `src/schemas/measurement-event.json` | schema contract | Factual measurement event schema |
+| `src/schemas/proof-summary.json` | schema contract | Proof summary and artifact inventory schema |
+| `src/schemas/measurement-classification.json` | cli schema contract | Evidence-cited classifier output schema |
+| `src/schemas/measurement-scorecard.json` | schema contract | Balanced local scorecard schema |
+| `src/schemas/pulse-aggregate.json` | runner/cli schema contract | Team/system aggregate pulse schema |
+| `src/schemas/benchmark-catalog.json` | runner schema contract | Benchmark catalogue schema |
 
 ## Contracts
 
@@ -35,6 +36,7 @@ Planned runtime files live in their owning domains; measurement defines the sema
 | Metric traceability levels | Vocabulary | metric registry, scorecard output, docs |
 | Authority model | Rule set | runner, cli, measurement agents, companions |
 | Redaction posture | Rule set | exports, scorecards, classifier evidence bundles |
+| Forbidden measurement views | Rule set | scorecards, exports, classifier evidence bundles |
 | Benchmark catalogue semantics | Schema/concept | `minih measure benchmark`, runner benchmark records |
 | Pulse aggregate semantics | Schema/concept | `minih measure pulse`, scorecards, exports |
 
@@ -47,7 +49,7 @@ Planned runtime files live in their owning domains; measurement defines the sema
 | Human pulse | Explicit team/system aggregate input or imported aggregate summaries. | CLI may summarize; agents may cite aggregates. | Aggregate-only by default; no individual productivity fields, stack rankings, or inferred sentiment from telemetry. |
 | Downstream context | Optional external summaries such as DORA/ESSP data with visible source definitions. | CLI may show as context; agents may cite with caveats. | Unavailable/not configured until explicitly provided; no unsupported causal claims. |
 
-Runner-owned facts can support interpretation, but interpretation cannot replace or correct them. Missing data is a first-class state and must not be coerced to zero.
+Runner-owned facts can support interpretation, but interpretation cannot replace or correct them. The implemented `MEASUREMENT_AUTHORITY_CONTRACTS` keeps `canOverrideRunnerFacts: false` for every authority class, including interpretations. Missing data is a first-class state and must not be coerced to zero.
 
 ## Concepts
 
@@ -62,6 +64,7 @@ Runner-owned facts can support interpretation, but interpretation cannot replace
 | Aggregate pulse | Team/system-level human feedback about proof trust, failure clarity, cognitive load, safer-to-change confidence, flow, and AI helpfulness. Individual productivity views are out of scope. |
 | False-pass candidate | A passed proof later contradicted by local evidence such as later validation failures, proof reruns, review notes, or manual proof audits. It is reviewable, not automatically adjudicated. |
 | Reviewable mitigation | A candidate improvement generated from repeated friction or measurement findings. It requires human review before becoming encoded work. |
+| Forbidden measurement view | A reporting shape MiniH must reject: composite productivity score, individual productivity score, inferred sentiment from telemetry, stack ranking, or unsupported causal claim. |
 
 ## Traceability Levels
 
@@ -102,6 +105,7 @@ MiniH-local L2/L3 metrics must not be described as DORA/SPACE/ESSP-native metric
 - Do not infer trust, flow, overload, or satisfaction solely from telemetry.
 - Do not claim MiniH caused downstream DORA or business outcomes without an explicit causal-evaluation design.
 - Do not export records without provenance and redaction metadata when they can leave the local run context.
+- Do not export pulse aggregates below the minimum group size of five; under-threshold pulse data is suppressed, not redacted into an individual view.
 
 ## Tests & Validation
 
@@ -109,6 +113,7 @@ MiniH-local L2/L3 metrics must not be described as DORA/SPACE/ESSP-native metric
 |------|---------------|
 | Proof levels and thresholds | `test/runner/measurement/proof-levels.test.ts` |
 | Metric registry and traceability wording | `test/runner/measurement/metric-registry.test.ts` |
+| Authority and redaction constants | `test/runner/measurement/authority-contracts.test.ts` |
 | Measurement schemas | `test/runner/schemas.test.ts` |
 | CLI scorecard missing-data rules | `test/cli/measure.test.ts` |
 | Classifier evidence citation | `test/cli/measure-classify.test.ts` |
@@ -119,3 +124,4 @@ MiniH-local L2/L3 metrics must not be described as DORA/SPACE/ESSP-native metric
 |-------|---------|
 | 020 planning | Created conceptual domain contract for MiniH harness effectiveness measurement. |
 | 020 Phase 1 | Clarified authority model, traceability levels, and redaction guardrails for implementation contracts. |
+| 020 Phase 1 T009 | Encoded authority/redaction constants, forbidden measurement views, and aggregate-only pulse threshold. |

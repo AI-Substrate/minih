@@ -103,13 +103,19 @@ export type {
 } from './inbox-poll.js';
 export { InboxPollError, pollInboxLane } from './inbox-poll.js';
 export type {
+  ForbiddenMeasurementView,
   FrameworkMapping,
   MeasurementAuthority,
+  MeasurementAuthorityContract,
+  MeasurementDataStatus,
   MeasurementFramework,
+  MeasurementRedactionContract,
+  MeasurementSchemaVersion,
   MetricCategory,
   MetricDefinition,
   MetricTraceability,
   MetricTraceabilityLevel,
+  MissingDataReason,
   ProofArtifact,
   ProofArtifactKind,
   ProofEvaluation,
@@ -123,15 +129,22 @@ export type {
 export {
   compareProofLevels,
   evaluateProof,
+  FORBIDDEN_MEASUREMENT_VIEWS,
   getDefaultProofRequirement,
   getMetricDefinition,
   getProofLevelDefinition,
+  isForbiddenMeasurementView,
   listMetricDefinitions,
   listMetricsByCategory,
+  MEASUREMENT_AUTHORITY_CONTRACTS,
+  MEASUREMENT_DATA_STATUSES,
+  MEASUREMENT_SCHEMA_VERSION,
   METRIC_REGISTRY,
+  MISSING_DATA_REASONS,
   meetsDefaultValidatedThreshold,
   PROOF_LEVEL_DEFINITIONS,
   PROOF_LEVELS,
+  REDACTION_POSTURE_CONTRACTS,
   TRACEABILITY_LEVELS,
 } from './measurement/index.js';
 export type {

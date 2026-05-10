@@ -3,7 +3,7 @@
 **Plan**: [minih-harness-measurement-plan.md](../../minih-harness-measurement-plan.md)
 **Phase**: Phase 1: Measurement Domain Contracts
 **Generated**: 2026-05-10
-**Status**: In flight
+**Status**: Landed
 
 ---
 
@@ -77,7 +77,7 @@ stateDiagram-v2
     class S6 done
     class S7 done
     class S8 done
-    class S9 pending
+    class S9 done
 ```
 
 **Legend**: grey = pending | yellow = active | red = blocked/needs input | green = done
@@ -96,7 +96,7 @@ stateDiagram-v2
 - [x] **Stage 6: Add runner schemas** - add factual measurement, proof, scorecard, pulse, benchmark schemas, and explicit build-copy wiring (`src/schemas/*.json`, `scripts/copy-schemas.js`).
 - [x] **Stage 7: Add classifier schema** - require evidence-cited interpretive output for later CLI orchestration (`src/schemas/measurement-classification.json` - new file).
 - [x] **Stage 8: Extend schema tests** - compile and sample-validate every new schema (`test/runner/schemas.test.ts`).
-- [ ] **Stage 9: Encode redaction rules** - keep fact, interpretation, human pulse, and downstream context authority visible (`docs/domains/measurement/domain.md`, `src/runner/measurement/types.ts`).
+- [x] **Stage 9: Encode redaction rules** - keep fact, interpretation, human pulse, and downstream context authority visible (`docs/domains/measurement/domain.md`, `src/runner/measurement/types.ts`).
 
 ---
 
@@ -139,14 +139,14 @@ flowchart LR
 
 ## Acceptance Criteria
 
-- [ ] Every metric contract has traceability metadata and framework-mapping caveats.
-- [ ] MiniH-local metrics are reported as "mapped to" or "aligned with" frameworks, not framework-native.
-- [ ] Proof defaults are L5 for setup/change/benchmark, L4 for research/coordination, and L6 only for reproducibility.
-- [ ] Interpretive classification output requires evidence IDs or proof artifacts.
-- [ ] Classifications are visibly interpretive and cannot override runner-owned facts.
-- [ ] Aggregate pulse contracts cannot produce individual productivity reports or composite productivity scores.
-- [ ] Reporting contract tests reject composite productivity scores, individual rankings, missing provenance/redaction metadata, and unsupported DORA/business causality.
-- [ ] The first useful local slice remains independent of downstream delivery-system integrations.
+- [x] Every metric contract has traceability metadata and framework-mapping caveats.
+- [x] MiniH-local metrics are reported as "mapped to" or "aligned with" frameworks, not framework-native.
+- [x] Proof defaults are L5 for setup/change/benchmark, L4 for research/coordination, and L6 only for reproducibility.
+- [x] Interpretive classification output requires evidence IDs or proof artifacts.
+- [x] Classifications are visibly interpretive and cannot override runner-owned facts.
+- [x] Aggregate pulse contracts cannot produce individual productivity reports or composite productivity scores.
+- [x] Reporting contract tests reject composite productivity scores, individual rankings, missing provenance/redaction metadata, and unsupported DORA/business causality.
+- [x] The first useful local slice remains independent of downstream delivery-system integrations.
 
 ---
 
@@ -174,7 +174,7 @@ flowchart LR
 - [x] T006: Add runner-owned measurement schemas and build copy wiring (CS-3)
 - [x] T007: Add the interpretive classification schema contract (CS-2)
 - [x] T008: Extend schema contract tests for every new schema, including privacy and missing-data negatives (CS-2)
-- [ ] T009: Encode authority, composite-score, and redaction contracts (CS-2)
+- [x] T009: Encode authority, composite-score, and redaction contracts (CS-2)
 
 ---
 

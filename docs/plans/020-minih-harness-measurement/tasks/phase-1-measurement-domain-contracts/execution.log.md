@@ -195,3 +195,21 @@ Companion briefing sent with message `01KR7VF8M3N2ZN6RAWD69B73BG`.
 **Evidence**:
 - `npx vitest run test/runner/schemas.test.ts` passed: 58 tests.
 - Companion summary `01KR7WS6Z7Y2RP70ZH1VDCVGEY` approved T007 and confirmed F005/F006 resolved.
+
+### T009 - Encode authority and redaction contracts
+
+**Status**: Complete
+**Started**: 2026-05-10
+
+**Plan**:
+- Add runner measurement authority/redaction constants and tests so docs and schemas have matching source-of-truth labels.
+- Update measurement domain docs to reference the implemented contract modules and explicit forbidden reporting views.
+
+**Changes**:
+- Added `src/runner/measurement/authority.ts` with schema version, missing-data vocabulary, data statuses, authority contracts, redaction postures, and forbidden measurement views.
+- Exported authority/redaction contracts from the runner measurement barrel and public runner barrel.
+- Added `test/runner/measurement/authority-contracts.test.ts`.
+- Updated `docs/domains/measurement/domain.md` to list implemented authority contracts, forbidden reporting views, aggregate-only pulse threshold, and test coverage.
+
+**Evidence**:
+- `npx vitest run test/runner/measurement/authority-contracts.test.ts test/runner/measurement/proof-levels.test.ts test/runner/measurement/metric-registry.test.ts test/runner/schemas.test.ts` passed: 85 tests.

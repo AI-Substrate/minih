@@ -30,6 +30,7 @@ MiniH needs a local-first measurement capability that shows whether the harness 
 | `/Users/jordanknight/substrate/minih/docs/domains/registry.md` | measurement | cross-domain | Registers the conceptual measurement domain without changing existing import topology. |
 | `/Users/jordanknight/substrate/minih/docs/domains/domain-map.md` | measurement | cross-domain | Adds measurement as a conceptual contract node and documents allowed flows to runner/cli/agents. |
 | `/Users/jordanknight/substrate/minih/src/runner/measurement/types.ts` | runner | contract | Shared measurement/proof type contracts exported from runner for CLI consumption. |
+| `/Users/jordanknight/substrate/minih/src/runner/measurement/authority.ts` | runner | contract | Encodes source-of-truth authority classes, redaction postures, missing-data vocabulary, and forbidden measurement views. |
 | `/Users/jordanknight/substrate/minih/src/runner/measurement/proof-levels.ts` | runner | internal | Implements L0-L6 proof-level semantics and threshold helpers. |
 | `/Users/jordanknight/substrate/minih/src/runner/measurement/metric-registry.ts` | runner | contract | Stores metric IDs, traceability levels, framework mappings, caveats, and reporting rules as code. |
 | `/Users/jordanknight/substrate/minih/src/runner/measurement/events.ts` | runner | internal | Derives canonical measurement events from existing run metadata and adapter events. |

@@ -1,0 +1,475 @@
+diff --git a/src/runner/index.ts b/src/runner/index.ts
+index 3c01c99..d556b0c 100644
+--- a/src/runner/index.ts
++++ b/src/runner/index.ts
+@@ -38,6 +38,10 @@ export {
+   validateSlug,
+   watermarkPath,
+ } from './folder.js';
++export {
++  ManifestSchemaVersionError,
++  MultipleActiveRunsError,
++} from './human-view-errors.js';
+ export type { PreambleAssemblyInput } from './preamble-builder.js';
+ export { buildInsidePreamble } from './preamble-builder.js';
+ export { PrettyDisplay } from './pretty.js';
+@@ -56,22 +60,44 @@ export {
+   writeState,
+ } from './state.js';
+ export type {
++  // Human View — Phase 1 contracts (plan 009-human-agent-view).
++  ActiveRunCandidate,
+   AgentDefinition,
+   AgentRunConfig,
+   AgentRunResult,
+   CompletedMetadata,
++  ControlTimelineEntry,
+   CoordinationFrontmatter,
++  CoordinationTimelineEntry,
++  DiagnosticTimelineEntry,
++  HumanHeaderView,
++  HumanViewModel,
+   InboxMessage,
++  InboxTimelineEntry,
++  InputFooterView,
+   InsideMcpServerFactoryContext,
+   InsideState,
++  LiveRunManifest,
++  LiveRunStatus,
++  OutputPaneView,
+   OutsideState,
+   ParsedReport,
++  ResolvedRun,
++  ResolverDiagnostic,
+   RunEventStats,
++  RunLiveness,
++  RunResolveMode,
+   Side,
+   SideState,
+   StateHistoryEntry,
++  StatePaneView,
++  StateTransitionTimelineEntry,
++  ToolCallView,
++  TranscriptEntry,
+   ValidationResult,
++  ValidationTimelineEntry,
+   VelocityData,
++  ViewDiagnostic,
+ } from './types.js';
+ export { ulid } from './ulid.js';
+ export {
+diff --git a/src/runner/runner.ts b/src/runner/runner.ts
+index 29289a7..b79f9ef 100644
+--- a/src/runner/runner.ts
++++ b/src/runner/runner.ts
+@@ -31,6 +31,11 @@ import {
+   type InboxForwarder,
+ } from './inbox-forwarder.js';
+ import { buildInsidePreamble } from './preamble-builder.js';
++import {
++  flushThrottled as flushManifestThrottled,
++  updateManifest,
++  writeManifest,
++} from './run-manifest.js';
+ import { readStateLazy } from './state.js';
+ import {
+   createStateForwarder,
+@@ -41,6 +46,7 @@ import type {
+   AgentRunConfig,
+   AgentRunResult,
+   CompletedMetadata,
++  LiveRunManifest,
+   ParsedReport,
+   RunEventStats,
+   ValidationResult,
+@@ -63,7 +69,8 @@ function resolvePreamblePath(agentsDir: string): string {
+ /** System output requirements injected into every agent prompt. */
+ export const SYSTEM_OUTPUT_INSTRUCTIONS = `## Required Output Format
+ 
+-Your output MUST be a valid JSON object written to the path specified above ($MINIH_OUTPUT_PATH).
++Your output MUST be a valid JSON object written to the literal path specified above.
++The runner also exposes that path as MINIH_OUTPUT_PATH where the execution environment supports it; if a shell cannot see that variable, use the literal path from this prompt.
+ At minimum, your JSON must include these fields:
+ 
+ \`\`\`json
+@@ -123,8 +130,8 @@ this system for every agent that runs after you.
+ 
+ ## MANDATORY: Validate Before Finishing
+ 
+-After writing your output, you MUST run \`minih check\` and verify it passes.
+-If validation fails, read the errors, fix your output, and re-run \`minih check\`.
++After writing your output, you MUST run \`minih check\` and verify it passes. If MINIH_OUTPUT_PATH is unavailable in your shell, run \`minih check <slug> --file <literal-output-path>\` instead.
++If validation fails, read the errors, fix your output, and re-run the same check command.
+ Repeat until validation passes or you've exhausted reasonable attempts.
+ 
+ If you cannot make the output valid after 3 attempts, write a valid JSON object
+@@ -139,7 +146,7 @@ explaining what went wrong:
+ }
+ \`\`\`
+ 
+-Do NOT finish without running \`minih check\` at least once.
++Do NOT finish without running \`minih check\` or \`minih check <slug> --file <literal-output-path>\` at least once.
+ 
+ ## Cleanup
+ 
+@@ -241,6 +248,25 @@ export async function runAgent(
+ 
+   fs.writeFileSync(eventsPath, '');
+ 
++  // Initial run.json manifest — workshop 002 §1, plan 009.
++  // Written immediately after run-folder creation so attach commands can
++  // resolve the run by ID before session_start.
++  const initialManifest: LiveRunManifest = {
++    schemaVersion: 1,
++    slug: definition.slug,
++    runId,
++    runDir,
++    pid: process.pid,
++    startedAt: startedAt.toISOString(),
++    updatedAt: startedAt.toISOString(),
++    status: 'starting',
++    sessionId: null,
++    model: config.model ?? null,
++    control: { available: false, kind: 'none' },
++    counters: { events: 0, toolCalls: 0, messages: 0, errors: 0 },
++  };
++  await writeManifest(runDir, initialManifest);
++
+   const outputPath = path.join(runDir, 'output', 'report.json');
+   const stderrPath = path.join(runDir, 'stderr.log');
+ 
+@@ -400,13 +426,35 @@ export async function runAgent(
+         );
+         break;
+       case 'session_start':
+-        if (event.data.sessionId) activeSessionId = event.data.sessionId;
++        if (event.data.sessionId) {
++          activeSessionId = event.data.sessionId;
++          // Immediate (non-throttled) — sessionId + active is the answer
++          // attach-by-id needs as fast as possible.
++          void updateManifest(runDir, {
++            sessionId: event.data.sessionId,
++            status: 'active',
++          });
++        }
+         break;
+     }
+ 
+     // Write to NDJSON incrementally
+     fs.appendFileSync(eventsPath, `${JSON.stringify(event)}\n`);
+ 
++    // Throttled counter patch — coalesces per-event tick to avoid disk thrash.
++    void updateManifest(
++      runDir,
++      {
++        counters: {
++          events: stats.total,
++          toolCalls: stats.toolCalls,
++          messages: stats.messages,
++          errors: stats.errors,
++        },
++      },
++      { throttleMs: 250 },
++    );
++
+     if (onEvent) onEvent(event);
+   };
+ 
+@@ -512,6 +560,9 @@ export async function runAgent(
+         ...(mcpServers && { mcpServers }),
+       })
+       .then(async (result) => {
++        // Manifest: status → completing right before terminal-condition wait
++        // (workshop 002 §Write points).
++        await updateManifest(runDir, { status: 'completing' });
+         const terminal = await awaitTerminalCondition(
+           result,
+           pendingForwarderCount,
+@@ -668,6 +719,21 @@ export async function runAgent(
+     JSON.stringify(metadata, null, 2),
+   );
+ 
++  // Final manifest patch — flush any pending throttled counters and mark
++  // the run completed/failed so attach commands can render an honest
++  // capability label even before they read completed.json.
++  await flushManifestThrottled(runDir);
++  await updateManifest(runDir, {
++    status: resultStatus === 'completed' ? 'completed' : 'failed',
++    sessionId: agentResult.sessionId || null,
++    counters: {
++      events: stats.total,
++      toolCalls: stats.toolCalls,
++      messages: stats.messages,
++      errors: stats.errors,
++    },
++  });
++
+   // Parse report.json for envelope surfacing
+   const parsedReport = parseReportJson(outputPath);
+ 
+diff --git a/src/runner/types.ts b/src/runner/types.ts
+index 4d943c9..726531f 100644
+--- a/src/runner/types.ts
++++ b/src/runner/types.ts
+@@ -240,3 +240,249 @@ export interface CoordinationFrontmatter {
+   outside?: Record<string, unknown>;
+   inside?: Record<string, unknown>;
+ }
++
++// ===========================================================================
++// Human View — Phase 1 (plan 009-human-agent-view)
++//
++// Live run identity (`run.json`), shared run resolver, and the pure
++// `HumanViewModel` reducer contract. These types are the public surface
++// Phase 2's CLI renderer will import via `src/runner/index.ts`.
++// ===========================================================================
++
++/** Lifecycle status of a live run, written into `run.json`. */
++export type LiveRunStatus =
++  | 'starting'
++  | 'active'
++  | 'idle'
++  | 'completing'
++  | 'completed'
++  | 'failed'
++  | 'stale';
++
++/**
++ * Live run manifest written to `runs/<runId>/run.json` from folder-create
++ * onward. Schema-versioned for forward compatibility (workshop 002 §1).
++ */
++export interface LiveRunManifest {
++  schemaVersion: 1;
++  slug: string;
++  runId: string;
++  runDir: string;
++  pid: number;
++  startedAt: string;
++  updatedAt: string;
++  status: LiveRunStatus;
++  sessionId: string | null;
++  model: string | null;
++  control: {
++    available: boolean;
++    kind: 'none' | 'file-command-lane';
++    commandLanePath?: string;
++  };
++  counters: {
++    events: number;
++    toolCalls: number;
++    messages: number;
++    errors: number;
++  };
++}
++
++/** Mode passed to `resolveRun({ slug, mode })`. */
++export type RunResolveMode =
++  | { kind: 'by-id'; runId: string }
++  | { kind: 'latest-active' }
++  | { kind: 'latest-completed' }
++  | { kind: 'latest-any' };
++
++/** Liveness as inferred by the resolver. */
++export type RunLiveness =
++  | 'active'
++  | 'stale'
++  | 'completed'
++  | 'failed'
++  | 'unknown';
++
++/** Single resolver diagnostic (e.g., a candidate run with a torn manifest). */
++export interface ResolverDiagnostic {
++  runId: string;
++  message: string;
++}
++
++/** Result of a successful `resolveRun(...)` call. */
++export interface ResolvedRun {
++  slug: string;
++  runId: string;
++  runDir: string;
++  manifest: LiveRunManifest | null;
++  completed: CompletedMetadata | null;
++  liveness: RunLiveness;
++  diagnostics: ResolverDiagnostic[];
++}
++
++/** Lightweight candidate descriptor used in `MultipleActiveRunsError`. */
++export interface ActiveRunCandidate {
++  runId: string;
++  startedAt: string;
++  sessionId: string | null;
++}
++
++// ---------------------------------------------------------------------------
++// HumanViewModel — Workshop 004 contract.
++// Pure reducer output; no I/O on this side. Phase 2 destructures everything
++// listed below; do NOT change shape without coordinating downstream.
++// ---------------------------------------------------------------------------
++
++/** Header pane projection. */
++export interface HumanHeaderView {
++  slug: string;
++  runId: string;
++  sessionId: string | null;
++  model: string | null;
++  status: 'starting' | 'active' | 'stale' | 'completed' | 'failed' | 'unknown';
++  capability: 'starting' | 'input-available' | 'input-read-only' | 'completed';
++  elapsedMs: number | null;
++  eventCount: number;
++  toolCallCount: number;
++  unreadCount: number;
++}
++
++/** A single transcript row. */
++export interface TranscriptEntry {
++  id: string;
++  ts: string;
++  role: 'user' | 'assistant' | 'system' | 'error';
++  /** Displayed actor label — outside actor / inside agent / system. */
++  actorLabel: 'Outside actor' | 'Inside agent' | 'System' | 'Error';
++  content: string;
++  status: 'streaming' | 'final' | 'collapsed' | 'error';
++  sourceEventIds: string[];
++  messageId: string | null;
++}
++
++/** A tool call lifecycle row. */
++export interface ToolCallView {
++  id: string;
++  toolName: string;
++  startedAt: string;
++  completedAt: string | null;
++  status: 'running' | 'ok' | 'error';
++  inputSummary: string;
++  outputSummary: string | null;
++  outputTruncated: boolean;
++}
++
++/** Inbox entry on the merged coordination timeline. */
++export interface InboxTimelineEntry {
++  kind: 'inbox';
++  id: string;
++  ts: string;
++  lane: 'outside' | 'inside';
++  type: string;
++  subject: string;
++  bodyPreview: string;
++  ackOf: string | null;
++  ackState: 'not-ack' | 'acks-other' | 'acked' | 'unacked';
++}
++
++/** State transition entry on the timeline. */
++export interface StateTransitionTimelineEntry {
++  kind: 'state-transition';
++  id: string;
++  ts: string;
++  side: Side;
++  from: string;
++  to: string;
++  reason: string | null;
++  peerStatus: string | null;
++}
++
++/** Output validation entry on the timeline. */
++export interface ValidationTimelineEntry {
++  kind: 'validation';
++  id: string;
++  ts: string;
++  valid: boolean;
++  errors: string[];
++}
++
++/** Future cross-process control entry on the timeline (placeholder). */
++export interface ControlTimelineEntry {
++  kind: 'control';
++  id: string;
++  ts: string;
++  controlType: string;
++  description: string;
++}
++
++/** Diagnostic entry on the timeline (degraded source / parse error). */
++export interface DiagnosticTimelineEntry {
++  kind: 'diagnostic';
++  id: string;
++  ts: string;
++  source: string;
++  message: string;
++}
++
++/** Discriminated union for the merged coordination timeline. */
++export type CoordinationTimelineEntry =
++  | InboxTimelineEntry
++  | StateTransitionTimelineEntry
++  | ValidationTimelineEntry
++  | ControlTimelineEntry
++  | DiagnosticTimelineEntry;
++
++/** State pane projection (inside/outside snapshots). */
++export interface StatePaneView {
++  inside: { status: string; updatedAt: string | null } | null;
++  outside: { status: string; updatedAt: string | null } | null;
++}
++
++/** Output pane projection (output path, validation, recent-write info). */
++export interface OutputPaneView {
++  outputPath: string | null;
++  exists: boolean;
++  bytes: number | null;
++  lastValidation: ValidationResult | null;
++}
++
++/** Input footer projection — drives footer enable/disable + reason. */
++export interface InputFooterView {
++  enabled: boolean;
++  mode:
++    | 'same-process'
++    | 'attached-read-only'
++    | 'attached-control'
++    | 'completed';
++  disabledReason: string | null;
++  draft: string;
++  followPaused: boolean;
++  pendingCommandCount: number;
++}
++
++/** A single view-model diagnostic surfaced in the diagnostics pane. */
++export interface ViewDiagnostic {
++  source:
++    | 'events'
++    | 'manifest'
++    | 'completed'
++    | 'inbox'
++    | 'state'
++    | 'history'
++    | 'output'
++    | 'validation';
++  message: string;
++  /** Optional original line/path/ref for the implementor to chase down. */
++  ref?: string;
++}
++
++/** Full Workshop 004 top-level model. */
++export interface HumanViewModel {
++  header: HumanHeaderView;
++  transcript: TranscriptEntry[];
++  tools: ToolCallView[];
++  coordination: CoordinationTimelineEntry[];
++  state: StatePaneView;
++  output: OutputPaneView;
++  input: InputFooterView;
++  diagnostics: ViewDiagnostic[];
++}
+diff --git a/test/runner/run-folder-snapshot.test.ts b/test/runner/run-folder-snapshot.test.ts
+index 335fca3..2318609 100644
+--- a/test/runner/run-folder-snapshot.test.ts
++++ b/test/runner/run-folder-snapshot.test.ts
+@@ -167,6 +167,7 @@ describe('run-folder coordination snapshots', () => {
+       'inbox-snapshot/outside.ndjson',
+       'output/report.json',
+       'prompt.md',
++      'run.json',
+       'state/inside.json',
+       'state/outside.json',
+       'state-snapshot.json',

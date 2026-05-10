@@ -12,21 +12,31 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
+import { registerAgentCommand } from './commands/agent.js';
+import { registerAgentReadmeCommand } from './commands/agent-readme.js';
+import { registerAttachCommand } from './commands/attach.js';
 import { registerCheckCommand } from './commands/check.js';
 import { registerConnectCommand } from './commands/connect.js';
 import { registerDifficultiesCommand } from './commands/difficulties.js';
 import { registerDoctorCommand } from './commands/doctor.js';
+import { registerHarvestCommand } from './commands/harvest.js';
 import { registerHistoryCommand } from './commands/history.js';
 import { registerInitCommand } from './commands/init.js';
+import { registerInsideCommand } from './commands/inside.js';
 import { registerInspectCommand } from './commands/inspect.js';
 import { registerLastRunCommand } from './commands/last-run.js';
 import { registerListCommand } from './commands/list.js';
+import { registerOutsideCommand } from './commands/outside.js';
+import { registerProbeCommand } from './commands/probe.js';
 import { registerQuickstartCommand } from './commands/quickstart.js';
 import { registerResumeCommand } from './commands/resume.js';
+import { registerRetrosCommand } from './commands/retros.js';
 import { registerRunCommand } from './commands/run.js';
+import { registerStateCommand } from './commands/state.js';
 import { registerStatusCommand } from './commands/status.js';
 import { registerTailCommand } from './commands/tail.js';
 import { registerValidateCommand } from './commands/validate.js';
+import { registerViewCommand } from './commands/view.js';
 
 // Read version from package.json (DYK #3: fs.readFileSync, not require)
 const thisDir = path.dirname(fileURLToPath(import.meta.url));
@@ -48,7 +58,7 @@ const program = new Command()
   .option('--agents-dir <path>', 'Agents directory', 'agents')
   .addHelpText(
     'after',
-    '\nDocs: https://github.com/AI-Substrate/minih/blob/main/AGENTS_README.md',
+    '\nDocs: https://github.com/AI-Substrate/minih/blob/main/AGENTS_README.md\n      or run: minih agent-readme',
   );
 
 // Resolve --agents-dir to absolute once (DYK #5)
@@ -63,6 +73,10 @@ registerQuickstartCommand(program);
 registerListCommand(program);
 registerRunCommand(program);
 registerResumeCommand(program);
+registerOutsideCommand(program);
+registerInsideCommand(program);
+registerStateCommand(program);
+registerRetrosCommand(program);
 registerConnectCommand(program);
 registerHistoryCommand(program);
 registerInspectCommand(program);
@@ -74,5 +88,11 @@ registerDoctorCommand(program);
 registerDifficultiesCommand(program);
 registerCheckCommand(program);
 registerInitCommand(program);
+registerHarvestCommand(program);
+registerAgentReadmeCommand(program);
+registerViewCommand(program);
+registerAttachCommand(program);
+registerAgentCommand(program);
+registerProbeCommand(program);
 
 program.parse();

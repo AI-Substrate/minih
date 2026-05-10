@@ -1,6 +1,7 @@
 ---
 description: "End-to-end smoke test of all minih CLI commands and the full agent lifecycle"
 tags: [smoke, ci, integration, e2e]
+permissions: yolo
 ---
 
 # Minih Smoke Test

@@ -1,6 +1,7 @@
 ---
 description: "Validate all minih agents follow folder conventions, frontmatter, and schema rules"
 tags: [ci, validation, conventions]
+permissions: trusted
 ---
 
 # Convention Check

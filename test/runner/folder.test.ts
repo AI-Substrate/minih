@@ -3,11 +3,20 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  coordinationRunLocation,
   createRunFolder,
+  hasOutsideMd,
+  historyPath,
+  InvalidCoordinationFrontmatterError,
+  InvalidSlugError,
+  inboxLanePath,
   listAgents,
+  outsideMdPath,
   parseFrontmatter,
   resolveAgent,
+  stateFilePath,
   validateSlug,
+  watermarkPath,
 } from '../../src/runner/folder.js';
 
 let tmpDir: string;
@@ -259,7 +268,9 @@ describe('createRunFolder', () => {
     fs.writeFileSync(path.join(dir, 'output-schema.json'), '{"type":"object"}');
     fs.writeFileSync(path.join(dir, 'instructions.md'), '# Instructions');
 
-    const agent = resolveAgent('test-agent', tmpDir)!;
+    const agent = resolveAgent('test-agent', tmpDir);
+    expect(agent).not.toBeNull();
+    if (!agent) throw new Error('expected test-agent to resolve');
     const { runDir, runId } = createRunFolder(agent);
 
     expect(fs.existsSync(runDir)).toBe(true);
@@ -277,5 +288,316 @@ describe('createRunFolder', () => {
     expect(fs.readFileSync(path.join(runDir, 'prompt.md'), 'utf-8')).toContain(
       '# Test prompt',
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P1 / T007 — coordination path helpers
+// ---------------------------------------------------------------------------
+
+describe('coordination path helpers (T007)', () => {
+  const location = () => coordinationRunLocation('hello', tmpDir, 'run-123');
+
+  it('inboxLanePath returns absolute path with the correct lane', () => {
+    const p = inboxLanePath(location(), 'outside');
+    expect(path.isAbsolute(p)).toBe(true);
+    expect(p).toBe(
+      path.join(
+        path.resolve(tmpDir),
+        'hello',
+        'runs',
+        'run-123',
+        'inbox',
+        'outside',
+        'messages.ndjson',
+      ),
+    );
+  });
+
+  it('stateFilePath returns absolute path per side', () => {
+    const o = stateFilePath(location(), 'outside');
+    const i = stateFilePath(location(), 'inside');
+    expect(path.isAbsolute(o) && path.isAbsolute(i)).toBe(true);
+    expect(o).toMatch(/state\/outside\.json$/);
+    expect(i).toMatch(/state\/inside\.json$/);
+  });
+
+  it('historyPath returns absolute path to history.ndjson', () => {
+    const p = historyPath(location());
+    expect(path.isAbsolute(p)).toBe(true);
+    expect(p).toMatch(/state\/history\.ndjson$/);
+  });
+
+  it('watermarkPath returns absolute path to sdk-watermark.json', () => {
+    const p = watermarkPath(location());
+    expect(path.isAbsolute(p)).toBe(true);
+    expect(p).toMatch(/state\/sdk-watermark\.json$/);
+  });
+
+  it('outsideMdPath returns absolute path to outside.md', () => {
+    const p = outsideMdPath('hello', tmpDir);
+    expect(path.isAbsolute(p)).toBe(true);
+    expect(p).toMatch(/hello\/outside\.md$/);
+  });
+
+  it.each([
+    ['..', 'parent traversal'],
+    ['a/b', 'slash'],
+    ['x\\y', 'backslash'],
+    ['', 'empty'],
+  ])('all helpers throw InvalidSlugError for slug %j (%s)', (badSlug) => {
+    expect(() =>
+      inboxLanePath(
+        coordinationRunLocation(badSlug, tmpDir, 'run-123'),
+        'outside',
+      ),
+    ).toThrow(InvalidSlugError);
+    expect(() =>
+      stateFilePath(
+        coordinationRunLocation(badSlug, tmpDir, 'run-123'),
+        'outside',
+      ),
+    ).toThrow(InvalidSlugError);
+    expect(() =>
+      historyPath(coordinationRunLocation(badSlug, tmpDir, 'run-123')),
+    ).toThrow(InvalidSlugError);
+    expect(() =>
+      watermarkPath(coordinationRunLocation(badSlug, tmpDir, 'run-123')),
+    ).toThrow(InvalidSlugError);
+    expect(() => outsideMdPath(badSlug, tmpDir)).toThrow(InvalidSlugError);
+    expect(() => hasOutsideMd(badSlug, tmpDir)).toThrow(InvalidSlugError);
+  });
+
+  it('hasOutsideMd is false when file absent', () => {
+    fs.mkdirSync(path.join(tmpDir, 'hello'));
+    expect(hasOutsideMd('hello', tmpDir)).toBe(false);
+  });
+
+  it('hasOutsideMd is true when file present', () => {
+    fs.mkdirSync(path.join(tmpDir, 'hello'));
+    fs.writeFileSync(path.join(tmpDir, 'hello', 'outside.md'), 'body');
+    expect(hasOutsideMd('hello', tmpDir)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P1 / T007 — outsideContract discovery via listAgents/resolveAgent
+// ---------------------------------------------------------------------------
+
+describe('outsideContract discovery (T007)', () => {
+  function seedAgent(opts: {
+    slug: string;
+    description: string;
+    coordination?: string; // raw frontmatter line
+    outsideMdBody?: string | null; // null = absent; '' = present-but-empty
+  }): void {
+    const dir = path.join(tmpDir, opts.slug);
+    fs.mkdirSync(dir, { recursive: true });
+    const fm = ['---', `description: "${opts.description}"`, 'tags: [test]'];
+    if (opts.coordination) fm.push(`coordination: ${opts.coordination}`);
+    fm.push('---', '', '# body');
+    fs.writeFileSync(path.join(dir, 'prompt.md'), fm.join('\n'));
+    if (opts.outsideMdBody !== undefined && opts.outsideMdBody !== null) {
+      fs.writeFileSync(path.join(dir, 'outside.md'), opts.outsideMdBody);
+    }
+  }
+
+  it('absent outside.md → outsideContract: undefined', () => {
+    seedAgent({ slug: 'plain', description: 'no outside.md' });
+    const agent = resolveAgent('plain', tmpDir);
+    expect(agent?.outsideContract).toBeUndefined();
+  });
+
+  it('present outside.md → outsideContract: body', () => {
+    seedAgent({
+      slug: 'with-outside',
+      description: 'has outside.md',
+      outsideMdBody: '# Peer contract\n\nbody here',
+    });
+    const agent = resolveAgent('with-outside', tmpDir);
+    expect(agent?.outsideContract).toContain('# Peer contract');
+  });
+
+  it('empty outside.md → outsideContract: "" (distinguishable from absent)', () => {
+    seedAgent({
+      slug: 'empty-outside',
+      description: 'empty outside.md',
+      outsideMdBody: '',
+    });
+    const agent = resolveAgent('empty-outside', tmpDir);
+    expect(agent?.outsideContract).toBe('');
+  });
+
+  it('oversize outside.md (>16KB) is truncated with a console.warn', () => {
+    const big = 'x'.repeat(20_000); // 20 KB > 16 KB ceiling
+    seedAgent({
+      slug: 'big-outside',
+      description: 'oversize',
+      outsideMdBody: big,
+    });
+    const warns: string[] = [];
+    const orig = console.warn;
+    console.warn = (msg: string) => warns.push(msg);
+    try {
+      const agent = resolveAgent('big-outside', tmpDir);
+      expect(agent?.outsideContract).toBeDefined();
+      expect(agent?.outsideContract?.length).toBeLessThanOrEqual(16 * 1024);
+      expect(warns.some((w) => w.includes('big-outside'))).toBe(true);
+    } finally {
+      console.warn = orig;
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P1 / T008 — parseFrontmatter coordination field
+// ---------------------------------------------------------------------------
+
+describe('parseFrontmatter coordination field (T008)', () => {
+  function fm(coord: string | null): string {
+    const lines = ['---', 'description: "x"'];
+    if (coord !== null) lines.push(coord);
+    lines.push('---', '', 'body');
+    return lines.join('\n');
+  }
+
+  it('absent → {enabled: false} (always populated, never omitted)', () => {
+    const result = parseFrontmatter(fm(null));
+    expect(result.coordination).toEqual({ enabled: false });
+  });
+
+  it("string 'enabled' → {enabled: true}", () => {
+    const result = parseFrontmatter(fm('coordination: enabled'));
+    expect(result.coordination).toEqual({ enabled: true });
+  });
+
+  it("string 'disabled' → {enabled: false}", () => {
+    const result = parseFrontmatter(fm('coordination: disabled'));
+    expect(result.coordination).toEqual({ enabled: false });
+  });
+
+  it('object form with enabled: true preserves outside/inside placeholders', () => {
+    const content = [
+      '---',
+      'description: "x"',
+      'coordination:',
+      '  enabled: true',
+      '  outside: {}',
+      '  inside: {}',
+      '---',
+      '',
+      'body',
+    ].join('\n');
+    const result = parseFrontmatter(content);
+    expect(result.coordination.enabled).toBe(true);
+    expect(result.coordination.outside).toEqual({});
+    expect(result.coordination.inside).toEqual({});
+  });
+
+  it('object form preserves real outside/inside payload values (F001)', () => {
+    const content = [
+      '---',
+      'description: "x"',
+      'coordination:',
+      '  enabled: true',
+      '  outside: {"audience":"ci","verbose":true}',
+      '  inside: {"strict":true}',
+      '---',
+      '',
+      'body',
+    ].join('\n');
+    const result = parseFrontmatter(content);
+    expect(result.coordination.outside).toEqual({
+      audience: 'ci',
+      verbose: true,
+    });
+    expect(result.coordination.inside).toEqual({ strict: true });
+  });
+
+  it('object form rejects non-object outside/inside JSON (F001)', () => {
+    const content = [
+      '---',
+      'description: "x"',
+      'coordination:',
+      '  enabled: true',
+      '  outside: "not-an-object"',
+      '---',
+      '',
+      'body',
+    ].join('\n');
+    expect(() => parseFrontmatter(content)).toThrow(
+      InvalidCoordinationFrontmatterError,
+    );
+  });
+
+  it('object form rejects malformed JSON in outside/inside value (F001)', () => {
+    const content = [
+      '---',
+      'description: "x"',
+      'coordination:',
+      '  enabled: true',
+      '  outside: {missing-quotes}',
+      '---',
+      '',
+      'body',
+    ].join('\n');
+    expect(() => parseFrontmatter(content)).toThrow(
+      InvalidCoordinationFrontmatterError,
+    );
+  });
+
+  it('object form with enabled: false (explicit) → {enabled: false}', () => {
+    const content = [
+      '---',
+      'description: "x"',
+      'coordination:',
+      '  enabled: false',
+      '---',
+      '',
+      'body',
+    ].join('\n');
+    const result = parseFrontmatter(content);
+    expect(result.coordination).toEqual({ enabled: false });
+  });
+
+  // Negative cases — InvalidCoordinationFrontmatterError
+  it.each([
+    'coordination: maybe',
+    'coordination: yes',
+    'coordination: ENABLED',
+    'coordination: 1',
+  ])('invalid string value rejects: %s', (line) => {
+    expect(() => parseFrontmatter(fm(line))).toThrow(
+      InvalidCoordinationFrontmatterError,
+    );
+  });
+
+  it('object form missing `enabled` rejects', () => {
+    const content = [
+      '---',
+      'description: "x"',
+      'coordination:',
+      '  outside: {}',
+      '---',
+      '',
+      'body',
+    ].join('\n');
+    expect(() => parseFrontmatter(content)).toThrow(
+      InvalidCoordinationFrontmatterError,
+    );
+  });
+
+  it('existing 9 agents do not declare `coordination` and resolve with {enabled:false}', () => {
+    // Sanity: parseFrontmatter against a stripped real-agent shape behaves.
+    const realShape = [
+      '---',
+      'description: "Confirm minih is working"',
+      'tags: [smoke, minimal]',
+      '---',
+      '',
+      '# Hello World',
+    ].join('\n');
+    const result = parseFrontmatter(realShape);
+    expect(result.coordination).toEqual({ enabled: false });
   });
 });

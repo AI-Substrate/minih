@@ -6,8 +6,8 @@
  * Logs to /tmp/mcp-wiretap.log
  */
 
-const { spawn } = require('child_process');
-const fs = require('fs');
+const { spawn } = require('node:child_process');
+const fs = require('node:fs');
 
 const logFile = '/tmp/mcp-wiretap.log';
 const args = process.argv.slice(2);

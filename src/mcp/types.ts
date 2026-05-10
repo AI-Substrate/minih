@@ -1,0 +1,368 @@
+import type { Side } from '../runner/types.js';
+
+export const MINIH_COORDINATION_SERVER_NAME = 'minih-coordination';
+export const MAX_INBOX_WAIT_MS = 30000;
+
+export const MCP_TOOL_NAMES = [
+  'inbox_list',
+  'inbox_send',
+  'inbox_ack',
+  'state_get',
+  'state_set',
+  'state_transition',
+  'wait_for_any',
+  'permission_status',
+] as const;
+
+export type McpToolName = (typeof MCP_TOOL_NAMES)[number];
+
+const LEGACY_MCP_TOOL_ALIASES = {
+  'inbox.list': 'inbox_list',
+  'inbox.send': 'inbox_send',
+  'inbox.ack': 'inbox_ack',
+  'state.get': 'state_get',
+  'state.set': 'state_set',
+  'state.transition': 'state_transition',
+} as const satisfies Record<string, McpToolName>;
+
+export type McpErrorCode =
+  | 'MCP_CONTEXT_INVALID'
+  | 'MCP_INBOX_CORRUPT'
+  | 'MCP_INVALID_ARGUMENT'
+  | 'MCP_NOT_FOUND'
+  | 'MCP_CONFLICT'
+  | 'MCP_STATE_CORRUPT'
+  | 'MCP_STATE_SCHEMA_INVALID'
+  | 'MCP_HISTORY_TOO_LARGE'
+  | 'MCP_INTERNAL_ERROR';
+
+export interface McpErrorMeta {
+  code: McpErrorCode;
+}
+
+export interface McpTextContent {
+  type: 'text';
+  text: string;
+}
+
+export interface McpToolResult<TStructured = unknown> {
+  content: McpTextContent[];
+  structuredContent?: TStructured;
+  _meta?: McpErrorMeta & Record<string, unknown>;
+  isError?: boolean;
+}
+
+export class McpToolError extends Error {
+  constructor(
+    public readonly code: McpErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'McpToolError';
+  }
+}
+
+export function jsonResult<TStructured>(
+  structuredContent: TStructured,
+): McpToolResult<TStructured> {
+  return {
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(structuredContent),
+      },
+    ],
+    structuredContent,
+  };
+}
+
+export function errorResult(error: McpToolError): McpToolResult {
+  return {
+    isError: true,
+    content: [{ type: 'text', text: error.message }],
+    _meta: { code: error.code },
+  };
+}
+
+export type JsonSchema =
+  | { type: 'boolean'; description?: string; default?: boolean }
+  | {
+      type: 'integer';
+      description?: string;
+      minimum?: number;
+      maximum?: number;
+    }
+  | { type: 'number'; description?: string; minimum?: number; maximum?: number }
+  | {
+      type: 'string';
+      description?: string;
+      minLength?: number;
+      maxLength?: number;
+    }
+  | {
+      type: 'object';
+      description?: string;
+      properties?: Record<string, JsonSchema>;
+      required?: string[];
+      additionalProperties?: boolean;
+      not?: { required: string[] };
+    }
+  | {
+      type: 'array';
+      description?: string;
+      items: JsonSchema;
+      minItems?: number;
+      maxItems?: number;
+      uniqueItems?: boolean;
+    };
+
+export interface ToolContract {
+  name: McpToolName;
+  description: string;
+  inputSchema: Extract<JsonSchema, { type: 'object' }>;
+}
+
+export interface InboxListInput {
+  unread?: boolean;
+  type?: string;
+  waitForAny?: string[];
+  limit?: number;
+  after?: string;
+  waitMs?: number;
+}
+
+export interface InboxSendInput {
+  subject: string;
+  body: string;
+  type?: string;
+  meta?: Record<string, unknown>;
+}
+
+export interface InboxAckInput {
+  msgId: string;
+}
+
+export interface StateGetInput {
+  side?: Side | 'self' | 'peer' | 'both';
+  key?: string;
+}
+
+export interface StateSetInput {
+  status: string;
+  data?: Record<string, unknown>;
+}
+
+export interface StateTransitionInput {
+  to: string;
+  reason?: string | null;
+  data?: Record<string, unknown>;
+}
+
+const sideSchema: JsonSchema = {
+  type: 'string',
+  description:
+    'State side to inspect: self/inside, peer/outside, or both. Defaults to both.',
+};
+
+export const TOOL_CONTRACTS: readonly ToolContract[] = [
+  {
+    name: 'inbox_list',
+    description: 'List messages visible to the inside agent.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        unread: {
+          type: 'boolean',
+          description: 'When true, exclude messages acknowledged by this side.',
+          default: false,
+        },
+        type: {
+          type: 'string',
+          description: 'When set, return only messages with this exact type.',
+          minLength: 1,
+          maxLength: 64,
+        },
+        waitForAny: {
+          type: 'array',
+          description:
+            'When set, return messages whose type exactly matches any listed value. Mutually exclusive with type.',
+          items: {
+            type: 'string',
+            minLength: 1,
+            maxLength: 64,
+          },
+          minItems: 1,
+          maxItems: 16,
+          uniqueItems: true,
+        },
+        limit: {
+          type: 'integer',
+          description: 'Maximum number of messages to return.',
+          minimum: 1,
+          maximum: 200,
+        },
+        after: {
+          type: 'string',
+          description: 'Return messages after this message id.',
+          minLength: 1,
+        },
+        waitMs: {
+          type: 'integer',
+          description:
+            'Optional bounded long-poll duration in milliseconds. Omit or set to 0 for immediate reads.',
+          minimum: 0,
+          maximum: MAX_INBOX_WAIT_MS,
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'inbox_send',
+    description: 'Send an append-only inbox message from the inside side.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        subject: { type: 'string', minLength: 1, maxLength: 200 },
+        body: { type: 'string', minLength: 1, maxLength: 16000 },
+        type: {
+          type: 'string',
+          description: "Short message kind; defaults to 'note'.",
+          minLength: 1,
+          maxLength: 64,
+        },
+        meta: { type: 'object', additionalProperties: true },
+        ackOf: {
+          type: 'string',
+          minLength: 1,
+          maxLength: 128,
+          description:
+            'Optional id of the message this is a reply to. Used to form reply chains; renders as "In reply to:" in the next agent\'s prompt. For acknowledgement specifically, prefer inbox_ack.',
+        },
+      },
+      required: ['subject', 'body'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'inbox_ack',
+    description: 'Acknowledge a peer inbox message by id.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        msgId: { type: 'string', minLength: 1, maxLength: 128 },
+      },
+      required: ['msgId'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'state_get',
+    description: 'Read inside or outside state.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        side: sideSchema,
+        key: {
+          type: 'string',
+          description:
+            "Optional dot-path to read from the selected state, e.g. 'status' or 'data.phase'.",
+          minLength: 1,
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'state_set',
+    description: 'Set the inside state data and status.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', minLength: 1, maxLength: 128 },
+        data: { type: 'object', additionalProperties: true },
+      },
+      required: ['status'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'state_transition',
+    description: 'Transition inside state status and append history.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        to: { type: 'string', minLength: 1, maxLength: 128 },
+        reason: { type: 'string', maxLength: 2000 },
+        data: { type: 'object', additionalProperties: true },
+      },
+      required: ['to'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'wait_for_any',
+    description:
+      'Long-poll for any of N event kinds (inbox messages, state changes, …) in one call. Returns all events fired during the wait window in an EventEnvelope discriminated union; clean timeout returns events: [] with timedOut: true. Plan 014.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        events: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 8,
+          description:
+            'Watch entries; each is { kind, filter? }. Supported kinds: inbox.message (with optional filter.types[]), state.peer.changed, state.self.changed.',
+          items: {
+            type: 'object',
+            properties: {
+              kind: {
+                type: 'string',
+                description:
+                  "Event kind to watch. Supported in v1: 'inbox.message', 'state.peer.changed', 'state.self.changed'. Runtime validates; unknown kinds return MCP_INVALID_ARGUMENT.",
+                minLength: 1,
+                maxLength: 64,
+              },
+              filter: { type: 'object', additionalProperties: true },
+            },
+            required: ['kind'],
+            additionalProperties: false,
+          },
+        },
+        waitMs: {
+          type: 'integer',
+          minimum: 0,
+          maximum: MAX_INBOX_WAIT_MS,
+          description:
+            'Bounded wait duration in milliseconds. Required (unlike inbox_list, where waitMs is optional).',
+        },
+      },
+      required: ['events', 'waitMs'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'permission_status',
+    description:
+      'Return the resolved permission policy for this agent. Read-only; always allowed for coordinated agents. Useful for self-introspection ("what am I allowed to do?") without firing a permission request.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+] as const;
+
+export function isMcpToolName(name: string): name is McpToolName {
+  return (MCP_TOOL_NAMES as readonly string[]).includes(name);
+}
+
+export function normalizeMcpToolName(name: string): McpToolName | null {
+  if (isMcpToolName(name)) return name;
+  if (Object.hasOwn(LEGACY_MCP_TOOL_ALIASES, name)) {
+    return LEGACY_MCP_TOOL_ALIASES[
+      name as keyof typeof LEGACY_MCP_TOOL_ALIASES
+    ];
+  }
+  return null;
+}

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://minih.dev/schemas/agents-registry.json",
+  "version": "1",
+  "agents": [
+    {
+      "slug": "code-review-companion",
+      "url": "github:AI-Substrate/minih",
+      "ref": "main",
+      "subpath": "agents/code-review-companion",
+      "description": "Long-running coordinated code-review companion that pairs alongside a human or supervising agent. Boots once per session, listens on the inbox, reviews each ping inline, and writes a session farewell envelope at exit. Designed for Power-On-Mode review during implementation.",
+      "tags": ["companion", "review", "coordination", "quality", "exemplar"],
+      "since": "0.4.0",
+      "minihVersion": ">=0.3.0"
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 ---
 description: "Review another agent's prompt.md for clarity, completeness, and minih conventions"
 tags: [review, quality, prompts]
+permissions: read-only
 ---
 
 # Prompt Review

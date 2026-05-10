@@ -1,0 +1,24 @@
+{
+  "name": "permission-prober",
+  "version": "0.1.0",
+  "description": "Permission-policy prober — runs scenario probes and reports observed outcomes. Plan 018 workshop 004.",
+  "tags": ["security", "validation", "plan-018", "prober"],
+  "type": "minih-agent",
+  "files": [
+    { "path": "prompt.md", "description": "Inside agent prompt." },
+    {
+      "path": "input-schema.json",
+      "description": "Input params: scenario + nonce."
+    },
+    { "path": "output-schema.json", "description": "Probe report shape." },
+    {
+      "path": "scenarios.json",
+      "description": "10-scenario data-driven matrix."
+    }
+  ],
+  "permissions": {
+    "recommended": "read-only",
+    "fallback": "yolo",
+    "rationale": "The prober reads its scenarios.json and emits a JSON report; the probes themselves attempt risky operations so the policy's denial behaviour is observed."
+  }
+}

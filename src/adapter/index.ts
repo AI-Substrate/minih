@@ -1,4 +1,6 @@
 export type {
+  CopilotModelInfo,
+  CopilotReasoningEffort,
   CopilotResumeSessionConfig,
   CopilotSessionConfig,
   CopilotSessionEventLike,
@@ -22,6 +24,7 @@ export type {
   AgentUsageEvent,
   AgentUserPromptEvent,
   ReasoningEffort,
+  SessionSender,
   TokenMetrics,
 } from './events.js';
 export type { FakeAgentAdapterOptions } from './fake.js';

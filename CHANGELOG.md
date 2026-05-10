@@ -1,5 +1,17 @@
 # Changelog
 
+## Plan 018 — agent permissions (release-please will format on merge)
+
+### Features
+
+- Fine-grained agent permissions schema (R1): six built-in presets (yolo/trusted/restricted/read-only/network/build-only), per-kind overrides, allowedRoots FS guard with realpath-each-access, four-layer resolution chain (frontmatter→sidecar→env→release-default), AgentPermissionDeniedEvent + 5-signal denial protocol, terminalReason in run.json, exit code 126 (POSIX permission-denied).
+- CLI tooling (R2): `minih agent permissions list-available/list/set/clear/migrate`, `minih run --permissions/--allowed-roots/--allowed-roots-only/--strict-fs/--dry-run-permissions`, doctor `permissions` warning on missing field, MINIH_PERMISSIONS_DEFAULT env var.
+- Sidecar lockedDefault (R3): `.minih-source.json` captures install-time permissions intent with lossless-preservation invariant; manifest 0.2.0 supports `permissions.recommended/fallback/rationale`.
+- All 13 first-party agents migrated to explicit `permissions:` (R4); fft-blocking regression test gates new agents that omit the field.
+- New init template defaults to `permissions: restricted` (R5); release default flipped from `yolo` to `restricted` (R6) — sidecar lockedDefault grandfathers prior installs.
+- `permission_status` MCP tool (T-S2) for self-introspection by coordinated agents.
+- `permission-prober` agent pack + `minih probe --matrix all/--scenario/--ci` orchestrator (workshop 004) — security validation fleet that fires N parallel scenarios and cross-references each agent's self-report against events.ndjson + run.json truth (untrusted-by-default with nonce + schema gates).
+
 ## [0.1.5](https://github.com/AI-Substrate/minih/compare/minih-v0.1.4...minih-v0.1.5) (2026-04-15)
 
 

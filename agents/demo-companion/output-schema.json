@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Demo Companion Farewell Envelope",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["session", "conversation", "summary", "retrospective"],
+  "properties": {
+    "session": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["startedAt", "endedAt", "exitReason", "messageCounts"],
+      "properties": {
+        "startedAt": { "type": "string" },
+        "endedAt": { "type": "string" },
+        "exitReason": {
+          "type": "string",
+          "enum": ["stop_requested", "idle_budget", "timeout", "error"]
+        },
+        "messageCounts": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": [
+            "briefingsReceived",
+            "tasksReceived",
+            "questionsAsked",
+            "questionsAnswered",
+            "directivesReceived"
+          ],
+          "properties": {
+            "briefingsReceived": { "type": "integer", "minimum": 0 },
+            "tasksReceived": { "type": "integer", "minimum": 0 },
+            "questionsAsked": { "type": "integer", "minimum": 0 },
+            "questionsAnswered": { "type": "integer", "minimum": 0 },
+            "directivesReceived": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "conversation": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["round", "topic"],
+        "properties": {
+          "round": { "type": "integer", "minimum": 1 },
+          "topic": { "type": "string" },
+          "highlights": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "summary": { "type": "string", "minLength": 30 },
+    "retrospective": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["magicWand", "magicWandTarget"],
+      "properties": {
+        "magicWand": { "type": "string", "minLength": 10 },
+        "magicWandTarget": {
+          "type": "string",
+          "enum": ["project", "minih", "coordination"]
+        },
+        "notes": { "type": "string" }
+      }
+    }
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Code Review Companion Input",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "initialTask": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional first task to perform after boot. If omitted, the agent runs the built-in 'orient' task: read the active plan tree, summarise where the work stands, then idle waiting for outside messages."
+    },
+    "planPath": {
+      "type": "string",
+      "description": "Optional explicit path under docs/plans/ for the orient default to focus on. If omitted, the agent picks the highest-numbered plan folder."
+    },
+    "idleBudgetMs": {
+      "type": "integer",
+      "minimum": 60000,
+      "default": 1800000,
+      "description": "Absolute upper bound (ms) on idle time before self-termination. Default 30 minutes (1800000). Acts as the safety net — under the check-in protocol (see prompt.md § 2), this rarely fires because the firstContact/postTask check-ins drive earlier clean exits."
+    },
+    "firstContactPollThreshold": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 20,
+      "description": "Number of consecutive empty long-poll cycles after orient before the companion sends its first-contact check-in question. Default 20 polls (~10 minutes at 30s/poll). Set to 0 to disable the first-contact check-in entirely (legacy behaviour: rely on idleBudgetMs only)."
+    },
+    "postTaskPollThreshold": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 10,
+      "description": "Number of consecutive empty long-poll cycles after a task completes before the companion sends a post-task check-in question. Default 10 polls (~5 minutes at 30s/poll). Set to 0 to disable post-task check-ins entirely."
+    },
+    "replyWaitPolls": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 4,
+      "description": "Number of additional empty long-poll cycles to wait after a check-in question before farewelling on the absence of a reply. Default 4 polls (~2 minutes at 30s/poll). Generous default to give slow LLM orchestrators time to react."
+    }
+  }
+}

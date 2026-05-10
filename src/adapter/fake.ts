@@ -39,6 +39,8 @@ export class FakeAgentAdapter implements IAgentAdapter {
   private readonly _options: ResolvedOptions;
   private readonly _runDuration: number;
   private _events: AgentEvent[];
+  private _queuedRun: AgentEvent[][] | null = null;
+  private _sessionSendHistory: string[] = [];
   private _runHistory: AgentRunOptions[] = [];
   private _terminateHistory: string[] = [];
   private _compactHistory: string[] = [];
@@ -62,13 +64,29 @@ export class FakeAgentAdapter implements IAgentAdapter {
   async run(options: AgentRunOptions): Promise<AgentResult> {
     this._runHistory.push({ ...options });
 
+    options.onSessionReady?.({
+      send: async (prompt: string): Promise<string> => {
+        this._sessionSendHistory.push(prompt);
+        return prompt;
+      },
+    });
+
     if (this._runDuration > 0) {
       await new Promise((resolve) => setTimeout(resolve, this._runDuration));
     }
 
-    if (options.onEvent && this._events.length > 0) {
-      for (const event of this._events) {
-        options.onEvent(event);
+    if (options.onEvent) {
+      if (this._queuedRun) {
+        for (const turn of this._queuedRun) {
+          for (const event of turn) {
+            options.onEvent(event);
+          }
+          options.onEvent(createSessionIdleEvent());
+        }
+      } else {
+        for (const event of this._events) {
+          options.onEvent(event);
+        }
       }
     }
 
@@ -122,6 +140,10 @@ export class FakeAgentAdapter implements IAgentAdapter {
     return [...this._compactHistory];
   }
 
+  getSessionSendHistory(): string[] {
+    return [...this._sessionSendHistory];
+  }
+
   assertRunCalled(expected: Partial<AgentRunOptions>): void {
     const match = this._runHistory.some((call) => {
       return Object.entries(expected).every(([key, value]) => {
@@ -167,17 +189,25 @@ export class FakeAgentAdapter implements IAgentAdapter {
     this._runHistory = [];
     this._terminateHistory = [];
     this._compactHistory = [];
+    this._sessionSendHistory = [];
   }
 
   setEvents(events: AgentEvent[]): void {
     this._events = [...events];
+    this._queuedRun = null;
+  }
+
+  setQueuedRun(turns: AgentEvent[][]): void {
+    this._queuedRun = turns.map((turn) => [...turn]);
   }
 
   addEvent(event: AgentEvent): void {
+    this._queuedRun = null;
     this._events.push(event);
   }
 
   clearEvents(): void {
+    this._queuedRun = null;
     this._events = [];
   }
 
@@ -186,6 +216,7 @@ export class FakeAgentAdapter implements IAgentAdapter {
   }
 
   emitToolCall(toolName: string, input: unknown, toolCallId: string): void {
+    this._queuedRun = null;
     this._events.push({
       type: 'tool_call',
       timestamp: new Date().toISOString(),
@@ -194,6 +225,7 @@ export class FakeAgentAdapter implements IAgentAdapter {
   }
 
   emitToolResult(toolCallId: string, output: string, isError = false): void {
+    this._queuedRun = null;
     this._events.push({
       type: 'tool_result',
       timestamp: new Date().toISOString(),
@@ -202,10 +234,37 @@ export class FakeAgentAdapter implements IAgentAdapter {
   }
 
   emitThinking(content: string, signature?: string): void {
+    this._queuedRun = null;
     this._events.push({
       type: 'thinking',
       timestamp: new Date().toISOString(),
       data: { content, signature },
     });
   }
+
+  emitSessionIdle(): void {
+    this._queuedRun = null;
+    this._events.push(createSessionIdleEvent());
+  }
+
+  emitPendingMessagesModified(queueDepth: number): void {
+    this._queuedRun = null;
+    this._events.push({
+      type: 'raw',
+      timestamp: new Date().toISOString(),
+      data: {
+        provider: 'fake',
+        originalType: 'pending_messages.modified',
+        originalData: { queueDepth },
+      },
+    });
+  }
+}
+
+function createSessionIdleEvent(): AgentEvent {
+  return {
+    type: 'session_idle',
+    timestamp: new Date().toISOString(),
+    data: {},
+  };
 }

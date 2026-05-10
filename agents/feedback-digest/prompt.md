@@ -1,6 +1,7 @@
 ---
 description: "Aggregate magic wand feedback from all agents' recent runs into a prioritized improvement digest"
 tags: [feedback, meta, roadmap]
+permissions: read-only
 ---
 
 # Feedback Digest

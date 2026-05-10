@@ -68,7 +68,9 @@ function createAgent(
     fs.writeFileSync(path.join(sharedDir, 'preamble.md'), opts.preamble);
   }
 
-  return resolveAgent(slug, tmpDir)!;
+  const def = resolveAgent(slug, tmpDir);
+  if (def === null) throw new Error(`expected agent ${slug} to resolve`);
+  return def;
 }
 
 describe('runAgent', () => {
@@ -480,5 +482,50 @@ describe('runAgent', () => {
     // Env cleaned up after run
     expect(process.env.MINIH).toBeUndefined();
     expect(process.env.MINIH_AGENT_SLUG).toBeUndefined();
+  });
+
+  it('sets coordination env vars during coordinated runs and cleans up after', async () => {
+    const def = createAgent('coord-env-test', {
+      prompt:
+        '---\ndescription: "Coordination env test"\ncoordination: enabled\npermissions:\n  preset: yolo\n---\n\n# Env',
+      schema: null,
+      instructions: null,
+      preamble: null,
+    });
+
+    let capturedEnv: Record<string, string | undefined> = {};
+    const fake = new FakeAgentAdapter({
+      output: validSystemOutput(),
+      events: [
+        {
+          type: 'message',
+          timestamp: new Date().toISOString(),
+          data: { content: 'checking coordination env' },
+        },
+      ],
+    });
+
+    const result = await runAgent(
+      fake,
+      def,
+      { slug: 'coord-env-test' },
+      () => {
+        capturedEnv = {
+          MINIH_CONTEXT: process.env.MINIH_CONTEXT,
+          MINIH_INBOX_DIR: process.env.MINIH_INBOX_DIR,
+          MINIH_STATE_DIR: process.env.MINIH_STATE_DIR,
+        };
+      },
+      tmpDir,
+    );
+
+    expect(capturedEnv).toEqual({
+      MINIH_CONTEXT: 'inside',
+      MINIH_INBOX_DIR: path.join(result.runDir, 'inbox'),
+      MINIH_STATE_DIR: path.join(result.runDir, 'state'),
+    });
+    expect(process.env.MINIH_CONTEXT).toBeUndefined();
+    expect(process.env.MINIH_INBOX_DIR).toBeUndefined();
+    expect(process.env.MINIH_STATE_DIR).toBeUndefined();
   });
 });

@@ -4,6 +4,11 @@ tags: [review, quality]
 model: gpt-5.4
 reasoning: xhigh
 timeout: 1200
+permissions:
+  preset: read-only
+  overrides:
+    shell: allow
+    network: allow
 ---
 
 # Code Review Agent

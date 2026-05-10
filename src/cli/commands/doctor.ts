@@ -8,7 +8,14 @@ import { fileURLToPath } from 'node:url';
 import Ajv2020 from 'ajv/dist/2020.js';
 import chalk from 'chalk';
 import type { Command } from 'commander';
-import { parseFrontmatter } from '../../runner/index.js';
+import {
+  derivePeerActivity,
+  hasOutsideMd,
+  OutsideAgentsDirError,
+  outsideMdPath,
+  type PeerActivity,
+  parseFrontmatter,
+} from '../../runner/index.js';
 import {
   ErrorCodes,
   exitWithEnvelope,
@@ -27,7 +34,7 @@ export function registerDoctorCommand(program: Command): void {
     .command('doctor')
     .description('Validate all agents and harness structure')
     .option('--strict', 'Treat warnings as errors')
-    .action((opts: { strict?: boolean }) => {
+    .action(async (opts: { strict?: boolean }) => {
       const agentsDir = program.opts().agentsDir ?? 'agents';
       const resolvedDir = path.resolve(agentsDir);
 
@@ -67,7 +74,8 @@ export function registerDoctorCommand(program: Command): void {
 
         // Check frontmatter
         const content = fs.readFileSync(promptPath, 'utf-8');
-        const { description } = parseFrontmatter(content);
+        const { description, coordination, permissions } =
+          parseFrontmatter(content);
         if (!description.trim()) {
           checks.push({
             check: 'frontmatter',
@@ -79,6 +87,24 @@ export function registerDoctorCommand(program: Command): void {
             check: 'frontmatter',
             status: 'pass',
             message: description,
+          });
+        }
+
+        // Plan 018 R2 — permissions check.
+        if (permissions) {
+          checks.push({
+            check: 'permissions',
+            status: 'pass',
+            message: `explicit policy: ${permissions.preset ?? 'object form'}`,
+          });
+        } else {
+          checks.push({
+            check: 'permissions',
+            status: 'warning',
+            message:
+              'no explicit `permissions:` field (running with current default; will flip to `restricted` at R6). Run `minih agent permissions migrate ' +
+              entry.name +
+              ' --dry-run` to preview.',
           });
         }
 
@@ -142,6 +168,19 @@ export function registerDoctorCommand(program: Command): void {
           checks.push({ check: 'instructions', status: 'pass' });
         }
 
+        checks.push(
+          ...checkOutsideContract(
+            entry.name,
+            resolvedDir,
+            promptPath,
+            coordination.enabled,
+          ),
+        );
+
+        if (coordination.enabled) {
+          checks.push(checkPromptStateVocabularyDrift(content, dir));
+        }
+
         agentResults.push({ slug: entry.name, checks });
       }
 
@@ -152,6 +191,14 @@ export function registerDoctorCommand(program: Command): void {
         path: preamblePath,
       };
 
+      // Plan 011 — audit the retro ledger. resolvedDir is the agents dir;
+      // the project root is its parent.
+      const projectRoot = path.dirname(resolvedDir);
+      const retroChecks = auditRetroLedger(resolvedDir, projectRoot);
+
+      // Plan 012 — audit peer activity for active coordinated runs.
+      const peerAudit = await auditPeerActivity(resolvedDir);
+
       // Summarize
       let warnings = 0;
       let errors = 0;
@@ -160,6 +207,13 @@ export function registerDoctorCommand(program: Command): void {
           if (check.status === 'warning') warnings++;
           if (check.status === 'fail') errors++;
         }
+      }
+      for (const check of retroChecks) {
+        if (check.status === 'warning') warnings++;
+        if (check.status === 'fail') errors++;
+      }
+      for (const row of peerAudit.rows) {
+        if (row.status === 'warning') warnings++;
       }
       const healthy = agentResults.filter((a) =>
         a.checks.every((c) => c.status === 'pass' || c.status === 'skip'),
@@ -196,6 +250,47 @@ export function registerDoctorCommand(program: Command): void {
           );
         }
 
+        // Plan 011 — render retro audit findings
+        if (retroChecks.length > 0) {
+          process.stderr.write(`  ${chalk.bold('docs/retros/')}\n`);
+          for (const check of retroChecks) {
+            const icon =
+              check.status === 'pass'
+                ? chalk.green('✓')
+                : check.status === 'warning'
+                  ? chalk.yellow('⚠')
+                  : check.status === 'fail'
+                    ? chalk.red('✗')
+                    : chalk.dim('—');
+            const msg = check.message ? ` ${chalk.dim(check.message)}` : '';
+            process.stderr.write(`    ${icon} ${check.check}${msg}\n`);
+          }
+          process.stderr.write('\n');
+        }
+
+        // Plan 012 — render peer activity audit
+        if (peerAudit.rows.length > 0) {
+          process.stderr.write(
+            `  ${chalk.bold('🔇 Coordination peer activity')}\n`,
+          );
+          for (const row of peerAudit.rows) {
+            const colour =
+              row.verdict === 'dead'
+                ? chalk.red
+                : row.verdict === 'silent'
+                  ? chalk.yellow
+                  : chalk.dim;
+            process.stderr.write(
+              `    ${colour('⚠')} ${row.slug}/${row.runId}: ${colour(row.verdict)} — ${row.reason}\n`,
+            );
+          }
+          process.stderr.write('\n');
+        } else if (peerAudit.activeRuns > 0) {
+          process.stderr.write(
+            `  ${chalk.green('✓')} ${peerAudit.activeRuns} active coordinated run(s) healthy\n\n`,
+          );
+        }
+
         process.stderr.write(`  ${chalk.bold('─── Results ───')}\n`);
         process.stderr.write(`  Agents:   ${agentResults.length} found\n`);
         process.stderr.write(`  Healthy:  ${healthy}\n`);
@@ -220,6 +315,8 @@ export function registerDoctorCommand(program: Command): void {
             {
               agents: agentResults,
               preamble,
+              retros: retroChecks,
+              peer: peerAudit.rows,
               summary: {
                 total: agentResults.length,
                 healthy,
@@ -236,6 +333,8 @@ export function registerDoctorCommand(program: Command): void {
             {
               agents: agentResults,
               preamble,
+              retros: retroChecks,
+              peer: peerAudit.rows,
               summary: {
                 total: agentResults.length,
                 healthy,
@@ -250,7 +349,147 @@ export function registerDoctorCommand(program: Command): void {
     });
 }
 
-/** Create an AJV instance pre-loaded with minih's published schemas for $ref support. */
+function checkOutsideContract(
+  slug: string,
+  agentsDir: string,
+  promptPath: string,
+  coordinationEnabled: boolean,
+): CheckResult[] {
+  if (!coordinationEnabled) return [];
+
+  let exists: boolean;
+  try {
+    exists = hasOutsideMd(slug, agentsDir);
+  } catch (error) {
+    if (error instanceof OutsideAgentsDirError) {
+      return [
+        {
+          check: 'outside.md',
+          status: 'fail',
+          message: error.message,
+        },
+      ];
+    }
+    throw error;
+  }
+  if (!exists) return [];
+
+  const outsidePath = outsideMdPath(slug, agentsDir);
+  const outsideStats = fs.statSync(outsidePath);
+  const promptStats = fs.statSync(promptPath);
+  const results: CheckResult[] = [{ check: 'outside.md', status: 'pass' }];
+
+  if (outsideStats.mtimeMs < promptStats.mtimeMs) {
+    results.push({
+      check: 'outside.md-drift',
+      status: 'warning',
+      message: 'outside.md is older than prompt.md; review the peer contract.',
+    });
+  }
+
+  if (outsideStats.size > 8 * 1024) {
+    results.push({
+      check: 'outside.md-size',
+      status: 'fail',
+      message: `outside.md is ${outsideStats.size} bytes (> 8192 byte limit).`,
+    });
+  } else if (outsideStats.size > 4 * 1024) {
+    results.push({
+      check: 'outside.md-size',
+      status: 'warning',
+      message: `outside.md is ${outsideStats.size} bytes (> 4096 byte warning threshold).`,
+    });
+  }
+
+  return results;
+}
+
+/**
+ * Plan 011 / Workshop 002 — audit retro ledger health.
+ *
+ * Walks `<agentsDir>/<slug>/runs/` and reports:
+ *   - Runs whose `output/report.json` contains a `retrospective.magicWand`
+ *     but whose `runId` does NOT appear in `<projectRoot>/docs/retros/<slug>.md`.
+ *   - Ledger files in `docs/retros/` exceeding the soft-warn size threshold.
+ *
+ * Returns `CheckResult` rows added to a synthetic `_retros` slug bucket so
+ * doctor's TTY summary surfaces them under their own heading.
+ */
+const LEDGER_SIZE_WARN_BYTES = 1 * 1024 * 1024; // 1 MB
+
+function auditRetroLedger(
+  agentsDir: string,
+  projectRoot: string,
+): CheckResult[] {
+  const results: CheckResult[] = [];
+  const ledgerDir = path.join(projectRoot, 'docs', 'retros');
+
+  const ledgerFiles: Record<string, string> = {};
+  if (fs.existsSync(ledgerDir)) {
+    const files = fs.readdirSync(ledgerDir);
+    for (const f of files) {
+      if (!f.endsWith('.md')) continue;
+      const full = path.join(ledgerDir, f);
+      try {
+        ledgerFiles[f.replace(/\.md$/, '')] = fs.readFileSync(full, 'utf-8');
+        const stat = fs.statSync(full);
+        if (stat.size > LEDGER_SIZE_WARN_BYTES) {
+          results.push({
+            check: `ledger/${f}`,
+            status: 'warning',
+            message: `ledger ${f} is ${(stat.size / 1024 / 1024).toFixed(1)}MB — consider rotating`,
+          });
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  // Walk run dirs looking for unharvested retros
+  if (!fs.existsSync(agentsDir)) return results;
+  const slugDirs = fs.readdirSync(agentsDir, { withFileTypes: true });
+  let totalUnharvested = 0;
+  for (const slugEntry of slugDirs) {
+    if (!slugEntry.isDirectory() || slugEntry.name.startsWith('_')) continue;
+    const runsDir = path.join(agentsDir, slugEntry.name, 'runs');
+    if (!fs.existsSync(runsDir)) continue;
+    const ledgerContent = ledgerFiles[slugEntry.name] ?? '';
+
+    const runEntries = fs.readdirSync(runsDir, { withFileTypes: true });
+    for (const runEntry of runEntries) {
+      if (!runEntry.isDirectory()) continue;
+      const runId = runEntry.name;
+      const runDir = path.join(runsDir, runId);
+      const reportPath = path.join(runDir, 'output', 'report.json');
+      if (!fs.existsSync(reportPath)) continue;
+
+      let report: { retrospective?: { magicWand?: string } } | null = null;
+      try {
+        report = JSON.parse(fs.readFileSync(reportPath, 'utf-8'));
+      } catch {
+        continue;
+      }
+      const wand = report?.retrospective?.magicWand;
+      if (!wand) continue;
+
+      if (!ledgerContent.includes(`runId: ${runId}`)) {
+        totalUnharvested++;
+        results.push({
+          check: `unharvested/${slugEntry.name}/${runId}`,
+          status: 'warning',
+          message: `unharvested retro — run \`minih harvest ${slugEntry.name}\` (or with --since)`,
+        });
+      }
+    }
+  }
+
+  if (totalUnharvested === 0 && results.length === 0) {
+    results.push({ check: 'retros', status: 'pass' });
+  }
+  return results;
+}
+
 function createRefAwareAjv(): InstanceType<typeof Ajv2020> {
   const ajv = new Ajv2020({ allErrors: true });
   const schemasDir = path.resolve(
@@ -270,4 +509,217 @@ function createRefAwareAjv(): InstanceType<typeof Ajv2020> {
     }
   }
   return ajv;
+}
+
+// ─── FX002-3: prompt ↔ inside-state schema vocabulary drift ───────────
+//
+// When a coordinated agent calls `state_transition` with a status that
+// isn't in its inside-state schema's enum, AJV silently rejects the
+// transition. Without an instruction to surface the rejection, the agent
+// proceeds and the operator sees an empty timeline. This check warns at
+// authoring time so the gap is caught before the demo / live run.
+//
+// Mirrors the 3-level fallback in src/mcp/tools/state.ts:insideStateSchemaPath.
+// Re-implemented here rather than imported to avoid a cli → mcp dependency.
+
+const DEFAULT_INSIDE_STATE_SCHEMA_PATH = fileURLToPath(
+  new URL('../../schemas/inside-state.json', import.meta.url),
+);
+
+function resolveInsideStateSchemaPath(agentDir: string): string {
+  const preferred = path.join(agentDir, 'state', 'inside-state.schema.json');
+  if (fs.existsSync(preferred)) return preferred;
+  const legacy = path.join(agentDir, 'inside-state.schema.json');
+  if (fs.existsSync(legacy)) return legacy;
+  return DEFAULT_INSIDE_STATE_SCHEMA_PATH;
+}
+
+/**
+ * Extract candidate state values mentioned in a coordinated agent's prompt.
+ * Looks for two patterns:
+ *   1. `state_transition status='X'` or `state_transition({to: 'X'})` — pseudocode + tool-call style
+ *   2. Markdown table cells like `| `idle` |` — but ONLY inside a section
+ *      whose heading mentions `state vocabulary`, `state machine`, `state values`,
+ *      or `state enum`. This avoids false positives from inbox-type tables,
+ *      severity tables, etc.
+ *
+ * Conservative on purpose: only quoted values (single quote, double quote, or
+ * backtick) with an enclosing context of `to`/`status` or scoped table cells.
+ */
+export function extractPromptStateValues(promptContent: string): Set<string> {
+  const values = new Set<string>();
+
+  // Pattern 1: state_transition / state_set quoted-value mentions.
+  // We require `state_transition` or `state_set` to appear on the SAME LINE as
+  // the `to:`/`status=` quoted value. This avoids false positives from
+  // verdict-shaped strings like `status: 'fail'` in unrelated tool-result JSON.
+  // Captures: keyword (to|status), separator (:|=), opening quote, value, closing quote.
+  const transitionRegex =
+    /^.*\bstate_(?:transition|set)\b.*?\b(?:to|status)\s*[:=]\s*(['"`])([a-z][a-z0-9_-]*)\1/gim;
+  for (const match of promptContent.matchAll(transitionRegex)) {
+    if (match[2]) values.add(match[2]);
+  }
+
+  // Pattern 2: scoped table parsing. Walk lines tracking whether we're
+  // inside a State Vocabulary / State Machine section.
+  const stateHeadingRegex =
+    /^#{1,6}\s.*\bstate\s+(vocabulary|machine|values?|enum)\b/i;
+  const otherHeadingRegex = /^#{1,6}\s/;
+  const tableCellRegex = /^\s*\|\s*`([a-z][a-z0-9_-]*)`\s*\|/;
+  let inStateSection = false;
+  for (const line of promptContent.split('\n')) {
+    if (stateHeadingRegex.test(line)) {
+      inStateSection = true;
+      continue;
+    }
+    if (otherHeadingRegex.test(line)) {
+      inStateSection = false;
+      continue;
+    }
+    if (inStateSection) {
+      const m = tableCellRegex.exec(line);
+      if (m?.[1]) values.add(m[1]);
+    }
+  }
+
+  return values;
+}
+
+/**
+ * Compare prompt-mentioned state values against the resolved inside-state
+ * schema's enum. Warns on values used in the prompt but absent from the enum
+ * (the silent-rejection foot-gun). Skips silently when the schema doesn't
+ * have a `properties.status.enum` array (custom shapes like oneOf are out
+ * of scope for this heuristic).
+ */
+function checkPromptStateVocabularyDrift(
+  promptContent: string,
+  agentDir: string,
+): CheckResult {
+  const schemaPath = resolveInsideStateSchemaPath(agentDir);
+  let enumValues: string[] | null = null;
+  try {
+    const schema = JSON.parse(fs.readFileSync(schemaPath, 'utf-8'));
+    const candidate = schema?.properties?.status?.enum;
+    if (
+      Array.isArray(candidate) &&
+      candidate.every((v) => typeof v === 'string')
+    ) {
+      enumValues = candidate as string[];
+    }
+  } catch {
+    // Unreadable / unparseable schema — let other checks (output-schema)
+    // surface that. Skip this one.
+    return {
+      check: 'prompt-state-vocabulary-drift',
+      status: 'skip',
+      message: `Could not parse inside-state schema at ${path.relative(process.cwd(), schemaPath)}`,
+    };
+  }
+  if (!enumValues) {
+    return {
+      check: 'prompt-state-vocabulary-drift',
+      status: 'skip',
+      message:
+        'inside-state schema has no `properties.status.enum` array — cannot check vocabulary drift',
+    };
+  }
+
+  const promptValues = extractPromptStateValues(promptContent);
+  const drifted = [...promptValues].filter((v) => !enumValues.includes(v));
+  drifted.sort();
+
+  if (drifted.length === 0) {
+    return { check: 'prompt-state-vocabulary-drift', status: 'pass' };
+  }
+
+  const schemaRel = path.relative(process.cwd(), schemaPath);
+  return {
+    check: 'prompt-state-vocabulary-drift',
+    status: 'warning',
+    message: `prompt.md mentions state value(s) ${drifted.map((v) => `'${v}'`).join(', ')} not in ${schemaRel} enum (${enumValues.map((v) => `'${v}'`).join(', ')}). state_transition calls to these values will be silently rejected.`,
+  };
+}
+
+// ─── plan 012 peer activity audit ─────────────────────────────────────
+
+interface PeerAuditRow {
+  slug: string;
+  runId: string;
+  verdict: PeerActivity['verdict'];
+  reason: string;
+  status: 'warning' | 'pass';
+}
+
+interface PeerAuditResult {
+  rows: PeerAuditRow[];
+  activeRuns: number;
+}
+
+async function auditPeerActivity(agentsDir: string): Promise<PeerAuditResult> {
+  const rows: PeerAuditRow[] = [];
+  let activeRuns = 0;
+
+  if (!fs.existsSync(agentsDir)) return { rows, activeRuns };
+
+  const slugDirs = fs.readdirSync(agentsDir, { withFileTypes: true });
+  for (const slugEntry of slugDirs) {
+    if (!slugEntry.isDirectory() || slugEntry.name.startsWith('_')) continue;
+    const runsDir = path.join(agentsDir, slugEntry.name, 'runs');
+    if (!fs.existsSync(runsDir)) continue;
+
+    const runEntries = fs.readdirSync(runsDir, { withFileTypes: true });
+    for (const runEntry of runEntries) {
+      if (!runEntry.isDirectory()) continue;
+      const runDir = path.join(runsDir, runEntry.name);
+
+      // Skip completed runs (completed.json present means the run wrapped up)
+      if (fs.existsSync(path.join(runDir, 'completed.json'))) continue;
+
+      // Read run.json to determine if active and coordinated
+      const runJsonPath = path.join(runDir, 'run.json');
+      if (!fs.existsSync(runJsonPath)) continue;
+      let manifest: { status?: string } = {};
+      try {
+        manifest = JSON.parse(fs.readFileSync(runJsonPath, 'utf8'));
+      } catch {
+        continue;
+      }
+      // Skip non-active states (we already skipped completed.json above; the
+      // remaining 'completed'/'failed'/'stale' here means a manifest-only
+      // termination — also not interesting for live audit)
+      if (
+        manifest.status &&
+        manifest.status !== 'active' &&
+        manifest.status !== 'idle' &&
+        manifest.status !== 'starting'
+      ) {
+        continue;
+      }
+
+      // Only audit coordinated runs (have state/inside.json)
+      if (!fs.existsSync(path.join(runDir, 'state', 'inside.json'))) continue;
+
+      activeRuns++;
+      try {
+        const peer = await derivePeerActivity({
+          runDir,
+          messageType: null,
+        });
+        if (peer.verdict === 'silent' || peer.verdict === 'dead') {
+          rows.push({
+            slug: slugEntry.name,
+            runId: runEntry.name,
+            verdict: peer.verdict,
+            reason: peer.reason,
+            status: 'warning',
+          });
+        }
+      } catch {
+        // tolerate per-run derivation errors silently
+      }
+    }
+  }
+
+  return { rows, activeRuns };
 }

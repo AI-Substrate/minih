@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Coordination Smoke Test Report",
+  "type": "object",
+  "required": [
+    "summary",
+    "toolChecks",
+    "artifacts",
+    "verdict",
+    "retrospective"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "summary": {
+      "type": "string",
+      "minLength": 20
+    },
+    "toolChecks": {
+      "type": "array",
+      "minItems": 8,
+      "items": {
+        "type": "object",
+        "required": ["tool", "status", "evidence"],
+        "additionalProperties": true,
+        "properties": {
+          "tool": {
+            "type": "string",
+            "enum": [
+              "inbox_list",
+              "inbox_send",
+              "inbox_ack",
+              "state_get",
+              "state_set",
+              "state_transition",
+              "wait_for_any"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pass", "fail", "skip"]
+          },
+          "evidence": {
+            "type": "string",
+            "minLength": 20,
+            "description": "Quote the artifact contents (file path + snippet) you read back to verify the tool actually wrote what it claimed. Empty or hand-wavy evidence is a contract violation."
+          }
+        }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "required": ["stateFile", "historyFile", "inboxInsideFile"],
+      "additionalProperties": true,
+      "properties": {
+        "stateFile": {
+          "type": "boolean",
+          "description": "True iff $MINIH_STATE_DIR/inside.json exists at session end."
+        },
+        "historyFile": {
+          "type": "boolean",
+          "description": "True iff $MINIH_STATE_DIR/history.ndjson exists at session end."
+        },
+        "inboxInsideFile": {
+          "type": "boolean",
+          "description": "True iff $MINIH_INBOX_DIR/inside/messages.ndjson exists at session end."
+        }
+      }
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["all-pass", "partial", "fail"]
+    },
+    "retrospective": {
+      "type": "object",
+      "required": ["workedWell", "confusing", "magicWand"],
+      "additionalProperties": true,
+      "properties": {
+        "workedWell": {
+          "type": "string",
+          "minLength": 10
+        },
+        "confusing": {
+          "type": "string",
+          "minLength": 10
+        },
+        "magicWand": {
+          "type": "string",
+          "minLength": 20
+        },
+        "magicWandTarget": {
+          "type": "string",
+          "enum": ["project", "minih", "coordination"]
+        },
+        "coordination": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    }
+  }
+}

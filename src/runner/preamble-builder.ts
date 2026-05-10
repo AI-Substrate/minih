@@ -1,0 +1,118 @@
+import type { AgentDefinition } from './types.js';
+
+const SECTION_DIVIDER = '\n\n---\n\n';
+const OUTPUT_HINT_PREFIX = 'Write your final JSON report to: ';
+
+const COORDINATION_TOOLS_SECTION = `<!-- coordination.tools-section -->
+
+## Coordination tools available to you
+
+Use the inside MCP tools when you need to coordinate with the outside peer:
+
+- \`inbox_list\` — read outside messages; use \`unread: true\` to focus on new work, and add \`waitMs: 30000\` when you need a bounded long-poll for the next outside signal.
+- \`inbox_send\` — send progress, questions, review evidence, or completion notes to the outside peer. Set \`ackOf\` to a prior message id to make your message a **reply** to it; replies can themselves be replied to, forming chains. Use \`inbox_ack\` (not \`inbox_send\`) when you specifically want to acknowledge a peer message.
+- \`inbox_ack\` — acknowledge an outside message after you have handled it.
+- \`state_get\` — inspect your inside state and the outside peer state.
+- \`state_set\` — publish your current inside state.
+- \`state_transition\` — move your inside status and append transition history.
+- \`wait_for_any\` — long-poll for any combination of events (inbox messages and/or state changes) in one call, instead of spinning on \`state_get\`. Pass \`{ events: [{ kind: 'inbox.message', filter?: { types: [...] } }, { kind: 'state.peer.changed' }, { kind: 'state.self.changed' }], waitMs: 30000 }\`. Returns \`{ events: EventEnvelope[], wait: { timedOut, ... } }\` where each envelope is \`{ kind, ts, data }\`. Clean timeout returns \`events: []\` + \`timedOut: true\` (no error). Up to 8 watch entries per call; \`waitMs\` capped at 30000.`;
+
+const COORDINATION_PRE_COMPLETION_CHECKLIST = `<!-- coordination.pre-completion-checklist -->
+
+## Coordination pre-completion checklist
+
+Before writing the final JSON report:
+
+- Check \`inbox_list\` for unresolved outside requests.
+- Send final progress or review evidence with \`inbox_send\` when the outside peer needs it.
+- Update inside state with \`state_set\` or \`state_transition\` so the peer can observe your final status.
+- Mention coordination blockers or follow-ups in \`retrospective.coordination\` when relevant.`;
+
+export interface PreambleAssemblyInput {
+  definition: AgentDefinition;
+  runId: string;
+  preamble: string | null;
+  instructions: string | null;
+  outputHint: string;
+  paramsHint: string | null;
+  userPrompt: string;
+  systemOutputInstructions: string;
+}
+
+/**
+ * Assemble the full inside-agent preamble for a fresh run.
+ *
+ * Always assembles the full inside preamble; do not call for resume turns.
+ * Resume callers send only the follow-up message because SDK conversation
+ * history already contains the original preamble.
+ */
+export function buildInsidePreamble(input: PreambleAssemblyInput): string {
+  const coord = input.definition.coordination ?? { enabled: false };
+  if (!coord.enabled) {
+    return [
+      input.preamble,
+      input.instructions,
+      input.outputHint,
+      input.paramsHint,
+      input.userPrompt,
+      input.systemOutputInstructions,
+    ]
+      .filter(Boolean)
+      .join(SECTION_DIVIDER);
+  }
+
+  return [
+    input.preamble,
+    identityBlock(input.definition.slug, input.runId),
+    COORDINATION_TOOLS_SECTION,
+    peerContractSection(input.definition.outsideContract),
+    input.outputHint,
+    outputValidationSection(input.definition.slug, input.outputHint),
+    input.paramsHint,
+    input.userPrompt,
+    input.instructions,
+    COORDINATION_PRE_COMPLETION_CHECKLIST,
+    input.systemOutputInstructions,
+  ]
+    .filter(Boolean)
+    .join(SECTION_DIVIDER);
+}
+
+function outputValidationSection(slug: string, outputHint: string): string {
+  const outputPath = outputHint.startsWith(OUTPUT_HINT_PREFIX)
+    ? outputHint.slice(OUTPUT_HINT_PREFIX.length)
+    : '<literal-output-path>';
+  return `<!-- coordination.output-validation -->
+
+## Output path and validation
+
+- The literal report path shown above is authoritative.
+- If your shell can read \`$MINIH_OUTPUT_PATH\`, you may use it.
+- If the shell cannot see that variable, write to \`${outputPath}\` directly and validate with \`minih check ${slug} --file ${outputPath}\`.`;
+}
+
+function identityBlock(slug: string, runId: string): string {
+  return `<!-- coordination.identity-block -->
+
+## Your Context (coordination)
+
+- You are running as the inside minih agent for \`${slug}\`.
+- This run id is \`${runId}\`.
+- You have a peer outside the minih session: the host caller, human, CI job, or sibling agent coordinating this work.
+- Treat outside inbox messages and outside state as peer context, and send inside replies/state updates when the peer needs progress or review evidence.`;
+}
+
+function peerContractSection(
+  outsideContract: string | undefined,
+): string | null {
+  if (outsideContract === undefined) return null;
+  const quoted = outsideContract
+    .split('\n')
+    .map((line) => `> ${line}`)
+    .join('\n');
+  return `<!-- coordination.peer-contract -->
+
+## Peer's Contract (from outside.md)
+
+${quoted}`;
+}

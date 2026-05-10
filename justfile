@@ -1,7 +1,7 @@
 # minih — declarative agent runner
 
-# Full pipeline: lint → format → build → typecheck → test → audit
-fft: lint format build typecheck test audit
+# Full pipeline: lint → format → build → typecheck → test → audit → sdk-check
+fft: lint format build typecheck test audit sdk-check
 
 # Lint (code quality, suspicious patterns)
 lint:
@@ -31,9 +31,20 @@ test-watch:
 audit:
     npm audit --audit-level=high || true
 
-# Install all dependencies
+# Warn (don't fail) if @github/copilot-sdk has a newer published version
+# than what's installed. Network-tolerant: skips silently if npm view fails.
+sdk-check:
+    @bash scripts/check-sdk-version.sh
+
+# Install all dependencies, build, and link `minih` to this repo
+# (so fresh clones get a working `minih` CLI without npm-publishing).
 install:
     npm install
+    npm run build
+    npm link
+    @echo ""
+    @echo "✅ minih linked to this repo. Try: minih list"
+    @echo "   To unlink: npm unlink -g minih && npm install -g minih"
 
 # Clean build artifacts
 clean:

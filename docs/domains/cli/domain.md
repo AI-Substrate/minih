@@ -1,12 +1,12 @@
 # Domain: cli
 
-**Purpose**: User-facing CLI commands and composition root. Only place that directly imports `@github/copilot-sdk` (via dynamic import for the `run` command).
+**Purpose**: User-facing CLI commands and composition root. Owns SDK runtime construction and wires domain-specific run configuration such as the inside MCP spawn factory.
 
 ## Boundary
 
-**Owns**: Command definitions (init, run, resume, connect, list, doctor, check, history, validate, tail, last-run), argument parsing, JSON output envelope, SDK client instantiation (composition root), agent scaffolding (init), SDK runtime helper (shared by run + resume)
+**Owns**: Command definitions (quickstart, init, run, resume, connect, list, doctor, check, validate, history, tail, last-run, status, inspect, difficulties, outside coordination commands), argument parsing, JSON output envelope, SDK client instantiation (composition root), agent scaffolding (init), SDK runtime helper (shared by run + resume), cross-domain composition wiring, inside-context command blocking
 
-**Excludes**: Execution logic (runner), SDK communication (adapter), schema validation (runner)
+**Excludes**: Execution logic (runner), SDK communication (adapter), schema validation (runner), MCP tool implementation (mcp)
 
 ## Composition
 
@@ -14,20 +14,30 @@
 |------|---------------|---------|
 | `src/cli/index.ts` | internal | CLI entry point (shebang, commander program) |
 | `src/cli/output.ts` | contract | MinihEnvelope — JSON output format (Phase 4) |
-| `src/cli/commands/run.ts` | internal | Composition root — dynamic SDK import (Phase 4) |
-| `src/cli/commands/resume.ts` | internal | Resume session — follow-up messages (003-resume-prompt) |
+| `src/cli/commands/run.ts` | internal | Composition root — dynamic SDK import + inside MCP factory wiring + dry-run prompt preview through runner builder (Phase 4 / 007 P4/P6) |
+| `src/cli/commands/resume.ts` | internal | Resume session — follow-up messages + inside MCP factory wiring (003-resume-prompt / 007 P4) |
 | `src/cli/commands/connect.ts` | internal | Print copilot CLI resume command (003-resume-prompt) |
 | `src/cli/commands/quickstart.ts` | internal | Scaffold + run hello-world in one command (FX001-quickstart) |
 | `src/cli/commands/sdk-runtime.ts` | internal | Shared SDK bootstrap: auth, import, client, SIGINT (003-resume-prompt) |
 | `src/cli/commands/list.ts` | internal | List agents with descriptions (Phase 4) |
-| `src/cli/commands/doctor.ts` | internal | Structural validation (Phase 5) |
-| `src/cli/commands/check.ts` | internal | File validation against schema (Phase 5) |
-| `src/cli/commands/init.ts` | internal | Agent scaffolding (Phase 5) |
+| `src/cli/commands/doctor.ts` | internal | Structural validation plus coordinated `outside.md` drift/size checks (Phase 5 + 007 P6) |
+| `src/cli/commands/check.ts` | internal | Explicit file validation against schema, with a friendly `check --run` correction toward `validate --run` (Phase 5 + 008 FX003) |
+| `src/cli/commands/init.ts` | internal | Agent scaffolding, including canonical shared-preamble creation and `--coordinated` outside/state-schema scaffold (Phase 5 + 007 P6) |
 | `src/cli/commands/history.ts` | internal | Past runs display (Phase 4) |
-| `src/cli/commands/validate.ts` | internal | Re-validate latest output (Phase 4) |
+| `src/cli/commands/validate.ts` | internal | Re-validate latest or selected completed run output (Phase 4 + 008 FX003) |
 | `src/cli/commands/last-run.ts` | internal | Latest run info (Phase 4) |
-| `src/cli/commands/tail.ts` | internal | Follow event stream (Phase 4) |
+| `src/cli/commands/tail.ts` | internal | Follow event stream or print bounded `--lines`/`--snapshot` samples (Phase 4 + 008 FX003) |
 | `src/cli/commands/difficulties.ts` | internal | Aggregate difficulty reports across all agents (006-compounding-value) |
+| `src/cli/commands/status.ts` | internal | Latest run status summary |
+| `src/cli/commands/inspect.ts` | internal | Prompt/config inspection |
+| `src/cli/preaction-context.ts` | internal | Reusable inside-context block for outside-only shell commands (007-backgrounding P5) |
+| `src/cli/coordination.ts` | internal | Shared outside coordination CLI helpers: agent/run resolution, schema validation, inbox lane parsing/appending (007-backgrounding P5 + FX001) |
+| `src/cli/commands/outside.ts` | contract | Append outside-lane inbox messages, including ack records (007-backgrounding P5) |
+| `src/cli/commands/inside.ts` | contract | Read/filter inside-lane replies for outside callers (007-backgrounding P5) |
+| `src/cli/commands/state.ts` | contract | Outside state get/set/transition subcommands (007-backgrounding P5) |
+| `src/cli/commands/outside.ts` | contract | Emit outside-side coordination markdown in a JSON envelope (007-backgrounding P5) |
+| `src/cli/commands/outside.ts` | contract | Record outside-side retro messages with target metadata (007-backgrounding P5) |
+| `src/cli/commands/retros.ts` | contract | Aggregate inside report retros and outside retro messages (007-backgrounding P5) |
 
 ## Contracts
 
@@ -35,14 +45,39 @@
 |----------|------|-----------|
 | `MinihEnvelope` | Type | External agents, CI, humans (JSON output) |
 | Error codes | Constants | All CLI consumers |
+| Outside coordination commands | CLI | Outside callers coordinating with inside minih sessions |
+| Inside-context block | CLI guard | Outside-only commands invoked from inside a minih session |
+| `init --coordinated` | CLI | Agent authors creating two-sided coordinated agents |
+| `doctor` outside-contract checks | CLI | Agent authors keeping `outside.md` current and bounded |
+| `run --dry-run` | CLI | Agent authors inspecting the exact coordinated inside prompt without launching the SDK |
 
 ## Concepts
 
 | Concept | Definition |
 |---------|-----------|
 | Composition root | `sdk-runtime.ts` owns shared SDK bootstrap (auth check, dynamic import, CopilotClient, SIGINT). Used by both `run.ts` and `resume.ts`. |
+| Inside MCP wiring | `run.ts` and `resume.ts` import `mcp` spawn config and pass a generic factory to runner only at the CLI composition boundary. |
 | stdout = machine | JSON envelope on stdout. Human formatting on stderr. TTY-detected. |
 | Three consumers | Agent inside minih, external coding agents, humans/CI. |
+| Outside commander surface | Humans, CI, and host agents coordinate with an inside session through `outside inbox send`, `inside inbox list`, `state get`, `state set`, `outside context`, `outside retro add`, and `retros`. Mutable commands target a run explicitly with `--run <runId>` or resolve only when unambiguous; they read/write runner coordination files and do not invoke inside MCP tools directly. |
+| Context block | `run`, `resume`, `quickstart`, `tail`, and `init` fail with `E128 INVALID_CONTEXT` under strict `MINIH=1`, while normal outside behavior is unchanged. |
+| Cross-side retros | Inside managed `report.json.retrospective` entries and outside-lane `retro` messages flow into the same `retros` aggregation surface. |
+| Coordinated scaffold | `init --coordinated` writes `coordination: enabled`, `outside.md`, `inside-state.schema.json`, and `outside-state.schema.json` without changing default init output. |
+| Outside context preview | `outside context` with no slug returns system-only guidance. With a slug, `contractStatus` is `absent`, `empty`, or `present`, and `hasOutsideContract` distinguishes no file from an empty file. |
+| Outside contract health | `doctor` warns when coordinated `outside.md` is older than `prompt.md` or over 4KB, fails over 8KB, ignores absent/non-coordinated outside contracts, and preserves realpath containment checks. |
+| Dry-run prompt parity | `run --dry-run` uses `buildInsidePreamble()` and returns the assembled prompt in the JSON envelope, so coordinated previews include the same identity/tool/peer/checklist sections as real runs. |
+| File vs run validation | `check` validates explicit files (`--file` or best-effort `MINIH_OUTPUT_PATH`), while `validate --run` revalidates completed run outputs. A mistaken `check --run` returns a JSON envelope with the correct alternatives. |
+| Tail snapshot | `tail --lines <n> --snapshot` prints a bounded recent event window plus completion summary if present, then exits without polling forever; no flags preserve live follow behavior. |
+
+## Tests & Validation
+
+| Area | Tests |
+|------|-------|
+| Outside context statuses | `test/cli/outside-inbox-wait.test.ts` |
+| Outside inbox/state/retro commands | `test/cli/outside-inbox-wait.test.ts`, `test/cli/outside-inbox-wait.test.ts`, `test/cli/outside-inbox-wait.test.ts`, `test/cli/state.test.ts`, `test/cli/retros.test.ts` |
+| Coordinated scaffold and dry-run parity | `test/cli/init-coordinated.test.ts` |
+| Doctor outside-contract checks | `test/cli/doctor-outside-md.test.ts` |
+| MCP composition wiring from CLI | `test/mcp/spawn.test.ts`, `test/mcp/leak-regression.test.ts` |
 
 ## History
 
@@ -56,3 +91,21 @@
 | FX001-quickstart | Added `quickstart` command — scaffold + run hello-world in one command. Extracted `ensurePreamble()` from `init.ts`. |
 | FX002-agent-ux | Suppressed SQLite ExperimentalWarning via `NODE_NO_WARNINGS`. Added tool elapsed timer to pretty mode. |
 | 006-compounding-value | Added `difficulties` command (aggregates difficulty reports across all agents). Added velocity trend column + summary line to `history`. Run envelope now includes summary/magicWand/magicWandTarget/difficulties from parsed report.json. |
+| 007-backgrounding P4 | Wired coordinated `run` and `resume` sessions to supply the inside MCP spawn config factory and reserved inbox/state tool namespace checks. |
+| 007-backgrounding P5 | Added outside coordination CLI surface: context block guard, outside inbox send/list, outside state get/set/transition, outside-context, outside-retro, retros aggregation, command discovery, and run help guidance. |
+| 007-backgrounding P6 | Extended `init` with `--coordinated` scaffolding and canonical shared-preamble creation, `doctor` with coordinated `outside.md` drift/size checks, and `run --dry-run` prompt preview parity while preserving default init and non-coordinated doctor behavior. |
+| 007-backgrounding P7 | Finalized CLI documentation for the complete command surface, outside-context contract statuses, coordinated scaffold files, doctor outside-contract checks, dry-run parity, and MCP composition-root boundary. |
+| 008-canonical-coordination-loop | Updated coordinated `run`/`resume` reserved MCP namespace checks from dotted `inbox.*`/`state.*` prefixes to backend-safe `inbox_`/`state_` prefixes and added the rich `coordination-loop-validator` worked-example docs/tests. |
+| 008 FX001 | Outside coordination commands now resolve a run target, include `runId` in envelopes, and keep same-agent concurrent runs isolated across inbox/state/retros. |
+| 008 FX002 | Clarified worked-example docs that `waitMs` is an inside MCP long-poll option while outside peers continue observing through CLI `status`, `tail`, `inside inbox list`, and state commands. |
+| 008 FX003 | Added `tail --lines` and `--snapshot`, clarified `check --file` vs `validate --run`, and added friendly `check --run` guidance for fresh-agent coordination evals. |
+| 010 HF-001/HF-002 | Lane CLI hard rename: introduced `outside <verb>` and `inside <verb>` Commander subcommand trees (replacing flat `outside-send` / `outside-inbox-list` / `outside-context` / `outside-retro` and moving `state set`/`transition` under `outside state`). Top-level `state get` survives as cross-lane both-view. Inside lane is read-only from CLI; write attempts return E143. Long-poll on inbox-list via shared `runner.pollInboxLane`: `--wait <ms>` (bare = 60_000, max 300_000), composes with `--type` / `--unread` / `--after`, surfaces E141 (out-of-range), E142 (agent-gone via run.json status flip). New `inside retro show` reads farewell envelope retrospective. Error code range E140-E149 reserved. Functional smoke verified against live coordinated agent. |
+| 010 HF-003 | Resume CLI rewritten for resume-in-place semantics. New flags `--resume-prompt <text>`, `--takeover`, `--fresh`, `--yes`. Default `minih resume <slug>` reuses the original runDir + sessionId; `--fresh` opts back into pre-HF-003 (new run dir). Eligibility check via `runner.detectRunState`; active runs without `--takeover` return E144, with `--takeover` go through SIGTERM → 5s grace → SIGKILL and a TTY confirmation (or `--yes`). Concurrent resumes coordinate via `resume-intent.lock` (E147 RESUME_IN_PROGRESS after 35s wait). `--resume-prompt` emits a `[SYSTEM RESUME]` envelope concatenated with any user message via `---` separator. New error codes wired: E144 ALREADY_ACTIVE, E145 NO_RUN_TO_RESUME, E146 SESSION_EXPIRED, E147 RESUME_IN_PROGRESS, E149 MCP_SPAWN_FAILED. `output.ts` got a doc-comment table for the full code surface. |
+| 011-retro-harvest-loop | New `minih harvest <slug>` command (single + `--since <ISO>` batch) writes agent retrospectives to `docs/retros/<slug>.md` (and `docs/retros/<plan-id>.md` when `MINIH_PLAN_ID` is set). Idempotent on `runId`. `MINIH_NO_AUTO_HARVEST=1` is intentionally ignored by the explicit verb (kill-switch is for runner auto-append only). End-of-run hint added to `displaySummary` (`📝 magicWand: "..." (full: minih harvest <slug>)` on success; `⚠️ Retrospective not written` on timeout/failed). `minih doctor` extended with retro-ledger audit: walks `agents/*/runs/`, reports unharvested retros + soft-warns on ledger files >1MB. `minih run`/`minih resume` `--help` updated to mention the harvest command. `minih init` now scaffolds `docs/retros/README.md` from a bundled template. |
+| 012-peer-activity-telemetry | Added `peer` block to 5 transactional outside commands' success envelopes: `outside inbox send`, `outside state set`, `outside state transition`, `outside retro add` always include peer; `outside inbox list --wait` includes peer (post-poll, not at call entry). Pure reads (`state get`, bare `inbox list`) skip peer. New `--strict-peer` flag on `outside inbox send` derives peer BEFORE the append and exits `E150 DEAF_PEER` (refusing delivery) when verdict is `'deaf'`; default behaviour is visible-but-non-blocking. TTY mode renders a colour-coded verdict line on stderr (red=deaf/dead, yellow=silent, green=healthy); silent in piped mode. New error code: `E150 DEAF_PEER`. `minih doctor` extended with `auditPeerActivity()` — walks active coordinated runs, surfaces `verdict ∈ {silent, dead}` rows in `peer[]` envelope array (deaf cannot fire because audit calls with messageType=null); healthy runs emit a single `✓ N active coordinated runs healthy` line. New `derivePeerOrNull(runDir, type)` helper keeps peer-derive sites uniform and error-tolerant (peer is always additive — never blocks the underlying command). 9 new CLI tests (5 outside-peer + 4 doctor-peer). |
+| 013-message-reply-chains | Removed the gate at `outside.ts:209-216` that rejected `--ack-of` unless `--type ack`. The flag now works for any `--type`, allowing outside operators to reply to a specific inbox message and form chains (since each reply's id is itself a valid `--ack-of` target). Inverse check (`--type ack` requires `--ack-of`) preserved. 4 new integration tests in `outside-peer.test.ts` covering reply-chain non-ack flow + AC-2 / AC-3 no-regression assertions. |
+| 015-agent-readme-command | New `minih agent-readme` subcommand at `src/cli/commands/agent-readme.ts` dumps the bundled `dist/AGENTS_README.md` as raw markdown to stdout (deliberate JSON-envelope deviation, documented in command `--description`). SIGPIPE silenced for `\| head` pipelines; missing-bundle returns `E160 README_NOT_FOUND` envelope on stderr + exit 1. `--help` footer extended with `or run: minih agent-readme` postscript. New error code `E160 README_NOT_FOUND`. Bundled via one-line addition to `scripts/copy-schemas.js`. README expansion: `### Companion mode` subsection (under `## Coordination`) promoted to top-level `## Companion mode` H2 with self-contained walkthrough (~190 lines, ≥1 fenced shell snippet per protocol phase: boot/brief/review/stop). New test file `test/cli/agent-readme.test.ts` — 13 tests across command behaviour, help signposting, bundle byte-equality, and README structure. |
+| 009-human-agent-view P2 | Plan 009 Phase 2 — Interactive Console & Commands. New `minih view <slug> [--run <id>]` command at `src/cli/commands/view.ts` (resolver fallback chain: `latest-active` → `latest-completed`). New `--human` flag on `minih run` mounts an Ink/React TUI to **stderr** (CLI stdout discipline preserved per AC-13) with same-process `SessionSender` write capability via the new `onSessionReady` hook on `AgentRunConfig`. New module `src/cli/human/` with: `app.tsx` (Ink root exporting `mountHumanApp({ unmount, waitUntilExit })`; `exitOnCtrlC: false` — caller owns lifecycle for Phase 3 SIGINT seam); `run-feed.ts` (file-watcher loop + `readSnapshot()` one-shot helper for Phase 3 reuse); `input-bridge.ts` (capability-aware footer adapter — `input available` / `input read-only` / `completed`); 5 panes (`header.tsx`, `transcript.tsx`, `tools.tsx`, `workbench.tsx`, `footer.tsx` with `Pause scroll` / `Resume follow` copy). New error codes `E170 AMBIGUOUS_RUN_ID`, `E171 RUN_NOT_FOUND`. New runtime deps `ink`, `react`. tsconfig gained `"jsx": "react-jsx"` and `*.tsx` include. New tests: `test/cli/human-input-bridge.test.ts` (12) + `test/cli/view-command.test.ts` (8). 682 passed \| 10 skipped, 0 vulnerabilities. Phase 3 follow-up: `--snapshot` mode + SIGINT/cleanup hardening + how-to docs. |
+| 017-agent-pack-install P1 | New error codes `E180 AGENT_PACK_REGISTRY_MISS` / `E181 AGENT_PACK_FETCH_FAILED` / `E182 AGENT_PACK_INVALID` / `E183 AGENT_PACK_ALREADY_INSTALLED` / `E184 AGENT_PACK_SOURCE_MISMATCH` registered in `src/cli/output.ts` `ErrorCodes` const + docblock for upcoming `minih agent <verb>` subcommand group (Phase 4 wires the commands). No CLI surface change in P1 — this is just the foundation. |
+| 017-agent-pack-install P3 | CLI composition root for the agent-pack fetcher. `src/cli/commands/agent.ts` `install` action now instantiates `GitHubAgentPackFetcher` (default) and threads it through `installAgentPack({fetcher})` for URL sources. NEW `MINIH_AGENT_PACK_FETCHER=fake:<json>` env-var injection seam — production-safe by default: hard-fails with E181 if the env var is set without `NODE_ENV=test`, hard-fails on malformed JSON or missing `\u0001` separator, ALWAYS prints a stderr warning line `[minih] using FakeAgentPackFetcher (NODE_ENV=test, MINIH_AGENT_PACK_FETCHER set)` so a developer never silently runs against a fake. URL canonicalization in `parseRefToInstallSource`: `cleanUrl = github:${owner}/${repo}` (fragment + query stripped); ref + subpath travel as separate fields so `github:foo/bar#main` and `https://github.com/foo/bar.git#main` map to the same fake-fetcher preset key. Updated 4 FX001 URL-stub tests (which expected E182 "not yet available") to use the real fake-fetcher seam and accept E181/E182 (now hits real fetcher). New test file `test/cli/agent-install-url.test.ts` — 11 cases: 3 production-safety (NODE_ENV gate, malformed JSON, warning-line emission) + 8 URL install scenarios (install/unchanged/upgraded action discriminator, --ref/--subpath/--as flag overrides, HTTPS URL form, fake-fetcher failure → E181). Default test suite remains free of real network calls. |
+| 017-agent-pack-install P5 | Registry slug install end-to-end. `src/cli/commands/agent.ts`: registry slug resolution at the composition root via `readRegistryCatalog()` + `resolveRegistrySlug(slug, catalog)`. On miss, throws E180 with up-to-3 Levenshtein "did you mean" suggestions and the canonical hint to `minih agent list --available` or use a full git URL. `pickErrorCode` extended with E180 precedence (before E182 fallback). On hit, the slug becomes a `source.type: 'registry'` install routed through `installFromRegistry()` with the bundled fetcher. NEW `agent list --available` flag (was deferred from Phase 4): reads the bundled catalog, lists each entry with installed/not-installed status, JSON envelope `{mode: 'available', count, agents: [{slug, url, ref, subpath, tags, since, minihVersion, installed}]}`. NEW `renderAvailableListHuman` for TTY output ("✓ installed" vs "available" status column). `parseRefToInstallSource` unchanged — bare slugs still produce `{type: 'registry', registrySlug, url: '<registry:slug>', ref: 'main'}` placeholders that the action method resolves before passing to `installAgentPack`. Updated FX001 stub test that expected E182 "not yet available" for bare slug — now expects E180 with did-you-mean hint (using `code-review-companin` typo as the slug since `code-review-companion` is now installable). New `test/cli/agent-install-self-protect.test.ts` (2 tests) covers spec AC11: existing `agents/<slug>/` hand-rolled folder triggers E183 collision; `--as <new-slug>` is the escape hatch (verified by reading the original prompt.md after install — untouched). New `test/cli/agent-list-baseline.test.ts` (`MINIH_REGRESSION`-gated) snapshots the catalog output for regression detection of curation drift. T008 e2e test extension validates the headline scenario in 1.6s wall-clock. Pre-merge variant uses `MINIH_E2E_PREMERGE=1` to test against `007-backgrounding` until the manifest lands on `main`. |

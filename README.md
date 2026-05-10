@@ -2,9 +2,11 @@
 
 *The miniest self-improving agent harness.*
 
-> **⚠️ WARNING: minih runs agents in YOLO mode.** Agents have unrestricted tool access — they can read, write, and execute anything on your machine. There is no sandbox, no tool allowlist, no confirmation prompt. A plan to support tool restrictions exists but is not yet implemented. **Use at your own risk.** Run in containers or throwaway environments if you're executing untrusted agents.
+> **As of plan 018 (R6): agents now run with `restricted` permissions by default** — read+MCP only, no shell/write/network. Existing installs are grandfathered via sidecar `lockedDefault`. Override per-run with `--permissions yolo` (legacy posture) or per-agent with `permissions:` frontmatter. See [`docs/how/permissions.md`](docs/how/permissions.md).
 
 Define AI agents as folders containing `prompt.md` + optional schemas + instructions, then run them against `@github/copilot-sdk`. Every agent produces structured retrospective feedback — what worked, what was confusing, and a **magic wand** wish for what should change. This feedback loop makes both the agents and the harness better over time.
+
+For long-running or multi-agent workflows, minih also supports **coordination-aware agents**: opt-in agents with an outside peer contract, run-scoped inbox/state files, outside CLI commands, and inside MCP tools for progress handoffs. Start with [`AGENTS_README.md#coordination-aware-agents`](AGENTS_README.md#coordination-aware-agents), then use [`docs/how/coordination-loop-validator.md`](docs/how/coordination-loop-validator.md) for the canonical rich worked example.
 
 ## Quick Start
 
@@ -16,6 +18,8 @@ npx github:AI-Substrate/minih quickstart
 ```
 
 One command — scaffolds a hello-world agent, runs it, shows the results. Zero to success in 60 seconds.
+
+> Each run's retro lands in `docs/retros/<slug>.md` (review before commit). See [AGENTS_README.md § The Improvement Loop](AGENTS_README.md#the-improvement-loop).
 
 > **Pin a specific version**: `npx github:AI-Substrate/minih#v0.x.y quickstart`
 
@@ -80,6 +84,28 @@ npx minih last-run my-agent    # Show latest run path
 npx minih history my-agent     # List all past runs
 npx minih validate my-agent    # Re-validate latest output against current schema
 ```
+
+## Agent Packs — install curated agents in one command
+
+Don't hand-copy agents between projects. Install them instead:
+
+```bash
+minih agent install code-review-companion           # from the bundled registry
+minih agent install github:owner/repo#main:agents/x # from any public GitHub repo
+minih agent install /path/to/local/agent-folder     # from a local clone
+```
+
+Each install copies the agent's manifest-listed files into `agents/<slug>/`, writes a provenance sidecar (`.minih-source.json`), and is **idempotent** — re-running upgrades from upstream and atomic-swaps changed files while preserving runtime data (`runs/`, `inbox/`, `state/`).
+
+Browse the bundled catalog:
+
+```bash
+minih agent list --available    # what you can install by slug
+minih agent list                # what's already installed (with source-type column)
+minih agent info <slug>         # provenance, manifest, per-file drift status
+```
+
+Full surface — manifest format, security model, error reference, curation — in [`docs/how/agent-pack.md`](docs/how/agent-pack.md).
 
 ## Agent Folder Structure
 
@@ -187,13 +213,15 @@ minih doctor --strict  # Treat warnings as errors
 
 ### `minih check [slug]`
 
-Validate a file against an agent's output schema.
+Validate an explicit file against an agent's output schema.
 
 ```bash
 minih check my-agent --file output.json     # Validate specific file
-minih check                                  # Inside a run — auto-detects via MINIH_* env vars
+minih check                                  # Best effort inside a run — uses MINIH_OUTPUT_PATH if available
 minih check my-agent --file input.json --input  # Validate against input schema
 ```
+
+`check` is for file validation. To validate an already-completed run output, use `minih validate <slug> --run <runId>`.
 
 ### `minih init <slug>`
 
@@ -202,6 +230,7 @@ Scaffold a new agent folder with templates.
 ```bash
 minih init my-agent                # prompt + output-schema + instructions
 minih init my-agent --with-input   # Also create input-schema.json
+minih init my-agent --coordinated  # Also create outside.md + state schemas
 minih init my-agent --no-output    # Skip output-schema.json
 ```
 
@@ -243,7 +272,12 @@ minih connect smoke-test --list       # Show all runs with session IDs
 
 ### `minih validate <slug>`
 
-Re-validate the most recent run's output against the current schema (useful after updating your schema).
+Re-validate the most recent or specified completed run's output against the current schema (useful after updating your schema).
+
+```bash
+minih validate my-agent                 # Latest run
+minih validate my-agent --run <runId>   # Specific completed run
+```
 
 ### `minih last-run <slug>`
 
@@ -251,7 +285,12 @@ Print the latest run directory and report path.
 
 ### `minih tail <slug>`
 
-Follow a running agent's event stream in real-time.
+Follow a running agent's event stream in real time, or print a bounded snapshot.
+
+```bash
+minih tail my-agent
+minih tail my-agent --run <runId> --lines 20 --snapshot
+```
 
 ### Global Options
 
@@ -262,7 +301,7 @@ Follow a running agent's event stream in real-time.
 
 ## Environment Variables
 
-The runner sets these during agent execution. Use them in scripts or to call `minih check` inside an agent with zero arguments.
+The runner sets these during agent execution where the execution environment exposes them. The prompt's literal output path remains authoritative; use `minih check <slug> --file <path>` if a shell cannot see `MINIH_OUTPUT_PATH`.
 
 | Variable | Description |
 |----------|-------------|
@@ -270,7 +309,7 @@ The runner sets these during agent execution. Use them in scripts or to call `mi
 | `MINIH_AGENT_SLUG` | Current agent slug |
 | `MINIH_RUN_ID` | Unique run identifier (timestamp) |
 | `MINIH_RUN_DIR` | Absolute path to run artifacts folder |
-| `MINIH_OUTPUT_PATH` | Where to write output JSON |
+| `MINIH_OUTPUT_PATH` | Where to write output JSON when available; same target as the literal path in the prompt |
 | `MINIH_AGENTS_DIR` | Absolute path to agents directory |
 | `MINIH_PROJECT_ROOT` | Absolute path to project root |
 | `MINIH_MODEL` | Model being used |
@@ -279,7 +318,7 @@ The runner sets these during agent execution. Use them in scripts or to call `mi
 | `MINIH_INSTRUCTIONS_PATH` | Path to instructions.md (if exists) |
 | `MINIH_PREAMBLE_PATH` | Path to preamble.md (if exists) |
 | `MINIH_HAS_INPUT_SCHEMA` | `true` if input-schema.json exists, else `false` |
-| `MINIH_PARAMS` | JSON-encoded input parameters |
+| `MINIH_PARAMS` | JSON-encoded input parameters. Values may be of any JSON type — strings, numbers, booleans, objects, arrays — depending on what each schema field declares and how the orchestrator passed them via `-p key=value`. |
 
 **Default model**: `claude-opus-4.6`. Override with `MINIH_DEFAULT_MODEL` env var or `--model` flag.
 
@@ -293,6 +332,8 @@ minih uses agents to test and improve itself. These are the best examples of how
 | [`convention-check`](agents/convention-check/) | Basic | Output schema, instructions, `$ref` to retrospective, CLI invocation |
 | [`prompt-review`](agents/prompt-review/) | Intermediate | Input params (`--param`), cross-agent file reading |
 | [`smoke-test`](agents/smoke-test/) | Advanced | Full CLI lifecycle test (init, doctor, check, dry-run) |
+| [`coordination-smoke-test`](agents/coordination-smoke-test/) | Advanced | Minimal primitive check for the outside/inside coordination surface |
+| [`coordination-loop-validator`](agents/coordination-loop-validator/) | Advanced | Rich worked example for the three-milestone outside/inside conversation loop |
 | [`feedback-digest`](agents/feedback-digest/) | Advanced | Cross-agent aggregation, feedback loop |
 | [`self-review`](agents/self-review/) | Complete | Production-grade code review with complex schema |
 

@@ -2,7 +2,11 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { validateInput, validateOutput } from '../../src/runner/validator.js';
+import {
+  validateInput,
+  validateOutput,
+  validateSystemOutput,
+} from '../../src/runner/validator.js';
 
 let tmpDir: string;
 
@@ -129,6 +133,45 @@ describe('validateInput', () => {
     const result = validateInput(path.join(tmpDir, 'no-input.json'), {});
     expect(result.valid).toBe(false);
     expect(result.errors[0]).toMatch(/not found/i);
+  });
+});
+
+describe('validateSystemOutput', () => {
+  it('accepts widened coordination retrospective fields', () => {
+    const outputPath = writeJson('coordination-output.json', {
+      summary: 'Completed a coordinated run with peer-visible status updates.',
+      retrospective: {
+        workedWell: 'The outside and inside tools were easy to coordinate.',
+        confusing: 'Nothing was confusing in this test run.',
+        magicWand:
+          'Make the coordination snapshot artifacts more prominent in history.',
+        magicWandTarget: 'coordination',
+        coordination: {
+          peerUpdatesSent: 1,
+          unresolvedPeerRequests: 0,
+          statePublished: true,
+          notes: 'Final state was published before output.',
+        },
+      },
+    });
+
+    const result = validateSystemOutput(outputPath);
+    expect(result).toEqual({ valid: true, errors: [] });
+  });
+
+  it('keeps unknown magicWandTarget values permissive at the system gate', () => {
+    const outputPath = writeJson('permissive-output.json', {
+      summary: 'Completed a task with a future feedback target value.',
+      retrospective: {
+        workedWell: 'The validation path accepted required feedback fields.',
+        confusing: 'Nothing was confusing in this test run.',
+        magicWand: 'Expose stricter schema validation only when requested.',
+        magicWandTarget: 'future-target',
+      },
+    });
+
+    const result = validateSystemOutput(outputPath);
+    expect(result.valid).toBe(true);
   });
 });
 

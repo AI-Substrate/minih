@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://minih.dev/agents/coordination-loop-validator/outside-state.schema.json",
+  "title": "Coordination Loop Validator Outside State",
+  "type": "object",
+  "required": ["status", "data", "updatedAt", "updatedBy"],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["idle", "in-progress", "paused", "done", "error"]
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "phase": { "type": "string" },
+        "milestone": { "type": "string" },
+        "milestones": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "summary": { "type": "string" }
+      }
+    },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "updatedBy": { "const": "outside" }
+  },
+  "additionalProperties": false
+}

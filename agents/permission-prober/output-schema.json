@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "nonce",
+    "claimedPolicy",
+    "probes",
+    "runJsonSnapshot",
+    "summary",
+    "retrospective"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "nonce": {
+      "type": "string",
+      "minLength": 8
+    },
+    "claimedPolicy": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "probes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "outcome"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "outcome": {
+            "type": "string",
+            "enum": ["succeeded", "denied", "error", "not-attempted"]
+          },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "runJsonSnapshot": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "terminalReason": { "type": ["string", "null"] },
+        "permissionError": { "type": ["object", "null"] }
+      }
+    },
+    "summary": { "type": "string", "minLength": 1 },
+    "retrospective": {
+      "type": "object",
+      "required": ["whatWentWell", "whatCouldImprove"],
+      "additionalProperties": true,
+      "properties": {
+        "whatWentWell": { "type": "string" },
+        "whatCouldImprove": { "type": "string" },
+        "magicWand": { "type": "string" },
+        "magicWandTarget": { "type": "string" },
+        "difficulties": { "type": "array" }
+      }
+    }
+  }
+}

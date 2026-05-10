@@ -105,7 +105,8 @@ Note: horizontal rule above should NOT break frontmatter parsing.
     });
 
     // Run agent
-    const def = resolveAgent('smoke-test', tmpDir)!;
+    const def = resolveAgent('smoke-test', tmpDir);
+    if (def === null) throw new Error('expected smoke-test agent to resolve');
     const result = await runAgent(
       fake,
       def,

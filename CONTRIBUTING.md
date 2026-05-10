@@ -82,11 +82,45 @@ npm test          # vitest run
 npm run clean     # remove dist/
 ```
 
+#### Coordination test matrix
+
+Use the full `just fft` gate before PRs, then add the targeted coordination tests for the surface you touched:
+
+| Surface | Command | Notes |
+|---------|---------|-------|
+| Outside CLI contracts | `npx vitest run test/cli/outside-context.test.ts test/cli/outside-send.test.ts test/cli/outside-inbox-list.test.ts test/cli/outside-retro.test.ts test/cli/init-coordinated.test.ts test/cli/doctor-outside-md.test.ts` | Covers outside contract statuses, outside inbox/state helpers, retros, coordinated scaffold, and doctor checks. |
+| MCP server/spawn contracts | `npx vitest run test/mcp/server.test.ts test/mcp/server-dispatch.test.ts test/mcp/spawn.test.ts test/mcp/coexist.test.ts test/mcp/types.test.ts test/mcp/inbox.test.ts test/mcp/state.test.ts` | Covers the private inside-only server, six tools, dispatch validation, and CLI-owned spawn config. |
+| Runner coordination lifecycle | `npx vitest run test/runner/preamble-builder.test.ts test/runner/runner-event-driven.test.ts test/runner/file-watcher.test.ts test/runner/inbox-forwarder.test.ts test/runner/state-forwarder.test.ts test/runner/run-folder-snapshot.test.ts` | Covers prompt sections, event-driven idle handling, forwarders, and final snapshots. |
+| Two-agent smoke path | `MINIH_E2E=1 npx vitest run test/e2e/two-agent-coordination.test.ts` | Opt-in; drives the dogfood coordination-smoke-test path end to end. |
+| Daemon-light forwarders | `MINIH_E2E=1 npx vitest run test/e2e/daemon-light.test.ts` | Opt-in; exercises cross-process file watching plus live inbox/state forwarding. |
+| MCP cleanup/leak regression | `MINIH_PGREP=1 npx vitest run test/mcp/leak-regression.test.ts` | Opt-in; requires `pgrep` and checks success, failure, timeout, and interrupt cleanup paths. |
+
+The opt-in e2e gates are skipped by default to keep local test runs fast. Run them explicitly when touching runner coordination lifecycle, live forwarders, inside MCP spawn/cleanup, or dogfood coordinated agent behavior.
+
+There is no supported `scripts/mcp-harness.mjs` probe command today. If you see references to an MCP probe harness, treat them as future design notes and validate current behavior through the MCP server/spawn/leak tests above.
+
+#### Optional daemon-light e2e gate
+
+Run this explicitly when touching runner coordination lifecycle code:
+
+```bash
+MINIH_E2E=1 npx vitest run test/e2e/daemon-light.test.ts
+```
+
+#### Optional MCP leak regression gate
+
+The inside MCP server uses a `minih-mcp-<runId>` process marker so cleanup can be checked without broad process killing. This gate is skipped by default and requires `pgrep`:
+
+```bash
+MINIH_PGREP=1 npx vitest run test/mcp/leak-regression.test.ts
+```
+
 ### Project Structure
 
 ```
 src/
 ├── adapter/      # SDK wrapper (IAgentAdapter interface)
+├── mcp/          # Inside-only coordination MCP server and tools
 ├── runner/       # Orchestration (prompt assembly, execution, validation)
 └── cli/          # Commands (run, status, inspect, etc.)
     └── commands/
@@ -97,7 +131,7 @@ docs/             # Domain docs, plans, ADRs
 scripts/          # Build helpers
 ```
 
-**Import direction**: `cli → runner → adapter` — never upward. The runner is adapter-agnostic via `IAgentAdapter`.
+**Import direction**: `cli → {mcp, runner, adapter}`, `mcp → runner`, `runner → adapter` — never upward. The runner is adapter-agnostic via `IAgentAdapter` and must not import `mcp`.
 
 ### Code Style
 

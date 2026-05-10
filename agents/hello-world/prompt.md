@@ -1,6 +1,7 @@
 ---
 description: "Confirm minih is working by reporting your environment and capabilities"
 tags: [smoke, minimal]
+permissions: trusted
 ---
 
 # Hello World

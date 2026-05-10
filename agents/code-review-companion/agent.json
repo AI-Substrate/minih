@@ -1,0 +1,28 @@
+{
+  "$schema": "https://minih.dev/schemas/agent-manifest.json",
+  "name": "code-review-companion",
+  "version": "0.1.0",
+  "description": "Long-running coordinated code-review companion that pairs alongside a human or supervising agent. Boots once per session, listens on the inbox, and reviews each ping (commit, scope, or PR) inline — one finding-message per finding, plus a session farewell envelope. Designed for Power-On-Mode (companion review during implementation), but works for one-shot reviews too.",
+  "author": "AI-Substrate",
+  "tags": ["companion", "review", "coordination", "exemplar", "quality"],
+  "minihVersion": ">=0.3.0",
+  "type": "minih-agent",
+  "files": [
+    {
+      "path": "prompt.md",
+      "description": "Identity, coordination loop, orient default, working-a-task protocol, output contract, and reporting style. Frontmatter declares coordination: enabled and timeout: 7200 (2h)."
+    },
+    {
+      "path": "instructions.md",
+      "description": "Per-task review checklists (Implementation Quality, Domain Compliance, Anti-Reinvention, Testing & Evidence) plus severity guide and verdict mapping (APPROVE / APPROVE_WITH_NOTES / REQUEST_CHANGES)."
+    },
+    {
+      "path": "input-schema.json",
+      "description": "JSON schema for the optional initialTask input — lets a caller boot the companion with a first task pre-loaded instead of letting it orient and idle."
+    },
+    {
+      "path": "output-schema.json",
+      "description": "JSON schema for the farewell envelope written to $MINIH_OUTPUT_PATH at session end — session metadata, findings array, summary, retrospective."
+    }
+  ]
+}

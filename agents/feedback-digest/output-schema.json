@@ -93,8 +93,8 @@
         },
         "magicWandTarget": {
           "type": "string",
-          "enum": ["project", "minih"],
-          "description": "Which system does the magic wand target — the project being tested or minih itself?"
+          "enum": ["project", "minih", "coordination"],
+          "description": "Which system does the magic wand target — the project being tested, minih itself, or coordination?"
         },
         "difficulties": {
           "type": "array",

@@ -48,6 +48,7 @@ Companion briefing sent with message `01KR7VF8M3N2ZN6RAWD69B73BG`.
 
 | Review Request | Companion Message | Severity | Disposition | Notes |
 |----------------|-------------------|----------|-------------|-------|
+| T001 `e81cb02` | `01KR7VP9SGA57M4YJ5MFZFAQ1N` | MEDIUM | Fixed inline | Spec still described `docs/project-rules/harness.md` as missing; updated Harness Readiness and clarification 6 to reflect the L2 engineering harness. |
 
 ### T002 - Add proof-level contract tests first
 

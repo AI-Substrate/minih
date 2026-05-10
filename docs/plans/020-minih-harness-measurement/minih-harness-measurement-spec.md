@@ -146,7 +146,7 @@ Confirmed for architecture planning. The new `measurement` domain should remain 
 
 ## Harness Readiness
 
-No `docs/project-rules/harness.md` exists yet. Architecture planning should include a Phase 0 to establish or refresh the project harness contract so MiniH's own Boot -> Interact -> Observe loop is explicit before the measurement feature attempts to evaluate harness effectiveness.
+`docs/project-rules/harness.md` now exists as the MiniH engineering harness contract. Phase 0 established the Boot -> Interact -> Observe loop before measurement implementation, so later phases should validate against that harness instead of treating harness readiness as missing.
 
 ## Testing Strategy
 
@@ -237,7 +237,7 @@ The critical product-scope questions have been clarified enough for architecture
 3. **Mock Usage**: Allow targeted mocks at external/unstable boundaries only. Local measurement records, proof summaries, CLI envelopes, exports, benchmark catalogs, and ledger transitions should use real fixtures wherever practical.
 4. **Documentation Strategy**: Hybrid README plus `docs/how/`. README should cover quick-start discovery and common commands; `docs/how/` should carry proof-level, scorecard, privacy, classifier, benchmark, and reporting guidance.
 5. **Domain Review**: Confirmed as written. Keep `measurement` as a new conceptual domain while `runner`, `cli`, `adapter`, and `mcp` retain their existing import-direction boundaries.
-6. **Harness Readiness**: Build harness as Phase 0. The project lacks `docs/project-rules/harness.md`, so the architecture plan should establish or refresh the project harness contract before implementing measurement surfaces.
+6. **Harness Readiness**: Build harness as Phase 0. This is now satisfied by `docs/project-rules/harness.md`, which defines MiniH's engineering Boot -> Interact -> Observe contract before measurement surfaces are implemented.
 7. **Proof-Level Policy**: Use an L0-L6 ladder. Default validated means L5 for setup/change/benchmark tasks, L4 for research/coordination tasks, and L6 only for reproducibility claims.
 8. **V1 Scope Bundle**: Adopt the local-first defaults: `minih measure` namespace; per-run proof/measurement artifacts plus project-level summaries/exports; redacted metadata by default; aggregate pulse capture/import only; fresh setup/proof quality/failure recovery/coordination benchmark catalogues; no DORA integration in the first implementation phase; false-pass candidates from local later evidence; and reviewable candidate mitigations/backlog items rather than automatic work creation.
 

@@ -10,6 +10,7 @@ export {
   evaluateProof,
   getDefaultProofRequirement,
   getProofLevelDefinition,
+  meetsDefaultValidatedThreshold,
   PROOF_LEVEL_DEFINITIONS,
 } from './proof-levels.js';
 export type {

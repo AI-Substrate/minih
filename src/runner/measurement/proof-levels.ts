@@ -18,7 +18,6 @@ export const PROOF_LEVEL_DEFINITIONS: readonly ProofLevelDefinition[] = [
     label: 'No evidence',
     description: 'No durable evidence has been captured.',
     requiredArtifactKinds: [],
-    scorecardValidated: false,
   },
   {
     level: 'L1',
@@ -26,21 +25,18 @@ export const PROOF_LEVEL_DEFINITIONS: readonly ProofLevelDefinition[] = [
     description:
       'A claim exists with a citation or note but no executable proof.',
     requiredArtifactKinds: ['citation'],
-    scorecardValidated: false,
   },
   {
     level: 'L2',
     label: 'Static artifact',
     description: 'A concrete artifact exists but has not been executed.',
     requiredArtifactKinds: ['artifact'],
-    scorecardValidated: false,
   },
   {
     level: 'L3',
     label: 'Command evidence',
     description: 'A relevant command or tool invocation produced evidence.',
     requiredArtifactKinds: ['command'],
-    scorecardValidated: false,
   },
   {
     level: 'L4',
@@ -48,7 +44,6 @@ export const PROOF_LEVEL_DEFINITIONS: readonly ProofLevelDefinition[] = [
     description:
       'A cited decision, contract, or coordination outcome is backed by concrete evidence.',
     requiredArtifactKinds: ['citation', 'decision-record'],
-    scorecardValidated: false,
   },
   {
     level: 'L5',
@@ -56,7 +51,6 @@ export const PROOF_LEVEL_DEFINITIONS: readonly ProofLevelDefinition[] = [
     description:
       'A setup, change, or benchmark has command, test, and observed working-state evidence.',
     requiredArtifactKinds: ['command', 'test', 'runtime-observation'],
-    scorecardValidated: true,
   },
   {
     level: 'L6',
@@ -64,7 +58,6 @@ export const PROOF_LEVEL_DEFINITIONS: readonly ProofLevelDefinition[] = [
     description:
       'The proof bundle was independently rerun or replayed from captured evidence.',
     requiredArtifactKinds: ['command', 'test', 'runtime-observation', 'rerun'],
-    scorecardValidated: true,
   },
 ];
 
@@ -138,6 +131,15 @@ export function compareProofLevels(
   return rankProofLevel(left) - rankProofLevel(right);
 }
 
+export function meetsDefaultValidatedThreshold(
+  level: ProofLevel,
+  taskKind: TaskKind,
+): boolean {
+  return (
+    compareProofLevels(level, getDefaultProofRequirement(taskKind).level) >= 0
+  );
+}
+
 export function evaluateProof(input: ProofEvaluationInput): ProofEvaluation {
   const requirement = getDefaultProofRequirement(input.taskKind);
   const presentKinds = new Set(
@@ -149,7 +151,7 @@ export function evaluateProof(input: ProofEvaluationInput): ProofEvaluation {
   const validated = missingArtifactKinds.length === 0;
   const level = validated
     ? requirement.level
-    : lowerConfidenceLevel(requirement.level);
+    : supportedProofLevel(input.taskKind, presentKinds);
 
   return {
     taskKind: input.taskKind,
@@ -175,7 +177,53 @@ function rankProofLevel(level: ProofLevel): number {
   return rank;
 }
 
-function lowerConfidenceLevel(level: ProofLevel): ProofLevel {
-  const rank = Math.max(0, rankProofLevel(level) - 1);
-  return PROOF_LEVELS[rank];
+function supportedProofLevel(
+  taskKind: TaskKind,
+  presentKinds: ReadonlySet<ProofEvaluationInput['artifacts'][number]['kind']>,
+): ProofLevel {
+  if (
+    taskKind === 'reproducibility' &&
+    hasKinds(presentKinds, ['command', 'test', 'runtime-observation'])
+  ) {
+    return 'L5';
+  }
+
+  if (
+    taskKind === 'research' &&
+    hasKinds(presentKinds, ['citation', 'decision-record'])
+  ) {
+    return 'L4';
+  }
+
+  if (
+    taskKind === 'coordination' &&
+    hasKinds(presentKinds, ['citation', 'coordination-log'])
+  ) {
+    return 'L4';
+  }
+
+  if (hasKinds(presentKinds, ['command', 'test', 'runtime-observation'])) {
+    return 'L5';
+  }
+
+  if (hasKinds(presentKinds, ['command'])) {
+    return 'L3';
+  }
+
+  if (hasKinds(presentKinds, ['artifact'])) {
+    return 'L2';
+  }
+
+  if (hasKinds(presentKinds, ['citation'])) {
+    return 'L1';
+  }
+
+  return 'L0';
+}
+
+function hasKinds(
+  presentKinds: ReadonlySet<ProofEvaluationInput['artifacts'][number]['kind']>,
+  requiredKinds: readonly ProofEvaluationInput['artifacts'][number]['kind'][],
+): boolean {
+  return requiredKinds.every((kind) => presentKinds.has(kind));
 }

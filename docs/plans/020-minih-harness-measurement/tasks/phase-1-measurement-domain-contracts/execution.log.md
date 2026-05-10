@@ -49,6 +49,8 @@ Companion briefing sent with message `01KR7VF8M3N2ZN6RAWD69B73BG`.
 | Review Request | Companion Message | Severity | Disposition | Notes |
 |----------------|-------------------|----------|-------------|-------|
 | T001 `e81cb02` | `01KR7VP9SGA57M4YJ5MFZFAQ1N` | MEDIUM | Fixed inline | Spec still described `docs/project-rules/harness.md` as missing; updated Harness Readiness and clarification 6 to reflect the L2 engineering harness. |
+| T002 `c76d889` | `01KR7VVVS83FF6W3MX89200KSW` | HIGH | Fixed inline | Empty or very partial proof evidence was over-ranked; added empty-evidence coverage and artifact-derived support levels. |
+| T003 `c76d889` | `01KR7VX31ESWVFX51G8GSZQ481` | HIGH | Fixed inline | Replaced global scorecard-validation semantics with task-kind-aware default-threshold evaluation. |
 
 ### T002 - Add proof-level contract tests first
 
@@ -82,6 +84,7 @@ Companion briefing sent with message `01KR7VF8M3N2ZN6RAWD69B73BG`.
 **Evidence**:
 - `npx vitest run test/runner/measurement/proof-levels.test.ts` passed: 14 tests.
 - First full-gate attempt caught an unused type import in `proof-levels.ts`; removed it before committing.
+- Companion findings F002/F003 identified proof-level overclaim risks; fixed with artifact-derived support levels and task-kind-aware threshold helper.
 
 ### T004 - Add metric registry contract tests first
 

@@ -32,7 +32,6 @@ export interface ProofLevelDefinition {
   label: string;
   description: string;
   requiredArtifactKinds: readonly ProofArtifactKind[];
-  scorecardValidated: boolean;
 }
 
 export interface ProofRequirement {

@@ -538,9 +538,6 @@ describe('installAgentPack — URL source (T006)', () => {
   });
 
   it('(g) URL install + tmp dir cleaned up on success', async () => {
-    const beforeDirs = fs
-      .readdirSync(os.tmpdir())
-      .filter((d) => d.startsWith('minih-agent-pack-'));
     const tarball = await makeGithubTarball({
       repoPrefix: 'minih-x',
       files: [{ path: 'prompt.md', body: 'x' }],
@@ -550,21 +547,22 @@ describe('installAgentPack — URL source (T006)', () => {
       commitSha: '5'.repeat(40),
       tarball,
     });
+    const installTmpDir = path.join(tmpDir, 'install-tmp-success');
+    fs.mkdirSync(installTmpDir);
     await installAgentPack({
       source: { type: 'url', url: 'github:foo/my-agent', ref: 'main' },
       agentsDir,
       fetcher: fake,
+      tempDir: installTmpDir,
     });
-    const afterDirs = fs
-      .readdirSync(os.tmpdir())
-      .filter((d) => d.startsWith('minih-agent-pack-'));
-    expect(afterDirs.length).toBe(beforeDirs.length);
+    expect(
+      fs
+        .readdirSync(installTmpDir)
+        .filter((d) => d.startsWith('minih-agent-pack-')),
+    ).toEqual([]);
   });
 
   it('(h) URL install + tmp dir cleaned up on extract failure', async () => {
-    const beforeDirs = fs
-      .readdirSync(os.tmpdir())
-      .filter((d) => d.startsWith('minih-agent-pack-'));
     const fake = new FakeAgentPackFetcher();
     // Garbage that gunzips fine but is not a valid tar — extractor returns
     // empty. install will then fail with implicit-manifest error since
@@ -574,17 +572,21 @@ describe('installAgentPack — URL source (T006)', () => {
       commitSha: '6'.repeat(40),
       tarball: garbage,
     });
+    const installTmpDir = path.join(tmpDir, 'install-tmp-failure');
+    fs.mkdirSync(installTmpDir);
     await expect(
       installAgentPack({
         source: { type: 'url', url: 'github:foo/my-agent', ref: 'main' },
         agentsDir,
         fetcher: fake,
+        tempDir: installTmpDir,
       }),
     ).rejects.toThrow();
-    const afterDirs = fs
-      .readdirSync(os.tmpdir())
-      .filter((d) => d.startsWith('minih-agent-pack-'));
-    expect(afterDirs.length).toBe(beforeDirs.length);
+    expect(
+      fs
+        .readdirSync(installTmpDir)
+        .filter((d) => d.startsWith('minih-agent-pack-')),
+    ).toEqual([]);
   });
 
   it('(i) URL install when fetcher rejects → E181 from fetcher', async () => {

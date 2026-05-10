@@ -3,6 +3,7 @@ import {
   evaluateProof,
   getDefaultProofRequirement,
   getProofLevelDefinition,
+  meetsDefaultValidatedThreshold,
   PROOF_LEVEL_DEFINITIONS,
 } from '../../../src/runner/measurement/proof-levels.js';
 import type {
@@ -33,9 +34,6 @@ describe('proof-level contracts', () => {
       expect(definition.level).toBe(level);
       expect(definition.label).toEqual(expect.any(String));
       expect(definition.description).toEqual(expect.any(String));
-      expect(definition.scorecardValidated).toBe(
-        level === 'L5' || level === 'L6',
-      );
     }
   });
 
@@ -85,6 +83,15 @@ describe('proof-level contracts', () => {
     ]);
   });
 
+  it('evaluates default validated threshold by task kind', () => {
+    expect(meetsDefaultValidatedThreshold('L4', 'research')).toBe(true);
+    expect(meetsDefaultValidatedThreshold('L4', 'coordination')).toBe(true);
+    expect(meetsDefaultValidatedThreshold('L4', 'change')).toBe(false);
+    expect(meetsDefaultValidatedThreshold('L5', 'change')).toBe(true);
+    expect(meetsDefaultValidatedThreshold('L5', 'reproducibility')).toBe(false);
+    expect(meetsDefaultValidatedThreshold('L6', 'reproducibility')).toBe(true);
+  });
+
   it('validates a setup proof when all default artifacts are present', () => {
     expect(
       evaluateProof({
@@ -110,10 +117,36 @@ describe('proof-level contracts', () => {
         artifacts: [artifact('command'), artifact('test')],
       }),
     ).toMatchObject({
-      level: 'L4',
+      level: 'L3',
       defaultLevel: 'L5',
       validated: false,
       missingArtifactKinds: ['runtime-observation'],
+    });
+  });
+
+  it('does not over-rank empty evidence as contract-level proof', () => {
+    expect(
+      evaluateProof({
+        taskKind: 'setup',
+        artifacts: [],
+      }),
+    ).toMatchObject({
+      level: 'L0',
+      defaultLevel: 'L5',
+      validated: false,
+      missingArtifactKinds: ['command', 'test', 'runtime-observation'],
+    });
+
+    expect(
+      evaluateProof({
+        taskKind: 'reproducibility',
+        artifacts: [],
+      }),
+    ).toMatchObject({
+      level: 'L0',
+      defaultLevel: 'L6',
+      validated: false,
+      missingArtifactKinds: ['command', 'test', 'runtime-observation', 'rerun'],
     });
   });
 

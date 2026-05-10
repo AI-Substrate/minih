@@ -129,6 +129,7 @@ export {
   listMetricDefinitions,
   listMetricsByCategory,
   METRIC_REGISTRY,
+  meetsDefaultValidatedThreshold,
   PROOF_LEVEL_DEFINITIONS,
   PROOF_LEVELS,
   TRACEABILITY_LEVELS,

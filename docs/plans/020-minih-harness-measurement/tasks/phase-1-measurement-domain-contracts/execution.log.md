@@ -177,3 +177,21 @@ Companion briefing sent with message `01KR7VF8M3N2ZN6RAWD69B73BG`.
 **Evidence**:
 - Manual strict AJV compile passed for all six new measurement schemas.
 - `npm run build` copied `measurement-classification.json` to `dist/schemas`.
+
+### T008 - Extend schema contract tests for every new schema
+
+**Status**: Complete
+**Started**: 2026-05-10
+
+**Plan**:
+- Extend `test/runner/schemas.test.ts` so all new measurement schemas parse and compile under strict AJV.
+- Add positive samples plus negative coverage for missing proof artifacts, missing evidence/citations, missing provenance/redaction, individual productivity fields, composite productivity score fields, contradictory missing-data values, under-threshold pulse aggregates, and missing-data semantics.
+
+**Changes**:
+- Extended `test/runner/schemas.test.ts` to compile all six measurement schemas under strict AJV.
+- Added positive samples for event, proof, scorecard, classification, pulse aggregate, and benchmark catalogue records.
+- Added negative tests for omitted proof inventories, missing provenance/redaction, missing citations, runner-fact overrides, individual productivity fields, composite productivity scores, contradictory metric values, under-threshold pulse aggregates, downstream causal claims, and benchmark execution-result leakage.
+
+**Evidence**:
+- `npx vitest run test/runner/schemas.test.ts` passed: 58 tests.
+- Companion summary `01KR7WS6Z7Y2RP70ZH1VDCVGEY` approved T007 and confirmed F005/F006 resolved.

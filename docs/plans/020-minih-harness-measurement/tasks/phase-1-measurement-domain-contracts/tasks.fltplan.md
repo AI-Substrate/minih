@@ -70,7 +70,9 @@ stateDiagram-v2
     S9 --> [*]
 
     class S1 done
-    class S2,S3,S4,S5,S6,S7,S8,S9 pending
+    class S2 done
+    class S3 done
+    class S4,S5,S6,S7,S8,S9 pending
 ```
 
 **Legend**: grey = pending | yellow = active | red = blocked/needs input | green = done
@@ -82,8 +84,8 @@ stateDiagram-v2
 <!-- Updated by /plan-6 during implementation: [ ] → [~] → [x] -->
 
 - [x] **Stage 1: Refresh domain docs** - clarify measurement as conceptual and preserve runtime ownership boundaries (`docs/domains/measurement/domain.md`).
-- [ ] **Stage 2: Write proof tests** - describe L0-L6 defaults and artifact requirements before implementation (`test/runner/measurement/proof-levels.test.ts` - new file).
-- [ ] **Stage 3: Add proof helpers** - export pure runner proof-level contracts (`src/runner/measurement/proof-levels.ts` - new file).
+- [x] **Stage 2: Write proof tests** - describe L0-L6 defaults and artifact requirements before implementation (`test/runner/measurement/proof-levels.test.ts` - new file).
+- [x] **Stage 3: Add proof helpers** - export pure runner proof-level contracts (`src/runner/measurement/proof-levels.ts` - new file).
 - [ ] **Stage 4: Write registry tests** - lock traceability levels, caveats, and framework wording (`test/runner/measurement/metric-registry.test.ts` - new file).
 - [ ] **Stage 5: Add metric registry** - publish metric IDs, categories, mappings, and caveats (`src/runner/measurement/metric-registry.ts` - new file).
 - [ ] **Stage 6: Add runner schemas** - add factual measurement, proof, scorecard, pulse, benchmark schemas, and explicit build-copy wiring (`src/schemas/*.json`, `scripts/copy-schemas.js`).
@@ -160,8 +162,8 @@ flowchart LR
 ## Checklist
 
 - [x] T001: Refine the conceptual measurement domain docs (CS-2)
-- [ ] T002: Add proof-level contract tests first (CS-2)
-- [ ] T003: Implement proof-level contract helpers (CS-3)
+- [x] T002: Add proof-level contract tests first (CS-2)
+- [x] T003: Implement proof-level contract helpers (CS-3)
 - [ ] T004: Add metric registry contract tests first (CS-2)
 - [ ] T005: Implement the metric registry contract (CS-3)
 - [ ] T006: Add runner-owned measurement schemas and build copy wiring (CS-3)

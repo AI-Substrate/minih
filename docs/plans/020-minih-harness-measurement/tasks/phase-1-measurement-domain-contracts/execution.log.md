@@ -48,3 +48,36 @@ Companion briefing sent with message `01KR7VF8M3N2ZN6RAWD69B73BG`.
 
 | Review Request | Companion Message | Severity | Disposition | Notes |
 |----------------|-------------------|----------|-------------|-------|
+
+### T002 - Add proof-level contract tests first
+
+**Status**: Complete
+**Started**: 2026-05-10
+
+**Plan**:
+- Add failing-first proof-level contract coverage for L0-L6 definitions, task-kind defaults, artifact requirements, lower-confidence labels, and L6 reproducibility.
+- Keep tests scoped to runner measurement contracts.
+
+**Changes**:
+- Added `test/runner/measurement/proof-levels.test.ts`.
+
+**Evidence**:
+- `npx vitest run test/runner/measurement/proof-levels.test.ts` failed red because `src/runner/measurement/proof-levels.ts` does not exist yet.
+
+### T003 - Implement proof-level contract helpers
+
+**Status**: Complete
+**Started**: 2026-05-10
+
+**Plan**:
+- Add runner-owned proof-level types and helpers.
+- Export contracts from the runner public barrel.
+- Keep implementation pure with no CLI, MCP, or adapter imports.
+
+**Changes**:
+- Added `src/runner/measurement/types.ts`, `src/runner/measurement/proof-levels.ts`, and `src/runner/measurement/index.ts`.
+- Exported proof-level contracts from `src/runner/index.ts`.
+
+**Evidence**:
+- `npx vitest run test/runner/measurement/proof-levels.test.ts` passed: 14 tests.
+- First full-gate attempt caught an unused type import in `proof-levels.ts`; removed it before committing.

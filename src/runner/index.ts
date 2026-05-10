@@ -103,6 +103,26 @@ export type {
 } from './inbox-poll.js';
 export { InboxPollError, pollInboxLane } from './inbox-poll.js';
 export type {
+  MeasurementAuthority,
+  ProofArtifact,
+  ProofArtifactKind,
+  ProofEvaluation,
+  ProofEvaluationInput,
+  ProofLevel,
+  ProofLevelDefinition,
+  ProofRequirement,
+  RedactionPosture,
+  TaskKind,
+} from './measurement/index.js';
+export {
+  compareProofLevels,
+  evaluateProof,
+  getDefaultProofRequirement,
+  getProofLevelDefinition,
+  PROOF_LEVEL_DEFINITIONS,
+  PROOF_LEVELS,
+} from './measurement/index.js';
+export type {
   DerivePeerActivityOptions,
   DerivePeerInputs,
   PeerActivity,

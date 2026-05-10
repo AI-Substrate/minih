@@ -151,7 +151,10 @@ export function evaluateProof(input: ProofEvaluationInput): ProofEvaluation {
   const validated = missingArtifactKinds.length === 0;
   const level = validated
     ? requirement.level
-    : supportedProofLevel(input.taskKind, presentKinds);
+    : capBelowDefault(
+        supportedProofLevel(input.taskKind, presentKinds),
+        requirement.level,
+      );
 
   return {
     taskKind: input.taskKind,
@@ -219,6 +222,18 @@ function supportedProofLevel(
   }
 
   return 'L0';
+}
+
+function capBelowDefault(
+  level: ProofLevel,
+  defaultLevel: ProofLevel,
+): ProofLevel {
+  if (compareProofLevels(level, defaultLevel) < 0) {
+    return level;
+  }
+
+  const cappedRank = Math.max(0, rankProofLevel(defaultLevel) - 1);
+  return PROOF_LEVELS[cappedRank];
 }
 
 function hasKinds(

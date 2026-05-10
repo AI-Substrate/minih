@@ -1,0 +1,142 @@
+{
+  "$id": "https://minih.dev/schemas/pulse-aggregate.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Minih Pulse Aggregate",
+  "description": "Aggregate-only human pulse data for team or system-level measurement.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "pulseId",
+    "runId",
+    "collectedAt",
+    "authority",
+    "aggregationLevel",
+    "minimumGroupSize",
+    "sampleSize",
+    "questions",
+    "missingData",
+    "provenance",
+    "redaction"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1" },
+    "pulseId": { "type": "string", "minLength": 1 },
+    "runId": { "type": "string", "minLength": 1 },
+    "collectedAt": { "type": "string", "format": "date-time" },
+    "authority": { "type": "string", "const": "human-pulse" },
+    "aggregationLevel": {
+      "type": "string",
+      "enum": ["project", "system", "team"]
+    },
+    "minimumGroupSize": { "type": "integer", "minimum": 2 },
+    "sampleSize": { "type": "integer", "minimum": 0 },
+    "questions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/questionAggregate" }
+    },
+    "missingData": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/missingData" }
+    },
+    "provenance": { "$ref": "#/$defs/provenance" },
+    "redaction": { "$ref": "#/$defs/redaction" }
+  },
+  "$defs": {
+    "questionAggregate": {
+      "type": "object",
+      "required": [
+        "questionId",
+        "prompt",
+        "dimension",
+        "responseScale",
+        "aggregate"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "questionId": { "type": "string", "minLength": 1 },
+        "prompt": { "type": "string", "minLength": 1 },
+        "dimension": {
+          "type": "string",
+          "enum": [
+            "ai-helpfulness",
+            "cognitive-load",
+            "failure-clarity",
+            "flow",
+            "proof-trust",
+            "safer-to-change"
+          ]
+        },
+        "responseScale": {
+          "type": "string",
+          "enum": ["boolean", "count", "likert-5", "text"]
+        },
+        "aggregate": {
+          "type": "object",
+          "required": ["responseCount", "distribution", "mean"],
+          "additionalProperties": false,
+          "properties": {
+            "responseCount": { "type": "integer", "minimum": 0 },
+            "distribution": {
+              "type": "object",
+              "additionalProperties": { "type": "integer", "minimum": 0 }
+            },
+            "mean": {
+              "type": "object",
+              "required": ["available"],
+              "additionalProperties": false,
+              "properties": {
+                "available": { "type": "boolean" },
+                "value": { "type": "number", "minimum": 1, "maximum": 5 },
+                "reason": { "type": "string", "minLength": 1 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "missingData": {
+      "type": "object",
+      "required": ["field", "reason", "description"],
+      "additionalProperties": false,
+      "properties": {
+        "field": { "type": "string", "minLength": 1 },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "not-applicable",
+            "not-collected",
+            "not-configured",
+            "redacted"
+          ]
+        },
+        "description": { "type": "string", "minLength": 1 }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["source", "generatedAt", "evidenceIds"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "type": "string", "const": "human" },
+        "generatedAt": { "type": "string", "format": "date-time" },
+        "evidenceIds": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        }
+      }
+    },
+    "redaction": {
+      "type": "object",
+      "required": ["posture", "containsPersonalData", "exportSafe", "notes"],
+      "additionalProperties": false,
+      "properties": {
+        "posture": { "type": "string", "const": "aggregate-only" },
+        "containsPersonalData": { "type": "boolean", "const": false },
+        "exportSafe": { "type": "boolean" },
+        "notes": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

@@ -166,6 +166,40 @@ describe('proof-level contracts', () => {
     ).toMatchObject({ level: 'L4', validated: true });
   });
 
+  it('does not let product-state artifacts substitute for cited research evidence', () => {
+    expect(
+      evaluateProof({
+        taskKind: 'research',
+        artifacts: [
+          artifact('command'),
+          artifact('test'),
+          artifact('runtime-observation'),
+        ],
+      }),
+    ).toMatchObject({
+      level: 'L3',
+      defaultLevel: 'L4',
+      validated: false,
+      missingArtifactKinds: ['citation', 'decision-record'],
+    });
+
+    expect(
+      evaluateProof({
+        taskKind: 'coordination',
+        artifacts: [
+          artifact('command'),
+          artifact('test'),
+          artifact('runtime-observation'),
+        ],
+      }),
+    ).toMatchObject({
+      level: 'L3',
+      defaultLevel: 'L4',
+      validated: false,
+      missingArtifactKinds: ['citation', 'coordination-log'],
+    });
+  });
+
   it('does not validate reproducibility without rerun evidence', () => {
     expect(
       evaluateProof({

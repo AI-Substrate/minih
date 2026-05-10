@@ -13,6 +13,11 @@ for (const file of [
   'outside-state.json',
   'inside-state.json',
   'state-history-entry.json',
+  'measurement-event.json',
+  'proof-summary.json',
+  'measurement-scorecard.json',
+  'pulse-aggregate.json',
+  'benchmark-catalog.json',
   'permission-error.json',
   'permission-policy.json',
 ]) {

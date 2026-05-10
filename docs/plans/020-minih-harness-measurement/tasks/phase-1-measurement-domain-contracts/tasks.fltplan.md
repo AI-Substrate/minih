@@ -3,7 +3,7 @@
 **Plan**: [minih-harness-measurement-plan.md](../../minih-harness-measurement-plan.md)
 **Phase**: Phase 1: Measurement Domain Contracts
 **Generated**: 2026-05-10
-**Status**: Ready for takeoff
+**Status**: In flight
 
 ---
 
@@ -74,7 +74,8 @@ stateDiagram-v2
     class S3 done
     class S4 done
     class S5 done
-    class S6,S7,S8,S9 pending
+    class S6 done
+    class S7,S8,S9 pending
 ```
 
 **Legend**: grey = pending | yellow = active | red = blocked/needs input | green = done
@@ -90,7 +91,7 @@ stateDiagram-v2
 - [x] **Stage 3: Add proof helpers** - export pure runner proof-level contracts (`src/runner/measurement/proof-levels.ts` - new file).
 - [x] **Stage 4: Write registry tests** - lock traceability levels, caveats, and framework wording (`test/runner/measurement/metric-registry.test.ts` - new file).
 - [x] **Stage 5: Add metric registry** - publish metric IDs, categories, mappings, and caveats (`src/runner/measurement/metric-registry.ts` - new file).
-- [ ] **Stage 6: Add runner schemas** - add factual measurement, proof, scorecard, pulse, benchmark schemas, and explicit build-copy wiring (`src/schemas/*.json`, `scripts/copy-schemas.js`).
+- [x] **Stage 6: Add runner schemas** - add factual measurement, proof, scorecard, pulse, benchmark schemas, and explicit build-copy wiring (`src/schemas/*.json`, `scripts/copy-schemas.js`).
 - [ ] **Stage 7: Add classifier schema** - require evidence-cited interpretive output for later CLI orchestration (`src/schemas/measurement-classification.json` - new file).
 - [ ] **Stage 8: Extend schema tests** - compile and sample-validate every new schema (`test/runner/schemas.test.ts`).
 - [ ] **Stage 9: Encode redaction rules** - keep fact, interpretation, human pulse, and downstream context authority visible (`docs/domains/measurement/domain.md`, `src/runner/measurement/types.ts`).
@@ -168,7 +169,7 @@ flowchart LR
 - [x] T003: Implement proof-level contract helpers (CS-3)
 - [x] T004: Add metric registry contract tests first (CS-2)
 - [x] T005: Implement the metric registry contract (CS-3)
-- [ ] T006: Add runner-owned measurement schemas and build copy wiring (CS-3)
+- [x] T006: Add runner-owned measurement schemas and build copy wiring (CS-3)
 - [ ] T007: Add the interpretive classification schema contract (CS-2)
 - [ ] T008: Extend schema contract tests for every new schema, including privacy and missing-data negatives (CS-2)
 - [ ] T009: Encode authority, composite-score, and redaction contracts (CS-2)

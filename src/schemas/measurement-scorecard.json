@@ -1,0 +1,195 @@
+{
+  "$id": "https://minih.dev/schemas/measurement-scorecard.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Minih Measurement Scorecard",
+  "description": "Balanced local scorecard that keeps measurement categories separate and forbids composite productivity scoring.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "scorecardId",
+    "runId",
+    "generatedAt",
+    "authority",
+    "categories",
+    "missingData",
+    "provenance",
+    "redaction"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1" },
+    "scorecardId": { "type": "string", "minLength": 1 },
+    "runId": { "type": "string", "minLength": 1 },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "authority": { "type": "string", "const": "runner-fact" },
+    "categories": {
+      "type": "object",
+      "required": [
+        "downstreamContext",
+        "flowFriction",
+        "learning",
+        "proofQuality",
+        "trustPulse",
+        "valueEvidence"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "downstreamContext": { "$ref": "#/$defs/category" },
+        "flowFriction": { "$ref": "#/$defs/category" },
+        "learning": { "$ref": "#/$defs/category" },
+        "proofQuality": { "$ref": "#/$defs/category" },
+        "trustPulse": { "$ref": "#/$defs/category" },
+        "valueEvidence": { "$ref": "#/$defs/category" }
+      }
+    },
+    "missingData": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/missingData" }
+    },
+    "provenance": { "$ref": "#/$defs/provenance" },
+    "redaction": { "$ref": "#/$defs/redaction" }
+  },
+  "$defs": {
+    "category": {
+      "type": "object",
+      "required": [
+        "status",
+        "summary",
+        "metrics",
+        "evidenceIds",
+        "missingData"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "$ref": "#/$defs/dataStatus" },
+        "summary": { "type": "string", "minLength": 1 },
+        "metrics": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/metricResult" }
+        },
+        "evidenceIds": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "missingData": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/missingData" }
+        }
+      }
+    },
+    "dataStatus": {
+      "type": "string",
+      "enum": [
+        "available",
+        "missing",
+        "not-applicable",
+        "not-configured",
+        "redacted"
+      ]
+    },
+    "metricResult": {
+      "type": "object",
+      "required": [
+        "metricId",
+        "authority",
+        "status",
+        "traceabilityLevel",
+        "value",
+        "evidenceIds",
+        "caveats"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "metricId": { "type": "string", "minLength": 1 },
+        "authority": {
+          "type": "string",
+          "enum": [
+            "downstream-context",
+            "human-pulse",
+            "interpretive-classification",
+            "runner-fact"
+          ]
+        },
+        "status": { "$ref": "#/$defs/dataStatus" },
+        "traceabilityLevel": {
+          "type": "string",
+          "enum": ["L1", "L2", "L3", "L4"]
+        },
+        "value": { "$ref": "#/$defs/metricValue" },
+        "evidenceIds": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "caveats": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "metricValue": {
+      "type": "object",
+      "required": ["kind", "display"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["boolean", "missing", "number", "text"]
+        },
+        "display": { "type": "string", "minLength": 1 },
+        "number": { "type": "number" },
+        "text": { "type": "string", "minLength": 1 },
+        "flag": { "type": "boolean" }
+      }
+    },
+    "missingData": {
+      "type": "object",
+      "required": ["field", "reason", "description"],
+      "additionalProperties": false,
+      "properties": {
+        "field": { "type": "string", "minLength": 1 },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "not-applicable",
+            "not-collected",
+            "not-configured",
+            "redacted"
+          ]
+        },
+        "description": { "type": "string", "minLength": 1 }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["source", "generatedAt", "evidenceIds"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "type": "string", "const": "runner" },
+        "generatedAt": { "type": "string", "format": "date-time" },
+        "evidenceIds": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        }
+      }
+    },
+    "redaction": {
+      "type": "object",
+      "required": ["posture", "containsPersonalData", "exportSafe", "notes"],
+      "additionalProperties": false,
+      "properties": {
+        "posture": {
+          "type": "string",
+          "enum": ["local-only", "redacted-export"]
+        },
+        "containsPersonalData": { "type": "boolean" },
+        "exportSafe": { "type": "boolean" },
+        "notes": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

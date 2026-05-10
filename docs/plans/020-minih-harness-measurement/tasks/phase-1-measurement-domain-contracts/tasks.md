@@ -95,7 +95,7 @@ flowchart TD
         T004["T004: Registry tests"]:::completed
         T005["T005: Metric registry"]:::completed
         T006["T006: Runner schemas"]:::completed
-        T007["T007: Classification schema"]:::pending
+        T007["T007: Classification schema"]:::completed
         T008["T008: Schema tests"]:::pending
         T009["T009: Authority/redaction"]:::pending
         T001 --> T002 --> T003
@@ -109,7 +109,7 @@ flowchart TD
     subgraph Files["Files"]
         D1["docs/domains/measurement/domain.md"]:::completed
         R1["src/runner/measurement/*"]:::completed
-        S1["src/schemas/measurement-*.json"]:::inprogress
+        S1["src/schemas/measurement-*.json"]:::completed
         C1["scripts/copy-schemas.js"]:::completed
         V1["test/runner/measurement/*"]:::completed
         V2["test/runner/schemas.test.ts"]:::pending
@@ -138,7 +138,7 @@ flowchart TD
 | [x] | T004 | Add metric registry contract tests first | runner | `/Users/jordanknight/substrate/minih/test/runner/measurement/metric-registry.test.ts` | Tests assert traceability levels, source refs, caveats, scorecard categories, and forbidden framework-native wording for MiniH-local metrics. | CS-2. Covers [AC4] and [AC5]. |
 | [x] | T005 | Implement the metric registry contract | runner | `/Users/jordanknight/substrate/minih/src/runner/measurement/types.ts`<br>`/Users/jordanknight/substrate/minih/src/runner/measurement/metric-registry.ts`<br>`/Users/jordanknight/substrate/minih/src/runner/index.ts` | Registry entries include ID, display name, category, traceability level, framework mappings, local source refs, caveats, and reporting wording helpers. | CS-3. Use workshop 001 traceability levels L1-L4. |
 | [x] | T006 | Add runner-owned measurement schemas and build copy wiring | runner | `/Users/jordanknight/substrate/minih/src/schemas/measurement-event.json`<br>`/Users/jordanknight/substrate/minih/src/schemas/proof-summary.json`<br>`/Users/jordanknight/substrate/minih/src/schemas/measurement-scorecard.json`<br>`/Users/jordanknight/substrate/minih/src/schemas/pulse-aggregate.json`<br>`/Users/jordanknight/substrate/minih/src/schemas/benchmark-catalog.json`<br>`/Users/jordanknight/substrate/minih/scripts/copy-schemas.js` | Schemas declare draft-2020-12, compile in strict AJV, include schema version/provenance/redaction fields where relevant, and `scripts/copy-schemas.js` explicitly copies each new schema to `dist/schemas` during build. | CS-3. Covers [AC1], [AC2], [AC3], [AC9], [AC10], [AC12]. |
-| [ ] | T007 | Add the interpretive classification schema contract | cli | `/Users/jordanknight/substrate/minih/src/schemas/measurement-classification.json`<br>`/Users/jordanknight/substrate/minih/scripts/copy-schemas.js` | Schema requires cited evidence IDs or proof artifacts, confidence, rationale, caveats, and an explicit interpretive marker before later CLI orchestration can surface classifier output. | CS-2. Covers [AC7] and [AC8]. |
+| [x] | T007 | Add the interpretive classification schema contract | cli | `/Users/jordanknight/substrate/minih/src/schemas/measurement-classification.json`<br>`/Users/jordanknight/substrate/minih/scripts/copy-schemas.js` | Schema requires cited evidence IDs or proof artifacts, confidence, rationale, caveats, and an explicit interpretive marker before later CLI orchestration can surface classifier output. | CS-2. Covers [AC7] and [AC8]. |
 | [ ] | T008 | Extend schema contract tests for every new schema | runner | `/Users/jordanknight/substrate/minih/test/runner/schemas.test.ts` | Strict AJV tests parse and compile every new schema and include positive/negative samples for proof, scorecard, classification, pulse aggregate, and benchmark catalogue shapes, including redaction/provenance violations, missing required evidence/citations, and missing-data edge cases on exportable records. | CS-2. Reuse existing `makeAjv()` + `ajv-formats` pattern. |
 | [ ] | T009 | Encode authority and redaction contracts | measurement | `/Users/jordanknight/substrate/minih/docs/domains/measurement/domain.md`<br>`/Users/jordanknight/substrate/minih/src/runner/measurement/types.ts`<br>`/Users/jordanknight/substrate/minih/src/schemas/measurement-scorecard.json`<br>`/Users/jordanknight/substrate/minih/src/schemas/pulse-aggregate.json` | Facts, interpretation, human pulse, and downstream context each have source-of-truth labels; schemas and docs forbid individual productivity fields and composite productivity scores, and require redaction/provenance metadata for exportable records. | CS-2. Finding 07. Covers [AC10] and [AC13]. |
 

@@ -16,6 +16,7 @@ for (const file of [
   'measurement-event.json',
   'proof-summary.json',
   'measurement-scorecard.json',
+  'measurement-classification.json',
   'pulse-aggregate.json',
   'benchmark-catalog.json',
   'permission-error.json',

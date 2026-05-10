@@ -130,18 +130,59 @@
       }
     },
     "metricValue": {
+      "oneOf": [
+        { "$ref": "#/$defs/numberMetricValue" },
+        { "$ref": "#/$defs/booleanMetricValue" },
+        { "$ref": "#/$defs/textMetricValue" },
+        { "$ref": "#/$defs/missingMetricValue" }
+      ]
+    },
+    "numberMetricValue": {
       "type": "object",
-      "required": ["kind", "display"],
+      "required": ["kind", "display", "number"],
       "additionalProperties": false,
       "properties": {
-        "kind": {
-          "type": "string",
-          "enum": ["boolean", "missing", "number", "text"]
-        },
+        "kind": { "type": "string", "const": "number" },
         "display": { "type": "string", "minLength": 1 },
-        "number": { "type": "number" },
-        "text": { "type": "string", "minLength": 1 },
+        "number": { "type": "number" }
+      }
+    },
+    "booleanMetricValue": {
+      "type": "object",
+      "required": ["kind", "display", "flag"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "type": "string", "const": "boolean" },
+        "display": { "type": "string", "minLength": 1 },
         "flag": { "type": "boolean" }
+      }
+    },
+    "textMetricValue": {
+      "type": "object",
+      "required": ["kind", "display", "text"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "type": "string", "const": "text" },
+        "display": { "type": "string", "minLength": 1 },
+        "text": { "type": "string", "minLength": 1 }
+      }
+    },
+    "missingMetricValue": {
+      "type": "object",
+      "required": ["kind", "display", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "type": "string", "const": "missing" },
+        "display": { "type": "string", "minLength": 1 },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "not-applicable",
+            "not-collected",
+            "not-configured",
+            "redacted"
+          ]
+        }
       }
     },
     "missingData": {

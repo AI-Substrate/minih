@@ -29,8 +29,8 @@
       "type": "string",
       "enum": ["project", "system", "team"]
     },
-    "minimumGroupSize": { "type": "integer", "minimum": 2 },
-    "sampleSize": { "type": "integer", "minimum": 0 },
+    "minimumGroupSize": { "type": "integer", "const": 5 },
+    "sampleSize": { "type": "integer", "minimum": 5 },
     "questions": {
       "type": "array",
       "items": { "$ref": "#/$defs/questionAggregate" }
@@ -76,7 +76,7 @@
           "required": ["responseCount", "distribution", "mean"],
           "additionalProperties": false,
           "properties": {
-            "responseCount": { "type": "integer", "minimum": 0 },
+            "responseCount": { "type": "integer", "minimum": 5 },
             "distribution": {
               "type": "object",
               "additionalProperties": { "type": "integer", "minimum": 0 }

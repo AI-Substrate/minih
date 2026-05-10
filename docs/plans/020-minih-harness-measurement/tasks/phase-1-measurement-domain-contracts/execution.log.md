@@ -52,6 +52,8 @@ Companion briefing sent with message `01KR7VF8M3N2ZN6RAWD69B73BG`.
 | T002 `c76d889` | `01KR7VVVS83FF6W3MX89200KSW` | HIGH | Fixed inline | Empty or very partial proof evidence was over-ranked; added empty-evidence coverage and artifact-derived support levels. |
 | T003 `c76d889` | `01KR7VX31ESWVFX51G8GSZQ481` | HIGH | Fixed inline | Replaced global scorecard-validation semantics with task-kind-aware default-threshold evaluation. |
 | Fix F002/F003 `d784ce1` | `01KR7WD5H1DPTBVCWRJCD1V3RP` | HIGH | Fixed inline | Product-state artifacts could over-rank research/coordination proof without required cited evidence; capped incomplete support below the task default. |
+| T006 `0f1c934` | `01KR7WNHPGVX2FJK7GFM80JD2W` | HIGH | Fixed inline | Scorecard metric values could contradict their discriminator; replaced the metric value shape with kind-specific schema branches. |
+| T006 `0f1c934` | `01KR7WNHPJB5RW0F2KZV169XKV` | HIGH | Fixed inline | Pulse aggregates could validate under-threshold groups; fixed the aggregate contract to require a group size and per-question response count of at least five. |
 
 ### T002 - Add proof-level contract tests first
 
@@ -157,3 +159,21 @@ Companion briefing sent with message `01KR7VF8M3N2ZN6RAWD69B73BG`.
 - `npm run build` copied all five new schemas to `dist/schemas`.
 - Manual strict AJV compile passed for the five new runner schemas.
 - `npx vitest run test/runner/measurement/proof-levels.test.ts` passed: 17 tests.
+
+### T007 - Add the interpretive classification schema contract
+
+**Status**: Complete
+**Started**: 2026-05-10
+
+**Plan**:
+- Add `measurement-classification.json` for later CLI orchestration of agent/companion interpretations.
+- Require explicit interpretive marker, evidence IDs, confidence, rationale, caveats, provenance, and redaction metadata.
+
+**Changes**:
+- Added `src/schemas/measurement-classification.json`.
+- Wired the classification schema into `scripts/copy-schemas.js`.
+- Fixed companion F005/F006 schema guardrails before landing T007 by tightening scorecard value branches and pulse aggregate minimum group size.
+
+**Evidence**:
+- Manual strict AJV compile passed for all six new measurement schemas.
+- `npm run build` copied `measurement-classification.json` to `dist/schemas`.

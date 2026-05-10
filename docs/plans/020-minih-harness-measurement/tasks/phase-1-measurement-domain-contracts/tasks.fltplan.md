@@ -72,7 +72,9 @@ stateDiagram-v2
     class S1 done
     class S2 done
     class S3 done
-    class S4,S5,S6,S7,S8,S9 pending
+    class S4 done
+    class S5 done
+    class S6,S7,S8,S9 pending
 ```
 
 **Legend**: grey = pending | yellow = active | red = blocked/needs input | green = done
@@ -86,8 +88,8 @@ stateDiagram-v2
 - [x] **Stage 1: Refresh domain docs** - clarify measurement as conceptual and preserve runtime ownership boundaries (`docs/domains/measurement/domain.md`).
 - [x] **Stage 2: Write proof tests** - describe L0-L6 defaults and artifact requirements before implementation (`test/runner/measurement/proof-levels.test.ts` - new file).
 - [x] **Stage 3: Add proof helpers** - export pure runner proof-level contracts (`src/runner/measurement/proof-levels.ts` - new file).
-- [ ] **Stage 4: Write registry tests** - lock traceability levels, caveats, and framework wording (`test/runner/measurement/metric-registry.test.ts` - new file).
-- [ ] **Stage 5: Add metric registry** - publish metric IDs, categories, mappings, and caveats (`src/runner/measurement/metric-registry.ts` - new file).
+- [x] **Stage 4: Write registry tests** - lock traceability levels, caveats, and framework wording (`test/runner/measurement/metric-registry.test.ts` - new file).
+- [x] **Stage 5: Add metric registry** - publish metric IDs, categories, mappings, and caveats (`src/runner/measurement/metric-registry.ts` - new file).
 - [ ] **Stage 6: Add runner schemas** - add factual measurement, proof, scorecard, pulse, benchmark schemas, and explicit build-copy wiring (`src/schemas/*.json`, `scripts/copy-schemas.js`).
 - [ ] **Stage 7: Add classifier schema** - require evidence-cited interpretive output for later CLI orchestration (`src/schemas/measurement-classification.json` - new file).
 - [ ] **Stage 8: Extend schema tests** - compile and sample-validate every new schema (`test/runner/schemas.test.ts`).
@@ -164,8 +166,8 @@ flowchart LR
 - [x] T001: Refine the conceptual measurement domain docs (CS-2)
 - [x] T002: Add proof-level contract tests first (CS-2)
 - [x] T003: Implement proof-level contract helpers (CS-3)
-- [ ] T004: Add metric registry contract tests first (CS-2)
-- [ ] T005: Implement the metric registry contract (CS-3)
+- [x] T004: Add metric registry contract tests first (CS-2)
+- [x] T005: Implement the metric registry contract (CS-3)
 - [ ] T006: Add runner-owned measurement schemas and build copy wiring (CS-3)
 - [ ] T007: Add the interpretive classification schema contract (CS-2)
 - [ ] T008: Extend schema contract tests for every new schema, including privacy and missing-data negatives (CS-2)

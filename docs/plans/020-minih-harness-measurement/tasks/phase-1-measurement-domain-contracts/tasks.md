@@ -92,8 +92,8 @@ flowchart TD
         T001["T001: Domain docs"]:::completed
         T002["T002: Proof tests"]:::completed
         T003["T003: Proof helpers"]:::completed
-        T004["T004: Registry tests"]:::pending
-        T005["T005: Metric registry"]:::pending
+        T004["T004: Registry tests"]:::completed
+        T005["T005: Metric registry"]:::completed
         T006["T006: Runner schemas"]:::pending
         T007["T007: Classification schema"]:::pending
         T008["T008: Schema tests"]:::pending
@@ -111,7 +111,7 @@ flowchart TD
         R1["src/runner/measurement/*"]:::completed
         S1["src/schemas/measurement-*.json"]:::pending
         C1["scripts/copy-schemas.js"]:::pending
-        V1["test/runner/measurement/*"]:::inprogress
+        V1["test/runner/measurement/*"]:::completed
         V2["test/runner/schemas.test.ts"]:::pending
     end
 
@@ -135,8 +135,8 @@ flowchart TD
 | [x] | T001 | Refine the conceptual measurement domain docs | measurement | `/Users/jordanknight/substrate/minih/docs/domains/measurement/domain.md`<br>`/Users/jordanknight/substrate/minih/docs/domains/registry.md`<br>`/Users/jordanknight/substrate/minih/docs/domains/domain-map.md` | The docs explicitly preserve measurement as a conceptual contract domain, keep a `## Concepts` section, name source-of-truth boundaries, and leave runtime ownership in runner/cli/agents. | CS-2. Plan 1.1. Findings 02, 07, 08. |
 | [x] | T002 | Add proof-level contract tests first | runner | `/Users/jordanknight/substrate/minih/test/runner/measurement/proof-levels.test.ts` | Tests describe L0-L6, task-kind defaults, required artifacts, lower-confidence labels, and L6 reproducibility requirements before implementation. | CS-2. Covers [AC6]. |
 | [x] | T003 | Implement proof-level contract helpers | runner | `/Users/jordanknight/substrate/minih/src/runner/measurement/types.ts`<br>`/Users/jordanknight/substrate/minih/src/runner/measurement/proof-levels.ts`<br>`/Users/jordanknight/substrate/minih/src/runner/index.ts` | Runner exports typed proof-level contracts and helpers that classify setup/change/benchmark as L5 default, research/coordination as L4 default, and reproducibility as L6-only. | CS-3. Keep helpers pure; no adapter, CLI, or MCP imports. |
-| [ ] | T004 | Add metric registry contract tests first | runner | `/Users/jordanknight/substrate/minih/test/runner/measurement/metric-registry.test.ts` | Tests assert traceability levels, source refs, caveats, scorecard categories, and forbidden framework-native wording for MiniH-local metrics. | CS-2. Covers [AC4] and [AC5]. |
-| [ ] | T005 | Implement the metric registry contract | runner | `/Users/jordanknight/substrate/minih/src/runner/measurement/types.ts`<br>`/Users/jordanknight/substrate/minih/src/runner/measurement/metric-registry.ts`<br>`/Users/jordanknight/substrate/minih/src/runner/index.ts` | Registry entries include ID, display name, category, traceability level, framework mappings, local source refs, caveats, and reporting wording helpers. | CS-3. Use workshop 001 traceability levels L1-L4. |
+| [x] | T004 | Add metric registry contract tests first | runner | `/Users/jordanknight/substrate/minih/test/runner/measurement/metric-registry.test.ts` | Tests assert traceability levels, source refs, caveats, scorecard categories, and forbidden framework-native wording for MiniH-local metrics. | CS-2. Covers [AC4] and [AC5]. |
+| [x] | T005 | Implement the metric registry contract | runner | `/Users/jordanknight/substrate/minih/src/runner/measurement/types.ts`<br>`/Users/jordanknight/substrate/minih/src/runner/measurement/metric-registry.ts`<br>`/Users/jordanknight/substrate/minih/src/runner/index.ts` | Registry entries include ID, display name, category, traceability level, framework mappings, local source refs, caveats, and reporting wording helpers. | CS-3. Use workshop 001 traceability levels L1-L4. |
 | [ ] | T006 | Add runner-owned measurement schemas and build copy wiring | runner | `/Users/jordanknight/substrate/minih/src/schemas/measurement-event.json`<br>`/Users/jordanknight/substrate/minih/src/schemas/proof-summary.json`<br>`/Users/jordanknight/substrate/minih/src/schemas/measurement-scorecard.json`<br>`/Users/jordanknight/substrate/minih/src/schemas/pulse-aggregate.json`<br>`/Users/jordanknight/substrate/minih/src/schemas/benchmark-catalog.json`<br>`/Users/jordanknight/substrate/minih/scripts/copy-schemas.js` | Schemas declare draft-2020-12, compile in strict AJV, include schema version/provenance/redaction fields where relevant, and `scripts/copy-schemas.js` explicitly copies each new schema to `dist/schemas` during build. | CS-3. Covers [AC1], [AC2], [AC3], [AC9], [AC10], [AC12]. |
 | [ ] | T007 | Add the interpretive classification schema contract | cli | `/Users/jordanknight/substrate/minih/src/schemas/measurement-classification.json`<br>`/Users/jordanknight/substrate/minih/scripts/copy-schemas.js` | Schema requires cited evidence IDs or proof artifacts, confidence, rationale, caveats, and an explicit interpretive marker before later CLI orchestration can surface classifier output. | CS-2. Covers [AC7] and [AC8]. |
 | [ ] | T008 | Extend schema contract tests for every new schema | runner | `/Users/jordanknight/substrate/minih/test/runner/schemas.test.ts` | Strict AJV tests parse and compile every new schema and include positive/negative samples for proof, scorecard, classification, pulse aggregate, and benchmark catalogue shapes, including redaction/provenance violations, missing required evidence/citations, and missing-data edge cases on exportable records. | CS-2. Reuse existing `makeAjv()` + `ajv-formats` pattern. |

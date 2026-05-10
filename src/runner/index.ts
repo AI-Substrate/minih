@@ -103,7 +103,13 @@ export type {
 } from './inbox-poll.js';
 export { InboxPollError, pollInboxLane } from './inbox-poll.js';
 export type {
+  FrameworkMapping,
   MeasurementAuthority,
+  MeasurementFramework,
+  MetricCategory,
+  MetricDefinition,
+  MetricTraceability,
+  MetricTraceabilityLevel,
   ProofArtifact,
   ProofArtifactKind,
   ProofEvaluation,
@@ -118,9 +124,14 @@ export {
   compareProofLevels,
   evaluateProof,
   getDefaultProofRequirement,
+  getMetricDefinition,
   getProofLevelDefinition,
+  listMetricDefinitions,
+  listMetricsByCategory,
+  METRIC_REGISTRY,
   PROOF_LEVEL_DEFINITIONS,
   PROOF_LEVELS,
+  TRACEABILITY_LEVELS,
 } from './measurement/index.js';
 export type {
   DerivePeerActivityOptions,

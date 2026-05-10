@@ -82,3 +82,34 @@ Companion briefing sent with message `01KR7VF8M3N2ZN6RAWD69B73BG`.
 **Evidence**:
 - `npx vitest run test/runner/measurement/proof-levels.test.ts` passed: 14 tests.
 - First full-gate attempt caught an unused type import in `proof-levels.ts`; removed it before committing.
+
+### T004 - Add metric registry contract tests first
+
+**Status**: Complete
+**Started**: 2026-05-10
+
+**Plan**:
+- Add registry tests that lock traceability levels, source references, caveats, scorecard categories, and safe reporting wording.
+- Ensure MiniH-local metrics are mapped/aligned with frameworks rather than framework-native.
+
+**Changes**:
+- Added `test/runner/measurement/metric-registry.test.ts`.
+
+**Evidence**:
+- `npx vitest run test/runner/measurement/metric-registry.test.ts` failed red because `src/runner/measurement/metric-registry.ts` does not exist yet.
+
+### T005 - Implement the metric registry contract
+
+**Status**: Complete
+**Started**: 2026-05-10
+
+**Plan**:
+- Add stable metric IDs, categories, traceability metadata, framework mappings, source references, caveats, and reporting wording.
+- Export registry helpers from runner contracts.
+
+**Changes**:
+- Added `src/runner/measurement/metric-registry.ts`.
+- Extended measurement runner types and runner barrel exports with metric registry contracts.
+
+**Evidence**:
+- `npx vitest run test/runner/measurement/proof-levels.test.ts test/runner/measurement/metric-registry.test.ts` passed: 20 tests.

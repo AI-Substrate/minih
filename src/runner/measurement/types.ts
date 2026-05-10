@@ -67,3 +67,44 @@ export type RedactionPosture =
   | 'local-only'
   | 'redacted-export'
   | 'aggregate-only';
+
+export type MetricTraceabilityLevel = 'L1' | 'L2' | 'L3' | 'L4';
+
+export type MetricCategory =
+  | 'value-evidence'
+  | 'proof-quality'
+  | 'flow-friction'
+  | 'learning'
+  | 'trust-pulse'
+  | 'downstream-context';
+
+export type MeasurementFramework =
+  | 'accelerate'
+  | 'dora'
+  | 'essp'
+  | 'minih'
+  | 'space';
+
+export interface MetricTraceability {
+  level: MetricTraceabilityLevel;
+  name: string;
+  description: string;
+}
+
+export interface FrameworkMapping {
+  framework: MeasurementFramework;
+  relationship: 'direct' | 'aligned' | 'mapped' | 'source-work-needed';
+  description: string;
+}
+
+export interface MetricDefinition {
+  id: string;
+  displayName: string;
+  category: MetricCategory;
+  traceability: MetricTraceability;
+  frameworkMappings: readonly FrameworkMapping[];
+  frameworkNative: boolean;
+  sourceRefs: readonly string[];
+  caveats: readonly string[];
+  reportingPhrase: string;
+}

@@ -1,4 +1,11 @@
 export {
+  getMetricDefinition,
+  listMetricDefinitions,
+  listMetricsByCategory,
+  METRIC_REGISTRY,
+  TRACEABILITY_LEVELS,
+} from './metric-registry.js';
+export {
   compareProofLevels,
   evaluateProof,
   getDefaultProofRequirement,
@@ -6,7 +13,13 @@ export {
   PROOF_LEVEL_DEFINITIONS,
 } from './proof-levels.js';
 export type {
+  FrameworkMapping,
   MeasurementAuthority,
+  MeasurementFramework,
+  MetricCategory,
+  MetricDefinition,
+  MetricTraceability,
+  MetricTraceabilityLevel,
   ProofArtifact,
   ProofArtifactKind,
   ProofEvaluation,

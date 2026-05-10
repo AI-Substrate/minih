@@ -213,3 +213,23 @@ Companion briefing sent with message `01KR7VF8M3N2ZN6RAWD69B73BG`.
 
 **Evidence**:
 - `npx vitest run test/runner/measurement/authority-contracts.test.ts test/runner/measurement/proof-levels.test.ts test/runner/measurement/metric-registry.test.ts test/runner/schemas.test.ts` passed: 85 tests.
+
+### Phase-end companion debrief
+
+**Status**: Complete
+**Started**: 2026-05-10
+
+**Summary**:
+- Final drain review `01KR7X5KGQTC1GRYNEQ9VJP7KD` approved the full Phase 1 commit range with 0 new findings.
+- Stop message `01KR7X6V8G1BNED8N3XE5YT38S` produced farewell message `01KR7X7BWW0SQKYC1FC1G9HGJ1`.
+- Companion farewell reported 12 tasks handled, 6 findings sent, and all findings resolved by the final scan.
+- Auto-harvest appended the companion retro to `docs/retros/code-review-companion.md`.
+- Plan-scoped paired retrospective recorded in `docs/retros/minih-harness-measurement.md`.
+
+**Findings reconciliation**:
+- Addressed inline: F001 (`e81cbd9`), F002/F003 (`d784ce1`), F004 (`0f1c934`), F005/F006 (`0173088`).
+- Deferred: none.
+- Disagreed: none.
+
+**Debrief note**:
+- `minih validate <slug> --file <path>` is not supported by the current CLI despite the phase-end skill text; farewell harvesting used `minih retros --slug`, `minih status`, and inbox/farewell messages instead.

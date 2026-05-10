@@ -221,6 +221,8 @@ _Populated during implementation by plan-6._
 |------|------|------|-----------|------------|------------|
 | 2026-05-10 | T002/T003 | unexpected-behavior | Companion found empty proof evidence was over-ranked and L4 validation was incorrectly modeled as a level-global flag. | Added artifact-derived support levels, task-kind-aware default threshold helper, and focused tests. | `d784ce1`, companion F002/F003 |
 | 2026-05-10 | Gate | gotcha | Full `just fft` surfaced a temp-dir cleanup assertion coupled to global OS temp state and concurrent tests. | Added explicit agent-pack temp parent injection and isolated cleanup assertions. | `d784ce1` |
+| 2026-05-10 | T006/T007 | insight | Schema contracts needed to encode missing-vs-zero and aggregate-only privacy directly, not rely on prose guardrails. | Added kind-specific scorecard metric values, pulse minimum group size, and schema negatives. | `0173088`, companion F005/F006 |
+| 2026-05-10 | Phase end | gotcha | Phase-end skill text referenced `minih validate <slug> --file <path>`, but the current CLI rejected `--file`. | Harvested farewell via `minih retros --slug`, `minih status`, and inbox/farewell messages; logged as orchestrator difficulty OH-001. | `docs/retros/minih-harness-measurement.md` |
 
 **Types**: `gotcha` | `research-needed` | `unexpected-behavior` | `workaround` | `decision` | `debt` | `insight`
 

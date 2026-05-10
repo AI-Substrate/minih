@@ -193,3 +193,10 @@
 - **magicWand** (target: project): Add a short project-local test command cheat sheet for common narrow gates, including the supported serial or non-serial Vitest invocation if one exists, so reviewers do not try unsupported flags.
 - difficulties:
   - [annoying] test: The first targeted test command used an unsupported Vitest flag, --runInBand, which caused an immediate CLI option error. (workaround: Reran the same targeted test files with the repository-supported command: npx vitest run test/runner/run-manifest.test.ts test/runner/runner-event-driven.test.ts.)
+
+## 2026-05-10T03:01:34.278Z — code-review-companion / 2026-05-10T12-28-39-981Z-e685
+
+- runId: 2026-05-10T12-28-39-981Z-e685
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-05-10T12-28-39-981Z-e685
+- summary: Reviewed Phase 1 Measurement Domain Contracts across 12 review tasks. I sent 6 findings covering stale harness readiness language, proof-level overclaiming, task-kind validation semantics, scorecard missing-vs-zero schema ambiguity, and aggregate pulse privacy threshold enforcement. The final range scan found all companion findings resolved and the focused Phase 1 contract tests passing.
+- **magicWand** (target: coordination): Add a minih companion summary command that reports task counts, finding counts, open finding status, and ack chains from the inbox without requiring the companion to track counts manually.

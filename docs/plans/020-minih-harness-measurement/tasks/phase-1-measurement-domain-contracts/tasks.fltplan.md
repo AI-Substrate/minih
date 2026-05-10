@@ -181,3 +181,21 @@ flowchart LR
 ## PlanPak
 
 Not active for this plan.
+
+---
+
+## Phase-End Retrospective
+
+### Orchestrator Retrospective
+
+**magicWand**: Make the phase-end progress/retro/debrief flow an executable MiniH command rather than a prose skill checklist, so progress tables, plan flight logs, companion drain/stop, farewell harvest, and plan-scoped retros are handled by one dogfooded surface.
+
+**magicWandTarget**: agent-harness
+
+**difficulties**:
+- OH-001 (tooling, annoying): `minih validate <slug> --file <path>` was documented in the skill text but rejected by the current CLI; workaround: used `minih retros --slug`, `minih status`, and inbox/farewell messages through MiniH surfaces.
+- OH-002 (coordination, minor): Companion finding reconciliation required manual inbox queries and count tracking; workaround: used `minih inside inbox list` with `jq` summaries plus the companion's final scan.
+
+**workedWell**: The live companion loop caught six real contract issues while the diffs were still small, and the engineering harness gates kept each slice reviewable.
+
+**Companion farewell**: `code-review-companion` run `2026-05-10T12-28-39-981Z-e685` reported 12 tasks handled, 6 findings sent, and all findings resolved by final scan. Plan-scoped retro: `docs/retros/minih-harness-measurement.md`.

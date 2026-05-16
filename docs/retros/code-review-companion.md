@@ -219,3 +219,13 @@
 - difficulties:
   - [degrading] coordination: The outside actor read the wrong inbox lane and missed companion findings, which caused multiple review findings to be deferred unintentionally. (workaround: The outside actor later acknowledged the mistake, read the inside lane, and sent a directive preserving the backlog; I kept findings open in the farewell.)
   - [annoying] test: I used an unsupported Vitest --runInBand flag, and piping output through tail without pipefail masked the nonzero exit at first. (workaround: Reran targeted tests without --runInBand and with set -o pipefail before relying on the result.)
+
+## 2026-05-16T04:52:59.721Z — code-review-companion / 2026-05-16T14-31-52-925Z-a3a2
+
+- runId: 2026-05-16T14-31-52-925Z-a3a2
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-05-16T14-31-52-925Z-a3a2
+- summary: Reviewed the scope-reduced Plan 021 branch and three follow-up cleanup commits. The core unblock fix became coherent: code-review-companion@0.2.0 ships root-level inside/outside state schemas plus outside.md, manifest validation and upgrade-detection regressions pass, and the final cleanup removed stale install-path, watchdog, dogfood, and whitespace drift. Final verdict sent to the peer was APPROVE after commit 13b92cc fixed the last flight-plan schema-path reference.
+- **magicWand** (target: coordination): Add a first-class `minih companion findings --run <runId>` or `minih retros --slug <slug> --latest --findings` view that extracts prior companion findings and summaries without requiring operators or reviewers to locate report paths or even consider run-dir files.
+- difficulties:
+  - [annoying] coordination: Initial review work arrived as an outside `briefing` message even though the companion protocol reserves `task` for review requests and says briefings should not start work. (workaround: Acknowledged it and treated the explicit review instructions in the body as task-like scope, preserving ackOf on all findings and summaries.)
+  - [annoying] debug: A shell verification command hung after I included markdown backticks inside a double-quoted ripgrep pattern, causing command-substitution hazards in the shell. (workaround: Stopped the shell session and reran the check using the rg tool and safer shell quoting.)

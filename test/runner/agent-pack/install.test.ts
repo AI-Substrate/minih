@@ -312,8 +312,14 @@ describe('installAgentPack — local source', () => {
           { path: 'outside.md', description: 'outside contract' },
           { path: 'input-schema.json', description: 'input schema' },
           { path: 'output-schema.json', description: 'output schema' },
-          { path: 'inside-state.schema.json', description: 'inside state schema' },
-          { path: 'outside-state.schema.json', description: 'outside state schema' },
+          {
+            path: 'inside-state.schema.json',
+            description: 'inside state schema',
+          },
+          {
+            path: 'outside-state.schema.json',
+            description: 'outside state schema',
+          },
         ],
       }),
     );

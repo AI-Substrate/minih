@@ -579,9 +579,9 @@ it('clears terminalReason from prior run on resumeInPlace', async () => {
   // Set up a run that already has terminalReason: 'mcp_error' in run.json (manually)
   const priorRunDir = setupRunDirWithMcpError();
   // Resume in place
-  const result = await runAgent(adapter, definition, { 
-    slug, 
-    resumedFromRunId: priorRunId, 
+  const result = await runAgent(adapter, definition, {
+    slug,
+    resumedFromRunId: priorRunId,
     resumeInPlace: true,
     sessionId: priorSessionId,
     // ...

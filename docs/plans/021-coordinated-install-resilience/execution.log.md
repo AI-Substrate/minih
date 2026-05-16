@@ -109,4 +109,3 @@ After landing T007-T011 (watchdog state machine subsystem), user halted scope cr
 
 - **D5 (process)**: Workshop-Contract-Ready status is a great gate for keeping design tight within a workshop, but it doesn't gate whether the implementation belongs in THIS PR. Workshop 001 was perfectly designed; it just shouldn't have been implemented now. Lesson: separate "is this design good?" from "is this PR's job?" — the architect skill should flag scope-relative scoping risks distinct from technical-readiness scoping.
 - **D6 (orchestrator-side)**: I confused `minih outside inbox list` (outgoing lane) with `minih inside inbox list` (companion replies). The companion was firing findings on every commit; I was reading the wrong file and assuming silence = approve. Real fire-and-forget protocol requires reading the *correct* lane between tasks. Filing as MW-OH-002.
-

@@ -170,7 +170,7 @@ The farewell envelope contains the canonical session record — fold any open fi
 
 ## State vocabulary the companion uses (inside)
 
-For reference when reading the inbox / state transitions: `idle | reading | reviewing | reporting | blocked | stopping`. See `prompt.md § 3 State Vocabulary` for the full meaning of each. The inside-state schema (`state/inside-state.schema.json`) enforces this enum — orchestrators MUST NOT set inside state directly; only the companion writes it via the MCP `state_transition` tool.
+For reference when reading the inbox / state transitions: `idle | reading | reviewing | reporting | blocked | stopping`. See `prompt.md § 3 State Vocabulary` for the full meaning of each. The inside-state schema is enforced at runtime via the MCP `state_transition` tool. The canonical 0.2.0 install ships the schema at `inside-state.schema.json` (agent root) because `state/` is in the install-manifest runtime-dir denylist; the MCP resolver also accepts `state/inside-state.schema.json` for in-tree-only agents (e.g. `demo-companion`). Orchestrators MUST NOT set inside state directly; only the companion writes it.
 
 ## State vocabulary you (outside) use
 
@@ -190,8 +190,7 @@ The companion uses `wait_for_any` to listen for both inbox messages AND outside-
 
 - **Companion appears `dead` after >30min silence** — known false positive when the companion is mid-tool-call. Check `currentlyRunningTool` and `selfReportedState` in `minih status` — both being non-null is a strong "alive" signal. Don't kill it.
 - **`still-needed` check-in arrived and you didn't see it** — your inbox skim missed it. The companion fires this after `firstContactPollThreshold` (~10 min default) or `postTaskPollThreshold` (~5 min default) empty polls. Reply with a `task`, `directive`, or `control:stop`; or accept the clean exit. See [`docs/how/companion-mode.md § Lifecycle and check-in protocol`](../../docs/how/companion-mode.md#lifecycle-and-check-in-protocol).
-- **Watchdog terminated the run with `terminalReason: 'mcp_error'`** — an MCP tool returned `isError: true` and the agent went silent for ≥60s. See [`docs/how/companion-install-resilience.md`](../../docs/how/companion-install-resilience.md) for the wedge-debug pattern; opt out per-agent via `mcpErrorTimeoutMs: null` at frontmatter root.
-- **Run wedged at `status: 'active'` for 30+min** — pre-0.2.0 behaviour. Upgrade to `code-review-companion@0.2.0` or later; the runner-level watchdog (introduced in plan 021) now terminates wedged runs cleanly after the MCP-error threshold.
+- **Run wedged at `status: 'active'` for 30+min** — known limitation as of `code-review-companion@0.2.0`. A runner-level MCP-error watchdog that terminates such runs cleanly is scoped for a follow-up plan (see [plan 021](../../docs/plans/021-coordinated-install-resilience/) § Scope Reduction). Until then, recovery is manual: `kill <pid>` and inspect the run-dir state.
 
 ---
 

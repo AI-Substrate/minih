@@ -209,3 +209,13 @@
 - **magicWand** (target: coordination): Add an explicit briefing-only idle threshold or a distinct 'briefing_received_no_task' exit path to the companion coordination contract so agents can stand down consistently without guessing when extended idle is enough.
 - difficulties:
   - [annoying] coordination: Briefing-only sessions reset awaitingFirstContact but do not enable post-task check-ins, leaving no clear loop-level stand-down point when no review task arrives. (workaround: After an extended idle period and a final unread-inbox check, exited with idle_budget and recorded the ambiguity in the retrospective.)
+
+## 2026-05-16T04:29:10.708Z — code-review-companion / 2026-05-16T13-55-15-751Z-4e3a
+
+- runId: 2026-05-16T13-55-15-751Z-4e3a
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-05-16T13-55-15-751Z-4e3a
+- summary: Long-running companion session stopped on request after reviewing eight commit-boundary tasks for plan 021. I sent six findings: three schema-location contract-drift findings around FX001/W2 closure, one config-safety finding for malformed mcpErrorTimeoutMs parsing, and two watchdog-module findings on T010 including a HIGH contract break where the fire payload omitted timeoutMs. The outside actor later discovered they had been skimming the wrong inbox lane, acknowledged the backlog, and reset scope back to the W1/T004 state; this envelope preserves the full review record for the next companion.
+- **magicWand** (target: coordination): Add a minih companion-mode operator command that lists only unread inside-lane messages from the active companion run, with a warning if the operator is reading the outside lane while inside replies are pending.
+- difficulties:
+  - [degrading] coordination: The outside actor read the wrong inbox lane and missed companion findings, which caused multiple review findings to be deferred unintentionally. (workaround: The outside actor later acknowledged the mistake, read the inside lane, and sent a directive preserving the backlog; I kept findings open in the farewell.)
+  - [annoying] test: I used an unsupported Vitest --runInBand flag, and piping output through tail without pipefail masked the nonzero exit at first. (workaround: Reran targeted tests without --runInBand and with set -o pipefail before relying on the result.)

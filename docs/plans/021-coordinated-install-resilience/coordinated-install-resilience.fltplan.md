@@ -2,11 +2,13 @@
 
 **Spec**: [coordinated-install-resilience-spec.md](./coordinated-install-resilience-spec.md)
 **Plan**: [coordinated-install-resilience-plan.md](./coordinated-install-resilience-plan.md)
-**Workshop**: [workshops/001-mcp-error-watchdog-state-machine.md](./workshops/001-mcp-error-watchdog-state-machine.md) (Contract Ready)
+**Workshop**: [workshops/001-mcp-error-watchdog-state-machine.md](./workshops/001-mcp-error-watchdog-state-machine.md) (Contract Ready — **deferred to follow-up plan**)
 **Origin**: [`AI-Substrate/minih#30`](https://github.com/AI-Substrate/minih/issues/30) (downstream wedge report, 2026-05-15)
 **Generated**: 2026-05-15
 **Status**: **W1 + partial W2 SHIPPED** — plan-3 + FX001 + T002 + T004 landed; W3/W4/T005/T021-T023 **DEFERRED** per scope reduction 2026-05-16; awaiting follow-up plan for the watchdog + diagnostic CLI work
 **Mode**: Simple (single-phase plan; clarify Q5 → one PR all workstreams — **scope reduced 2026-05-16: only W1 + partial W2 ship in this PR**)
+
+> ⚠️ **Scope Reduction (2026-05-16)**: This flight plan was originally drafted for the full 24-task plan. Sections below (The Mission, Where We Are, Goals, Acceptance Criteria, Key Risks) still describe the full scope as reference for the follow-up plan. **Only W1 + partial W2 ship in this PR.** See § Phases Overview below for the precise shipped-vs-deferred state; see `coordinated-install-resilience-plan.md` § Scope Reduction for full detail.
 
 ---
 

@@ -2,6 +2,8 @@
 
 **Mode**: Simple
 
+> ⚠️ **Scope Reduction (2026-05-16)**: This spec was originally a 24-task plan that grew well beyond unblocking issue #30. After implementing FX001 + W1 (T001-T002) + partial W2 (T003 no-op + T004), user halted scope creep. **Only W1 + partial W2 ship in this PR.** The watchdog (W3), diagnostic CLI surfaces (W4), doctor copy rewrite (T005), and cross-cutting docs (T021-T023) are deferred to a follow-up plan. The Goals, Non-Goals, ACs, Risks, Workshop, and Clarifications sections below are preserved for that follow-up plan's reference and do NOT all describe the current PR's deliverable. See `coordinated-install-resilience-plan.md` § Scope Reduction for the precise shipped-vs-deferred breakdown.
+
 ## Research Context
 
 ℹ️ No `/plan-1a-explore` was run — but this spec is grounded in a concrete external bug report and a recorded dialogue with the downstream agent that filed it. Key artifacts:

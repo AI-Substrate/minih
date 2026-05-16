@@ -230,4 +230,3 @@ The original T003 description in the plan says "Keep the legacy root-level `'ins
 
 - Ran as **single serial validator**, no parallel subagents (no `task` tool in this harness). Lost: perspective diversity.
 - **Self-validation bias**: I authored the dossier and validated it. Fixes landed are real (verified against `manifest.ts` line numbers + on-disk state), but a fresh validator might catch a class I'm blind to. **Recommended mitigation**: ping `code-review-companion` (run `2026-05-16T12-51-35-391Z-c8e3`) with a `briefing`-typed update linking FX001 BEFORE T001 resumes; companion review at the FX001 commit boundary is the second-eyes pass validate-v2 would normally provide.
-

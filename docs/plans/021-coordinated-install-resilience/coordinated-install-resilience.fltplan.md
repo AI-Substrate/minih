@@ -59,7 +59,7 @@ flowchart LR
 
     subgraph Target["After (0.2.0)"]
         TA[code-review-companion<br/>agent.json: 7 files]:::changed
-        TB[CANONICAL_AGENT_FILES<br/>state/-prefixed paths]:::changed
+        TB[CANONICAL_AGENT_FILES<br/>root-level state schemas]:::changed
         TC[Runner event loop<br/>+ MCP-error watchdog]:::changed
         TD[minih agent info<br/>+ --remote/--local/--diff]:::changed
         TE[minih tail<br/>+ --since-tool/--around-error]:::changed
@@ -84,7 +84,7 @@ flowchart LR
 
 **Goals**:
 - Ship the missing schemas + outside contract for `code-review-companion`; bump to `0.2.0`; verify upgrade detection
-- Close the implicit-manifest hole so coordinated agents without `agent.json` also ship `state/` schemas
+- Close the implicit-manifest hole so coordinated agents without `agent.json` also ship root-level state schemas (`inside-state.schema.json` / `outside-state.schema.json`)
 - Terminate zombie runs cleanly with `terminalReason: 'mcp_error'` (default-on, frontmatter opt-out)
 - Stop misleading operators (doctor copy + stale schema description)
 - Make the dogfood rule enforceable (`agent info --remote`, `tail --since-tool`)
@@ -144,7 +144,7 @@ Top-level success criteria (full list of 17 lives in the spec):
 - [x] Fresh `minih agent install code-review-companion` ships `inside-state.schema.json`, `outside-state.schema.json`, `outside.md` at agent root (Phase 1 — per FX001)
 - [ ] `agent.json` reports `version: '0.2.0'` with 7 files; upgrade from `0.1.0` reports the 3 new files in `changedFiles[]` (Phase 1)
 - [ ] Fresh post-`0.2.0` companion run executes `state_transition({ to: 'reading' })` without wedging (Phase 1 gate)
-- [ ] Implicit-manifest install picks up `state/` schemas via `CANONICAL_AGENT_FILES` (Phase 2)
+- [x] Implicit-manifest install picks up root-level state schemas (`inside-state.schema.json` / `outside-state.schema.json`) via `CANONICAL_AGENT_FILES` (Phase 2)
 - [ ] Run (coordinated or non-coordinated) silent ≥60s after `isError: true` terminates with `terminalReason: 'mcp_error'` (Workstream 3 — default-on)
 - [ ] Frontmatter `mcpErrorTimeoutMs: null` at root opts an agent out of the watchdog (Workstream 3)
 - [ ] `minih agent info <slug> --remote` previews remote manifest without installing (Phase 4)

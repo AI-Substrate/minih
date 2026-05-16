@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://minih.dev/agents/code-review-companion/outside-state.schema.json",
+  "title": "Code Review Companion Outside State",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "data", "updatedAt", "updatedBy"],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["idle", "in-progress", "paused", "done", "error"],
+      "description": "Outside-actor lifecycle vocabulary — the orchestrator's view of the session. Standard minih outside-state enum; matches coordination-loop-validator and other coordinated agents. Set via `minih outside state set` when the operator wants the companion to react to session-level transitions (e.g. flipping to 'paused' while the orchestrator is investigating a finding, or 'done' before sending control:stop)."
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Free-form scratch for outside-actor context — typical fields: 'phase' (the orchestrator's current phase/task id), 'plan' (path or slug of the active plan), 'commitsReviewed' (count), 'lastReviewedSha'.",
+      "properties": {
+        "phase": { "type": "string" },
+        "plan": { "type": "string" },
+        "commitsReviewed": { "type": "integer", "minimum": 0 },
+        "lastReviewedSha": { "type": "string" }
+      }
+    },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "updatedBy": { "const": "outside" }
+  }
+}

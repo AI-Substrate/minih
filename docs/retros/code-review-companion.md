@@ -200,3 +200,12 @@
 - runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-05-10T12-28-39-981Z-e685
 - summary: Reviewed Phase 1 Measurement Domain Contracts across 12 review tasks. I sent 6 findings covering stale harness readiness language, proof-level overclaiming, task-kind validation semantics, scorecard missing-vs-zero schema ambiguity, and aggregate pulse privacy threshold enforcement. The final range scan found all companion findings resolved and the focused Phase 1 contract tests passing.
 - **magicWand** (target: coordination): Add a minih companion summary command that reports task counts, finding counts, open finding status, and ack chains from the inbox without requiring the companion to track counts manually.
+
+## 2026-05-16T03:11:35.078Z — code-review-companion / 2026-05-16T12-51-35-391Z-c8e3
+
+- runId: 2026-05-16T12-51-35-391Z-c8e3
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-05-16T12-51-35-391Z-c8e3
+- summary: Oriented on plan 021-coordinated-install-resilience, acknowledged the outside briefing, and remained available for review requests. No review tasks arrived during the extended idle window, so no code findings were produced.
+- **magicWand** (target: coordination): Add an explicit briefing-only idle threshold or a distinct 'briefing_received_no_task' exit path to the companion coordination contract so agents can stand down consistently without guessing when extended idle is enough.
+- difficulties:
+  - [annoying] coordination: Briefing-only sessions reset awaitingFirstContact but do not enable post-task check-ins, leaving no clear loop-level stand-down point when no review task arrives. (workaround: After an extended idle period and a final unread-inbox check, exited with idle_budget and recorded the ambiguity in the retrospective.)

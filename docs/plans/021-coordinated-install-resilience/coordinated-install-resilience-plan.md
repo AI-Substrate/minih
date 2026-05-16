@@ -1,11 +1,34 @@
 # Coordinated Install Resilience Implementation Plan
 
 **Mode**: Simple
-**Plan Version**: 1.0.0
+**Plan Version**: 1.1.0 — scope-reduced 2026-05-16 (see § Scope Reduction)
 **Created**: 2026-05-15
 **Spec**: [coordinated-install-resilience-spec.md](./coordinated-install-resilience-spec.md)
-**Workshop**: [workshops/001-mcp-error-watchdog-state-machine.md](./workshops/001-mcp-error-watchdog-state-machine.md) (Contract Ready — authoritative)
-**Status**: DRAFT
+**Workshop**: [workshops/001-mcp-error-watchdog-state-machine.md](./workshops/001-mcp-error-watchdog-state-machine.md) (Contract Ready — **deferred to follow-up plan**)
+**Status**: **W1 + partial W2 SHIPPED**; W3 + W4 + T005 + T021-T023 cross-cutting **DEFERRED** — see § Scope Reduction
+
+## 🚧 Scope Reduction (2026-05-16)
+
+The original 24-task plan grew well beyond the actual unblock-pij fix. After landing W1 + FX001 + 2 of 3 W2 tasks (8 commits / ~600 lines net), the user halted scope creep and required KISS execution:
+
+**SHIPPED** (the actual fix for issue #30):
+- Plan + execution log committed (`397a56b`)
+- FX001 schema location pivot — schemas at agent root, `agent.json` 0.2.0 with 7 files, outside.md authored (`ddf09fd`)
+- T002 tests for 0.2.0 manifest + upgrade-detection regression (`1cd056e`)
+- T004 implicit-manifest fixture test (spec AC6) (`748f330`)
+
+**DEFERRED to a future plan** (reset out of this PR 2026-05-16):
+- **T005** — Doctor copy rewrite + schema description fix. (Tied forward-references to `mcpErrorTimeoutMs` knob that no longer ships in this PR; revert was cleanest.)
+- **W3 (T006-T016)** — MCP-error watchdog state machine. Full subsystem (watchdog module + signal protocol + types + frontmatter knob + runner wiring + tests). Defensible defense-in-depth but NOT required to unblock pij. Workshop 001 stays Contract Ready for the follow-up plan to pick up directly.
+- **W4 (T017-T020)** — Diagnostic CLI surfaces (`agent info --remote/--local/--diff`, `tail --since-tool/--around-error`). Genuinely useful for enforcing the dogfood rule but adjacent to the wedge fix.
+- **Cross-cutting T021-T023** — New docs page, AGENTS.md cross-links, final `just fft` gate. Cross-links to non-existent (deferred) sections wouldn't make sense.
+
+**Why reduce**: original bug is ~3 JSON edits in `agent.json`. The unblock-pij work is W1 alone. W3 birthed during workshop because the spec asked "how do we prevent this *class* of wedge?" — worthy question, wrong PR. W4 birthed from the live #30 dialogue identifying diagnostic gaps — also worthy, also wrong PR. Splitting them into a follow-up plan keeps the 0.2.0 ship atomic and reviewable.
+
+**The following follow-up dossiers preserve the design work**:
+- This plan + spec + workshop 001 are intact and Contract-Ready for a future plan to lift the W3 watchdog work.
+- FX001 dossier captures the schema-location pivot decision permanently.
+- The 6 reverted commits remain in git reflog (`0a25434..efbafb1`) for ~30-90 days if recovery becomes useful.
 
 ## Summary
 
@@ -96,11 +119,36 @@ Every file this plan introduces or modifies, mapped to its domain. Paths absolut
 | [ ] | T004 | **Implicit-manifest fixture test (post-FX001 paths).** Add to `test/runner/agent-pack/install.test.ts`: a fresh local install of a fixture agent with `prompt.md` + `inside-state.schema.json` + `outside-state.schema.json` (all at agent root; no `agent.json`) succeeds, and the installed copy contains both schemas at root. | runner (test) | `/Users/jordanknight/substrate/minih/test/runner/agent-pack/install.test.ts` | Test green | Spec AC6 (post-FX001 paths) |
 | [ ] | T005 | **Doctor warning copy rewrite + stale schema description fix (post-FX001 path).** In `src/cli/commands/doctor.ts:640`, replace "calls to these values will be silently rejected" with accurate text per spec AC11: name the runtime behaviour ("rejected at MCP `state_transition`"), DROP "silently rejected" phrase, reference `mcpErrorTimeoutMs` knob as safety net. **Per FX001 MW-003: the rewritten copy should mention BOTH valid schema locations (`<agentDir>/inside-state.schema.json` AND `<agentDir>/state/inside-state.schema.json`) so authors copying from `code-review-companion` or `demo-companion` both get accurate guidance.** Update `agents/code-review-companion/inside-state.schema.json` description field — remove "minih runtime currently validates output-schema.json and the shared outside-state.schema.json, but inside-state validation is not yet enforced" (per spec AC12). Update `test/cli/doctor-state-vocabulary.test.ts` to match new copy. Update `MINIH_REGRESSION=1` doctor baseline (R3 mitigation). | cli + runner (data) | `/Users/jordanknight/substrate/minih/src/cli/commands/doctor.ts`, `/Users/jordanknight/substrate/minih/agents/code-review-companion/inside-state.schema.json`, `/Users/jordanknight/substrate/minih/test/cli/doctor-state-vocabulary.test.ts` | `minih doctor` warning copy matches spec AC11 + mentions both schema locations; baseline test green | R3 mitigation + FX001 MW-003 |
 
-#### Workstream 3 — MCP-error watchdog
+#### Workstream 3 — MCP-error watchdog [DEFERRED 2026-05-16]
 
-| Status | ID | Task | Domain | Path(s) | Done When | Notes |
-|--------|-----|------|--------|---------|-----------|-------|
-| [ ] | T006 | **Grep audit for `'permission-denied'` literal checks.** Before widening `terminalReason` union, find every `=== 'permission-denied'` / `=== "permission-denied"` site and confirm widening is safe. Likely sites: `cli/commands/status.ts`, `runner/probe/aggregator.ts`, `permissions/error-signal.ts`. | runner | (audit, no edit) | List of sites collected; widening plan confirmed for T007 | H1 mitigation |
+🚧 **Deferred to a follow-up plan.** Workshop 001 stays Contract Ready as the design contract for that plan to inherit. The 6 watchdog commits (T007-T011 + T005) were reset out of this branch 2026-05-16 per KISS scope reduction. T013 (resumeInPlace stale-terminal fix) is also deferred — it was only in scope because the watchdog widened the terminalReason union; without that widening, the latent bug stays latent until the watchdog ships.
+
+| Status | ID | Task | Notes |
+|--------|-----|------|-------|
+| [DEFER] | T006-T016 | Full watchdog workstream (audit, types, events, parser knob, state machine, signal protocol, runner wiring, resume fix, tests, exit code, preamble docs) | Workshop 001 §State Machine + §Signal Protocol + §Frontmatter Contract describe the implementation precisely. Follow-up plan picks up at T006. |
+
+#### Workstream 4 — Diagnostic CLI surfaces [DEFERRED 2026-05-16]
+
+🚧 **Deferred to a follow-up plan.** `agent info --remote/--local/--diff` requires a fetcher seam refactor; `tail --since-tool / --around-error` is also new CLI surface. Useful, but adjacent to the wedge fix.
+
+| Status | ID | Task | Notes |
+|--------|-----|------|-------|
+| [DEFER] | T017-T020 | Full CLI diagnostics workstream | Spec ACs 13-17 + dogfood-rule checklist live there. |
+
+#### Cross-cutting [DEFERRED 2026-05-16]
+
+🚧 **Deferred** — the new docs page would cross-link to non-existent (deferred) sections. Re-shape when W3+W4 ship in the follow-up plan.
+
+| Status | ID | Task | Notes |
+|--------|-----|------|-------|
+| [DEFER] | T021 | Author docs/how/companion-install-resilience.md | Deferred with W3/W4 |
+| [DEFER] | T022 | Cross-link AGENTS.md + companion-mode.md + post issue #30 follow-up | Issue #30 follow-up still needed once 0.2.0 publishes — will land in a small docs-only PR or alongside the W3 follow-up plan. |
+| [DEFER] | T023 | Final just fft + companion control:stop + retro harvest | Shipping path will run `just fft` before commit per AGENTS.md; the formal T023 ceremony defers. |
+
+
+**[DEFER 2026-05-16] Workstream 3 + 4 + Cross-cutting tasks deferred per scope reduction.** Original detail kept below for follow-up plan reference.
+
+ Before widening `terminalReason` union, find every `=== 'permission-denied'` / `=== "permission-denied"` site and confirm widening is safe. Likely sites: `cli/commands/status.ts`, `runner/probe/aggregator.ts`, `permissions/error-signal.ts`. | runner | (audit, no edit) | List of sites collected; widening plan confirmed for T007 | H1 mitigation |
 | [ ] | T007 | **Extend runner types.** Widen `LiveRunManifest.terminalReason: 'permission-denied' \| 'mcp_error'`. Add `mcpError?: { firstIsErrorAt, lastIsErrorAt, timeoutMs, terminatedToolName, streakLength }` field per workshop §Signal 2. Mirror `mcpError` in `CompletedMetadata`. Add `mcpErrorTimeoutMs?: number \| null` to `AgentDefinition`. Update any sites identified in T006. | runner | `/Users/jordanknight/substrate/minih/src/runner/types.ts` + sites from T006 | `npm run build` green | Workshop §Signal 2 / §Frontmatter Contract |
 | [ ] | T008 | **Extend `AgentEvent` union.** Add `mcp_error_watchdog_fired` event type to `src/adapter/events.ts` per workshop §Signal 1. Grep-verify exhaustiveness in `runner/pretty.ts`, `runner/human-view-model.ts`, `runner/peer-activity.ts`, `cli/commands/status.ts` — most have `default: break`; confirm or add. | adapter + runner + cli | `/Users/jordanknight/substrate/minih/src/adapter/events.ts` (+ minor consumer touches) | `npm run build` green; no exhaustiveness errors | H4 mitigation |
 | [ ] | T009 | **Frontmatter parser reads `mcpErrorTimeoutMs`.** Extend `parseFrontmatter` (in `src/runner/folder.ts`) or downstream `loadAgentDefinition` to thread `mcpErrorTimeoutMs: number \| null` into `AgentDefinition`. Resolution rule per workshop: `null` or `<=0` → opt-out; `undefined` → default 60000; integer > 0 → use as-is. | runner | `/Users/jordanknight/substrate/minih/src/runner/folder.ts` | Unit test: agent with `mcpErrorTimeoutMs: 5000` resolves to `5000`; with `null` resolves to `null` (disabled); absent resolves to `60000` | Workshop §Frontmatter Contract; clarify Q7 |

@@ -63,3 +63,50 @@
 - **D4 (companion lifecycle)**: A 62-minute validation cycle exceeded the previous companion's `firstContactPollThreshold` (default ~10min). The companion exited gracefully with `no_engagement` and a useful magic-wand. **Lesson**: when implementing a plan with long thinking/validation cycles between commits, either (a) commit early stubs to keep the companion engaged, (b) configure the companion with longer thresholds at boot, or (c) accept that companion rebooting is part of the workflow. Filing as MW-OH-001.
 
 ## T001 — FX003b authoring
+
+---
+
+## T002 — Tests for FX003b
+
+**Status**: ✅ Completed at commit `1cd056e`
+
+- companion-manifest.test.ts: version assertion `0.1.0` → `0.2.0`; added 7-file sorted-path enumeration.
+- install.test.ts: regression test for 0.1.0 → 0.2.0 upgrade-detection per spec AC4 (asserts 3 new files in `changedFiles[]`, 4 unchanged absent).
+- Full agent-pack: 183/183 green.
+
+## T003 — CANONICAL_AGENT_FILES verify (FX001 collapse)
+
+**Status**: ✅ No-op per FX001 — `CANONICAL_AGENT_FILES` at `src/runner/agent-pack/manifest.ts:33-37` already lists root-level schema paths.
+
+## T004 — Implicit-manifest fixture (spec AC6)
+
+**Status**: ✅ Completed at commit `748f330`
+
+- New test in `install.test.ts`: implicit-manifest synthesis with root-level inside/outside-state schemas; sidecar fileChecksums asserts SHA256 for both.
+
+## 2026-05-16 — SCOPE REDUCTION (`git reset --hard 748f330`)
+
+After landing T007-T011 (watchdog state machine subsystem), user halted scope creep with the verdict: *"considering how simple the original fix was, it feels like we have A LOT of tasks to do here and its taking long time. why is it so bloody complex this plan?"*
+
+**Honest answer**: the original bug is ~3 JSON edits. W1 alone (FX001 + T002) unblocks pij. W3+W4+T005 grew because workshop 001 ratified a defense-in-depth watchdog subsystem and the live #30 dialogue identified diagnostic gaps — both worthy, both wrong for this PR.
+
+**Reset operation**:
+- `git reset --hard 748f330` — drops 6 commits (`0a25434` mcp-error-signal.ts, `3f82b8f` watchdog.ts, `dac8cf6` parser knob, `cb7bea7` AgentEvent union, `59c1917` types widening, `efbafb1` doctor copy).
+- Reverted commits remain in reflog ~30-90 days if recovery becomes useful.
+- Plan documents kept and updated to mark scope-reduced state.
+
+**Post-reset tree state** (HEAD = `748f330`):
+- Plan + execution log (`397a56b`)
+- FX001 schema location pivot + 0.2.0 manifest (`ddf09fd`)
+- T002 manifest + upgrade-detection tests (`1cd056e`)
+- T004 implicit-manifest regression test (`748f330`)
+
+**Build/test verification post-reset**: `npm run build` clean; `vitest run test/runner/agent-pack/ test/runner/folder.test.ts` → 235/235 green.
+
+**Companion review of reset state**: pending — fresh briefing being sent to existing run.
+
+### Discoveries
+
+- **D5 (process)**: Workshop-Contract-Ready status is a great gate for keeping design tight within a workshop, but it doesn't gate whether the implementation belongs in THIS PR. Workshop 001 was perfectly designed; it just shouldn't have been implemented now. Lesson: separate "is this design good?" from "is this PR's job?" — the architect skill should flag scope-relative scoping risks distinct from technical-readiness scoping.
+- **D6 (orchestrator-side)**: I confused `minih outside inbox list` (outgoing lane) with `minih inside inbox list` (companion replies). The companion was firing findings on every commit; I was reading the wrong file and assuming silence = approve. Real fire-and-forget protocol requires reading the *correct* lane between tasks. Filing as MW-OH-002.
+

@@ -5,8 +5,8 @@
 **Workshop**: [workshops/001-mcp-error-watchdog-state-machine.md](./workshops/001-mcp-error-watchdog-state-machine.md) (Contract Ready)
 **Origin**: [`AI-Substrate/minih#30`](https://github.com/AI-Substrate/minih/issues/30) (downstream wedge report, 2026-05-15)
 **Generated**: 2026-05-15
-**Status**: **Ready** — plan-3 complete; 24 tasks across 4 workstreams + cross-cutting; validated 2026-05-15; awaiting `/plan-6-v2-implement-phase`
-**Mode**: Simple (single-phase plan; clarify Q5 → one PR all workstreams)
+**Status**: **W1 + partial W2 SHIPPED** — plan-3 + FX001 + T002 + T004 landed; W3/W4/T005/T021-T023 **DEFERRED** per scope reduction 2026-05-16; awaiting follow-up plan for the watchdog + diagnostic CLI work
+**Mode**: Simple (single-phase plan; clarify Q5 → one PR all workstreams — **scope reduced 2026-05-16: only W1 + partial W2 ship in this PR**)
 
 ---
 
@@ -121,17 +121,17 @@ flowchart LR
 
 ## Phases Overview
 
-**Simple mode** — single phase, 4 workstreams + cross-cutting, **24 tasks** (T000–T023 inclusive). Tasks land in workstream order in a single PR (clarify Q5).
+**Simple mode** — single phase, originally 4 workstreams + cross-cutting (**24 tasks**, T000–T023). Per 2026-05-16 scope reduction, **only W1 + partial W2 shipped in this PR**; W3, W4, T005, and cross-cutting deferred to a follow-up plan. The 6 watchdog-prep commits (T005, T007–T011) were `git reset` out of the branch; design work preserved in workshop 001 and the spec.
 
 | Order | Workstream | Tasks | CS | Status |
 |-------|------------|-------|----|--------|
-| 1 | FX003b — ship 0.2.0 (unblock gate) | T000–T002 (3) | CS-1 | Pending |
-| 2 | Implicit-manifest + doc/copy fixes | T003–T005 (3) | CS-1 | Pending |
-| 3 | MCP-error watchdog | T006–T016 (11) | CS-3 | Pending |
-| 4 | Diagnostic CLI surfaces (`agent info`, `tail` filters) | T017–T020 (4) | CS-2 | Pending |
-| — | Cross-cutting (docs + release gate) | T021–T023 (3) | CS-1 | Pending |
+| 1 | FX003b — ship 0.2.0 (unblock gate) | T000–T002 (3) | CS-1 | ✅ **Shipped** |
+| 2 | Implicit-manifest + doc/copy fixes | T003 (no-op), T004 only — T005 **DEFERRED** | CS-1 → CS-0.5 | ✅ **Partial: T003 (no-op per FX001) + T004 shipped; T005 deferred** |
+| 3 | MCP-error watchdog | T006–T016 (11) | CS-3 | 🚧 **DEFERRED** — reset out 2026-05-16; workshop 001 stays Contract Ready for the follow-up plan |
+| 4 | Diagnostic CLI surfaces | T017–T020 (4) | CS-2 | 🚧 **DEFERRED** |
+| — | Cross-cutting (docs + release gate) | T021–T023 (3) | CS-1 | 🚧 **DEFERRED** (docs page would cross-link to non-existent sections) |
 
-**Workstream 1 is the critical path** — unbreaks downstream pij the moment it lands. Each workstream's commits are individually revertable if CI catches a regression mid-PR.
+**This PR ships the actual unblock-pij fix**: `code-review-companion@0.2.0` with the missing schemas at agent root + `outside.md` + upgrade detection + implicit-manifest regression test. Downstream pij can drop their workaround.
 
 ---
 

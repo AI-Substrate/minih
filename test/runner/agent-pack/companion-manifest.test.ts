@@ -75,12 +75,30 @@ describe('canonical code-review-companion manifest', () => {
     expect(result.manifest.tags ?? []).toContain('companion');
   });
 
-  it('declares manifestVersion 0.1.0 for the initial seed', () => {
+  it('declares manifestVersion 0.2.0 (post-FX001 + FX003b)', () => {
     const raw = fs.readFileSync(MANIFEST_PATH, 'utf-8');
     const parsed = JSON.parse(raw);
     const result = validateManifest(parsed);
     if (!result.ok) throw new Error('manifest invalid');
-    expect(result.manifest.version).toBe('0.1.0');
+    expect(result.manifest.version).toBe('0.2.0');
+  });
+
+  it('lists 7 files (post-FX003b: prompt + instructions + outside.md + input/output schemas + 2 state schemas at root per FX001)', () => {
+    const raw = fs.readFileSync(MANIFEST_PATH, 'utf-8');
+    const parsed = JSON.parse(raw);
+    const result = validateManifest(parsed);
+    if (!result.ok) throw new Error('manifest invalid');
+    expect(result.manifest.files.length).toBe(7);
+    const paths = result.manifest.files.map((f) => f.path).sort();
+    expect(paths).toEqual([
+      'input-schema.json',
+      'inside-state.schema.json',
+      'instructions.md',
+      'output-schema.json',
+      'outside-state.schema.json',
+      'outside.md',
+      'prompt.md',
+    ]);
   });
 });
 

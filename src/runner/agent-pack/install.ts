@@ -74,6 +74,11 @@ export interface InstallOptions {
    * Wins over `permissionsAccept` when set.
    */
   permissionsOverride?: string;
+  /**
+   * Parent directory for temporary extraction of fetched agent packs. Defaults
+   * to the OS temp dir; callers may override for isolated tests or sandboxes.
+   */
+  tempDir?: string;
 }
 
 export interface InstallResult {
@@ -174,7 +179,7 @@ async function installFromRegistry(
     source.ref,
   );
 
-  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'minih-agent-pack-'));
+  const tmpRoot = createAgentPackTempDir(opts);
   try {
     await extractTarball(tarball, tmpRoot);
 
@@ -267,7 +272,7 @@ async function installFromUrl(
     source.ref,
   );
 
-  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'minih-agent-pack-'));
+  const tmpRoot = createAgentPackTempDir(opts);
   try {
     await extractTarball(tarball, tmpRoot);
 
@@ -311,6 +316,12 @@ async function installFromUrl(
       // Best-effort cleanup; if it fails the OS will eventually clean tmpdir.
     }
   }
+}
+
+function createAgentPackTempDir(opts: InstallOptions): string {
+  return fs.mkdtempSync(
+    path.join(opts.tempDir ?? os.tmpdir(), 'minih-agent-pack-'),
+  );
 }
 
 /**

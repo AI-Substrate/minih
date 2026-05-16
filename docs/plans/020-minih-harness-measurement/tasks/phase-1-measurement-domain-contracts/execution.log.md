@@ -1,0 +1,235 @@
+# Execution Log: Phase 1 - Measurement Domain Contracts
+
+**Plan**: [minih-harness-measurement-plan.md](../../minih-harness-measurement-plan.md)
+**Phase**: Phase 1: Measurement Domain Contracts
+**Started**: 2026-05-10
+**Companion**: `code-review-companion` run `2026-05-10T12-28-39-981Z-e685`
+
+---
+
+## Pre-Phase Validation
+
+| Check | Command | Result | Evidence |
+|-------|---------|--------|----------|
+| Boot | `just build` | Passed | `scratch/evidence/phase1-harness-build.stdout`, `scratch/evidence/phase1-harness-build.stderr` |
+| Interact | `minih doctor` and `minih list` | Passed | `scratch/evidence/phase1-harness-doctor.json`, `scratch/evidence/phase1-harness-list.json` |
+| Observe | non-empty redirected CLI evidence | Passed | `test -s scratch/evidence/phase1-harness-doctor.json` and `test -s scratch/evidence/phase1-harness-list.json` |
+| Baseline schema gate | `npx vitest run test/runner/schemas.test.ts` | Passed | 25 tests passed |
+
+Companion briefing sent with message `01KR7VF8M3N2ZN6RAWD69B73BG`.
+
+---
+
+## Task Entries
+
+### T001 - Refine the conceptual measurement domain docs
+
+**Status**: Complete
+**Started**: 2026-05-10
+
+**Plan**:
+- Clarify measurement as conceptual, not a runtime import layer.
+- Document authority/redaction posture enough for later runner/CLI contracts.
+- Keep domain map and registry consistent with runner/CLI ownership boundaries.
+
+**Changes**:
+- Added a measurement authority model that separates runner-owned facts, interpretive classifications, human pulse, and downstream context.
+- Added traceability levels L1-L4 with required reporting wording.
+- Marked the conceptual measurement domain active in the domain registry.
+- Updated the domain map to include authority/redaction and aggregate human-pulse boundaries.
+
+**Evidence**:
+- `git --no-pager diff --check` passed.
+- Companion acknowledged the briefing and reported readiness; no findings for T001 at completion time.
+
+---
+
+## Companion Findings
+
+| Review Request | Companion Message | Severity | Disposition | Notes |
+|----------------|-------------------|----------|-------------|-------|
+| T001 `e81cb02` | `01KR7VP9SGA57M4YJ5MFZFAQ1N` | MEDIUM | Fixed inline | Spec still described `docs/project-rules/harness.md` as missing; updated Harness Readiness and clarification 6 to reflect the L2 engineering harness. |
+| T002 `c76d889` | `01KR7VVVS83FF6W3MX89200KSW` | HIGH | Fixed inline | Empty or very partial proof evidence was over-ranked; added empty-evidence coverage and artifact-derived support levels. |
+| T003 `c76d889` | `01KR7VX31ESWVFX51G8GSZQ481` | HIGH | Fixed inline | Replaced global scorecard-validation semantics with task-kind-aware default-threshold evaluation. |
+| Fix F002/F003 `d784ce1` | `01KR7WD5H1DPTBVCWRJCD1V3RP` | HIGH | Fixed inline | Product-state artifacts could over-rank research/coordination proof without required cited evidence; capped incomplete support below the task default. |
+| T006 `0f1c934` | `01KR7WNHPGVX2FJK7GFM80JD2W` | HIGH | Fixed inline | Scorecard metric values could contradict their discriminator; replaced the metric value shape with kind-specific schema branches. |
+| T006 `0f1c934` | `01KR7WNHPJB5RW0F2KZV169XKV` | HIGH | Fixed inline | Pulse aggregates could validate under-threshold groups; fixed the aggregate contract to require a group size and per-question response count of at least five. |
+
+### T002 - Add proof-level contract tests first
+
+**Status**: Complete
+**Started**: 2026-05-10
+
+**Plan**:
+- Add failing-first proof-level contract coverage for L0-L6 definitions, task-kind defaults, artifact requirements, lower-confidence labels, and L6 reproducibility.
+- Keep tests scoped to runner measurement contracts.
+
+**Changes**:
+- Added `test/runner/measurement/proof-levels.test.ts`.
+
+**Evidence**:
+- `npx vitest run test/runner/measurement/proof-levels.test.ts` failed red because `src/runner/measurement/proof-levels.ts` does not exist yet.
+
+### T003 - Implement proof-level contract helpers
+
+**Status**: Complete
+**Started**: 2026-05-10
+
+**Plan**:
+- Add runner-owned proof-level types and helpers.
+- Export contracts from the runner public barrel.
+- Keep implementation pure with no CLI, MCP, or adapter imports.
+
+**Changes**:
+- Added `src/runner/measurement/types.ts`, `src/runner/measurement/proof-levels.ts`, and `src/runner/measurement/index.ts`.
+- Exported proof-level contracts from `src/runner/index.ts`.
+
+**Evidence**:
+- `npx vitest run test/runner/measurement/proof-levels.test.ts` passed: 14 tests.
+- First full-gate attempt caught an unused type import in `proof-levels.ts`; removed it before committing.
+- Companion findings F002/F003 identified proof-level overclaim risks; fixed with artifact-derived support levels and task-kind-aware threshold helper.
+
+### T004 - Add metric registry contract tests first
+
+**Status**: Complete
+**Started**: 2026-05-10
+
+**Plan**:
+- Add registry tests that lock traceability levels, source references, caveats, scorecard categories, and safe reporting wording.
+- Ensure MiniH-local metrics are mapped/aligned with frameworks rather than framework-native.
+
+**Changes**:
+- Added `test/runner/measurement/metric-registry.test.ts`.
+
+**Evidence**:
+- `npx vitest run test/runner/measurement/metric-registry.test.ts` failed red because `src/runner/measurement/metric-registry.ts` does not exist yet.
+
+### T005 - Implement the metric registry contract
+
+**Status**: Complete
+**Started**: 2026-05-10
+
+**Plan**:
+- Add stable metric IDs, categories, traceability metadata, framework mappings, source references, caveats, and reporting wording.
+- Export registry helpers from runner contracts.
+
+**Changes**:
+- Added `src/runner/measurement/metric-registry.ts`.
+- Extended measurement runner types and runner barrel exports with metric registry contracts.
+
+**Evidence**:
+- `npx vitest run test/runner/measurement/proof-levels.test.ts test/runner/measurement/metric-registry.test.ts` passed: 20 tests.
+
+### Companion F002/F003 Fix - Correct proof threshold semantics
+
+**Status**: Complete
+**Started**: 2026-05-10
+
+**Plan**:
+- Address companion HIGH findings before proceeding to schema work.
+- Keep proof summaries honest when evidence is empty or incomplete.
+
+**Changes**:
+- Removed level-global scorecard validation from proof definitions.
+- Added `meetsDefaultValidatedThreshold()` for task-kind-aware validation.
+- Derived incomplete proof support from actual artifacts instead of degrading by one fixed level.
+- Isolated agent-pack temp-dir cleanup tests after `just fft` surfaced global temp coupling.
+
+**Evidence**:
+- `npx vitest run test/runner/agent-pack/install.test.ts test/runner/measurement/proof-levels.test.ts` passed: 45 tests.
+- `just fft` passed.
+- Commit `d784ce1`; companion review-request `01KR7WC5VDR52JWN3ASHCZ84ZN`.
+
+### T006 - Add runner-owned measurement schemas and build copy wiring
+
+**Status**: Complete
+**Started**: 2026-05-10
+
+**Plan**:
+- Add runner-owned schema contracts for measurement events, proof summaries, scorecards, pulse aggregates, and benchmark catalogues.
+- Wire every new runner schema into `scripts/copy-schemas.js`.
+
+**Changes**:
+- Added `src/schemas/measurement-event.json`, `proof-summary.json`, `measurement-scorecard.json`, `pulse-aggregate.json`, and `benchmark-catalog.json`.
+- Added schema-version, provenance, authority, redaction, and missing-data fields to exportable measurement records.
+- Updated `scripts/copy-schemas.js` to copy the new runner-owned schemas into `dist/schemas`.
+- Fixed companion F004 by capping incomplete proof support below the task default when task-specific citation/coordination evidence is missing.
+
+**Evidence**:
+- `npm run build` copied all five new schemas to `dist/schemas`.
+- Manual strict AJV compile passed for the five new runner schemas.
+- `npx vitest run test/runner/measurement/proof-levels.test.ts` passed: 17 tests.
+
+### T007 - Add the interpretive classification schema contract
+
+**Status**: Complete
+**Started**: 2026-05-10
+
+**Plan**:
+- Add `measurement-classification.json` for later CLI orchestration of agent/companion interpretations.
+- Require explicit interpretive marker, evidence IDs, confidence, rationale, caveats, provenance, and redaction metadata.
+
+**Changes**:
+- Added `src/schemas/measurement-classification.json`.
+- Wired the classification schema into `scripts/copy-schemas.js`.
+- Fixed companion F005/F006 schema guardrails before landing T007 by tightening scorecard value branches and pulse aggregate minimum group size.
+
+**Evidence**:
+- Manual strict AJV compile passed for all six new measurement schemas.
+- `npm run build` copied `measurement-classification.json` to `dist/schemas`.
+
+### T008 - Extend schema contract tests for every new schema
+
+**Status**: Complete
+**Started**: 2026-05-10
+
+**Plan**:
+- Extend `test/runner/schemas.test.ts` so all new measurement schemas parse and compile under strict AJV.
+- Add positive samples plus negative coverage for missing proof artifacts, missing evidence/citations, missing provenance/redaction, individual productivity fields, composite productivity score fields, contradictory missing-data values, under-threshold pulse aggregates, and missing-data semantics.
+
+**Changes**:
+- Extended `test/runner/schemas.test.ts` to compile all six measurement schemas under strict AJV.
+- Added positive samples for event, proof, scorecard, classification, pulse aggregate, and benchmark catalogue records.
+- Added negative tests for omitted proof inventories, missing provenance/redaction, missing citations, runner-fact overrides, individual productivity fields, composite productivity scores, contradictory metric values, under-threshold pulse aggregates, downstream causal claims, and benchmark execution-result leakage.
+
+**Evidence**:
+- `npx vitest run test/runner/schemas.test.ts` passed: 58 tests.
+- Companion summary `01KR7WS6Z7Y2RP70ZH1VDCVGEY` approved T007 and confirmed F005/F006 resolved.
+
+### T009 - Encode authority and redaction contracts
+
+**Status**: Complete
+**Started**: 2026-05-10
+
+**Plan**:
+- Add runner measurement authority/redaction constants and tests so docs and schemas have matching source-of-truth labels.
+- Update measurement domain docs to reference the implemented contract modules and explicit forbidden reporting views.
+
+**Changes**:
+- Added `src/runner/measurement/authority.ts` with schema version, missing-data vocabulary, data statuses, authority contracts, redaction postures, and forbidden measurement views.
+- Exported authority/redaction contracts from the runner measurement barrel and public runner barrel.
+- Added `test/runner/measurement/authority-contracts.test.ts`.
+- Updated `docs/domains/measurement/domain.md` to list implemented authority contracts, forbidden reporting views, aggregate-only pulse threshold, and test coverage.
+
+**Evidence**:
+- `npx vitest run test/runner/measurement/authority-contracts.test.ts test/runner/measurement/proof-levels.test.ts test/runner/measurement/metric-registry.test.ts test/runner/schemas.test.ts` passed: 85 tests.
+
+### Phase-end companion debrief
+
+**Status**: Complete
+**Started**: 2026-05-10
+
+**Summary**:
+- Final drain review `01KR7X5KGQTC1GRYNEQ9VJP7KD` approved the full Phase 1 commit range with 0 new findings.
+- Stop message `01KR7X6V8G1BNED8N3XE5YT38S` produced farewell message `01KR7X7BWW0SQKYC1FC1G9HGJ1`.
+- Companion farewell reported 12 tasks handled, 6 findings sent, and all findings resolved by the final scan.
+- Auto-harvest appended the companion retro to `docs/retros/code-review-companion.md`.
+- Plan-scoped paired retrospective recorded in `docs/retros/minih-harness-measurement.md`.
+
+**Findings reconciliation**:
+- Addressed inline: F001 (`e81cbd9`), F002/F003 (`d784ce1`), F004 (`0f1c934`), F005/F006 (`0173088`).
+- Deferred: none.
+- Disagreed: none.
+
+**Debrief note**:
+- `minih validate <slug> --file <path>` is not supported by the current CLI despite the phase-end skill text; farewell harvesting used `minih retros --slug`, `minih status`, and inbox/farewell messages instead.

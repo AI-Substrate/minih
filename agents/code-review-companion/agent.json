@@ -1,7 +1,7 @@
 {
   "$schema": "https://minih.dev/schemas/agent-manifest.json",
   "name": "code-review-companion",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Long-running coordinated code-review companion that pairs alongside a human or supervising agent. Boots once per session, listens on the inbox, and reviews each ping (commit, scope, or PR) inline — one finding-message per finding, plus a session farewell envelope. Designed for Power-On-Mode (companion review during implementation), but works for one-shot reviews too.",
   "author": "AI-Substrate",
   "tags": ["companion", "review", "coordination", "exemplar", "quality"],
@@ -17,12 +17,24 @@
       "description": "Per-task review checklists (Implementation Quality, Domain Compliance, Anti-Reinvention, Testing & Evidence) plus severity guide and verdict mapping (APPROVE / APPROVE_WITH_NOTES / REQUEST_CHANGES)."
     },
     {
+      "path": "outside.md",
+      "description": "Outside contract — the operator/orchestrator-side script for Power On Mode (install, boot, brief, per-commit ping, drain, control:stop, read farewell). Pairs with prompt.md's inside contract."
+    },
+    {
       "path": "input-schema.json",
       "description": "JSON schema for the optional initialTask input — lets a caller boot the companion with a first task pre-loaded instead of letting it orient and idle."
     },
     {
       "path": "output-schema.json",
       "description": "JSON schema for the farewell envelope written to $MINIH_OUTPUT_PATH at session end — session metadata, findings array, summary, retrospective."
+    },
+    {
+      "path": "inside-state.schema.json",
+      "description": "Per-agent inside-state schema. Enum matches prompt.md § 3 State Vocabulary (idle, reading, reviewing, reporting, blocked, stopping) so state_transition calls land cleanly instead of being rejected against the default global enum. Lives at agent root because state/ is a runtime directory (see RUNTIME_DIR_NAMES in src/runner/agent-pack/manifest.ts) and cannot host install-payload files. The MCP state.ts resolver's 3-level fallback still finds root-level schemas at level 2."
+    },
+    {
+      "path": "outside-state.schema.json",
+      "description": "Per-agent outside-state schema. Standard minih outside enum (idle, in-progress, paused, done, error) plus structured data fields (phase, plan, commitsReviewed, lastReviewedSha) for the orchestrator's session view. Root location for the same reason as inside-state.schema.json."
     }
   ]
 }

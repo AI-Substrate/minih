@@ -1,0 +1,124 @@
+{
+  "$id": "https://minih.dev/schemas/proof-summary.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Minih Proof Summary",
+  "description": "Runner-owned summary of the evidence supporting a task or claim.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "proofId",
+    "runId",
+    "taskKind",
+    "authority",
+    "defaultProofLevel",
+    "supportedProofLevel",
+    "validated",
+    "requiredArtifactKinds",
+    "missingArtifactKinds",
+    "artifacts",
+    "limitations",
+    "provenance",
+    "redaction"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1" },
+    "proofId": { "type": "string", "minLength": 1 },
+    "runId": { "type": "string", "minLength": 1 },
+    "taskKind": { "$ref": "#/$defs/taskKind" },
+    "authority": { "type": "string", "const": "runner-fact" },
+    "defaultProofLevel": { "$ref": "#/$defs/proofLevel" },
+    "supportedProofLevel": { "$ref": "#/$defs/proofLevel" },
+    "validated": { "type": "boolean" },
+    "requiredArtifactKinds": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/proofArtifactKind" },
+      "uniqueItems": true
+    },
+    "missingArtifactKinds": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/proofArtifactKind" },
+      "uniqueItems": true
+    },
+    "artifacts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/proofArtifact" }
+    },
+    "limitations": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "provenance": { "$ref": "#/$defs/provenance" },
+    "redaction": { "$ref": "#/$defs/redaction" }
+  },
+  "$defs": {
+    "proofLevel": {
+      "type": "string",
+      "enum": ["L0", "L1", "L2", "L3", "L4", "L5", "L6"]
+    },
+    "taskKind": {
+      "type": "string",
+      "enum": [
+        "benchmark",
+        "change",
+        "coordination",
+        "reproducibility",
+        "research",
+        "setup"
+      ]
+    },
+    "proofArtifactKind": {
+      "type": "string",
+      "enum": [
+        "artifact",
+        "citation",
+        "command",
+        "coordination-log",
+        "decision-record",
+        "rerun",
+        "runtime-observation",
+        "test"
+      ]
+    },
+    "proofArtifact": {
+      "type": "object",
+      "required": ["id", "kind", "description", "evidenceRef"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "$ref": "#/$defs/proofArtifactKind" },
+        "description": { "type": "string", "minLength": 1 },
+        "evidenceRef": { "type": "string", "minLength": 1 }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["source", "generatedAt", "evidenceIds"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "type": "string", "const": "runner" },
+        "generatedAt": { "type": "string", "format": "date-time" },
+        "evidenceIds": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        }
+      }
+    },
+    "redaction": {
+      "type": "object",
+      "required": ["posture", "containsPersonalData", "exportSafe", "notes"],
+      "additionalProperties": false,
+      "properties": {
+        "posture": {
+          "type": "string",
+          "enum": ["local-only", "redacted-export"]
+        },
+        "containsPersonalData": { "type": "boolean" },
+        "exportSafe": { "type": "boolean" },
+        "notes": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

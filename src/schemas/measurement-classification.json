@@ -1,0 +1,148 @@
+{
+  "$id": "https://minih.dev/schemas/measurement-classification.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Minih Measurement Classification",
+  "description": "Evidence-cited interpretive classification output from an agent or companion. It may cite runner facts but cannot override them.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "classificationId",
+    "runId",
+    "producedAt",
+    "authority",
+    "interpretive",
+    "classifier",
+    "target",
+    "labels",
+    "runnerFactOverrides",
+    "provenance",
+    "redaction"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1" },
+    "classificationId": { "type": "string", "minLength": 1 },
+    "runId": { "type": "string", "minLength": 1 },
+    "producedAt": { "type": "string", "format": "date-time" },
+    "authority": { "type": "string", "const": "interpretive-classification" },
+    "interpretive": { "type": "boolean", "const": true },
+    "classifier": {
+      "type": "object",
+      "required": ["name", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "source": {
+          "type": "string",
+          "enum": ["agent", "companion", "human-review"]
+        },
+        "version": { "type": "string", "minLength": 1 }
+      }
+    },
+    "target": {
+      "type": "object",
+      "required": ["type", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["metric", "phase", "run", "task"]
+        },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "labels": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/classificationLabel" }
+    },
+    "runnerFactOverrides": {
+      "type": "array",
+      "maxItems": 0,
+      "items": false,
+      "description": "Must remain empty: interpretations cannot override runner-owned facts."
+    },
+    "provenance": { "$ref": "#/$defs/provenance" },
+    "redaction": { "$ref": "#/$defs/redaction" }
+  },
+  "$defs": {
+    "classificationLabel": {
+      "type": "object",
+      "required": [
+        "label",
+        "category",
+        "confidence",
+        "rationale",
+        "evidenceIds",
+        "proofArtifactIds",
+        "caveats"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "label": { "type": "string", "minLength": 1 },
+        "category": {
+          "type": "string",
+          "enum": [
+            "flow-friction",
+            "framework-mapping",
+            "learning",
+            "mitigation",
+            "proof-quality",
+            "risk",
+            "value-evidence"
+          ]
+        },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "rationale": { "type": "string", "minLength": 1 },
+        "evidenceIds": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "proofArtifactIds": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "caveats": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["source", "generatedAt", "evidenceIds"],
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "type": "string",
+          "enum": ["agent", "companion", "human-review"]
+        },
+        "generatedAt": { "type": "string", "format": "date-time" },
+        "evidenceIds": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        }
+      }
+    },
+    "redaction": {
+      "type": "object",
+      "required": ["posture", "containsPersonalData", "exportSafe", "notes"],
+      "additionalProperties": false,
+      "properties": {
+        "posture": {
+          "type": "string",
+          "enum": ["local-only", "redacted-export"]
+        },
+        "containsPersonalData": { "type": "boolean" },
+        "exportSafe": { "type": "boolean" },
+        "notes": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

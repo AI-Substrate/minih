@@ -193,3 +193,39 @@
 - **magicWand** (target: project): Add a short project-local test command cheat sheet for common narrow gates, including the supported serial or non-serial Vitest invocation if one exists, so reviewers do not try unsupported flags.
 - difficulties:
   - [annoying] test: The first targeted test command used an unsupported Vitest flag, --runInBand, which caused an immediate CLI option error. (workaround: Reran the same targeted test files with the repository-supported command: npx vitest run test/runner/run-manifest.test.ts test/runner/runner-event-driven.test.ts.)
+
+## 2026-05-10T03:01:34.278Z — code-review-companion / 2026-05-10T12-28-39-981Z-e685
+
+- runId: 2026-05-10T12-28-39-981Z-e685
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-05-10T12-28-39-981Z-e685
+- summary: Reviewed Phase 1 Measurement Domain Contracts across 12 review tasks. I sent 6 findings covering stale harness readiness language, proof-level overclaiming, task-kind validation semantics, scorecard missing-vs-zero schema ambiguity, and aggregate pulse privacy threshold enforcement. The final range scan found all companion findings resolved and the focused Phase 1 contract tests passing.
+- **magicWand** (target: coordination): Add a minih companion summary command that reports task counts, finding counts, open finding status, and ack chains from the inbox without requiring the companion to track counts manually.
+
+## 2026-05-16T03:11:35.078Z — code-review-companion / 2026-05-16T12-51-35-391Z-c8e3
+
+- runId: 2026-05-16T12-51-35-391Z-c8e3
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-05-16T12-51-35-391Z-c8e3
+- summary: Oriented on plan 021-coordinated-install-resilience, acknowledged the outside briefing, and remained available for review requests. No review tasks arrived during the extended idle window, so no code findings were produced.
+- **magicWand** (target: coordination): Add an explicit briefing-only idle threshold or a distinct 'briefing_received_no_task' exit path to the companion coordination contract so agents can stand down consistently without guessing when extended idle is enough.
+- difficulties:
+  - [annoying] coordination: Briefing-only sessions reset awaitingFirstContact but do not enable post-task check-ins, leaving no clear loop-level stand-down point when no review task arrives. (workaround: After an extended idle period and a final unread-inbox check, exited with idle_budget and recorded the ambiguity in the retrospective.)
+
+## 2026-05-16T04:29:10.708Z — code-review-companion / 2026-05-16T13-55-15-751Z-4e3a
+
+- runId: 2026-05-16T13-55-15-751Z-4e3a
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-05-16T13-55-15-751Z-4e3a
+- summary: Long-running companion session stopped on request after reviewing eight commit-boundary tasks for plan 021. I sent six findings: three schema-location contract-drift findings around FX001/W2 closure, one config-safety finding for malformed mcpErrorTimeoutMs parsing, and two watchdog-module findings on T010 including a HIGH contract break where the fire payload omitted timeoutMs. The outside actor later discovered they had been skimming the wrong inbox lane, acknowledged the backlog, and reset scope back to the W1/T004 state; this envelope preserves the full review record for the next companion.
+- **magicWand** (target: coordination): Add a minih companion-mode operator command that lists only unread inside-lane messages from the active companion run, with a warning if the operator is reading the outside lane while inside replies are pending.
+- difficulties:
+  - [degrading] coordination: The outside actor read the wrong inbox lane and missed companion findings, which caused multiple review findings to be deferred unintentionally. (workaround: The outside actor later acknowledged the mistake, read the inside lane, and sent a directive preserving the backlog; I kept findings open in the farewell.)
+  - [annoying] test: I used an unsupported Vitest --runInBand flag, and piping output through tail without pipefail masked the nonzero exit at first. (workaround: Reran targeted tests without --runInBand and with set -o pipefail before relying on the result.)
+
+## 2026-05-16T04:52:59.721Z — code-review-companion / 2026-05-16T14-31-52-925Z-a3a2
+
+- runId: 2026-05-16T14-31-52-925Z-a3a2
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-05-16T14-31-52-925Z-a3a2
+- summary: Reviewed the scope-reduced Plan 021 branch and three follow-up cleanup commits. The core unblock fix became coherent: code-review-companion@0.2.0 ships root-level inside/outside state schemas plus outside.md, manifest validation and upgrade-detection regressions pass, and the final cleanup removed stale install-path, watchdog, dogfood, and whitespace drift. Final verdict sent to the peer was APPROVE after commit 13b92cc fixed the last flight-plan schema-path reference.
+- **magicWand** (target: coordination): Add a first-class `minih companion findings --run <runId>` or `minih retros --slug <slug> --latest --findings` view that extracts prior companion findings and summaries without requiring operators or reviewers to locate report paths or even consider run-dir files.
+- difficulties:
+  - [annoying] coordination: Initial review work arrived as an outside `briefing` message even though the companion protocol reserves `task` for review requests and says briefings should not start work. (workaround: Acknowledged it and treated the explicit review instructions in the body as task-like scope, preserving ackOf on all findings and summaries.)
+  - [annoying] debug: A shell verification command hung after I included markdown backticks inside a double-quoted ripgrep pattern, causing command-substitution hazards in the shell. (workaround: Stopped the shell session and reran the check using the rg tool and safer shell quoting.)

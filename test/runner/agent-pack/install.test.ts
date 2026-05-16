@@ -95,6 +95,82 @@ describe('installAgentPack — local source', () => {
     ).toBe(true);
   });
 
+  it('T004 (spec AC6): implicit manifest synthesis ships root-level inside/outside state schemas', async () => {
+    // Spec AC6: An agent source folder with prompt.md + inside-state.schema.json
+    // + outside-state.schema.json (all at root per FX001) but no explicit
+    // agent.json installs successfully, and the installed copy contains both
+    // schema files at root. This exercises CANONICAL_AGENT_FILES (manifest.ts:33-37)
+    // which already lists root-level schema paths — T003 verified, T004 locks in.
+    writeFile(sourceDir, 'prompt.md', '# implicit-manifest companion prompt');
+    writeFile(
+      sourceDir,
+      'inside-state.schema.json',
+      JSON.stringify({
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        type: 'object',
+        properties: {
+          status: {
+            type: 'string',
+            enum: ['idle', 'working', 'done'],
+          },
+        },
+      }),
+    );
+    writeFile(
+      sourceDir,
+      'outside-state.schema.json',
+      JSON.stringify({
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        type: 'object',
+        properties: {
+          status: {
+            type: 'string',
+            enum: ['idle', 'in-progress', 'paused', 'done', 'error'],
+          },
+        },
+      }),
+    );
+    // NO agent.json — implicit-manifest path must synthesize one.
+
+    const result = await installAgentPack({
+      source: { type: 'local', localPath: sourceDir },
+      agentsDir,
+    });
+
+    expect(result.action).toBe('installed');
+    expect(
+      fs.existsSync(path.join(agentsDir, 'source-agent', 'prompt.md')),
+      'prompt.md missing from installed copy',
+    ).toBe(true);
+    expect(
+      fs.existsSync(
+        path.join(agentsDir, 'source-agent', 'inside-state.schema.json'),
+      ),
+      'inside-state.schema.json missing — implicit-manifest did not pick up root schema',
+    ).toBe(true);
+    expect(
+      fs.existsSync(
+        path.join(agentsDir, 'source-agent', 'outside-state.schema.json'),
+      ),
+      'outside-state.schema.json missing — implicit-manifest did not pick up root schema',
+    ).toBe(true);
+
+    // Sidecar fileChecksums must include the schemas so future upgrades
+    // surface them in changedFiles[] (linkage to spec AC4).
+    const sidecar = JSON.parse(
+      fs.readFileSync(
+        path.join(agentsDir, 'source-agent', '.minih-source.json'),
+        'utf-8',
+      ),
+    );
+    expect(sidecar.fileChecksums['inside-state.schema.json']).toMatch(
+      /^sha256:/,
+    );
+    expect(sidecar.fileChecksums['outside-state.schema.json']).toMatch(
+      /^sha256:/,
+    );
+  });
+
   it('re-install with identical source returns action: "unchanged"', async () => {
     writeFile(sourceDir, 'prompt.md', '# prompt');
     writeAgentJson(sourceDir, [{ path: 'prompt.md', description: 'p' }]);

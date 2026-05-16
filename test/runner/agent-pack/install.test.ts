@@ -177,6 +177,108 @@ describe('installAgentPack — local source', () => {
     ).toBe('{}');
   });
 
+  it('FX003b regression: 0.1.0 → 0.2.0 upgrade reports the 3 new companion files in changedFiles[] (spec AC4)', async () => {
+    // Fixture mirrors the canonical code-review-companion upgrade path:
+    //   v0.1.0 ships 4 files (prompt/instructions/input-schema/output-schema)
+    //   v0.2.0 ships 7 files (the original 4 + outside.md + 2 state schemas at root per FX001)
+    // The per-file checksum diff (install.ts:467-471) must surface the 3 NEW
+    // root-level files as changedFiles[] entries on re-install. This is the
+    // load-bearing assertion behind FX003b's "adopters notice the upgrade"
+    // promise on issue AI-Substrate/minih#30.
+
+    // v0.1.0 source
+    writeFile(sourceDir, 'prompt.md', '# v0.1.0 companion prompt');
+    writeFile(sourceDir, 'instructions.md', '# v0.1.0 instructions');
+    writeFile(sourceDir, 'input-schema.json', '{"v":"0.1.0"}');
+    writeFile(sourceDir, 'output-schema.json', '{"v":"0.1.0"}');
+    fs.writeFileSync(
+      path.join(sourceDir, 'agent.json'),
+      JSON.stringify({
+        name: 'companion-fixture',
+        version: '0.1.0',
+        description: 'v0.1.0 baseline',
+        files: [
+          { path: 'prompt.md', description: 'agent prompt' },
+          { path: 'instructions.md', description: 'instructions' },
+          { path: 'input-schema.json', description: 'input schema' },
+          { path: 'output-schema.json', description: 'output schema' },
+        ],
+      }),
+    );
+
+    const first = await installAgentPack({
+      source: { type: 'local', localPath: sourceDir },
+      agentsDir,
+    });
+    expect(first.action).toBe('installed');
+
+    // v0.2.0 source: add 3 new files at root + keep originals identical
+    writeFile(sourceDir, 'outside.md', '# v0.2.0 outside contract');
+    writeFile(
+      sourceDir,
+      'inside-state.schema.json',
+      '{"$schema":"https://json-schema.org/draft/2020-12/schema","v":"0.2.0-inside"}',
+    );
+    writeFile(
+      sourceDir,
+      'outside-state.schema.json',
+      '{"$schema":"https://json-schema.org/draft/2020-12/schema","v":"0.2.0-outside"}',
+    );
+    fs.writeFileSync(
+      path.join(sourceDir, 'agent.json'),
+      JSON.stringify({
+        name: 'companion-fixture',
+        version: '0.2.0',
+        description: 'v0.2.0 with coordination contract',
+        files: [
+          { path: 'prompt.md', description: 'agent prompt' },
+          { path: 'instructions.md', description: 'instructions' },
+          { path: 'outside.md', description: 'outside contract' },
+          { path: 'input-schema.json', description: 'input schema' },
+          { path: 'output-schema.json', description: 'output schema' },
+          { path: 'inside-state.schema.json', description: 'inside state schema' },
+          { path: 'outside-state.schema.json', description: 'outside state schema' },
+        ],
+      }),
+    );
+
+    const second = await installAgentPack({
+      source: { type: 'local', localPath: sourceDir },
+      agentsDir,
+    });
+
+    expect(second.action).toBe('upgraded');
+    // The 3 new files MUST appear in changedFiles[]. Order is
+    // implementation-defined (alphabetical-by-path in current impl), so we
+    // assert membership rather than order.
+    expect(second.changedFiles).toContain('outside.md');
+    expect(second.changedFiles).toContain('inside-state.schema.json');
+    expect(second.changedFiles).toContain('outside-state.schema.json');
+    // The 4 unchanged files MUST NOT appear (identical content + same path).
+    expect(second.changedFiles).not.toContain('prompt.md');
+    expect(second.changedFiles).not.toContain('instructions.md');
+    expect(second.changedFiles).not.toContain('input-schema.json');
+    expect(second.changedFiles).not.toContain('output-schema.json');
+
+    // The installed copy contains all 7 files at root.
+    // Slug is derived from source-dir basename (sourceDir = .../source-agent/),
+    // not the `name` field in agent.json.
+    for (const f of [
+      'prompt.md',
+      'instructions.md',
+      'outside.md',
+      'input-schema.json',
+      'output-schema.json',
+      'inside-state.schema.json',
+      'outside-state.schema.json',
+    ]) {
+      expect(
+        fs.existsSync(path.join(agentsDir, 'source-agent', f)),
+        `installed copy missing ${f}`,
+      ).toBe(true);
+    }
+  });
+
   it('refuses self-install when source path equals target path', async () => {
     writeFile(sourceDir, 'prompt.md', '# prompt');
     writeAgentJson(sourceDir, [{ path: 'prompt.md', description: 'p' }]);

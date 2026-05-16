@@ -34,8 +34,8 @@ TODAY (0.1.6):                              AFTER this plan (0.2.0):
 🔴 minih doctor warns "silently             🟡 Doctor warning rewritten:
    rejected" (misleading)                      "rejected at runtime; wedges
                                                 run unless mcpErrorTimeoutMs set"
-🔴 Implicit-manifest installs miss          🟢 CANONICAL_AGENT_FILES picks up
-   state/ schemas (same wedge path)            state/inside-state.schema.json
+🔴 Implicit-manifest installs miss          🟢 CANONICAL_AGENT_FILES already lists
+   state/ schemas (same wedge path)            inside-state.schema.json (root)
 🔴 No CLI way to preview install            🟢 minih agent info <slug> --remote
    payload before committing                   shows manifest without installing
 🔴 No CLI way to find wedge-relevant        🟢 minih tail --since-tool /
@@ -64,7 +64,7 @@ flowchart LR
         TD[minih agent info<br/>+ --remote/--local/--diff]:::changed
         TE[minih tail<br/>+ --since-tool/--around-error]:::changed
         TF[minih doctor warning copy<br/>accurate language]:::changed
-        TG[outside.md<br/>state/inside-state.schema.json<br/>state/outside-state.schema.json]:::new
+        TG[outside.md<br/>inside-state.schema.json<br/>outside-state.schema.json<br/><i>(root per FX001)</i>]:::new
     end
 
     CA --> TA
@@ -141,7 +141,7 @@ flowchart LR
 
 Top-level success criteria (full list of 17 lives in the spec):
 
-- [ ] Fresh `minih agent install code-review-companion` ships `state/inside-state.schema.json`, `state/outside-state.schema.json`, `outside.md` (Phase 1)
+- [x] Fresh `minih agent install code-review-companion` ships `inside-state.schema.json`, `outside-state.schema.json`, `outside.md` at agent root (Phase 1 — per FX001)
 - [ ] `agent.json` reports `version: '0.2.0'` with 7 files; upgrade from `0.1.0` reports the 3 new files in `changedFiles[]` (Phase 1)
 - [ ] Fresh post-`0.2.0` companion run executes `state_transition({ to: 'reading' })` without wedging (Phase 1 gate)
 - [ ] Implicit-manifest install picks up `state/` schemas via `CANONICAL_AGENT_FILES` (Phase 2)

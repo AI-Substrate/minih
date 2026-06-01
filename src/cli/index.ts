@@ -12,6 +12,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
+import { initTelemetry, shutdownTelemetry } from '../telemetry/index.js';
 import { registerAgentCommand } from './commands/agent.js';
 import { registerAgentReadmeCommand } from './commands/agent-readme.js';
 import { registerAttachCommand } from './commands/attach.js';
@@ -49,6 +50,9 @@ try {
   // Fallback if package.json not found (shouldn't happen)
 }
 
+// Initialize telemetry before any command logic (DD1, Option A: top-of-entry-point)
+initTelemetry();
+
 const program = new Command()
   .name('minih')
   .description(
@@ -67,6 +71,11 @@ program.hook('preAction', (thisCommand) => {
   if (opts.agentsDir) {
     opts.agentsDir = path.resolve(opts.agentsDir);
   }
+});
+
+// Flush telemetry after every command (DD1)
+program.hook('postAction', async () => {
+  await shutdownTelemetry();
 });
 
 registerQuickstartCommand(program);
@@ -95,4 +104,4 @@ registerAttachCommand(program);
 registerAgentCommand(program);
 registerProbeCommand(program);
 
-program.parse();
+await program.parseAsync();

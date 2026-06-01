@@ -109,7 +109,7 @@ Note: horizontal rule above should NOT break frontmatter parsing.
     if (def === null) throw new Error('expected smoke-test agent to resolve');
     const result = await runAgent(
       fake,
-      def,
+      def as NonNullable<typeof def>,
       { slug: 'smoke-test', cwd: '/test/project' },
       undefined,
       tmpDir,

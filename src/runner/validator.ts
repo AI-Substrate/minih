@@ -11,6 +11,7 @@
 
 import * as fs from 'node:fs';
 import Ajv2020 from 'ajv/dist/2020.js';
+import { validationCount } from '../telemetry/index.js';
 import type { ValidationResult } from './types.js';
 
 /** Levenshtein distance between two strings. */
@@ -197,11 +198,13 @@ export function validateOutput(
 
   const valid = validate(outputData);
   if (valid) {
+    validationCount.add(1, { valid: true, type: 'user' });
     return { valid: true, errors: [] };
   }
 
   const errors = formatErrors(validate.errors ?? [], outputData);
 
+  validationCount.add(1, { valid: false, type: 'user' });
   return { valid: false, errors };
 }
 
@@ -277,10 +280,12 @@ export function validateSystemOutput(outputPath: string): ValidationResult {
 
   const valid = validate(outputData);
   if (valid) {
+    validationCount.add(1, { valid: true, type: 'system' });
     return { valid: true, errors: [] };
   }
 
   const errors = formatErrors(validate.errors ?? [], outputData, '[system]');
 
+  validationCount.add(1, { valid: false, type: 'system' });
   return { valid: false, errors };
 }

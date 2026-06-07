@@ -10,8 +10,30 @@
  */
 
 import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import Ajv2020 from 'ajv/dist/2020.js';
 import type { ValidationResult } from './types.js';
+
+const SCHEMAS_DIR = fileURLToPath(new URL('../schemas', import.meta.url));
+
+/** Load all bundled minih.dev schemas into an AJV instance so $ref resolution works. */
+function loadBundledSchemas(ajv: Ajv2020): void {
+  if (!fs.existsSync(SCHEMAS_DIR)) return;
+  for (const file of fs.readdirSync(SCHEMAS_DIR)) {
+    if (!file.endsWith('.json')) continue;
+    try {
+      const schema = JSON.parse(
+        fs.readFileSync(path.join(SCHEMAS_DIR, file), 'utf-8'),
+      ) as Record<string, unknown>;
+      if (typeof schema.$id === 'string') {
+        ajv.addSchema(schema);
+      }
+    } catch {
+      // ignore unreadable schema files
+    }
+  }
+}
 
 /** Levenshtein distance between two strings. */
 function levenshtein(a: string, b: string): number {
@@ -186,10 +208,15 @@ export function validateOutput(
   }
 
   const ajv = new Ajv2020({ allErrors: true });
+  loadBundledSchemas(ajv);
 
   let validate: ReturnType<typeof ajv.compile>;
   try {
-    validate = ajv.compile(schemaData as Record<string, unknown>);
+    const schema = schemaData as Record<string, unknown>;
+    // If the schema was already loaded as a bundled schema (same $id), reuse it.
+    const schemaId = typeof schema.$id === 'string' ? schema.$id : undefined;
+    const preloaded = schemaId ? ajv.getSchema(schemaId) : undefined;
+    validate = preloaded ?? ajv.compile(schema);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return { valid: false, errors: [`Schema compilation failed: ${message}`] };

@@ -74,6 +74,10 @@ export interface AgentRunConfig {
   configDir?: string;
   /** Explicit MCP servers loaded from --mcp-config file */
   mcpServers?: Record<string, unknown>;
+  /** Resolved SDK-neutral skill directories selected by the CLI. */
+  skillDirectories?: string[];
+  /** Skill names disabled/excluded by the CLI resolver. */
+  disabledSkills?: string[];
   /** Optional domain-supplied MCP servers created after runId/runDir are known. */
   insideMcpServerFactory?: (
     context: InsideMcpServerFactoryContext,

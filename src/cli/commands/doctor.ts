@@ -22,6 +22,7 @@ import {
   formatError,
   formatSuccess,
 } from '../output.js';
+import { resolveSkillsConfig } from '../skills.js';
 
 interface CheckResult {
   check: string;
@@ -199,6 +200,23 @@ export function registerDoctorCommand(program: Command): void {
       // Plan 012 — audit peer activity for active coordinated runs.
       const peerAudit = await auditPeerActivity(resolvedDir);
 
+      // Plan 022 — audit .minih.json skills configuration without starting SDK.
+      const skillsAudit = resolveSkillsConfig({ cwd: projectRoot });
+      const skillsChecks: CheckResult[] = skillsAudit.diagnostics.map((d) => ({
+        check: `skills/${d.code}`,
+        status: d.level === 'error' ? 'fail' : 'warning',
+        message: d.message,
+      }));
+      if (skillsChecks.length === 0) {
+        skillsChecks.push({
+          check: 'skills-config',
+          status: skillsAudit.enabled ? 'pass' : 'skip',
+          message: skillsAudit.enabled
+            ? `${skillsAudit.skillDirectories?.length ?? 0} skill director${skillsAudit.skillDirectories?.length === 1 ? 'y' : 'ies'} resolved`
+            : '.minih.json skills not configured',
+        });
+      }
+
       // Summarize
       let warnings = 0;
       let errors = 0;
@@ -214,6 +232,10 @@ export function registerDoctorCommand(program: Command): void {
       }
       for (const row of peerAudit.rows) {
         if (row.status === 'warning') warnings++;
+      }
+      for (const check of skillsChecks) {
+        if (check.status === 'warning') warnings++;
+        if (check.status === 'fail') errors++;
       }
       const healthy = agentResults.filter((a) =>
         a.checks.every((c) => c.status === 'pass' || c.status === 'skip'),
@@ -268,6 +290,21 @@ export function registerDoctorCommand(program: Command): void {
           process.stderr.write('\n');
         }
 
+        process.stderr.write(`  ${chalk.bold('Skills')}\n`);
+        for (const check of skillsChecks) {
+          const icon =
+            check.status === 'pass'
+              ? chalk.green('✓')
+              : check.status === 'warning'
+                ? chalk.yellow('⚠')
+                : check.status === 'fail'
+                  ? chalk.red('✗')
+                  : chalk.dim('—');
+          const msg = check.message ? ` ${chalk.dim(check.message)}` : '';
+          process.stderr.write(`    ${icon} ${check.check}${msg}\n`);
+        }
+        process.stderr.write('\n');
+
         // Plan 012 — render peer activity audit
         if (peerAudit.rows.length > 0) {
           process.stderr.write(
@@ -317,6 +354,10 @@ export function registerDoctorCommand(program: Command): void {
               preamble,
               retros: retroChecks,
               peer: peerAudit.rows,
+              skills: {
+                checks: skillsChecks,
+                resolved: skillsAudit,
+              },
               summary: {
                 total: agentResults.length,
                 healthy,
@@ -335,6 +376,10 @@ export function registerDoctorCommand(program: Command): void {
               preamble,
               retros: retroChecks,
               peer: peerAudit.rows,
+              skills: {
+                checks: skillsChecks,
+                resolved: skillsAudit,
+              },
               summary: {
                 total: agentResults.length,
                 healthy,

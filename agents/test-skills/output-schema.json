@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "summary",
+    "retrospective",
+    "skillName",
+    "skillInvoked",
+    "observedMarker"
+  ],
+  "properties": {
+    "summary": { "type": "string" },
+    "retrospective": { "$ref": "https://minih.dev/schemas/retrospective.json" },
+    "skillName": { "const": "minih-test-skill" },
+    "skillInvoked": { "type": "boolean" },
+    "observedMarker": { "type": "boolean" }
+  },
+  "additionalProperties": true
+}

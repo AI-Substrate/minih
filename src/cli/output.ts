@@ -45,6 +45,10 @@
  *   E203  PERMISSIONS_FRONTMATTER_INVALID  — `permissions:` field has a bad shape
  *   E204  PERMISSION_PRESET_UNKNOWN        — preset name not in the registry
  *   E205  COORDINATION_WRITE_DENIED        — coord-enabled agent resolved to write:deny preset (FX008)
+ *
+ *   --- Plan 022 (skills config) ---
+ *   E210  SKILLS_CONFIG_INVALID            — .minih.json skills block has invalid shape
+ *   E211  SKILL_NOT_FOUND                  — explicitly included skill was not found
  */
 
 export const ErrorCodes = {
@@ -92,6 +96,9 @@ export const ErrorCodes = {
   PERMISSION_PRESET_UNKNOWN: 'E204',
   // Plan 018 — FX008 — coordination write precondition
   COORDINATION_WRITE_DENIED: 'E205',
+  // Plan 022 — skills config
+  SKILLS_CONFIG_INVALID: 'E210',
+  SKILL_NOT_FOUND: 'E211',
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];

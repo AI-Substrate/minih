@@ -1116,6 +1116,12 @@ export async function runAgent(
           onSessionReady: startForwarders,
           configDir: config.configDir ?? config.cwd,
           ...(mcpServers && { mcpServers }),
+          ...(config.skillDirectories && {
+            skillDirectories: config.skillDirectories,
+          }),
+          ...(config.disabledSkills && {
+            disabledSkills: config.disabledSkills,
+          }),
           ...(permissionHandler && { permissionHandler }),
         })
         .then(async (result) => {

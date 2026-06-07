@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "kind": "flight-plan",
+  "slug": "minih-skills-config",
+  "plan_dir": "docs/plans/022-minih-skills-config",
+  "mode": "Simple",
+  "cursor": "review",
+  "recommended_next": "review",
+  "now": "Implementation complete",
+  "next": "Review",
+  "_comment": "Adopted by /the-flow after a pre-spec workshop. the-flow.md is generated from this JSON; do not hand-edit the markdown as primary.",
+  "agents": [
+    {
+      "id": "code-review-companion-implementation",
+      "kind": "companion",
+      "agent": "code-review-companion",
+      "status": "completed",
+      "runId": "2026-06-05T13-00-14-912Z-f334",
+      "render": "wrap",
+      "covers": ["implementation"],
+      "note": "User requested code review companion mode for /plan-6. Companion completed before final diff review; farewell had no code findings."
+    }
+  ],
+  "nodes": [
+    {
+      "id": "spec",
+      "type": "spec",
+      "label": "Spec",
+      "status": "done",
+      "command": "/plan-1b-v3-specify-and-clarify \"minih skills config: first-class CLI and repo config for loading named local skills from portable aliases, with discoverable docs and diagnostics for agents on other machines\"",
+      "ran_at": "2026-06-05T02:01:42Z",
+      "user_input": "Workflow Mode: Simple; Testing Strategy: Full TDD; Mock Usage: Targeted mocks; Documentation Strategy: Hybrid; Harness: L2 sufficient.",
+      "note": "Spec captured .minih.json skills config, source aliases, include/exclude semantics, CLI discovery/doctor surfaces, SDK pass-through, and event visibility.",
+      "artifacts": [
+        "docs/plans/022-minih-skills-config/minih-skills-config-spec.md"
+      ],
+      "next": ["ws1", "backpressure", "plan"]
+    },
+    {
+      "id": "ws1",
+      "type": "workshop",
+      "label": "Workshop 1 · CLI config and discovery",
+      "status": "done",
+      "branch_of": "spec",
+      "ran_at": "2026-06-05T01:35:54Z",
+      "user_input": "Workshop the minih CLI design and config file locations for first-class skill loading, emphasizing discoverability, affordability, and ease for agents on other machines, with built-in CLI documentation that lights up like a Christmas tree.",
+      "reconstructed": true,
+      "note": "Selected .minih.json plus CLI overrides; minih resolves aliases deterministically and uses direct skill directories for include-by-name.",
+      "artifacts": [
+        "docs/plans/022-minih-skills-config/workshops/001-cli-config-and-discovery.md"
+      ],
+      "next": ["backpressure", "plan"]
+    },
+    {
+      "id": "backpressure",
+      "type": "backpressure",
+      "label": "Backpressure survey",
+      "status": "done",
+      "branch_of": "spec",
+      "command": "/plan-2d-backpressure-survey docs/plans/022-minih-skills-config/minih-skills-config-spec.md",
+      "ran_at": "2026-06-05T02:06:57Z",
+      "note": "Certainty Partial: existing quality gates are strong, but feature-specific resolver/CLI/adapter/event sensors are buildable and should be planned.",
+      "artifacts": [
+        "docs/plans/022-minih-skills-config/backpressure-coverage.md"
+      ],
+      "next": ["plan"]
+    },
+    {
+      "id": "plan",
+      "type": "plan",
+      "label": "Plan",
+      "status": "done",
+      "command": "/plan-3-v3-architect docs/plans/022-minih-skills-config/minih-skills-config-spec.md",
+      "ran_at": "2026-06-05T02:19:24Z",
+      "note": "Status READY. Simple implementation plan includes test-first backpressure, repo-local sample skill fixture, and portable test-skills agent.",
+      "artifacts": [
+        "docs/plans/022-minih-skills-config/minih-skills-config-plan.md",
+        "docs/plans/022-minih-skills-config/minih-skills-config.fltplan.md"
+      ],
+      "next": ["implementation"]
+    },
+    {
+      "id": "implementation",
+      "type": "phase",
+      "phase": 1,
+      "label": "Implementation",
+      "status": "done",
+      "command": "/plan-6-v2-implement-phase-companion --plan \"docs/plans/022-minih-skills-config/minih-skills-config-plan.md\" --phase \"Implementation\"",
+      "ran_at": "2026-06-05T03:20:01Z",
+      "user_input": "use code review companion mode for /6 please",
+      "note": "Implemented skills config/resolution/pass-through/events/docs/fixtures and validator bundled-schema ref side-fix. Full tests and just fft passed aside from non-failing audit advisories.",
+      "artifacts": ["docs/plans/022-minih-skills-config/execution.log.md"],
+      "next": ["review"]
+    },
+    {
+      "id": "review",
+      "type": "review",
+      "label": "Review",
+      "status": "known",
+      "command": "/plan-7-v2-code-review --plan \"docs/plans/022-minih-skills-config/minih-skills-config-plan.md\"",
+      "note": "Formal review still recommended because companion completed before final diff review.",
+      "next": ["merge"]
+    },
+    {
+      "id": "merge",
+      "type": "merge",
+      "label": "Merge",
+      "status": "assumed",
+      "command": "/plan-8-v2-merge",
+      "next": []
+    }
+  ]
+}

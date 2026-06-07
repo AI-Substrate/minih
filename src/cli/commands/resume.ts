@@ -53,6 +53,7 @@ import {
   formatSuccess,
 } from '../output.js';
 import { assertOutsideContext } from '../preaction-context.js';
+import { hasSkillErrors, resolveSkillsConfig } from '../skills.js';
 import { createSdkRuntime } from './sdk-runtime.js';
 
 const RESUME_LOCK_WAIT_MS = 35_000;
@@ -64,6 +65,11 @@ interface ResumeFlagOpts {
   verbose?: boolean;
   human?: boolean;
   mcpConfig?: string;
+  skillSource?: string[];
+  skill?: string[];
+  disableSkill?: string[];
+  skills?: boolean;
+  skillsDebug?: boolean;
   resumePrompt?: string;
   takeover?: boolean;
   fresh?: boolean;
@@ -178,6 +184,35 @@ export function registerResumeCommand(program: Command): void {
       'Mount the live human-view TUI to stderr (mutually-exclusive with --verbose)',
     )
     .option('--mcp-config <path>', 'MCP config file with mcpServers (JSON)')
+    .option(
+      '--skill-source <alias-or-path>',
+      'Skill source alias/path to load for the resumed SDK session (repeatable)',
+      (val: string, acc: string[]) => {
+        acc.push(val);
+        return acc;
+      },
+      [] as string[],
+    )
+    .option(
+      '--skill <name>',
+      'Load only a named skill from configured sources (repeatable)',
+      (val: string, acc: string[]) => {
+        acc.push(val);
+        return acc;
+      },
+      [] as string[],
+    )
+    .option(
+      '--disable-skill <name>',
+      'Disable/exclude a skill by name (repeatable)',
+      (val: string, acc: string[]) => {
+        acc.push(val);
+        return acc;
+      },
+      [] as string[],
+    )
+    .option('--no-skills', 'Disable .minih.json skills for this invocation')
+    .option('--skills-debug', 'Print resolved skills config before resuming')
     .action(
       async (
         slug: string,
@@ -423,6 +458,36 @@ async function runResumed(args: RunResumedArgs): Promise<void> {
     process.stderr.write('\n');
   }
 
+  const resolvedSkills = resolveSkillsConfig({
+    cwd: process.cwd(),
+    sourceOverrides: opts.skillSource,
+    includeOverrides: opts.skill,
+    excludeOverrides: opts.disableSkill,
+    noSkills: opts.skills === false,
+  });
+  for (const diagnostic of resolvedSkills.diagnostics) {
+    const prefix = diagnostic.level === 'error' ? 'error' : 'warning';
+    process.stderr.write(`skills ${prefix}: ${diagnostic.message}\n`);
+  }
+  if (opts.skillsDebug && resolvedSkills.enabled) {
+    process.stderr.write(
+      `skills debug: directories=${(resolvedSkills.skillDirectories ?? []).join(', ') || '(none)'} disabled=${(resolvedSkills.disabledSkills ?? []).join(', ') || '(none)'}\n`,
+    );
+  }
+  if (hasSkillErrors(resolvedSkills)) {
+    exitWithEnvelope(
+      formatError(
+        'resume',
+        ErrorCodes.SKILL_NOT_FOUND,
+        'Could not resolve requested skills.',
+        {
+          diagnostics: resolvedSkills.diagnostics,
+        },
+      ),
+    );
+    return;
+  }
+
   let mcpServers: Record<string, unknown> | undefined;
   if (opts.mcpConfig) {
     try {
@@ -492,6 +557,12 @@ async function runResumed(args: RunResumedArgs): Promise<void> {
       }),
     reservedMcpToolPrefixes: ['inbox_', 'state_'],
     ...(mcpServers && { mcpServers }),
+    ...(resolvedSkills.skillDirectories && {
+      skillDirectories: resolvedSkills.skillDirectories,
+    }),
+    ...(resolvedSkills.disabledSkills && {
+      disabledSkills: resolvedSkills.disabledSkills,
+    }),
     ...(args.useInPlace && {
       resumeInPlace: true,
       resumeFromState:

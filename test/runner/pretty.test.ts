@@ -203,6 +203,25 @@ describe('PrettyDisplay', () => {
     });
   });
 
+  describe('skill events', () => {
+    it('shows loaded and invoked skills', () => {
+      const output = captureStderr(() => {
+        display.handleEvent({
+          type: 'skills_loaded',
+          timestamp: new Date().toISOString(),
+          data: { skills: [{ name: 'grill-me' }], raw: {} },
+        });
+        display.handleEvent({
+          type: 'skill_invoked',
+          timestamp: new Date().toISOString(),
+          data: { name: 'grill-me', raw: {} },
+        });
+      });
+      expect(output).toContain('skills loaded: grill-me');
+      expect(output).toContain('skill invoked: grill-me');
+    });
+  });
+
   describe('cleanup', () => {
     it('flushes thinking stream with newline', () => {
       const output = captureStderr(() => {

@@ -87,6 +87,12 @@ export function formatEvent(event: AgentEvent): string {
       return `${t} 📊 tokens: in=${event.data.inputTokens ?? '?'} out=${event.data.outputTokens ?? '?'}`;
     case 'session_idle':
       return `${t} ⏸  session idle`;
+    case 'skills_loaded': {
+      const names = event.data.skills.map((skill) => skill.name).join(', ');
+      return `${t} 🧩 skills loaded: ${chalk.cyan(names || 'none')}`;
+    }
+    case 'skill_invoked':
+      return `${t} 🧩 skill invoked: ${chalk.cyan(event.data.name)}`;
     case 'session_error':
       return `${t} ${chalk.red(`❌ ${event.data.message}`)}`;
     default:

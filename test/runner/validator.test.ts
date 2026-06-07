@@ -93,6 +93,32 @@ describe('validateOutput', () => {
     expect(result.errors[0]).toMatch(/not found/i);
   });
 
+  it('resolves bundled minih.dev schema refs in agent output schemas', () => {
+    const schema = writeJson('schema-with-retro-ref.json', {
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      type: 'object',
+      required: ['summary', 'retrospective'],
+      properties: {
+        summary: { type: 'string' },
+        retrospective: {
+          $ref: 'https://minih.dev/schemas/retrospective.json',
+        },
+      },
+    });
+    const output = writeJson('report.json', {
+      summary:
+        'Validated a schema that references the bundled retrospective schema.',
+      retrospective: {
+        workedWell: 'Bundled schema ref resolution was available.',
+        confusing: 'Nothing was confusing in this focused validator test.',
+        magicWand: 'Keep bundled schema references usable in agent schemas.',
+      },
+    });
+
+    const result = validateOutput(schema, output);
+    expect(result).toEqual({ valid: true, errors: [] });
+  });
+
   it('handles schema compilation errors', () => {
     const schema = writeJson('schema.json', { type: 'not-a-type' });
     const output = writeJson('report.json', { name: 'hello' });

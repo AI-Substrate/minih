@@ -1,0 +1,6 @@
+{
+  "skills": {
+    "sources": [".agents"],
+    "include": ["minih-test-skill"]
+  }
+}

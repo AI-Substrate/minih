@@ -229,3 +229,13 @@
 - difficulties:
   - [annoying] coordination: Initial review work arrived as an outside `briefing` message even though the companion protocol reserves `task` for review requests and says briefings should not start work. (workaround: Acknowledged it and treated the explicit review instructions in the body as task-like scope, preserving ackOf on all findings and summaries.)
   - [annoying] debug: A shell verification command hung after I included markdown backticks inside a double-quoted ripgrep pattern, causing command-substitution hazards in the shell. (workaround: Stopped the shell session and reran the check using the rg tool and safer shell quoting.)
+
+## 2026-06-05T03:12:09.558Z — code-review-companion / 2026-06-05T13-00-14-912Z-f334
+
+- runId: 2026-06-05T13-00-14-912Z-f334
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-06-05T13-00-14-912Z-f334
+- summary: Code review companion oriented on plan 022-minih-skills-config, acknowledged the session brief, and remained available for commit-boundary reviews. No review requests arrived after the brief, so no findings were produced; the run stopped cleanly after the post-task idle check-in expired.
+- **magicWand** (target: coordination): Add a minih coordination/orient helper that returns the active plan bundle, latest phase/workshop metadata, and recent commit summary in one JSON envelope so companions do not reimplement this discovery sequence.
+- difficulties:
+  - [annoying] knowledge: The orient default assumes a tasks/ phase folder exists, but the active plan was READY with no tasks tree yet. (workaround: Reported phase none in the orientation and used the plan/spec/flight-plan/workshop/backpressure files as the current context.)
+  - [annoying] debug: The glob tool returned no matches for docs/plans/022-minih-skills-config even though the files existed and view could list them. (workaround: Used view on the plan directory, then read the discovered file paths directly.)

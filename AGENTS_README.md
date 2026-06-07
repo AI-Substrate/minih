@@ -370,6 +370,34 @@ Injected into every agent before their specific prompt. This is your agent onboa
 
 ---
 
+## Skills config
+
+Minih agents can load local Copilot/Claude-style skills through first-class config. Use this when an agent should invoke a local skill without hardcoding a full path in its prompt.
+
+Repo defaults live in `.minih.json`:
+
+```json
+{
+  "skills": {
+    "sources": [".agents"],
+    "include": ["minih-test-skill"],
+    "exclude": []
+  }
+}
+```
+
+One-off run flags are also available:
+
+```bash
+minih skills discover
+minih skills doctor
+minih run test-skills --skill-source .agents --skill minih-test-skill
+```
+
+Source aliases include `.agents` / `repo:.agents`, `.claude`, `.github`, `global:agents`, `global:copilot`, `global:claude`, `global:pi`, and `path:<path>`. Minih does **not** load user-global skills implicitly; configure sources or pass flags explicitly. `minih inspect <slug>` and `minih doctor` surface the resolved skills block and missing-source diagnostics.
+
+---
+
 ## Permissions
 
 > Plan 018 — fine-grained permission policies replace the legacy `approveAll` posture.
@@ -1206,6 +1234,9 @@ minih run <slug> --reasoning xhigh        # Set reasoning effort
 minih run <slug> --timeout 1200           # Override timeout (seconds)
 minih run <slug> --param key=value        # Pass input parameters (repeatable)
 minih run <slug> --mcp-config config.json # Load MCP servers from file
+minih run <slug> --skill-source .agents --skill minih-test-skill # Load a named local skill
+minih skills discover                    # List configured/discovered skills
+minih skills doctor                      # Validate .minih.json skills config
 
 # Monitoring
 minih status <slug>                       # One-shot liveness check (active/stale/done)
@@ -1276,6 +1307,7 @@ When your agent runs, minih sets these environment variables:
 9. **Don't nest `minih run` inside agents** — SDK session conflicts. Use `--dry-run` and other CLI commands instead
 10. **Clean up after yourself** — remove worktrees, temp dirs, scratch files before finishing
 11. **Use frontmatter for per-agent config** — `model`, `reasoning`, `timeout` avoid needing CLI flags
+12. **Use skills config for local slash skills** — `.minih.json`, `--skill-source`, and `--skill` keep skill paths out of prompts
 
 ---
 

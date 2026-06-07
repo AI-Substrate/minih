@@ -23,11 +23,17 @@ import {
   formatSuccess,
 } from '../output.js';
 import { parseParamFlags } from '../param-parser.js';
+import { resolveSkillsConfig } from '../skills.js';
 
 interface PromptSection {
   label: string;
   source: string;
   content: string;
+}
+
+function collect(value: string, previous: string[]): string[] {
+  previous.push(value);
+  return previous;
 }
 
 export function registerInspectCommand(program: Command): void {
@@ -36,6 +42,25 @@ export function registerInspectCommand(program: Command): void {
     .description('Show the fully composed prompt an agent receives')
     .option('--resolved', 'Show with runtime variables resolved (default)')
     .option('--raw', 'Show without resolving template variables')
+    .option(
+      '--skill-source <alias-or-path>',
+      'Skill source alias/path to inspect (repeatable)',
+      collect,
+      [] as string[],
+    )
+    .option(
+      '--skill <name>',
+      'Only select a named skill (repeatable)',
+      collect,
+      [] as string[],
+    )
+    .option(
+      '--disable-skill <name>',
+      'Disable/exclude a skill by name (repeatable)',
+      collect,
+      [] as string[],
+    )
+    .option('--no-skills', 'Disable .minih.json skills for this invocation')
     .option(
       '-p, --param <key=value>',
       'Input parameter (repeatable). Values are JSON-parsed when possible: ' +
@@ -52,7 +77,15 @@ export function registerInspectCommand(program: Command): void {
     .action(
       (
         slug: string,
-        opts: { resolved?: boolean; raw?: boolean; param?: string[] },
+        opts: {
+          resolved?: boolean;
+          raw?: boolean;
+          param?: string[];
+          skillSource?: string[];
+          skill?: string[];
+          disableSkill?: string[];
+          skills?: boolean;
+        },
       ) => {
         const agentsDir = program.opts().agentsDir ?? 'agents';
         const resolve = !opts.raw;
@@ -180,6 +213,14 @@ export function registerInspectCommand(program: Command): void {
           MINIH_HAS_INPUT_SCHEMA: definition.inputSchemaPath ? 'true' : 'false',
         };
 
+        const resolvedSkills = resolveSkillsConfig({
+          cwd: repoRoot,
+          sourceOverrides: opts.skillSource,
+          includeOverrides: opts.skill,
+          excludeOverrides: opts.disableSkill,
+          noSkills: opts.skills === false,
+        });
+
         // MCP config discovery
         const mcpJsonPath = path.join(repoRoot, '.mcp.json');
         const hasMcpConfig = fs.existsSync(mcpJsonPath);
@@ -227,6 +268,24 @@ export function registerInspectCommand(program: Command): void {
             `  ${chalk.dim('MCP config')}=${mcpConfigSource}\n`,
           );
 
+          process.stderr.write(`\n${chalk.bold('─── Skills ───')}\n`);
+          process.stderr.write(
+            `  enabled: ${resolvedSkills.enabled ? 'yes' : 'no'}\n`,
+          );
+          for (const diagnostic of resolvedSkills.diagnostics) {
+            process.stderr.write(
+              `  ${diagnostic.level}: ${diagnostic.message}\n`,
+            );
+          }
+          for (const source of resolvedSkills.sources) {
+            process.stderr.write(
+              `  ${source.exists ? '✓' : '!'} ${source.alias} -> ${source.path}\n`,
+            );
+          }
+          for (const dir of resolvedSkills.skillDirectories ?? []) {
+            process.stderr.write(`  skillDirectory: ${dir}\n`);
+          }
+
           process.stderr.write(`\n${chalk.bold('─── Stats ───')}\n`);
           process.stderr.write(`  Sections:     ${sections.length}\n`);
           process.stderr.write(
@@ -253,6 +312,7 @@ export function registerInspectCommand(program: Command): void {
             frontmatter: { description, tags, model, reasoning, timeout },
             envVars,
             mcpConfig: mcpConfigSource,
+            skills: resolvedSkills,
           }),
         );
       },

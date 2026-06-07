@@ -189,10 +189,38 @@ minih run my-agent --verbose    # Old-style timestamped event log
 | `-t, --timeout <seconds>` | Timeout in seconds (default: 300) |
 | `-p, --param <key=value>` | Input parameter (repeatable) |
 | `--mcp-config <path>` | Load MCP servers from a JSON config file |
+| `--skill-source <alias-or-path>` | Load local skills from a source such as `.agents`, `global:agents`, or `path:<dir>` |
+| `--skill <name>` | Load only a named skill from configured sources (repeatable) |
+| `--disable-skill <name>` | Disable/exclude a skill by name (repeatable) |
+| `--no-skills` | Disable `.minih.json` skills for this invocation |
 | `--dry-run` | Preview assembled prompt without executing |
 | `--verbose` | Show all events with timestamps (default: pretty streaming) |
 
 **Display modes**: By default, `minih run` shows clean streaming output — thinking in gray italic, tool calls formatted with names, intent changes highlighted. Use `--verbose` for the timestamped line-per-event log. Non-TTY environments always use verbose mode.
+
+### Skills config
+
+Minih can pass locally installed Copilot/Claude-style skills to SDK-backed sessions without hardcoded absolute paths. Add a small repo config when you want defaults:
+
+```json
+{
+  "skills": {
+    "sources": [".agents"],
+    "include": ["minih-test-skill"],
+    "exclude": []
+  }
+}
+```
+
+Or use one-off flags:
+
+```bash
+minih skills discover
+minih skills doctor
+minih run test-skills --skill-source .agents --skill minih-test-skill
+```
+
+Supported source aliases include `.agents` / `repo:.agents`, `.claude`, `.github`, `global:agents`, `global:copilot`, `global:claude`, `global:pi`, and `path:<path>`. Minih never loads user-global skills implicitly; configure `.minih.json` or pass flags explicitly.
 
 ### `minih list`
 

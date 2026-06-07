@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "slug": "minih-skills-config",
+  "plan_dir": "docs/plans/022-minih-skills-config",
+  "mode": "Simple",
+  "current_stage": "awaiting-7",
+  "pending_command": "/plan-7-v2-code-review --plan \"docs/plans/022-minih-skills-config/minih-skills-config-plan.md\"",
+  "intent": "Workshop the minih CLI design and config file locations for first-class skill loading, emphasizing discoverability, affordability, and ease for agents on other machines, with built-in CLI documentation that lights up like a Christmas tree.",
+  "milestones_total": 5,
+  "milestones_done": 4,
+  "last_checkpoint_at": "2026-06-05T03:20:01Z",
+  "compacted_seams": ["before-implementation"],
+  "status": "active"
+}

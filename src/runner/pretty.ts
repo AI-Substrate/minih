@@ -46,6 +46,18 @@ export class PrettyDisplay {
           `\n${chalk.red(`  ❌ ${event.data.message ?? 'Session error'}`)}\n`,
         );
         break;
+      case 'skills_loaded':
+        this.endStreams();
+        process.stderr.write(
+          `  ${chalk.cyan('🧩')} skills loaded: ${event.data.skills.map((skill) => skill.name).join(', ') || 'none'}\n`,
+        );
+        break;
+      case 'skill_invoked':
+        this.endStreams();
+        process.stderr.write(
+          `  ${chalk.cyan('🧩')} skill invoked: ${event.data.name}\n`,
+        );
+        break;
       case 'usage':
       case 'session_idle':
       case 'session_start':

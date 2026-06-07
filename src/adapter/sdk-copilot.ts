@@ -39,6 +39,8 @@ export class SdkCopilotAdapter implements IAgentAdapter {
       reasoningEffort,
       configDir,
       mcpServers,
+      skillDirectories,
+      disabledSkills,
       permissionHandler,
     } = options;
 
@@ -97,6 +99,8 @@ export class SdkCopilotAdapter implements IAgentAdapter {
           ...(reasoningEffort && { reasoningEffort }),
           ...(configDir && { configDir }),
           ...(mcpServers && { mcpServers }),
+          ...(skillDirectories && { skillDirectories }),
+          ...(disabledSkills && { disabledSkills }),
         })
       : await this._client.createSession({
           streaming: !!onEvent,
@@ -106,6 +110,8 @@ export class SdkCopilotAdapter implements IAgentAdapter {
           ...(reasoningEffort && { reasoningEffort }),
           ...(configDir && { configDir }),
           ...(mcpServers && { mcpServers }),
+          ...(skillDirectories && { skillDirectories }),
+          ...(disabledSkills && { disabledSkills }),
         });
 
     // Emit session_start so the runner can capture sessionId for timeout termination
@@ -316,6 +322,35 @@ function sessionErrorMessage(event: CopilotSessionEventLike): string {
   return event.data?.message ?? 'Session error';
 }
 
+function normalizeLoadedSkills(
+  data: unknown,
+): Array<{ name: string; path?: string }> {
+  const rec =
+    typeof data === 'object' && data !== null
+      ? (data as Record<string, unknown>)
+      : {};
+  const rawSkills = Array.isArray(rec.skills)
+    ? rec.skills
+    : Array.isArray(rec.loadedSkills)
+      ? rec.loadedSkills
+      : [];
+  return rawSkills.map((item) => {
+    if (typeof item === 'string') return { name: item };
+    if (typeof item === 'object' && item !== null) {
+      const skill = item as Record<string, unknown>;
+      const name = String(
+        skill.name ?? skill.skillName ?? skill.id ?? 'unknown',
+      );
+      const skillPath = skill.path ?? skill.skillPath;
+      return {
+        name,
+        ...(typeof skillPath === 'string' && { path: skillPath }),
+      };
+    }
+    return { name: 'unknown' };
+  });
+}
+
 function translateEvent(event: CopilotSessionEventLike): AgentEvent | null {
   const timestamp = new Date().toISOString();
 
@@ -361,6 +396,34 @@ function translateEvent(event: CopilotSessionEventLike): AgentEvent | null {
     case 'session.error':
     case 'session_error':
       return null; // Handled in catch block
+
+    case 'session.skills_loaded': {
+      const skills = normalizeLoadedSkills(event.data);
+      return {
+        type: 'skills_loaded',
+        timestamp,
+        data: { skills, raw: event.data },
+      };
+    }
+
+    case 'skill.invoked': {
+      const name =
+        event.data?.name ??
+        event.data?.skillName ??
+        event.data?.skill?.name ??
+        'unknown';
+      const skillPath =
+        event.data?.path ?? event.data?.skillPath ?? event.data?.skill?.path;
+      return {
+        type: 'skill_invoked',
+        timestamp,
+        data: {
+          name,
+          ...(skillPath && { path: skillPath }),
+          raw: event.data,
+        },
+      };
+    }
 
     case 'tool.execution_start':
       return {

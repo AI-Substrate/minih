@@ -130,6 +130,21 @@ describe('agent-readme bundle byte-equality (AC-9, AC-10)', () => {
   });
 });
 
+describe('AGENTS_README skills config discoverability', () => {
+  const readmeText = fs.existsSync(repoReadme)
+    ? fs.readFileSync(repoReadme, 'utf-8')
+    : '';
+
+  it('mentions skills config, aliases, and discovery commands', () => {
+    expect(readmeText).toContain('## Skills config');
+    expect(readmeText).toContain('minih skills discover');
+    expect(readmeText).toContain('minih skills doctor');
+    expect(readmeText).toContain('--skill-source');
+    expect(readmeText).toContain('global:agents');
+    expect(readmeText).toContain('.minih.json');
+  });
+});
+
 describe('AGENTS_README companion section structure (AC-14, AC-15)', () => {
   const readmeText = fs.existsSync(repoReadme)
     ? fs.readFileSync(repoReadme, 'utf-8')

@@ -239,4 +239,78 @@ describe('SdkCopilotAdapter.run', () => {
       { prompt: 'follow-up' },
     ]);
   });
+
+  it('passes skill config into createSession and resumeSession', async () => {
+    const session = new MockSession();
+    const client = new MockClient(session);
+    const adapter = new SdkCopilotAdapter(client);
+
+    const fresh = adapter.run({
+      prompt: 'start',
+      skillDirectories: ['/skills/grill-me'],
+      disabledSkills: ['disabled-one'],
+    });
+    await waitFor(() => session.sendCalls.length === 1);
+    session.emit({ type: 'session.idle', data: {} });
+    await fresh;
+
+    expect(client.createSessionCalls[0]).toMatchObject({
+      skillDirectories: ['/skills/grill-me'],
+      disabledSkills: ['disabled-one'],
+    });
+
+    const resumed = adapter.run({
+      prompt: 'resume',
+      sessionId: 'existing-session',
+      skillDirectories: ['/skills/grill-me'],
+      disabledSkills: ['disabled-one'],
+    });
+    await waitFor(() => session.sendCalls.length === 2);
+    session.emit({ type: 'session.idle', data: {} });
+    await resumed;
+
+    expect(client.resumeSessionCalls[0]).toMatchObject({
+      skillDirectories: ['/skills/grill-me'],
+      disabledSkills: ['disabled-one'],
+    });
+  });
+
+  it('normalizes skill load and invocation SDK events', async () => {
+    const session = new MockSession();
+    const adapter = new SdkCopilotAdapter(new MockClient(session));
+    const events: AgentEvent[] = [];
+
+    const runPromise = adapter.run({
+      prompt: 'start',
+      onEvent: (event) => events.push(event),
+    });
+
+    await waitFor(() => session.sendCalls.length === 1);
+    session.emit({
+      type: 'session.skills_loaded',
+      data: {
+        skills: [{ name: 'grill-me', path: '/skills/grill-me/SKILL.md' }],
+      },
+    });
+    session.emit({
+      type: 'skill.invoked',
+      data: { name: 'grill-me', path: '/skills/grill-me/SKILL.md' },
+    });
+    session.emit({ type: 'session.idle', data: {} });
+
+    await runPromise;
+
+    expect(
+      events.find((event) => event.type === 'skills_loaded'),
+    ).toMatchObject({
+      data: {
+        skills: [{ name: 'grill-me', path: '/skills/grill-me/SKILL.md' }],
+      },
+    });
+    expect(
+      events.find((event) => event.type === 'skill_invoked'),
+    ).toMatchObject({
+      data: { name: 'grill-me', path: '/skills/grill-me/SKILL.md' },
+    });
+  });
 });

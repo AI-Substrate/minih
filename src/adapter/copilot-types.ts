@@ -65,6 +65,8 @@ export interface CopilotSessionConfig {
   workingDirectory?: string;
   configDir?: string;
   mcpServers?: Record<string, unknown>;
+  skillDirectories?: string[];
+  disabledSkills?: string[];
   onPermissionRequest?: CopilotPermissionHandler;
 }
 
@@ -74,6 +76,8 @@ export interface CopilotResumeSessionConfig {
   workingDirectory?: string;
   configDir?: string;
   mcpServers?: Record<string, unknown>;
+  skillDirectories?: string[];
+  disabledSkills?: string[];
   onPermissionRequest?: CopilotPermissionHandler;
 }
 

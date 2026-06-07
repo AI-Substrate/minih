@@ -49,6 +49,10 @@ export interface AgentRunOptions {
   timeout?: number;
   configDir?: string;
   mcpServers?: Record<string, unknown>;
+  /** Resolved local skill directories passed through to Copilot SDK. */
+  skillDirectories?: string[];
+  /** Skill names disabled through Copilot SDK. */
+  disabledSkills?: string[];
   /**
    * Permission handler for SDK 0.3.0+ permission gating. Plan 018 R1.
    * When omitted, the adapter falls back to its built-in `approveAll`
@@ -122,6 +126,23 @@ export interface AgentSessionEvent extends AgentEventBase {
     sessionId?: string;
     errorType?: string;
     message?: string;
+  };
+}
+
+export interface AgentSkillLoadedEvent extends AgentEventBase {
+  type: 'skills_loaded';
+  data: {
+    skills: Array<{ name: string; path?: string }>;
+    raw: unknown;
+  };
+}
+
+export interface AgentSkillInvokedEvent extends AgentEventBase {
+  type: 'skill_invoked';
+  data: {
+    name: string;
+    path?: string;
+    raw: unknown;
   };
 }
 
@@ -216,6 +237,8 @@ export type AgentEvent =
   | AgentMessageEvent
   | AgentUsageEvent
   | AgentSessionEvent
+  | AgentSkillLoadedEvent
+  | AgentSkillInvokedEvent
   | AgentRawEvent
   | AgentToolCallEvent
   | AgentToolResultEvent

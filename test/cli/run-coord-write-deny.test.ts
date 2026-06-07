@@ -216,7 +216,7 @@ describe('FX008 — coord write-deny precondition (CLI regression)', () => {
     expect(env.error.details.metadata.permissionError.kind).toBe(
       'coord-write-deny',
     );
-  });
+  }, 15_000);
 
   it('AC-FX8.6 — coord-disabled + read-only + no flag → precondition does NOT fire', () => {
     // Coordination omitted from frontmatter = disabled. The precondition

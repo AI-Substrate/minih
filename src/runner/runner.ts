@@ -1191,6 +1191,60 @@ export async function runAgent(
         config.reservedMcpToolPrefixes ?? [],
       );
 
+      // Plan 026 review FT-002 — all three budget race arms are built BEFORE
+      // adapter.run() so a synchronously-emitting adapter can never breach a
+      // budget while fireStall/fireMaxTurns are still undefined. Each arm
+      // gets a noop catch: if it fires during adapter.run()'s synchronous
+      // startup (before Promise.race attaches), the rejection is already
+      // handled.
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutHandle = setTimeout(() => {
+          if (budgetBreached()) return;
+          timedOut = true;
+          reject(new Error(budgetMessages.timeout));
+        }, timeoutMs);
+      });
+      timeoutPromise.catch(() => {});
+      // Plan 026 (CD-02) — the stall arm. The synthetic run_stalled event
+      // is emitted HERE (not via handleEvent) so it cannot reset the
+      // deadline or re-trigger the arm.
+      const stallPromise = new Promise<never>((_, reject) => {
+        fireStall = () => {
+          if (budgetBreached()) return;
+          stalled = true;
+          const stalledEvent: AgentEvent = {
+            type: 'run_stalled',
+            timestamp: new Date().toISOString(),
+            data: {
+              stallTimeoutSec,
+              ...(lastEventAt && { lastEventAt }),
+            },
+          };
+          stats.total++;
+          try {
+            fs.appendFileSync(eventsPath, `${JSON.stringify(stalledEvent)}\n`);
+          } catch {
+            // best-effort — run.json + completed.json still carry the stall
+          }
+          if (onEvent) onEvent(stalledEvent);
+          reject(new Error(budgetMessages['stalled-stream']));
+        };
+        // Arm the initial deadline — a run that emits nothing at all must
+        // still stall rather than wait for the wall-clock budget.
+        resetStallDeadline();
+      });
+      stallPromise.catch(() => {});
+      // Plan 026 (CD-03) — the turn-budget arm; fired synchronously from
+      // handleEvent's message-count increment.
+      const maxTurnsPromise = new Promise<never>((_, reject) => {
+        fireMaxTurns = () => {
+          if (budgetBreached()) return;
+          turnsExceeded = true;
+          reject(new Error(budgetMessages['max-turns']));
+        };
+      });
+      maxTurnsPromise.catch(() => {});
+
       runPromise = adapter
         .run({
           prompt: finalPrompt,
@@ -1231,50 +1285,6 @@ export async function runAgent(
           return terminal;
         })
         .finally(closeForwarders);
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        timeoutHandle = setTimeout(() => {
-          if (budgetBreached()) return;
-          timedOut = true;
-          reject(new Error(budgetMessages.timeout));
-        }, timeoutMs);
-      });
-      // Plan 026 (CD-02) — the stall arm. The synthetic run_stalled event
-      // is emitted HERE (not via handleEvent) so it cannot reset the
-      // deadline or re-trigger the arm.
-      const stallPromise = new Promise<never>((_, reject) => {
-        fireStall = () => {
-          if (budgetBreached()) return;
-          stalled = true;
-          const stalledEvent: AgentEvent = {
-            type: 'run_stalled',
-            timestamp: new Date().toISOString(),
-            data: {
-              stallTimeoutSec,
-              ...(lastEventAt && { lastEventAt }),
-            },
-          };
-          stats.total++;
-          try {
-            fs.appendFileSync(eventsPath, `${JSON.stringify(stalledEvent)}\n`);
-          } catch {
-            // best-effort — run.json + completed.json still carry the stall
-          }
-          if (onEvent) onEvent(stalledEvent);
-          reject(new Error(budgetMessages['stalled-stream']));
-        };
-        // Arm the initial deadline — a run that emits nothing at all must
-        // still stall rather than wait for the wall-clock budget.
-        resetStallDeadline();
-      });
-      // Plan 026 (CD-03) — the turn-budget arm; fired synchronously from
-      // handleEvent's message-count increment.
-      const maxTurnsPromise = new Promise<never>((_, reject) => {
-        fireMaxTurns = () => {
-          if (budgetBreached()) return;
-          turnsExceeded = true;
-          reject(new Error(budgetMessages['max-turns']));
-        };
-      });
       agentResult = await Promise.race([
         runPromise,
         timeoutPromise,

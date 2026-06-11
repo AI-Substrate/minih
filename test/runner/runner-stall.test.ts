@@ -105,6 +105,44 @@ class ScriptedAdapter implements IAgentAdapter {
   }
 }
 
+/**
+ * FT-002 (plan 026 review F002) — emits its whole script synchronously
+ * INSIDE run(), before returning a never-settling promise. Models an
+ * adapter whose events would beat the budget race arms if those arms were
+ * wired up only after adapter.run() had been invoked.
+ */
+class SyncEmitAdapter implements IAgentAdapter {
+  readonly terminateHistory: string[] = [];
+
+  constructor(private readonly events: AgentEvent[]) {}
+
+  run(options: AgentRunOptions): Promise<AgentResult> {
+    for (const e of this.events) options.onEvent?.(e);
+    return new Promise<never>(() => {});
+  }
+
+  async compact(sessionId: string): Promise<AgentResult> {
+    return {
+      output: '',
+      sessionId,
+      status: 'completed',
+      exitCode: 0,
+      tokens: null,
+    };
+  }
+
+  async terminate(sessionId: string): Promise<AgentResult> {
+    this.terminateHistory.push(sessionId);
+    return {
+      output: '',
+      sessionId,
+      status: 'killed',
+      exitCode: 137,
+      tokens: null,
+    };
+  }
+}
+
 function readManifest(runDir: string): Record<string, unknown> {
   return JSON.parse(fs.readFileSync(path.join(runDir, 'run.json'), 'utf-8'));
 }
@@ -379,5 +417,31 @@ describe('max-turns budget (plan 026 T006)', () => {
 
     expect(result.metadata.result).toBe('completed');
     expect(readManifest(result.runDir).terminalReason).toBeUndefined();
+  });
+
+  // FT-002 (plan 026 review F002) — the budget race arms must exist before
+  // adapter.run() is invoked: an adapter that emits its turns synchronously
+  // during run() startup must still trip --max-turns rather than drift into
+  // the stall arm.
+  it('trips max-turns for events emitted synchronously during adapter.run()', async () => {
+    const def = createAgent('turns-sync');
+    const adapter = new SyncEmitAdapter([
+      event('message', { content: 'one' }),
+      event('message', { content: 'two' }),
+      event('message', { content: 'three' }),
+    ]);
+
+    const result = await runAgent(
+      adapter,
+      def,
+      { slug: 'turns-sync', maxTurns: 2, stallTimeout: 0.3, timeout: 10 },
+      undefined,
+      tmpDir,
+    );
+
+    expect(result.metadata.result).toBe('failed');
+    expect(result.metadata.exitCode).toBe(124);
+    expect(result.agentResult.output).toContain('max-turns');
+    expect(readManifest(result.runDir).terminalReason).toBe('max-turns');
   });
 });

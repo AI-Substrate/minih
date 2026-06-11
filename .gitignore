@@ -150,3 +150,6 @@ session-store.db*
 
 # Local scratch — screenshots, pane dumps, paste artifacts (not committed)
 scratch/
+
+# Engineering-harness transient scratch (defense-in-depth above the CLI's self-healed nested .gitignore)
+.harness/temp/

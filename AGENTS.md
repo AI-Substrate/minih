@@ -4,7 +4,7 @@
 
 **The harness IS the product. We MUST be exemplar users.** That means: NEVER `cat`/`tail`/`grep`/`jq` files under `agents/<slug>/runs/<runId>/` directly. ALWAYS go through the `minih` CLI. Every time you bypass the CLI, you skip a UX gap that real users will hit — and you set a bad pattern in this very document for the next agent reading it.
 
-**This rule is non-negotiable.** If the CLI doesn't expose what you need, that's a missing surface — file it as MW/fix dossier and use `cat` only AFTER raising the gap explicitly with the user. Don't silently bypass.
+**This rule is non-negotiable.** If the CLI doesn't expose what you need, that's a missing surface — file it as MW/fix dossier (`harness observe "<the gap>" --kind magic-wand`) and use `cat` only AFTER raising the gap explicitly with the user. Don't silently bypass.
 
 **Equivalence table** (read left-to-right; if you reach for the left, use the right instead):
 
@@ -38,6 +38,18 @@ The infrastructure improvement IS the work. Going around it is the failure mode.
 ### Self-check before a `cat`/`jq`/`tail`
 
 Ask: "Could `minih X` answer this?" If yes, use that. If no, the gap is the answer — file it.
+
+---
+
+## Engineering harness — session start
+
+**Start every session with `harness boot --json`.** minih's engineering harness runs on the global harness-core CLI — always bare `harness` (the `engh` alias also works); **never `npm install` it into this repo**. Boot runs five read-only sensors (lint, typecheck, build+test, minih doctor, audit) and returns one JSON envelope: `ok` / `degraded` (workable-with-awareness — read `next_action` for the named caveats) / `error` (fix the named sensor before feature work). For orientation, run `harness instructions` (then `harness instructions boot`). The governance contract lives at [`.harness/engineering-harness.md`](.harness/engineering-harness.md).
+
+**File friction the moment it bites**: `harness observe "<what>" --kind <kind>` — one silent line into gitignored scratch (`.harness/temp/`); it round-trips to a committed record at retro time via `harness record retro --slug <plan-slug>`.
+
+If the eng-harness skills are missing from your agent CLI: `npx skills@latest add AI-Substrate/harness-engineering -a claude-code -g -y`.
+
+Deep guide — loop narrative, friction lifecycle, narrow gates, copy-paste validation: [`docs/how/engineering-harness.md`](docs/how/engineering-harness.md).
 
 ---
 

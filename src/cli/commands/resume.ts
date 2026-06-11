@@ -30,8 +30,6 @@ import type {
 import {
   clearResumeLock,
   coordinationRunLocation,
-  DEFAULT_STALL_TIMEOUT_SEC,
-  DEFAULT_TIMEOUT_SEC,
   detectRunState,
   displayEvent,
   displayHeader,
@@ -50,7 +48,7 @@ import {
   validateSlug,
   waitForResumeLock,
 } from '../../runner/index.js';
-import { parseBudgetFlag } from '../budget-flags.js';
+import { parseBudgetFlag, resolveEffectiveBudgets } from '../budget-flags.js';
 import {
   ErrorCodes,
   exitWithEnvelope,
@@ -620,31 +618,18 @@ async function runResumed(args: RunResumedArgs): Promise<void> {
 
   // Plan 026 (CD-05) — resume shares run's default-timeout source
   // (frontmatter-aware, then the shared constant; the '300' hardcode is gone).
+  // FT-004 — one resolution path with `run`, unit-pinned in
+  // test/cli/budget-flags.test.ts.
+  const effectiveBudgets = resolveEffectiveBudgets(
+    'resume',
+    opts,
+    definition.timeout,
+  );
   const config: AgentRunConfig = {
     slug,
-    timeout:
-      parseBudgetFlag(
-        'resume',
-        '--timeout',
-        opts.timeout,
-        'positive-seconds',
-      ) ??
-      definition.timeout ??
-      DEFAULT_TIMEOUT_SEC,
-    stallTimeout:
-      parseBudgetFlag(
-        'resume',
-        '--stall-timeout',
-        opts.stallTimeout,
-        'non-negative-seconds',
-      ) ?? DEFAULT_STALL_TIMEOUT_SEC,
-    maxTurns:
-      parseBudgetFlag(
-        'resume',
-        '--max-turns',
-        opts.maxTurns,
-        'non-negative-count',
-      ) ?? 0,
+    timeout: effectiveBudgets.timeout,
+    stallTimeout: effectiveBudgets.stallTimeout,
+    maxTurns: effectiveBudgets.maxTurns,
     cwd: process.cwd(),
     sessionId: session.sessionId,
     resumedFromRunId: session.runId,

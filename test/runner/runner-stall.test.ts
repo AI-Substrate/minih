@@ -419,6 +419,55 @@ describe('max-turns budget (plan 026 T006)', () => {
     expect(readManifest(result.runDir).terminalReason).toBeUndefined();
   });
 
+  // FT-004 (plan 026 review F004) — a resume-in-place run re-records its
+  // effective budgets in run.json, so operators see the limits the RESUMED
+  // session runs under, not the original's.
+  it('records the resumed budgets in run.json on resume-in-place', async () => {
+    const def = createAgent('resume-budgets');
+    const settleFast = () =>
+      new ScriptedAdapter([{ atMs: 0, event: event('session_idle') }], {
+        settleAtMs: 30,
+        result: { output: validSystemOutput() },
+      });
+
+    const first = await runAgent(
+      settleFast(),
+      def,
+      { slug: 'resume-budgets', timeout: 10, stallTimeout: 5, maxTurns: 0 },
+      undefined,
+      tmpDir,
+    );
+    expect(readManifest(first.runDir).budgets).toEqual({
+      timeoutSec: 10,
+      stallTimeoutSec: 5,
+      maxTurns: 0,
+    });
+
+    const firstRunId = readManifest(first.runDir).runId as string;
+    const resumed = await runAgent(
+      settleFast(),
+      def,
+      {
+        slug: 'resume-budgets',
+        timeout: 20,
+        stallTimeout: 2,
+        maxTurns: 7,
+        sessionId: 'scripted-session',
+        resumeInPlace: true,
+        resumedFromRunId: firstRunId,
+      },
+      undefined,
+      tmpDir,
+    );
+
+    expect(resumed.runDir).toBe(first.runDir);
+    expect(readManifest(first.runDir).budgets).toEqual({
+      timeoutSec: 20,
+      stallTimeoutSec: 2,
+      maxTurns: 7,
+    });
+  });
+
   // FT-002 (plan 026 review F002) — the budget race arms must exist before
   // adapter.run() is invoked: an adapter that emits its turns synchronously
   // during run() startup must still trip --max-turns rather than drift into

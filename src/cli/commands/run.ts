@@ -18,8 +18,6 @@ import {
   buildInsidePreamble,
   buildRunParamsSummary,
   coordinationRunLocation,
-  DEFAULT_STALL_TIMEOUT_SEC,
-  DEFAULT_TIMEOUT_SEC,
   displayEvent,
   displayHeader,
   displayPreflight,
@@ -34,7 +32,7 @@ import {
   validateRunLabel,
   validateSlug,
 } from '../../runner/index.js';
-import { parseBudgetFlag } from '../budget-flags.js';
+import { resolveEffectiveBudgets } from '../budget-flags.js';
 import {
   ErrorCodes,
   exitWithEnvelope,
@@ -272,28 +270,12 @@ export function registerRunCommand(program: Command): void {
 
         // Plan 026 — budget flags validate loudly (E108) before any run
         // state is touched; defaults come from the shared runner constants.
-        const timeoutFlag = parseBudgetFlag(
+        // FT-004 — run and resume share one resolution path.
+        const { timeout, stallTimeout, maxTurns } = resolveEffectiveBudgets(
           'run',
-          '--timeout',
-          opts.timeout,
-          'positive-seconds',
+          opts,
+          definition.timeout,
         );
-        const stallTimeoutFlag = parseBudgetFlag(
-          'run',
-          '--stall-timeout',
-          opts.stallTimeout,
-          'non-negative-seconds',
-        );
-        const maxTurnsFlag = parseBudgetFlag(
-          'run',
-          '--max-turns',
-          opts.maxTurns,
-          'non-negative-count',
-        );
-        const timeout =
-          timeoutFlag ?? definition.timeout ?? DEFAULT_TIMEOUT_SEC;
-        const stallTimeout = stallTimeoutFlag ?? DEFAULT_STALL_TIMEOUT_SEC;
-        const maxTurns = maxTurnsFlag ?? 0;
         const budgets = {
           timeoutSec: timeout,
           stallTimeoutSec: stallTimeout,

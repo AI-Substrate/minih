@@ -6,6 +6,10 @@
  * before any run state is touched.
  */
 
+import {
+  DEFAULT_STALL_TIMEOUT_SEC,
+  DEFAULT_TIMEOUT_SEC,
+} from '../runner/index.js';
 import { ErrorCodes, exitWithEnvelope, formatError } from './output.js';
 
 export type BudgetFlagKind =
@@ -48,4 +52,51 @@ export function parseBudgetFlag(
     );
   }
   return value;
+}
+
+export interface EffectiveBudgets {
+  timeout: number;
+  stallTimeout: number;
+  maxTurns: number;
+}
+
+/**
+ * Resolve the effective run budgets from raw flag strings, agent
+ * frontmatter, and the shared runner defaults — the single resolution path
+ * `run` and `resume` share (plan 026 review FT-004 pins resume's positive
+ * path through this helper).
+ *
+ * Precedence: explicit flag → frontmatter `timeout` (wall-clock only) →
+ * `DEFAULT_TIMEOUT_SEC` / `DEFAULT_STALL_TIMEOUT_SEC` / 0 (unlimited turns).
+ */
+export function resolveEffectiveBudgets(
+  commandName: string,
+  flags: { timeout?: string; stallTimeout?: string; maxTurns?: string },
+  definitionTimeout?: number,
+): EffectiveBudgets {
+  return {
+    timeout:
+      parseBudgetFlag(
+        commandName,
+        '--timeout',
+        flags.timeout,
+        'positive-seconds',
+      ) ??
+      definitionTimeout ??
+      DEFAULT_TIMEOUT_SEC,
+    stallTimeout:
+      parseBudgetFlag(
+        commandName,
+        '--stall-timeout',
+        flags.stallTimeout,
+        'non-negative-seconds',
+      ) ?? DEFAULT_STALL_TIMEOUT_SEC,
+    maxTurns:
+      parseBudgetFlag(
+        commandName,
+        '--max-turns',
+        flags.maxTurns,
+        'non-negative-count',
+      ) ?? 0,
+  };
 }

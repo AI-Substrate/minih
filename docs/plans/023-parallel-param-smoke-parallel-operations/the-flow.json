@@ -3,7 +3,7 @@
   "slug": "parallel-param-smoke-parallel-operations",
   "plan_dir": "docs/plans/023-parallel-param-smoke-parallel-operations",
   "cursor": "merge",
-  "recommended_next": "merge",
+  "recommended_next": null,
   "agents": [
     {
       "kind": "companion",
@@ -96,11 +96,27 @@
       "next": ["merge"]
     },
     {
+      "id": "validation-002",
+      "type": "validation",
+      "label": "Branch validation (fft + live smoke)",
+      "status": "done",
+      "branch_of": "merge",
+      "ran_at": "2026-06-11T04:20:00Z",
+      "user_input": "start with tier 1, then move in to the others please.",
+      "note": "Two-tier backpressure validation on feat/023-parallel-runs: just fft PASS (1185 passed / 16 skipped); live smoke booted 3 concurrent parallel-param-smoke runs — runs list --active showed labels+paramsSummary, status <slug> failed E170 with 3 candidates, --latest returned selection metadata, bulk --run x3 and --from (with bogus target) returned degraded row E171, per-run markers proved param isolation. Auto-harvested retros independently reproduced #37 and demonstrated #39.",
+      "artifacts": [
+        "docs/retros/parallel-param-smoke.md"
+      ],
+      "next": ["merge"]
+    },
+    {
       "id": "merge",
       "type": "merge",
-      "label": "Merge",
-      "status": "in_progress",
-      "note": "Next: commit or otherwise clean the worktree, then run merge analysis. plan-8 will refuse a dirty worktree.",
+      "label": "Merge (PR #41)",
+      "status": "done",
+      "ran_at": "2026-06-11T04:22:15Z",
+      "user_input": "we just came from main, no need for merge stuff. lets do a pr please.",
+      "note": "Skipped /plan-8 merge analysis — branch was cut from fresh main minutes earlier, so there was no upstream drift to analyze. Shipped as PR #41 (https://github.com/AI-Substrate/minih/pull/41) after branch validation. This state lands on main via the PR itself, so merge=done is self-fulfilling at merge time.",
       "next": []
     }
   ]

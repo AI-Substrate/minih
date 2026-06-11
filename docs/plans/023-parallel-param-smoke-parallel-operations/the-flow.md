@@ -18,7 +18,8 @@ flowchart TD
   plan["Architecture Plan"]:::done
   validation_001["Plan validation"]:::done
   build["Build: Core parallel operations convenience"]:::done
-  merge["Merge"]:::wip
+  validation_002["Branch validation (fft + live smoke)"]:::done
+  merge["Merge (PR #41)"]:::done
 
   said_research>"🗣 Run a parallel smoke and collect evidence for a future plan; keep batch out of scope for now."]:::said
   said_spec>"🗣 Simple mode; Full TDD; targeted mocks; hybrid docs."]:::said
@@ -26,6 +27,8 @@ flowchart TD
   said_plan>"🗣 yes"]:::said
   said_validation_001>"🗣 validation run?"]:::said
   said_build>"🗣 yes"]:::said
+  said_validation_002>"🗣 start with tier 1, then move in to the others please."]:::said
+  said_merge>"🗣 we just came from main, no need for merge stuff. lets do a pr please."]:::said
   companion_code_review_companion["code-review-companion\n2026-06-09T13-00-07-113Z-caf6"]:::companion
   said_research -.- research
   said_spec -.- spec
@@ -33,12 +36,16 @@ flowchart TD
   said_plan -.- plan
   said_validation_001 -.- validation_001
   said_build -.- build
+  said_validation_002 -.- validation_002
+  said_merge -.- merge
 
   research --> spec --> plan --> build --> merge
   spec -.-> workshop_001
   workshop_001 -.-> plan
   plan -.-> validation_001
   validation_001 -.-> build
+  merge -.-> validation_002
+  validation_002 -.-> merge
   companion_code_review_companion -. reviews .-> build
 ```
 

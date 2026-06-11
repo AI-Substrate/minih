@@ -114,3 +114,33 @@ Docs:
 ## Suggested Commit Message
 
 `feat: add core parallel run visibility`
+
+## Branch Validation Addendum (2026-06-11, pre-merge)
+
+Work was committed to `feat/023-parallel-runs` (cut from fresh `main`) and re-validated on the branch before shipping as [PR #41](https://github.com/AI-Substrate/minih/pull/41). `/plan-8` merge analysis was skipped deliberately — no upstream drift existed.
+
+### Tier 1 — computational
+
+| Command | Result | Notes |
+|---------|--------|-------|
+| `just fft` | PASS | 1185 passed / 16 skipped — identical to pre-commit gate. Known npm audit advisories only. |
+
+### Tier 2 — behavioral (live, 3 concurrent runs)
+
+| Check | Result |
+|-------|--------|
+| 3× `minih run parallel-param-smoke --label … --param …` concurrent | PASS — all three active simultaneously (~7s to boot) |
+| `runs list --active --slug parallel-param-smoke` | PASS — labels + bounded `paramsSummary`, no `runDir` leakage |
+| `minih status parallel-param-smoke` while 3 active | PASS — E170, exit 1, 3 candidates + remediation text |
+| `minih status parallel-param-smoke --latest` | PASS — `selection: {mode: latest, ambiguousCandidates: 3}` |
+| `runs status --run ×3` (post-completion) | PASS — completed verdicts + labels. (One false alarm during testing: a zsh word-splitting bug in the test harness script, not the CLI.) |
+| `runs status --from <file>` with one bogus target | PASS — envelope `degraded`, real rows fine, bogus row E171 (F003 contract) |
+| `scratch/agent-runs/{t1,t2,t3}/marker.json` | PASS — per-run param isolation, zero cross-contamination |
+
+### Tier 3 — inferential
+
+Covered during build by the live companion (F001–F004, all fixed; see Companion Findings above).
+
+### Side-signals harvested
+
+The smoke runs auto-harvested retros into `docs/retros/parallel-param-smoke.md` (committed on this branch), which independently **reproduce #37** (MINIH_* env vars empty in the agent shell) and **demonstrate #39** (harvest ledger destination hardcoded to `docs/retros/`). Neither is fixed by this PR.

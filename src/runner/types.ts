@@ -343,7 +343,11 @@ export interface CoordinationFrontmatter {
 // Phase 2's CLI renderer will import via `src/runner/index.ts`.
 // ===========================================================================
 
-/** Lifecycle status of a live run, written into `run.json`. */
+/**
+ * Lifecycle status of a live run, written into `run.json`.
+ * `crashed` (plan 025, FX011) — written by `minih reconcile` when a
+ * non-terminal manifest's recorded pid no longer exists; terminal.
+ */
 export type LiveRunStatus =
   | 'starting'
   | 'active'
@@ -351,6 +355,7 @@ export type LiveRunStatus =
   | 'completing'
   | 'completed'
   | 'failed'
+  | 'crashed'
   | 'stale';
 
 /**
@@ -416,8 +421,16 @@ export interface LiveRunManifest {
   /**
    * Plan 018 R1 — recorded once a permission denial fires. Mandatory signal #2
    * of the 5-signal protocol (workshop 002 § Q1).
+   *
+   * Plan 025 widens the union: `provider-stream-aborted` (FX012 — the
+   * adapter saw the stream die mid-message) and `pid-vanished` (FX011 —
+   * `minih reconcile` healed a dead run). Writers must never overwrite an
+   * existing value (preservation invariant, AC-FX11.9).
    */
-  terminalReason?: 'permission-denied';
+  terminalReason?:
+    | 'permission-denied'
+    | 'provider-stream-aborted'
+    | 'pid-vanished';
   /**
    * Plan 018 R1 — populated alongside `terminalReason: 'permission-denied'`.
    * Shape mirrors the `permission-error.json` envelope without `meta.contractVersion`
@@ -449,9 +462,14 @@ export type RunResolveMode =
   | { kind: 'latest-completed' }
   | { kind: 'latest-any' };
 
-/** Liveness as inferred by the resolver. */
+/**
+ * Liveness as inferred by the resolver/inventory. `dead` = the manifest
+ * claims a live process but its recorded pid no longer exists (plan 025,
+ * CF-01 vocabulary unify); `stale` stays reserved for live-but-quiet runs.
+ */
 export type RunLiveness =
   | 'active'
+  | 'dead'
   | 'stale'
   | 'completed'
   | 'failed'

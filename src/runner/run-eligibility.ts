@@ -33,14 +33,31 @@ export interface DetectRunStateOptions {
   isProcessAlive?: (pid: number) => boolean;
 }
 
-/** Default pid-liveness check using POSIX signal 0 ("test if process exists"). */
-export function isProcessAliveDefault(pid: number): boolean {
+/** Injection seam for the probe's signal sender (plan 025 T001). */
+export interface ProcessProbeDeps {
+  /** Inject the signal-0 sender. Defaults to `process.kill`. */
+  kill?: (pid: number, signal: 0) => unknown;
+}
+
+/**
+ * Default pid-liveness check using POSIX signal 0 ("test if process exists").
+ *
+ * Error spec (FX009-3): ESRCH proves the process is gone → dead. EPERM means
+ * the process EXISTS but belongs to another user — signal-0 probes existence,
+ * so EPERM reads as alive (conservative-alive: a falsely-dead verdict invites
+ * takeover of a live run). EINVAL and anything uncoded → dead.
+ */
+export function isProcessAliveDefault(
+  pid: number,
+  deps: ProcessProbeDeps = {},
+): boolean {
   if (!Number.isInteger(pid) || pid <= 0) return false;
+  const kill = deps.kill ?? ((p: number, s: 0) => process.kill(p, s));
   try {
-    process.kill(pid, 0);
+    kill(pid, 0);
     return true;
-  } catch {
-    return false;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === 'EPERM';
   }
 }
 

@@ -6,6 +6,7 @@ import {
   makeCompleted,
   makeManifest,
 } from '../../src/runner/human-view-fixtures.js';
+import { isProcessAliveDefault } from '../../src/runner/run-eligibility.js';
 import {
   getRunStatuses,
   listRunInventory,
@@ -127,6 +128,122 @@ describe('listRunInventory', () => {
     });
     expect(rows[0]).not.toHaveProperty('runDir');
     expect(rows[0]).not.toHaveProperty('velocity');
+  });
+
+  // T005 (plan 025, CF-01) — vocabulary unify: a dead pid is 'dead', not
+  // 'stale'. Stale stays reserved for live-but-quiet (mtime) runs.
+  it("reports 'dead' (not 'stale') for an active manifest with a dead pid", async () => {
+    const runId = '2026-06-08T00-00-06-000Z-f';
+    const dir = makeRunDir('alpha', runId);
+    await writeManifest(
+      dir,
+      makeManifest({
+        slug: 'alpha',
+        runId,
+        runDir: dir,
+        status: 'active',
+        pid: 4242,
+      }),
+    );
+
+    const rows = await listRunInventory({
+      agentsDir,
+      slug: 'alpha',
+      staleThresholdMs: Number.MAX_SAFE_INTEGER,
+      isProcessAlive: () => false,
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.liveness).toBe('dead');
+  });
+
+  it("keeps dead rows visible under the --active filter (they were 'stale' before)", async () => {
+    const runId = '2026-06-08T00-00-07-000Z-g';
+    const dir = makeRunDir('alpha', runId);
+    await writeManifest(
+      dir,
+      makeManifest({
+        slug: 'alpha',
+        runId,
+        runDir: dir,
+        status: 'active',
+        pid: 4242,
+      }),
+    );
+
+    const rows = await listRunInventory({
+      agentsDir,
+      slug: 'alpha',
+      active: true,
+      staleThresholdMs: Number.MAX_SAFE_INTEGER,
+      isProcessAlive: () => false,
+    });
+
+    expect(rows.map((r) => r.liveness)).toEqual(['dead']);
+  });
+
+  // T010 (plan 025, FX011) — healed runs read 'dead' but leave the --active
+  // attention queue (that's what the heal is for).
+  it("maps healed manifests (status 'crashed') to 'dead', excluded from --active", async () => {
+    const runId = '2026-06-08T00-00-10-000Z-k';
+    const dir = makeRunDir('alpha', runId);
+    await writeManifest(
+      dir,
+      makeManifest({
+        slug: 'alpha',
+        runId,
+        runDir: dir,
+        status: 'crashed',
+        terminalReason: 'pid-vanished',
+        pid: 4242,
+      }),
+    );
+
+    const allRows = await listRunInventory({ agentsDir, slug: 'alpha' });
+    expect(allRows).toHaveLength(1);
+    expect(allRows[0]).toMatchObject({
+      liveness: 'dead',
+      manifestStatus: 'crashed',
+    });
+
+    const activeRows = await listRunInventory({
+      agentsDir,
+      slug: 'alpha',
+      active: true,
+    });
+    expect(activeRows).toHaveLength(0);
+  });
+
+  // T001 (plan 025, FX009-3) — EPERM means the process exists; the probe's
+  // error spec must keep such a run active through this caller too.
+  it('keeps a run active when the probe hits EPERM (exists, not ours)', async () => {
+    const runId = '2026-06-08T00-00-05-000Z-e';
+    const dir = makeRunDir('alpha', runId);
+    await writeManifest(
+      dir,
+      makeManifest({
+        slug: 'alpha',
+        runId,
+        runDir: dir,
+        status: 'active',
+        pid: 4242,
+      }),
+    );
+
+    const epermKill = (): void => {
+      const err = new Error('EPERM') as NodeJS.ErrnoException;
+      err.code = 'EPERM';
+      throw err;
+    };
+    const rows = await listRunInventory({
+      agentsDir,
+      slug: 'alpha',
+      staleThresholdMs: Number.MAX_SAFE_INTEGER,
+      isProcessAlive: (pid) => isProcessAliveDefault(pid, { kill: epermKill }),
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.liveness).toBe('active');
   });
 
   it('returns globally newest rows across slugs before applying limit', async () => {

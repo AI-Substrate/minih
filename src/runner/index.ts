@@ -202,6 +202,21 @@ export type {
 } from './probe/index.js';
 export { aggregateReport, buildMatrix } from './probe/index.js';
 export type {
+  ReconcileHealedRun,
+  ReconcileOptions,
+  ReconcileReport,
+} from './reconcile.js';
+export { reconcileRuns } from './reconcile.js';
+export type {
+  ReconcileLock,
+  ReconcileLockOptions,
+} from './reconcile-lock.js';
+export {
+  RECONCILE_LOCK_HELD,
+  ReconcileLockHeldError,
+  withReconcileLock,
+} from './reconcile-lock.js';
+export type {
   AcquireLockOptions,
   AcquireLockResult,
   ResumeLockContent,
@@ -228,6 +243,7 @@ export {
 } from './retro-ledger.js';
 export type {
   DetectRunStateOptions,
+  ProcessProbeDeps,
   RunEligibilityState,
 } from './run-eligibility.js';
 export {

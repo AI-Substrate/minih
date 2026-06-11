@@ -140,6 +140,55 @@ describe('minih runs list', () => {
       liveness: 'completed',
     });
   });
+
+  // T005 (plan 025, AC-4) — end-to-end through the built CLI with the REAL
+  // probe. The fixture pid exceeds PID_MAX on macOS (99998) and Linux
+  // (4194304), so the kill-0 probe deterministically reports it gone.
+  it("reports liveness 'dead' for an active manifest whose pid is gone", () => {
+    const runId = '2026-06-08T00-00-08-000Z-h';
+    const runDir = makeRun('alpha', runId);
+    fs.writeFileSync(
+      path.join(runDir, 'run.json'),
+      JSON.stringify(
+        makeManifest({
+          slug: 'alpha',
+          runId,
+          runDir,
+          pid: 99_999_999,
+          status: 'active',
+          updatedAt: new Date().toISOString(),
+        }),
+      ),
+    );
+    const liveId = '2026-06-08T00-00-09-000Z-i';
+    const liveDir = makeRun('alpha', liveId);
+    fs.writeFileSync(
+      path.join(liveDir, 'run.json'),
+      JSON.stringify(
+        makeManifest({
+          slug: 'alpha',
+          runId: liveId,
+          runDir: liveDir,
+          pid: process.pid,
+          status: 'active',
+          updatedAt: new Date().toISOString(),
+        }),
+      ),
+    );
+
+    const result = run(['--agents-dir', agentsDir, 'runs', 'list', '--active']);
+
+    expect(result.exitCode).toBe(0);
+    const envelope = JSON.parse(result.stdout);
+    const bySlug = Object.fromEntries(
+      envelope.data.runs.map((r: { runId: string; liveness: string }) => [
+        r.runId,
+        r.liveness,
+      ]),
+    );
+    expect(bySlug[runId]).toBe('dead');
+    expect(bySlug[liveId]).toBe('active');
+  });
 });
 
 describe('minih runs status', () => {

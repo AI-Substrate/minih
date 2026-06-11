@@ -115,7 +115,7 @@ echo "Companion run: $RUN"
 
 `minih agent install` copies the canonical companion's manifest-listed files (prompt, instructions, schemas) into `agents/code-review-companion/` and writes a provenance sidecar. Install once per project; subsequent `install` invocations upgrade idempotently. See [`docs/how/agent-pack.md`](docs/how/agent-pack.md) for the full agent-pack surface.
 
-The `verdict: 'active'` filter is load-bearing — `minih status` defaults to "latest run" which may be a completed one from a prior session.
+The `verdict: 'active'` filter is load-bearing — `minih status` defaults to "latest run" which may be a completed one from a prior session. Since plan 025 a run whose process died reports `verdict: "dead"` (terminal — treat like `failed`, never poll-wait on it); `minih reconcile <slug>` heals such records to `status: 'crashed'` + `terminalReason: 'pid-vanished'`. See [`docs/how/run-liveness.md`](docs/how/run-liveness.md).
 
 **Then brief it once at session start**:
 - Plan/spec/dossier paths

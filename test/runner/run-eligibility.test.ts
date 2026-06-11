@@ -13,9 +13,10 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   detectRunState,
+  isProcessAliveDefault,
   type RunEligibilityState,
 } from '../../src/runner/run-eligibility.js';
 
@@ -172,5 +173,70 @@ describe('detectRunState', () => {
     writeManifest(runDir, { status: 'failed' });
     const state = await detectRunState(runDir);
     expect(state).toBe<RunEligibilityState>('failed');
+  });
+});
+
+// T001 (plan 025, FX009-3) — the probe's error spec. `process.kill(pid, 0)`
+// can fail three distinct ways; only ESRCH actually proves death. EPERM means
+// the process EXISTS but belongs to someone else — signal-0 probes existence,
+// so EPERM must read as alive (conservative-alive is the safe failure
+// direction: a falsely-dead verdict invites takeover of a live run).
+// EPERM is unproducible against a real pid in CI, hence the injected kill fn.
+describe('isProcessAliveDefault — probe error spec (FX009-3)', () => {
+  const killThrowing =
+    (code?: string) =>
+    (_pid: number, _signal: 0): void => {
+      const err = new Error(code ?? 'boom') as NodeJS.ErrnoException;
+      if (code) err.code = code;
+      throw err;
+    };
+
+  it('returns true when kill succeeds', () => {
+    expect(isProcessAliveDefault(4242, { kill: () => undefined })).toBe(true);
+  });
+
+  it('returns false on ESRCH (no such process)', () => {
+    expect(isProcessAliveDefault(4242, { kill: killThrowing('ESRCH') })).toBe(
+      false,
+    );
+  });
+
+  it('returns true on EPERM (process exists, not ours)', () => {
+    expect(isProcessAliveDefault(4242, { kill: killThrowing('EPERM') })).toBe(
+      true,
+    );
+  });
+
+  it('returns false on EINVAL (bad signal)', () => {
+    expect(isProcessAliveDefault(4242, { kill: killThrowing('EINVAL') })).toBe(
+      false,
+    );
+  });
+
+  it('returns false on an uncoded error', () => {
+    expect(isProcessAliveDefault(4242, { kill: killThrowing() })).toBe(false);
+  });
+
+  it('never calls kill for non-positive or non-integer pids', () => {
+    const kill = vi.fn();
+    for (const pid of [0, -1, 1.5, Number.NaN]) {
+      expect(isProcessAliveDefault(pid, { kill })).toBe(false);
+    }
+    expect(kill).not.toHaveBeenCalled();
+  });
+
+  it('EPERM reads as alive through detectRunState (resume path)', async () => {
+    const runDir = makeRunDir();
+    writeManifest(runDir, { status: 'active', pid: 4242 });
+    const state = await detectRunState(runDir, {
+      isProcessAlive: (pid) =>
+        isProcessAliveDefault(pid, { kill: killThrowing('EPERM') }),
+    });
+    expect(state).toBe<RunEligibilityState>('active');
+  });
+
+  it('uses the real process.kill when no kill fn is injected', () => {
+    // process.pid is by definition alive while this test runs.
+    expect(isProcessAliveDefault(process.pid)).toBe(true);
   });
 });

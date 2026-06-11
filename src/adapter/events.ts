@@ -232,6 +232,24 @@ export interface AgentPermissionDeniedEvent extends AgentEventBase {
   };
 }
 
+/**
+ * Plan 025 FX012 — emitted when the provider stream ends or errors while a
+ * message is still in flight (no consolidated message, no session_idle).
+ * Emitted at most once per run, carrying the LATEST in-flight messageId
+ * (PL-06). Mirrors the `permission_denied` synthetic-event precedent: the
+ * adapter emits, the runner maps to events.ndjson + run.json
+ * `terminalReason: 'provider-stream-aborted'`.
+ */
+export interface AgentProviderStreamAbortedEvent extends AgentEventBase {
+  type: 'provider_stream_aborted';
+  data: {
+    /** The latest in-flight messageId at abort time, when known. */
+    messageId?: string;
+    /** Why the adapter considers the stream aborted. */
+    reason: string;
+  };
+}
+
 export type AgentEvent =
   | AgentTextDeltaEvent
   | AgentMessageEvent
@@ -244,6 +262,7 @@ export type AgentEvent =
   | AgentToolResultEvent
   | AgentThinkingEvent
   | AgentUserPromptEvent
-  | AgentPermissionDeniedEvent;
+  | AgentPermissionDeniedEvent
+  | AgentProviderStreamAbortedEvent;
 
 export type AgentEventHandler = (event: AgentEvent) => void;

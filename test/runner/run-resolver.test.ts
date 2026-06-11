@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { makeManifest } from '../../src/runner/human-view-fixtures.js';
+import { isProcessAliveDefault } from '../../src/runner/run-eligibility.js';
 import { writeManifest } from '../../src/runner/run-manifest.js';
 import { resolveRun } from '../../src/runner/run-resolver.js';
 
@@ -249,6 +250,38 @@ describe('resolveRun latest-active', () => {
             d.message.includes(`pid ${FAKE_DEAD_PID} is dead`),
         ),
       ).toBe(true);
+    });
+
+    // T001 (plan 025, FX009-3) — EPERM means the process exists; the probe's
+    // error spec must keep such a run resolvable as active through this caller.
+    it('keeps an active run resolvable when the probe hits EPERM (exists, not ours)', async () => {
+      const runId = '01HRUN_FX009_EPERM_AAAAAAAAA';
+      const runDir = makeRunFolder('demo', runId);
+      await writeManifest(
+        runDir,
+        makeManifest({
+          runDir,
+          slug: 'demo',
+          runId,
+          status: 'active',
+          pid: 4242,
+        }),
+      );
+
+      const epermKill = (): void => {
+        const err = new Error('EPERM') as NodeJS.ErrnoException;
+        err.code = 'EPERM';
+        throw err;
+      };
+      const result = await resolveRun({
+        slug: 'demo',
+        mode: { kind: 'latest-active' },
+        staleThresholdMs: Number.MAX_SAFE_INTEGER,
+        isProcessAlive: (pid) =>
+          isProcessAliveDefault(pid, { kill: epermKill }),
+      });
+
+      expect(result?.runId).toBe(runId);
     });
 
     it('returns null instead of MultipleActiveRunsError when only stale-active candidates exist', async () => {

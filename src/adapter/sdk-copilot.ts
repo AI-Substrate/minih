@@ -125,6 +125,12 @@ export class SdkCopilotAdapter implements IAgentAdapter {
 
     let sessionDestroyed = false;
     let unsubscribeRun: (() => void) | undefined;
+    // Plan 025 FX012 / PL-06 — track the LATEST in-flight message so a
+    // stream that dies mid-message can be diagnosed as an abort. Cleared
+    // on the consolidated message or on idle (settlement). Read by the
+    // catch block, so declared outside the try.
+    let inFlightMessage: { messageId?: string } | null = null;
+    let abortEmitted = false;
 
     try {
       let output = '';
@@ -142,12 +148,14 @@ export class SdkCopilotAdapter implements IAgentAdapter {
           }
           if (event.type === 'assistant.message_delta') {
             hasStreamedText = true;
+            inFlightMessage = { messageId: event.data?.messageId };
           }
           if (event.type === 'assistant.reasoning' && hasStreamedThinking) {
             return;
           }
           if (event.type === 'assistant.message' && hasStreamedText) {
             output = event.data?.content ?? '';
+            inFlightMessage = null;
             return;
           }
 
@@ -158,11 +166,13 @@ export class SdkCopilotAdapter implements IAgentAdapter {
 
           if (event.type === 'assistant.message') {
             output = event.data?.content ?? '';
+            inFlightMessage = null;
           }
 
           if (isSessionIdleEvent(event)) {
             hasStreamedThinking = false;
             hasStreamedText = false;
+            inFlightMessage = null;
             if (!idleSettled) {
               idleSettled = true;
               resolve();
@@ -203,6 +213,26 @@ export class SdkCopilotAdapter implements IAgentAdapter {
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
+
+      // Plan 025 FX012 — the stream ended while a message was in flight:
+      // emit the abort diagnosis (at most once) before the generic error.
+      // Snapshot via cast: TS narrows the closure-mutated `let` to its
+      // initializer (`null`) here, which is wrong — the event handler
+      // assigns it before this catch can run.
+      const inFlight = inFlightMessage as { messageId?: string } | null;
+      if (inFlight !== null && !abortEmitted && onEvent) {
+        abortEmitted = true;
+        onEvent({
+          type: 'provider_stream_aborted',
+          timestamp: new Date().toISOString(),
+          data: {
+            ...(inFlight.messageId !== undefined && {
+              messageId: inFlight.messageId,
+            }),
+            reason: errorMessage,
+          },
+        });
+      }
 
       if (onEvent) {
         onEvent({

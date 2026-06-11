@@ -276,14 +276,31 @@ Use these when you have multiple runs in flight, especially same-slug runs launc
 minih run worker --label case-a --param id=a &
 minih run worker --label case-b --param id=b &
 
-minih runs list --active                  # active/stale runs across all agents
+minih runs list --active                  # active/stale/dead runs across all agents
 minih runs list --all --slug worker       # bounded history for one slug
 minih runs status --run worker/<runId> --run worker/<otherRunId>
 ```
 
-Rows include the agent slug, run ID, liveness, timestamps, counters, model/session IDs, optional label, and a bounded/redacted params summary. Public rows intentionally identify runs by `slug` + `runId`; use follow-up commands with explicit `--run <runId>` rather than inspecting run folders directly.
+Rows include the agent slug, run ID, liveness, timestamps, counters, model/session IDs, optional label, and a bounded/redacted params summary. Liveness `dead` means the run's recorded process no longer exists (plan 025 — formerly misreported as `stale`); `stale` is reserved for live-but-quiet runs. Public rows intentionally identify runs by `slug` + `runId`; use follow-up commands with explicit `--run <runId>` rather than inspecting run folders directly.
 
 When more than one active run exists for a slug, single-run commands that default to "latest" refuse with E170 and list candidates. Pass `--run <runId>` to target one run, or use read-only `--latest` where the command supports intentionally choosing the newest active run.
+
+### `minih reconcile [slug]`
+
+Heal run records whose process is gone. A crashed or `kill -9`'d run leaves `run.json` claiming `active` forever; `reconcile` probes each recorded pid and flips dead ones to `status: 'crashed'` + `terminalReason: 'pid-vanished'` (existing diagnoses such as `provider-stream-aborted` are never overwritten).
+
+```bash
+minih reconcile worker            # heal one agent's runs
+minih reconcile worker --run <id> # heal one specific run
+minih reconcile --all             # heal everything under the agents dir
+```
+
+| Flag | Description |
+|------|-------------|
+| `--run <runId>` | Limit to one run id (requires a slug) |
+| `--all` | Reconcile every agent under the agents dir (cannot combine with a slug or `--run`) |
+
+Lock-guarded — one pass per agents dir at a time (`E190 RECONCILE_IN_PROGRESS` on contention; stale and dead-owner locks are stolen automatically). Idempotent: a second pass reports nothing to heal. See [`docs/how/run-liveness.md`](docs/how/run-liveness.md) for the full liveness model.
 
 ### `minih resume <slug> <message>`
 

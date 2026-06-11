@@ -10,6 +10,7 @@ import * as path from 'node:path';
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import {
+  isProcessAliveDefault,
   listActiveRunCandidates,
   MultipleActiveRunsError,
   resolveAgent,
@@ -71,6 +72,148 @@ function extractTurns(eventsPath: string, limit: number): TurnEntry[] {
   }
 
   return turns.slice(-limit);
+}
+
+/** Verdict vocabulary for `minih status`. `dead` = manifest claims a
+ * non-terminal run but its recorded pid no longer exists (plan 025, FX009). */
+export type StatusVerdict =
+  | 'active'
+  | 'dead'
+  | 'stale'
+  | 'completed'
+  | 'failed'
+  | 'unknown';
+
+/** Manifest statuses that claim a live process — the only ones worth probing. */
+const PROBE_STATUSES = new Set(['starting', 'active', 'idle', 'completing']);
+
+/** Injection seams for the verdict computation (plan 025 T002, FX009-2). */
+export interface StatusVerdictDeps {
+  /** Inject the pid-liveness probe. Defaults to the shared runner probe. */
+  isProcessAlive?: (pid: number) => boolean;
+  /** Inject the clock for stale-threshold math. Defaults to `Date.now`. */
+  now?: () => number;
+}
+
+export interface StatusVerdictResult {
+  verdict: StatusVerdict;
+  result?: string;
+  durationMs?: number;
+  sessionId?: string;
+  /** Probe diagnostics — present only when the pid probe was consulted. */
+  pid?: number;
+  pidAlive?: boolean;
+  lastEventAt?: string | null;
+}
+
+/**
+ * Explicit per-verdict TTY arms (plan 025 T004). `Record<StatusVerdict, …>`
+ * makes tsc demand an arm for every verdict — the previous ternary chains
+ * ended in default fallbacks that would have silently rendered a new
+ * verdict as a dim `?`.
+ */
+export const STATUS_VERDICT_COLORS: Record<
+  StatusVerdict,
+  (text: string) => string
+> = {
+  active: chalk.green,
+  dead: chalk.red,
+  stale: chalk.yellow,
+  completed: chalk.green,
+  failed: chalk.red,
+  unknown: chalk.dim,
+};
+
+export const STATUS_VERDICT_ICONS: Record<StatusVerdict, string> = {
+  active: '●',
+  dead: '☠',
+  stale: '◌',
+  completed: '✓',
+  failed: '✗',
+  unknown: '?',
+};
+
+/**
+ * Compute the status verdict for a run dir from its on-disk markers.
+ *
+ * Decision order: completed.json wins (terminal — completed/failed by
+ * `result`, unknown when torn), then the pid probe for manifests claiming
+ * a live process (dead pid → `dead`), then events.ndjson mtime against
+ * the stale threshold (active/stale), else unknown. Live pids keep the
+ * pre-probe mtime semantics untouched.
+ */
+export function computeStatusVerdict(
+  runDir: string,
+  deps: StatusVerdictDeps = {},
+): StatusVerdictResult {
+  const completedPath = path.join(runDir, 'completed.json');
+  const eventsPath = path.join(runDir, 'events.ndjson');
+  const now = deps.now ?? Date.now;
+
+  if (fs.existsSync(completedPath)) {
+    try {
+      const meta = JSON.parse(fs.readFileSync(completedPath, 'utf-8'));
+      return {
+        verdict:
+          meta.result === 'completed' || meta.result === 'degraded'
+            ? 'completed'
+            : 'failed',
+        result: meta.result,
+        durationMs: meta.durationMs,
+        sessionId: meta.sessionId,
+      };
+    } catch {
+      return { verdict: 'unknown' };
+    }
+  }
+
+  // FX009 — a manifest claiming a live process must prove its pid exists.
+  const runJsonPath = path.join(runDir, 'run.json');
+  let probe: Pick<StatusVerdictResult, 'pid' | 'pidAlive' | 'lastEventAt'> = {};
+  if (fs.existsSync(runJsonPath)) {
+    try {
+      const manifest = JSON.parse(fs.readFileSync(runJsonPath, 'utf-8'));
+      // FX011 — a healed manifest is already diagnosed: dead, no re-probe
+      // (a recycled pid must not flip a crashed run back to alive).
+      if (manifest.status === 'crashed') {
+        return {
+          verdict: 'dead',
+          ...(typeof manifest.pid === 'number' && { pid: manifest.pid }),
+          pidAlive: false,
+          lastEventAt: fs.existsSync(eventsPath)
+            ? fs.statSync(eventsPath).mtime.toISOString()
+            : null,
+        };
+      }
+      if (
+        typeof manifest.status === 'string' &&
+        PROBE_STATUSES.has(manifest.status) &&
+        typeof manifest.pid === 'number'
+      ) {
+        const isAlive = deps.isProcessAlive ?? isProcessAliveDefault;
+        const pidAlive = isAlive(manifest.pid);
+        const lastEventAt = fs.existsSync(eventsPath)
+          ? fs.statSync(eventsPath).mtime.toISOString()
+          : null;
+        probe = { pid: manifest.pid, pidAlive, lastEventAt };
+        if (!pidAlive) {
+          return { verdict: 'dead', ...probe };
+        }
+      }
+    } catch {
+      // Torn run.json — fall through to mtime semantics, as before.
+    }
+  }
+
+  if (fs.existsSync(eventsPath)) {
+    const stat = fs.statSync(eventsPath);
+    const ageMs = now() - stat.mtimeMs;
+    return {
+      verdict: ageMs < STALE_THRESHOLD_MS ? 'active' : 'stale',
+      ...probe,
+    };
+  }
+  return { verdict: 'unknown', ...probe };
 }
 
 function countEvents(eventsPath: string): { total: number; toolCalls: number } {
@@ -218,7 +361,6 @@ export function registerStatusCommand(program: Command): void {
         const runId = resolved.runId;
         const runDir = resolved.runDir;
         const eventsPath = path.join(runDir, 'events.ndjson');
-        const completedPath = path.join(runDir, 'completed.json');
         const runJsonPath = path.join(runDir, 'run.json');
 
         // Plan 018 — surface resolved permissions from run.json (per AC1).
@@ -237,31 +379,8 @@ export function registerStatusCommand(program: Command): void {
         }
 
         // Determine liveness
-        let verdict: 'active' | 'stale' | 'completed' | 'failed' | 'unknown';
-        let result: string | undefined;
-        let durationMs: number | undefined;
-        let sessionId: string | undefined;
-
-        if (fs.existsSync(completedPath)) {
-          try {
-            const meta = JSON.parse(fs.readFileSync(completedPath, 'utf-8'));
-            result = meta.result;
-            durationMs = meta.durationMs;
-            sessionId = meta.sessionId;
-            verdict =
-              meta.result === 'completed' || meta.result === 'degraded'
-                ? 'completed'
-                : 'failed';
-          } catch {
-            verdict = 'unknown';
-          }
-        } else if (fs.existsSync(eventsPath)) {
-          const stat = fs.statSync(eventsPath);
-          const ageMs = Date.now() - stat.mtimeMs;
-          verdict = ageMs < STALE_THRESHOLD_MS ? 'active' : 'stale';
-        } else {
-          verdict = 'unknown';
-        }
+        const verdictInfo = computeStatusVerdict(runDir);
+        const { verdict, result, durationMs, sessionId } = verdictInfo;
 
         // Elapsed time for in-progress runs
         let elapsedMs: number | undefined;
@@ -276,31 +395,17 @@ export function registerStatusCommand(program: Command): void {
 
         // TTY display
         if (process.stderr.isTTY) {
-          const verdictColor =
-            verdict === 'active'
-              ? chalk.green
-              : verdict === 'stale'
-                ? chalk.yellow
-                : verdict === 'completed'
-                  ? chalk.green
-                  : verdict === 'failed'
-                    ? chalk.red
-                    : chalk.dim;
-
-          const icon =
-            verdict === 'active'
-              ? '●'
-              : verdict === 'stale'
-                ? '◌'
-                : verdict === 'completed'
-                  ? '✓'
-                  : verdict === 'failed'
-                    ? '✗'
-                    : '?';
+          const verdictColor = STATUS_VERDICT_COLORS[verdict];
+          const icon = STATUS_VERDICT_ICONS[verdict];
 
           process.stderr.write(
             `\n  ${chalk.bold(`Status: ${slug}`)}  ${verdictColor(`${icon} ${verdict}`)}\n\n`,
           );
+          if (verdict === 'dead' && verdictInfo.pid !== undefined) {
+            process.stderr.write(
+              `  ${chalk.red(`Process ${verdictInfo.pid} is gone — run never completed.`)}\n`,
+            );
+          }
           process.stderr.write(`  Run:      ${chalk.dim(runId)}\n`);
           if (result) process.stderr.write(`  Result:   ${result}\n`);
           if (sessionId)
@@ -353,6 +458,12 @@ export function registerStatusCommand(program: Command): void {
             permissions,
             terminalReason,
             permissionError,
+            // Probe diagnostics — present only when the pid probe ran (T004).
+            ...(verdictInfo.pidAlive !== undefined && {
+              pid: verdictInfo.pid ?? null,
+              pidAlive: verdictInfo.pidAlive,
+              lastEventAt: verdictInfo.lastEventAt ?? null,
+            }),
             ...(selection && { selection }),
           }),
         );

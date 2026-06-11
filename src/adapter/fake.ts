@@ -40,6 +40,7 @@ export class FakeAgentAdapter implements IAgentAdapter {
   private readonly _runDuration: number;
   private _events: AgentEvent[];
   private _queuedRun: AgentEvent[][] | null = null;
+  private _suppressFinalIdle = false;
   private _sessionSendHistory: string[] = [];
   private _runHistory: AgentRunOptions[] = [];
   private _terminateHistory: string[] = [];
@@ -77,11 +78,16 @@ export class FakeAgentAdapter implements IAgentAdapter {
 
     if (options.onEvent) {
       if (this._queuedRun) {
-        for (const turn of this._queuedRun) {
+        for (const [index, turn] of this._queuedRun.entries()) {
           for (const event of turn) {
             options.onEvent(event);
           }
-          options.onEvent(createSessionIdleEvent());
+          // T008 (plan 025) — abort scenarios end without settlement: the
+          // final turn's auto-idle is suppressible via setQueuedRun options.
+          const isFinalTurn = index === this._queuedRun.length - 1;
+          if (!(isFinalTurn && this._suppressFinalIdle)) {
+            options.onEvent(createSessionIdleEvent());
+          }
         }
       } else {
         for (const event of this._events) {
@@ -197,8 +203,12 @@ export class FakeAgentAdapter implements IAgentAdapter {
     this._queuedRun = null;
   }
 
-  setQueuedRun(turns: AgentEvent[][]): void {
+  setQueuedRun(
+    turns: AgentEvent[][],
+    options: { suppressFinalIdle?: boolean } = {},
+  ): void {
     this._queuedRun = turns.map((turn) => [...turn]);
+    this._suppressFinalIdle = options.suppressFinalIdle ?? false;
   }
 
   addEvent(event: AgentEvent): void {

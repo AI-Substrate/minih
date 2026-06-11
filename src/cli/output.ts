@@ -38,6 +38,9 @@
  *   E183  AGENT_PACK_ALREADY_INSTALLED — folder exists locally without `.minih-source.json` (hand-rolled agent)
  *   E184  AGENT_PACK_SOURCE_MISMATCH   — `.minih-source.json` source URL mismatch
  *
+ *   --- Plan 025 (dead-pid liveness) ---
+ *   E190  RECONCILE_IN_PROGRESS            — reconcile lock held by another pass
+ *
  *   --- Plan 018 (agent permissions) ---
  *   E200  PERMISSION_DENIED                — agent denied at runtime; terminal failure
  *   E201  ALLOWED_ROOTS_INVALID            — allowedRoots composition empty / unresolvable
@@ -82,6 +85,8 @@ export const ErrorCodes = {
   // Plan 009 Phase 2 — view command
   AMBIGUOUS_RUN_ID: 'E170',
   RUN_NOT_FOUND: 'E171',
+  // Plan 025 — dead-pid liveness
+  RECONCILE_IN_PROGRESS: 'E190',
   // Plan 017 — agent-pack install/info/list/remove
   AGENT_PACK_REGISTRY_MISS: 'E180',
   AGENT_PACK_FETCH_FAILED: 'E181',

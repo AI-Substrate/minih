@@ -1113,7 +1113,7 @@ The key habit: **run `minih status` every couple of minutes** during long runs. 
 minih status my-agent
 ```
 
-Returns a verdict: **active** (events flowing), **stale** (no events for >60s), **completed**, or **failed**. Shows event count, tool call count, elapsed time, and the last few turns:
+Returns a verdict: **active** (events flowing), **dead** (the recorded process no longer exists — terminal, the run will never finish), **stale** (process alive but no events for >60s), **completed**, or **failed**. Shows event count, tool call count, elapsed time, and the last few turns. When the pid was probed, the envelope also carries `pid`, `pidAlive`, and `lastEventAt`:
 
 ```
 Status: code-review  ● active
@@ -1139,21 +1139,29 @@ minih status my-agent -n 10
 # Machine-readable verdict
 VERDICT=$(minih status my-agent 2>/dev/null | jq -r '.data.verdict')
 if [ "$VERDICT" = "stale" ]; then echo "Agent may be stuck!"; fi
+if [ "$VERDICT" = "dead" ]; then echo "Agent process is gone — run: minih reconcile my-agent"; fi
 ```
+
+> **Breaking change (plan 025)**: runs whose process died used to report `active` (within 60s of the crash) or `stale`. They now report **`dead`** — a terminal verdict. Polling loops that only break on `completed`/`failed` must also break on `dead`/`crashed`, or they will spin forever on a crashed run. See [`docs/how/run-liveness.md`](docs/how/run-liveness.md) for the migration.
 
 ### Automated polling (for orchestrating agents)
 
 If you're building an agent that launches other agents, poll `minih status` to keep tabs:
 
 ```bash
-# Poll every 2 minutes until done
+# Poll every 2 minutes until done. 'dead' is terminal too — the process is
+# gone and the run will never complete; do NOT keep waiting on it.
 while true; do
   VERDICT=$(minih status my-agent 2>/dev/null | jq -r '.data.verdict')
-  if [ "$VERDICT" = "completed" ] || [ "$VERDICT" = "failed" ]; then break; fi
+  case "$VERDICT" in
+    completed|failed|dead) break ;;
+  esac
   echo "$(date +%H:%M) — $VERDICT ($(minih status my-agent 2>/dev/null | jq -r '.data.toolCallCount') tool calls)"
   sleep 120
 done
 ```
+
+If a run comes back `dead`, heal its record so inventories reflect the truth: `minih reconcile my-agent` flips it to `status: 'crashed'` + `terminalReason: 'pid-vanished'`. Tip: keep the `runId` from the launch envelope and poll with `minih status my-agent --run <runId>` — the no-`--run` form resolves the *latest live* run and reports `E171` when the only run died.
 
 ### Follow a running agent in real-time
 

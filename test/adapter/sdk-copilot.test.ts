@@ -214,6 +214,116 @@ describe('SdkCopilotAdapter.run', () => {
     expect(session.disconnectCalls).toBe(1);
   });
 
+  // T008 (plan 025, FX012/PL-06) — a stream that dies while a message is
+  // still in flight must emit provider_stream_aborted exactly once, carrying
+  // the LATEST in-flight messageId.
+  it('emits provider_stream_aborted once when the stream errors mid-message', async () => {
+    const session = new MockSession();
+    const adapter = new SdkCopilotAdapter(new MockClient(session));
+    const events: AgentEvent[] = [];
+
+    const runPromise = adapter.run({
+      prompt: 'start',
+      onEvent: (event) => events.push(event),
+    });
+
+    await waitFor(() => session.sendCalls.length === 1);
+    session.emit({
+      type: 'assistant.message_delta',
+      data: { deltaContent: 'par', messageId: 'm1' },
+    });
+    session.emit({
+      type: 'assistant.message',
+      data: { content: 'partial-one', messageId: 'm1' },
+    });
+    session.emit({
+      type: 'assistant.message_delta',
+      data: { deltaContent: 'sec', messageId: 'm2' },
+    });
+    session.emit({
+      type: 'session.error',
+      data: { message: 'boom', errorType: 'SESSION_ERROR' },
+    });
+
+    const result = await runPromise;
+
+    expect(result.status).toBe('failed');
+    const aborts = events.filter(
+      (event) => event.type === 'provider_stream_aborted',
+    );
+    expect(aborts).toHaveLength(1);
+    expect(aborts[0]?.data).toMatchObject({
+      messageId: 'm2',
+      reason: expect.stringContaining('boom'),
+    });
+    // The abort diagnosis precedes the generic session_error.
+    const types = events.map((event) => event.type);
+    expect(types.indexOf('provider_stream_aborted')).toBeLessThan(
+      types.indexOf('session_error'),
+    );
+  });
+
+  it('does NOT emit provider_stream_aborted when the message settled before the error', async () => {
+    const session = new MockSession();
+    const adapter = new SdkCopilotAdapter(new MockClient(session));
+    const events: AgentEvent[] = [];
+
+    const runPromise = adapter.run({
+      prompt: 'start',
+      onEvent: (event) => events.push(event),
+    });
+
+    await waitFor(() => session.sendCalls.length === 1);
+    session.emit({
+      type: 'assistant.message_delta',
+      data: { deltaContent: 'don', messageId: 'm1' },
+    });
+    session.emit({
+      type: 'assistant.message',
+      data: { content: 'done', messageId: 'm1' },
+    });
+    session.emit({
+      type: 'session.error',
+      data: { message: 'late boom', errorType: 'SESSION_ERROR' },
+    });
+
+    const result = await runPromise;
+
+    expect(result.status).toBe('failed');
+    expect(
+      events.filter((event) => event.type === 'provider_stream_aborted'),
+    ).toHaveLength(0);
+  });
+
+  it('does NOT emit provider_stream_aborted on a normal settle', async () => {
+    const session = new MockSession();
+    const adapter = new SdkCopilotAdapter(new MockClient(session));
+    const events: AgentEvent[] = [];
+
+    const runPromise = adapter.run({
+      prompt: 'start',
+      onEvent: (event) => events.push(event),
+    });
+
+    await waitFor(() => session.sendCalls.length === 1);
+    session.emit({
+      type: 'assistant.message_delta',
+      data: { deltaContent: 'don', messageId: 'm1' },
+    });
+    session.emit({
+      type: 'assistant.message',
+      data: { content: 'done', messageId: 'm1' },
+    });
+    session.emit({ type: 'session.idle', data: {} });
+
+    const result = await runPromise;
+
+    expect(result.status).toBe('completed');
+    expect(
+      events.filter((event) => event.type === 'provider_stream_aborted'),
+    ).toHaveLength(0);
+  });
+
   it('invokes onSessionReady once with a working sender', async () => {
     const session = new MockSession();
     const adapter = new SdkCopilotAdapter(new MockClient(session));

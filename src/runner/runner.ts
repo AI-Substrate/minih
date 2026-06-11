@@ -918,6 +918,9 @@ export async function runAgent(
     let activeSessionId = '';
     const stderrLines: string[] = [];
     let timedOut = false;
+    // Plan 025 FX012 — set when the adapter reports an aborted stream;
+    // persisted to run.json post-run (mirrors the denial flow below).
+    let streamAborted = false;
     const timeoutMs = (config.timeout ?? 300) * 1000;
     const manifestUpdates = new Set<Promise<void>>();
     let manifestUpdateError: Error | null = null;
@@ -967,6 +970,11 @@ export async function runAgent(
           stderrLines.push(
             `[${event.timestamp}] ${event.data.errorType ?? 'ERROR'}: ${event.data.message ?? ''}`,
           );
+          break;
+        case 'provider_stream_aborted':
+          // Plan 025 FX012 — the NDJSON append below persists the event
+          // itself; the run.json terminalReason write happens post-run.
+          streamAborted = true;
           break;
         case 'session_start':
           if (event.data.sessionId) {
@@ -1235,6 +1243,20 @@ export async function runAgent(
           exitCode: denialState.exitCode,
           tokens: agentResult.tokens,
         };
+      }
+    }
+
+    // Plan 025 FX012 — persist the stream-abort diagnosis to run.json.
+    // The permission-denial write above is the more specific diagnosis and
+    // takes precedence (preservation: never overwrite its terminalReason).
+    if (streamAborted && !denialState.terminalFired) {
+      try {
+        await updateManifest(runDir, {
+          status: 'failed',
+          terminalReason: 'provider-stream-aborted',
+        });
+      } catch {
+        // best-effort — events.ndjson + completed.json still carry the abort
       }
     }
 

@@ -104,9 +104,7 @@
       "ran_at": "2026-06-11T04:20:00Z",
       "user_input": "start with tier 1, then move in to the others please.",
       "note": "Two-tier backpressure validation on feat/023-parallel-runs: just fft PASS (1185 passed / 16 skipped); live smoke booted 3 concurrent parallel-param-smoke runs — runs list --active showed labels+paramsSummary, status <slug> failed E170 with 3 candidates, --latest returned selection metadata, bulk --run x3 and --from (with bogus target) returned degraded row E171, per-run markers proved param isolation. Auto-harvested retros independently reproduced #37 and demonstrated #39.",
-      "artifacts": [
-        "docs/retros/parallel-param-smoke.md"
-      ],
+      "artifacts": ["docs/retros/parallel-param-smoke.md"],
       "next": ["merge"]
     },
     {

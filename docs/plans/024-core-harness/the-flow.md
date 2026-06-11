@@ -21,7 +21,7 @@ flowchart TD
   build["Phase 1: Implementation (13/13, ACs 1–11 verified live)"]:::done
   harness_phaseend_001["Phase-end seam → noop (buffer drained at AC-6; zone now OPEN: S0+S2+S4 hold)"]:::harness
   review["Code review (plan-7) — APPROVE, 0 HIGH/CRITICAL, 94% coverage confidence; 6 non-blocking follow-ups (3 MED · 3 LOW)"]:::done
-  merge["Merge"]:::assumed
+  merge["PR #43 opened (not merged — human merges on GitHub)"]:::done
 
   said_research>"🗣 let's get plan research done. using harness concept, evaluate this repo for wrapping…"]:::said
   said_spec>"🗣 specif now — Simple; Lightweight; no mocks; docs/how only; register eng-harness as real domain; composite boot; contract-only pinning; skills global"]:::said
@@ -29,12 +29,14 @@ flowchart TD
   said_harness_setup_001>"🗣 run the harness setup skill. no need to install harness as it's already present (harness command and engh alias too)"]:::said
   said_plan>"🗣 yes run"]:::said
   said_build>"🗣 yeah thanks, just briefly a para on where we are and what we get after this"]:::said
+  said_merge>"🗣 do a PR no need to merge, mark it complete in the flow and get pr up please"]:::said
   said_research -.- research
   said_spec -.- spec
   said_backpressure_001 -.- backpressure_001
   said_harness_setup_001 -.- harness_setup_001
   said_plan -.- plan
   said_build -.- build
+  said_merge -.- merge
 
   research --> spec --> backpressure_001 --> plan --> build --> review --> merge
   backpressure_001 -.-> harness_setup_001 -.-> plan

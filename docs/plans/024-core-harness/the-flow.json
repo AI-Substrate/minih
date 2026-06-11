@@ -2,8 +2,8 @@
   "schema_version": 1,
   "slug": "core-harness",
   "plan_dir": "docs/plans/024-core-harness",
-  "cursor": "review",
-  "recommended_next": "merge",
+  "cursor": "merge",
+  "recommended_next": null,
   "agents": [],
   "nodes": [
     {
@@ -121,8 +121,12 @@
     {
       "id": "merge",
       "type": "merge",
-      "label": "Merge",
-      "status": "assumed",
+      "label": "PR #43 opened (not merged — human merges on GitHub)",
+      "status": "done",
+      "ran_at": "2026-06-11T07:50:00Z",
+      "user_input": "do a PR no need to merge, mark it complete in the flow and get pr up please",
+      "note": "User chose PR-not-merge: branch 024-core-harness pushed, PR #43 opened against main (https://github.com/AI-Substrate/minih/pull/43). Title chore(harness): non-releasing under default release-please ruleset. No local merge executed — human merges on GitHub. Flow marked complete.",
+      "artifacts": ["https://github.com/AI-Substrate/minih/pull/43"],
       "next": []
     }
   ]

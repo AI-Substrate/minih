@@ -4,10 +4,10 @@
   "slug": "minih-skills-config",
   "plan_dir": "docs/plans/022-minih-skills-config",
   "mode": "Simple",
-  "cursor": "review",
-  "recommended_next": "review",
-  "now": "Implementation complete",
-  "next": "Review",
+  "cursor": "merge",
+  "recommended_next": null,
+  "now": "Complete — merged 69c16c1, shipped in minih 0.1.7",
+  "next": "—",
   "_comment": "Adopted by /the-flow after a pre-spec workshop. the-flow.md is generated from this JSON; do not hand-edit the markdown as primary.",
   "agents": [
     {
@@ -98,15 +98,17 @@
       "label": "Review",
       "status": "known",
       "command": "/plan-7-v2-code-review --plan \"docs/plans/022-minih-skills-config/minih-skills-config-plan.md\"",
-      "note": "Formal review still recommended because companion completed before final diff review.",
+      "note": "Skipped — flow closed out 2026-06-11 without a formal plan-7: the feature had already merged (69c16c1) and shipped in 0.1.7; companion review covered commits during implementation.",
       "next": ["merge"]
     },
     {
       "id": "merge",
       "type": "merge",
-      "label": "Merge",
-      "status": "assumed",
-      "command": "/plan-8-v2-merge",
+      "label": "Merge — 69c16c1 feat: add first-class skills config",
+      "status": "done",
+      "ran_at": "2026-06-07T21:20:54Z",
+      "user_input": "close out 22. then run the explore",
+      "note": "Closed out retroactively 2026-06-11: feature merged to main as 69c16c1 (2026-06-08) and shipped in release 0.1.7 (51e8fc1) outside the flow; no plan-8 run. Review milestone skipped (see review node).",
       "next": []
     }
   ]

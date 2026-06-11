@@ -3,7 +3,7 @@
 > Generated from [`the-flow.json`](./the-flow.json). Do not hand-edit this markdown as the primary; update the JSON and regenerate.
 
 **Plan**: minih-skills-config · **Mode**: Simple · **Phases**: 1
-**Rail**: `[the-flow] ◆─◆─◆─◆─◇` · **now**: Implementation complete · **next**: Review
+**Rail**: `[the-flow] ◆─◆─◆─◇─◆` · **now**: Complete — merged 69c16c1, shipped in minih 0.1.7 · **next**: — *(review pip open: formal plan-7 was skipped at close-out)*
 
 ```mermaid
 flowchart TD
@@ -16,7 +16,7 @@ flowchart TD
     classDef companion fill:#E0F2F1,stroke:#00897B,color:#000
     classDef worker  fill:#E8EAF6,stroke:#3F51B5,color:#000
 
-    S["Spec"]:::done --> PL["Plan"]:::done --> I["Implementation"]:::done --> R["Review"]:::known --> M["Merge"]:::assumed
+    S["Spec"]:::done --> PL["Plan"]:::done --> I["Implementation"]:::done --> R["Review (skipped at close-out)"]:::known --> M["Merge — 69c16c1, shipped 0.1.7"]:::done
 
     S -.->|design workshop| W1["Workshop 1 · CLI config and discovery"]:::done
     W1 -.-> PL
@@ -48,5 +48,5 @@ flowchart TD
 - **Backpressure survey** — done: `backpressure-coverage.md` (`Certainty: Partial`).
 - **Plan** — done: `minih-skills-config-plan.md` (`Status: READY`) and `minih-skills-config.fltplan.md`.
 - **Implementation** — done: `execution.log.md`; companion completed before final diff review.
-- **Review** — known next: formal `/plan-7-v2-code-review` recommended.
-- **Merge** — final explicit-confirmation step.
+- **Review** — skipped: flow closed out 2026-06-11 without a formal plan-7; companion review covered commits during implementation.
+- **Merge** — done: merged to main as `69c16c1` (2026-06-08), shipped in release 0.1.7 (`51e8fc1`); closed out retroactively, no plan-8 run.

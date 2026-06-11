@@ -72,11 +72,12 @@
     {
       "id": "review",
       "type": "phase",
-      "label": "Code review (stage 7) — REQUEST_CHANGES → fixes landed",
-      "status": "in_progress",
+      "label": "Code review (stage 7) — REQUEST_CHANGES → fixed → settled",
+      "status": "done",
       "ran_at": "2026-06-11T22:30:00Z",
+      "user_input": "so all good for pr? … make sure the flow is closed out pre-pr please",
       "command": "/the-flow 7 review --plan \"docs/plans/026-stall-watchdog/stall-watchdog-plan.md\"",
-      "note": "REQUEST_CHANGES — 1 HIGH (F001: adapter suppresses consolidated assistant.message after streaming deltas, so --max-turns misses normal streamed turns; AC-4 confidence 60%), 4 MED (F002 fireMaxTurns init ordering, F003 manifest classification, F004 resume budget evidence, F005 runs passthrough evidence), 2 LOW (barrel manifest rows). F001+F002 verified real against source. ALL findings addressed in fix-1 (companion mode, zero companion findings); review milestone settles when Jordan picks merge (companion supersedes per 6c) or a fresh stage-7 re-run.",
+      "note": "REQUEST_CHANGES — 1 HIGH (F001: adapter suppressed consolidated assistant.message after streaming deltas, so --max-turns missed normal streamed turns), 4 MED (F002 fireMaxTurns init ordering, F003 manifest classification, F004 resume budget evidence, F005 runs passthrough evidence), 2 LOW (barrel manifest rows). All addressed in fix-1; SETTLED 2026-06-12 by companion supersession (stage-6c doctrine): code-review-companion reviewed every FT commit + full range 752945f..a75d435, farewell zero findings, six APPROVEs — disposition recorded in reviews/fix-tasks.md. Retro buffer drained to .harness/records/retro/2026-06-11/004-026-stall-watchdog.md on Jordan's go.",
       "artifacts": ["reviews/review.md", "reviews/fix-tasks.md"],
       "next": ["merge"]
     },
@@ -95,8 +96,9 @@
     {
       "id": "merge",
       "type": "merge",
-      "label": "Merge (PROCEED-gated)",
-      "status": "assumed",
+      "label": "Merge via PR (PROCEED-gated; posts #44 comment)",
+      "status": "known",
+      "command": "/the-flow 8 merge --plan \"docs/plans/026-stall-watchdog/stall-watchdog-plan.md\"",
       "next": []
     }
   ],

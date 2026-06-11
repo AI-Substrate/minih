@@ -19,8 +19,8 @@ flowchart TD
     backpressure["Backpressure survey — Certainty: Partial"]:::harness
     plan["Architect → READY + validate-v2 fix pass"]:::done
     build["Implement — T000–T011 done, 11/11 ACs, fft 1310 green"]:::done
-    review["Code review (stage 7) — REQUEST_CHANGES → fixes landed"]:::wip
-    merge["Merge (PROCEED-gated)"]:::assumed
+    review["Code review (stage 7) — REQUEST_CHANGES → fixed → settled"]:::done
+    merge["Merge via PR (PROCEED-gated; posts #44 comment)"]:::known
 
     subgraph companion1["🤝 code-review-companion · run 2026-06-12T08-39-31-885Z-544e · 0 findings"]
         fix1["Fix pass — FT-001…FT-005 (companion mode)"]:::done
@@ -35,9 +35,11 @@ flowchart TD
     said_build -.- build
     said_fix>"🗣 yes, but please use companion mode"]:::said
     said_fix -.- fix1
+    said_settle>"🗣 so all good for pr? … make sure the flow is closed out pre-pr please"]:::said
+    said_settle -.- review
 ```
 
 Legend: 🟩 done · 🟧 in progress · 🟥 blocked · 🟦 known next · ⬜ assumed · 🗣 user input · 🟪 harness loop · 🤝 companion
 
-**Now**: fix pass DONE in companion mode — all review findings addressed (FT-001 `ab0be14` streamed-turn accounting, FT-002 `dd9d7a0` race-arm preinit, FT-003 `1997b3f` manifest, FT-004 `d713af9` resume budget proof, FT-005 `4b3d20f` runs terminalReason). `just fft` exit 0 — 1319 tests (+9). Companion farewell: **zero findings, six APPROVEs** across `752945f..a75d435`; magicWand = `--stop-after-summary`. Seven commits on `026-stall-watchdog`, not pushed. #44 comment still drafted-not-posted.
-**Next**: `/the-flow 8 merge --plan "docs/plans/026-stall-watchdog/stall-watchdog-plan.md"` (companion supersedes a stage-7 re-run per 6c doctrine) — or re-run `/the-flow 7 review` first for a fresh artifact.
+**Now**: flow CLOSED OUT pre-PR. Review settled by companion supersession (stage-6c doctrine; disposition in `reviews/fix-tasks.md`) — all seven findings fixed (FT-001 `ab0be14` … FT-005 `4b3d20f`), companion farewell zero findings / six APPROVEs over `752945f..a75d435`, `just fft` exit 0 (1319 tests, +9). Retro buffer drained to `.harness/records/retro/2026-06-11/004-026-stall-watchdog.md` (DL-001 SDK method-surface pin, SUGG-001 fake-adapter seam, DL-002 per-commit format). Nine commits on `026-stall-watchdog`, not pushed. #44 comment drafted, posts at merge.
+**Next**: `/the-flow 8 merge --plan "docs/plans/026-stall-watchdog/stall-watchdog-plan.md"` — merge/PR analysis; executes only on typed `PROCEED`.

@@ -18,6 +18,8 @@ import {
   buildInsidePreamble,
   buildRunParamsSummary,
   coordinationRunLocation,
+  DEFAULT_STALL_TIMEOUT_SEC,
+  DEFAULT_TIMEOUT_SEC,
   displayEvent,
   displayHeader,
   displayPreflight,
@@ -32,6 +34,7 @@ import {
   validateRunLabel,
   validateSlug,
 } from '../../runner/index.js';
+import { parseBudgetFlag } from '../budget-flags.js';
 import {
   ErrorCodes,
   exitWithEnvelope,
@@ -84,6 +87,14 @@ export function registerRunCommand(program: Command): void {
     .option(
       '-t, --timeout <seconds>',
       'Timeout in seconds (default: agent frontmatter or 900)',
+    )
+    .option(
+      '--stall-timeout <seconds>',
+      'Inactivity watchdog: fail the run when no provider event arrives for this many seconds; 0 disables (default: 300)',
+    )
+    .option(
+      '--max-turns <count>',
+      'Fail the run after this many consolidated assistant messages; 0 = unlimited (default: 0)',
     )
     .option(
       '-p, --param <key=value>',
@@ -175,6 +186,8 @@ export function registerRunCommand(program: Command): void {
           /** string when --reasoning <effort>; false when --no-reasoning; undefined otherwise */
           reasoning?: string | false;
           timeout?: string;
+          stallTimeout?: string;
+          maxTurns?: string;
           param?: string[];
           label?: string;
           dryRun?: boolean;
@@ -257,6 +270,36 @@ export function registerRunCommand(program: Command): void {
           Object.keys(params).length > 0 ? params : undefined,
         );
 
+        // Plan 026 — budget flags validate loudly (E108) before any run
+        // state is touched; defaults come from the shared runner constants.
+        const timeoutFlag = parseBudgetFlag(
+          'run',
+          '--timeout',
+          opts.timeout,
+          'positive-seconds',
+        );
+        const stallTimeoutFlag = parseBudgetFlag(
+          'run',
+          '--stall-timeout',
+          opts.stallTimeout,
+          'non-negative-seconds',
+        );
+        const maxTurnsFlag = parseBudgetFlag(
+          'run',
+          '--max-turns',
+          opts.maxTurns,
+          'non-negative-count',
+        );
+        const timeout =
+          timeoutFlag ?? definition.timeout ?? DEFAULT_TIMEOUT_SEC;
+        const stallTimeout = stallTimeoutFlag ?? DEFAULT_STALL_TIMEOUT_SEC;
+        const maxTurns = maxTurnsFlag ?? 0;
+        const budgets = {
+          timeoutSec: timeout,
+          stallTimeoutSec: stallTimeout,
+          maxTurns,
+        };
+
         const DEFAULT_MODEL = 'claude-opus-4.6';
         const model =
           opts.model ??
@@ -272,8 +315,6 @@ export function registerRunCommand(program: Command): void {
             ? undefined
             : ((opts.reasoning ??
                 definition.reasoning) as AgentRunConfig['reasoningEffort']);
-
-        const DEFAULT_TIMEOUT = 900; // 15 minutes
 
         // MCP config: --mcp-config file (explicit) or auto-discovery via configDir (DYK #1: mutually exclusive)
         let mcpServers: Record<string, unknown> | undefined;
@@ -422,9 +463,9 @@ export function registerRunCommand(program: Command): void {
           slug,
           model,
           reasoningEffort,
-          timeout: opts.timeout
-            ? Number.parseInt(opts.timeout, 10)
-            : (definition.timeout ?? DEFAULT_TIMEOUT),
+          timeout,
+          stallTimeout,
+          maxTurns,
           cwd: process.cwd(),
           params: Object.keys(params).length > 0 ? params : undefined,
           ...(labelResult.label && { label: labelResult.label }),
@@ -603,7 +644,9 @@ export function registerRunCommand(program: Command): void {
             `  Parts: ${parts.map((p) => p.toLowerCase()).join(' + ')}\n`,
           );
           process.stderr.write(`  Model: ${model}\n`);
-          process.stderr.write(`  Timeout: ${config.timeout}s\n\n`);
+          process.stderr.write(
+            `  Timeout: ${budgets.timeoutSec}s · stall: ${budgets.stallTimeoutSec}s · max-turns: ${budgets.maxTurns || 'unlimited'}\n\n`,
+          );
 
           exitWithEnvelope(
             formatSuccess('run', {
@@ -614,6 +657,7 @@ export function registerRunCommand(program: Command): void {
               parts,
               model,
               timeout: config.timeout,
+              budgets,
             }),
           );
           return;

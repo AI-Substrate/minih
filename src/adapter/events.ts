@@ -250,6 +250,23 @@ export interface AgentProviderStreamAbortedEvent extends AgentEventBase {
   };
 }
 
+/**
+ * Plan 026 — synthetic event the RUNNER emits when the inactivity
+ * watchdog fires: no provider event arrived within the stall budget.
+ * Emitted from the watchdog race arm directly (never through the
+ * event funnel, so it can neither reset the deadline nor re-trigger
+ * the arm) and mapped to run.json `terminalReason: 'stalled-stream'`.
+ */
+export interface AgentStalledEvent extends AgentEventBase {
+  type: 'run_stalled';
+  data: {
+    /** The configured inactivity budget that was breached (seconds). */
+    stallTimeoutSec: number;
+    /** Timestamp of the last provider event, when one was seen. */
+    lastEventAt?: string;
+  };
+}
+
 export type AgentEvent =
   | AgentTextDeltaEvent
   | AgentMessageEvent
@@ -263,6 +280,7 @@ export type AgentEvent =
   | AgentThinkingEvent
   | AgentUserPromptEvent
   | AgentPermissionDeniedEvent
-  | AgentProviderStreamAbortedEvent;
+  | AgentProviderStreamAbortedEvent
+  | AgentStalledEvent;
 
 export type AgentEventHandler = (event: AgentEvent) => void;

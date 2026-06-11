@@ -438,6 +438,73 @@ describe('runAgent', () => {
     expect(fake.getTerminateHistory().length).toBeGreaterThan(0);
   });
 
+  // Plan 026 T004 — the existing timeout fires, but it must also leave a
+  // diagnosable run.json: terminalReason 'timeout' in the final patch, and
+  // the error message must report the configured budget.
+  it('timeout writes terminalReason "timeout" in the final manifest patch', async () => {
+    const def = createAgent('timeout-reason', {
+      schema: null,
+      instructions: null,
+      preamble: null,
+    });
+
+    const fake = new FakeAgentAdapter({ output: 'too slow', runDuration: 500 });
+    const result = await runAgent(
+      fake,
+      def,
+      { slug: 'timeout-reason', timeout: 0.1 },
+      undefined,
+      tmpDir,
+    );
+
+    expect(result.metadata.result).toBe('timeout');
+    expect(result.agentResult.output).toContain('timed out after 0.1s');
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(result.runDir, 'run.json'), 'utf-8'),
+    );
+    expect(manifest.status).toBe('failed');
+    expect(manifest.terminalReason).toBe('timeout');
+  });
+
+  // Plan 026 T004 (CD-01) — terminal artifacts may never depend on SDK
+  // cooperation: a terminate() that hangs on dead RPC must not block
+  // completed.json or the final manifest patch.
+  it('still terminalizes within a bounded window when terminate() hangs', async () => {
+    const def = createAgent('timeout-hung-terminate', {
+      schema: null,
+      instructions: null,
+      preamble: null,
+    });
+
+    const fake = new FakeAgentAdapter({
+      output: 'too slow',
+      runDuration: 500,
+      hangOnTerminate: true,
+    });
+
+    const started = Date.now();
+    const result = await runAgent(
+      fake,
+      def,
+      { slug: 'timeout-hung-terminate', timeout: 0.1, cleanupGraceMs: 50 },
+      undefined,
+      tmpDir,
+    );
+
+    expect(Date.now() - started).toBeLessThan(3000);
+    expect(result.metadata.result).toBe('timeout');
+    expect(result.metadata.exitCode).toBe(124);
+    expect(fake.getTerminateHistory().length).toBeGreaterThan(0);
+    expect(fs.existsSync(path.join(result.runDir, 'completed.json'))).toBe(
+      true,
+    );
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(result.runDir, 'run.json'), 'utf-8'),
+    );
+    expect(manifest.status).toBe('failed');
+    expect(manifest.terminalReason).toBe('timeout');
+  });
+
   it('sets MINIH env vars during run and cleans up after', async () => {
     const def = createAgent('env-test', {
       schema: null,

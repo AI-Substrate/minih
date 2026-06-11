@@ -7,13 +7,20 @@
  *
  * Extracted from: packages/shared/src/adapters/sdk-copilot-adapter.ts
  * Adapted: dropped ILogger, dropped workspaceRoot, simplified constructor,
- *          removed console.log debug noise, added session destroy guard.
+ *          removed console.log debug noise.
+ *
+ * Plan 026 (stall watchdog): every SDK cleanup await (terminate rungs,
+ * the run/compact `finally` disconnects) is deadline-bounded — a wedged
+ * CLI subprocess that stops answering JSON-RPC must never block the
+ * runner's terminal artifact writes. A hung or failed terminate rung
+ * escalates to client.forceStop() (SIGKILL on the subprocess).
  */
 
 import type {
   CopilotSessionEventLike,
   ICopilotClient,
 } from './copilot-types.js';
+import { DEADLINE_EXPIRED, withDeadline } from './deadline.js';
 import type { AgentEvent, AgentResult, AgentRunOptions } from './events.js';
 import type { IAgentAdapter } from './interface.js';
 
@@ -23,11 +30,37 @@ const approveAll = () => ({ kind: 'approve-once' as const });
 
 const MAX_PROMPT_LENGTH = 100_000;
 
+const DEFAULT_CLEANUP_RUNG_TIMEOUT_MS = 5_000;
+
+export interface SdkCopilotAdapterOptions {
+  /** Per-rung bound on SDK cleanup awaits. Tests inject tiny values. */
+  cleanupRungTimeoutMs?: number;
+}
+
 export class SdkCopilotAdapter implements IAgentAdapter {
   private readonly _client: ICopilotClient;
+  private readonly _cleanupRungTimeoutMs: number;
 
-  constructor(client: ICopilotClient) {
+  constructor(client: ICopilotClient, options?: SdkCopilotAdapterOptions) {
     this._client = client;
+    this._cleanupRungTimeoutMs =
+      options?.cleanupRungTimeoutMs ?? DEFAULT_CLEANUP_RUNG_TIMEOUT_MS;
+  }
+
+  /**
+   * Await one cleanup rung, bounded. Returns true only when the rung
+   * settled cleanly within the deadline — hangs and rejections both
+   * report false so the caller can escalate.
+   */
+  private async _boundedRung(rung: Promise<unknown>): Promise<boolean> {
+    const outcome = await withDeadline(
+      rung.then(
+        () => true,
+        () => false,
+      ),
+      this._cleanupRungTimeoutMs,
+    );
+    return outcome === DEADLINE_EXPIRED ? false : outcome;
   }
 
   async run(options: AgentRunOptions): Promise<AgentResult> {
@@ -123,7 +156,7 @@ export class SdkCopilotAdapter implements IAgentAdapter {
       });
     }
 
-    let sessionDestroyed = false;
+    let sessionDisconnected = false;
     let unsubscribeRun: (() => void) | undefined;
     // Plan 025 FX012 / PL-06 — track the LATEST in-flight message so a
     // stream that dies mid-message can be diagnosed as an abort. Cleared
@@ -257,10 +290,12 @@ export class SdkCopilotAdapter implements IAgentAdapter {
       if (unsubscribeRun) {
         unsubscribeRun();
       }
-      if (!sessionDestroyed) {
-        sessionDestroyed = true;
-        // Disconnect but don't destroy — session state preserved for resumption
-        await session.disconnect();
+      if (!sessionDisconnected) {
+        sessionDisconnected = true;
+        // Disconnect but don't delete — session state preserved for
+        // resumption. Bounded: a wedged subprocess must not block run()
+        // from returning its result (plan 026).
+        await this._boundedRung(session.disconnect());
       }
     }
   }
@@ -298,20 +333,41 @@ export class SdkCopilotAdapter implements IAgentAdapter {
         tokens: null,
       };
     } finally {
-      // Disconnect but don't destroy — session state preserved for resumption
-      await session.disconnect();
+      // Disconnect but don't delete — session state preserved for
+      // resumption. Bounded for the same reason as run()'s finally.
+      await this._boundedRung(session.disconnect());
     }
   }
 
   async terminate(sessionId: string): Promise<AgentResult> {
-    const session = await this._client.resumeSession(sessionId, {
-      onPermissionRequest: approveAll,
-    });
+    // Bounded cleanup ladder: resume → abort → disconnect, each rung
+    // deadline-bounded; any hang or rejection escalates to forceStop().
+    // (SDK 1.0.1 removed session.destroy() — abort+disconnect is the
+    // graceful path; session state stays on disk for post-mortem.)
+    let escalate = false;
 
-    try {
-      await session.abort();
-    } finally {
-      await session.destroy();
+    const session = await withDeadline(
+      this._client
+        .resumeSession(sessionId, { onPermissionRequest: approveAll })
+        .catch(() => null),
+      this._cleanupRungTimeoutMs,
+    );
+
+    if (session === DEADLINE_EXPIRED || session === null) {
+      escalate = true;
+    } else {
+      const aborted = await this._boundedRung(session.abort());
+      const disconnected = await this._boundedRung(session.disconnect());
+      if (!aborted || !disconnected) {
+        escalate = true;
+      }
+    }
+
+    if (escalate) {
+      const force = this._client.forceStop?.();
+      if (force) {
+        await this._boundedRung(force);
+      }
     }
 
     return {

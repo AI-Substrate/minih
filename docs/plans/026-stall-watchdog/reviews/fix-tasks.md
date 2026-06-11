@@ -1,0 +1,67 @@
+# Fix Tasks: Simple Mode
+
+Apply in order. Re-run review after fixes.
+
+## Critical / High Fixes
+
+### FT-001: Count streamed assistant turns for `--max-turns`
+
+- **Severity**: HIGH
+- **File(s)**: `/Users/jordanknight/substrate/minih/src/adapter/sdk-copilot.ts`, relevant tests under `/Users/jordanknight/substrate/minih/test/`
+- **Issue**: After `assistant.message_delta`, the adapter returns early for the consolidated `assistant.message`. The runner counts turns only on translated `message` events, so normal streaming turns can bypass `--max-turns`.
+- **Fix**: Preserve exactly one turn-accounting signal for each assistant turn, including streamed turns. Add a regression test using SDK-shaped events: deltas followed by a consolidated message, with `maxTurns` low enough to breach.
+- **Patch hint**:
+
+```diff
+- if (event.type === 'assistant.message' && hasStreamedText) {
+-   output = event.data?.content ?? '';
+-   inFlightMessage = null;
+-   return;
+- }
++ if (event.type === 'assistant.message' && hasStreamedText) {
++   output = event.data?.content ?? '';
++   inFlightMessage = null;
++   // Still emit/count one completed turn; suppress duplicate display elsewhere if needed.
++ }
+```
+
+The exact patch may differ; the invariant is that streaming chunks do not produce multiple turns, but the final assistant turn is counted once.
+
+## Medium / Low Fixes
+
+### FT-002: Preinitialize budget race callbacks before adapter events can fire
+
+- **Severity**: MEDIUM
+- **File(s)**: `/Users/jordanknight/substrate/minih/src/runner/runner.ts`, `/Users/jordanknight/substrate/minih/test/runner/runner-stall.test.ts`
+- **Issue**: `adapter.run()` is invoked before `fireMaxTurns` is assigned. Synchronous `message` events can execute `fireMaxTurns?.()` while it is undefined.
+- **Fix**: Build the max-turns/stall deferred promises before calling `adapter.run()`, or use a preinitialized deferred object that cannot miss synchronous breaches. Add a regression test with synchronous fake-adapter events.
+
+### FT-003: Fix Domain Manifest currency
+
+- **Severity**: MEDIUM
+- **File(s)**: `/Users/jordanknight/substrate/minih/docs/plans/026-stall-watchdog/stall-watchdog-plan.md`
+- **Issue**: `src/adapter/deadline.ts` is classified as internal even though runner imports it and adapter domain docs expose it as contract. `src/adapter/index.ts` and `src/runner/index.ts` changed but are absent from the manifest.
+- **Fix**: Reclassify `src/adapter/deadline.ts` as `adapter` / `contract`; add manifest rows for `src/adapter/index.ts` and `src/runner/index.ts`.
+
+### FT-004: Add missing resume positive-path budget evidence
+
+- **Severity**: MEDIUM
+- **File(s)**: `/Users/jordanknight/substrate/minih/test/cli/run-budget-flags.test.ts`
+- **Issue**: AC-6 covers run/resume validation and run budget echo, but does not show positive resume-path budget threading/recording.
+- **Fix**: Add or cite a test that supplies resume budget flags and verifies effective config/run.json budgets.
+
+### FT-005: Add missing `runs` terminalReason passthrough evidence
+
+- **Severity**: MEDIUM
+- **File(s)**: `/Users/jordanknight/substrate/minih/test/cli/status-terminal-reason.test.ts` or the existing runs command tests
+- **Issue**: AC-7 explicitly names `status` and `runs`; current evidence covers `status` only.
+- **Fix**: Add or cite a `runs` test seeded with `terminalReason: 'stalled-stream'`.
+
+## Re-Review Checklist
+
+- [ ] FT-001 fixed with regression coverage
+- [ ] FT-002 fixed or proven impossible with regression coverage
+- [ ] FT-003 manifest updates applied
+- [ ] FT-004 evidence added or cited
+- [ ] FT-005 evidence added or cited
+- [ ] Re-run `/the-flow 7 review --plan /Users/jordanknight/substrate/minih/docs/plans/026-stall-watchdog/stall-watchdog-plan.md` and achieve zero HIGH/CRITICAL findings

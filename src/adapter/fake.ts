@@ -27,10 +27,18 @@ export interface FakeAgentAdapterOptions {
   runDuration?: number;
   /** Events to emit via onEvent callback during run(). */
   events?: AgentEvent[];
+  /**
+   * Plan 026 T004 — opt-in hang mode: terminate() records the call then
+   * never settles, simulating cleanup RPC into a wedged subprocess.
+   */
+  hangOnTerminate?: boolean;
 }
 
 type ResolvedOptions = Required<
-  Omit<FakeAgentAdapterOptions, 'runDuration' | 'stderr' | 'events'>
+  Omit<
+    FakeAgentAdapterOptions,
+    'runDuration' | 'stderr' | 'events' | 'hangOnTerminate'
+  >
 > & {
   stderr?: string;
 };
@@ -41,6 +49,7 @@ export class FakeAgentAdapter implements IAgentAdapter {
   private _events: AgentEvent[];
   private _queuedRun: AgentEvent[][] | null = null;
   private _suppressFinalIdle = false;
+  private _hangOnTerminate: boolean;
   private _sessionSendHistory: string[] = [];
   private _runHistory: AgentRunOptions[] = [];
   private _terminateHistory: string[] = [];
@@ -60,6 +69,7 @@ export class FakeAgentAdapter implements IAgentAdapter {
     };
     this._runDuration = options.runDuration ?? 0;
     this._events = options.events ?? [];
+    this._hangOnTerminate = options.hangOnTerminate ?? false;
   }
 
   async run(options: AgentRunOptions): Promise<AgentResult> {
@@ -121,6 +131,9 @@ export class FakeAgentAdapter implements IAgentAdapter {
 
   async terminate(sessionId: string): Promise<AgentResult> {
     this._terminateHistory.push(sessionId);
+    if (this._hangOnTerminate) {
+      return new Promise<never>(() => {});
+    }
     return {
       output: '',
       sessionId,
@@ -209,6 +222,10 @@ export class FakeAgentAdapter implements IAgentAdapter {
   ): void {
     this._queuedRun = turns.map((turn) => [...turn]);
     this._suppressFinalIdle = options.suppressFinalIdle ?? false;
+  }
+
+  setTerminateHang(hang: boolean): void {
+    this._hangOnTerminate = hang;
   }
 
   addEvent(event: AgentEvent): void {

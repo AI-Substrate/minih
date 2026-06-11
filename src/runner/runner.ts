@@ -13,6 +13,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { withDeadline } from '../adapter/deadline.js';
 import type {
   AgentEvent,
   AgentResult,
@@ -58,16 +59,18 @@ import {
   createStateForwarder,
   type StateForwarder,
 } from './state-forwarder.js';
-import type {
-  AgentDefinition,
-  AgentRunConfig,
-  AgentRunResult,
-  CompletedMetadata,
-  LiveRunManifest,
-  ParsedReport,
-  RunEventStats,
-  ValidationResult,
-  VelocityData,
+import {
+  type AgentDefinition,
+  type AgentRunConfig,
+  type AgentRunResult,
+  type CompletedMetadata,
+  DEFAULT_STALL_TIMEOUT_SEC,
+  DEFAULT_TIMEOUT_SEC,
+  type LiveRunManifest,
+  type ParsedReport,
+  type RunEventStats,
+  type ValidationResult,
+  type VelocityData,
 } from './types.js';
 import {
   validateInput,
@@ -423,6 +426,15 @@ export async function runAgent(
       fs.writeFileSync(eventsPath, '');
     }
 
+    // Plan 026 — effective run budgets, recorded in run.json at start so
+    // operators can see what limits a run was under (AC-6). Also the single
+    // computation the watchdog/timeout race arms read from.
+    const budgets = {
+      timeoutSec: config.timeout ?? DEFAULT_TIMEOUT_SEC,
+      stallTimeoutSec: config.stallTimeout ?? DEFAULT_STALL_TIMEOUT_SEC,
+      maxTurns: config.maxTurns ?? 0,
+    };
+
     // Initial run.json manifest — workshop 002 §1, plan 009.
     // Written immediately after run-folder creation so attach commands can
     // resolve the run by ID before session_start.
@@ -441,6 +453,7 @@ export async function runAgent(
       ...(config.label && { label: config.label }),
       ...(config.paramsSummary && { paramsSummary: config.paramsSummary }),
       counters: { events: 0, toolCalls: 0, messages: 0, errors: 0 },
+      budgets,
     };
     if (isResumeInPlace) {
       // Resume-in-place: mutate the existing run.json instead of overwriting it.
@@ -479,6 +492,9 @@ export async function runAgent(
         status: 'starting',
         updatedAt: startedAt.toISOString(),
         resumes: [...priorResumes, resumeEntry],
+        // Plan 026 — a resume may carry different budgets; record the
+        // effective ones for this takeover/follow-up.
+        budgets,
       };
       fs.writeFileSync(
         path.join(runDir, 'run.json'),
@@ -921,7 +937,46 @@ export async function runAgent(
     // Plan 025 FX012 — set when the adapter reports an aborted stream;
     // persisted to run.json post-run (mirrors the denial flow below).
     let streamAborted = false;
-    const timeoutMs = (config.timeout ?? 300) * 1000;
+    // Plan 026 — single default source (CD-05); the message and the race
+    // arm must always report the same configured value (`budgets` above).
+    const timeoutSec = budgets.timeoutSec;
+    const timeoutMs = timeoutSec * 1000;
+    // Plan 026 — bound on the runner's own cleanup awaits after a kill
+    // trigger; terminal writes must never wait on a wedged adapter.
+    const cleanupGraceMs = config.cleanupGraceMs ?? 10_000;
+    // Plan 026 (CD-02) — inactivity watchdog: a stream that silently stops
+    // advancing (#44) settles neither session.idle nor session.error, so a
+    // third race arm fires when no provider event arrives within the stall
+    // budget. `stalled` mirrors `timedOut` everywhere. 0 disables.
+    let stalled = false;
+    let lastEventAt: string | undefined;
+    let stallHandle: ReturnType<typeof setTimeout> | undefined;
+    let fireStall: (() => void) | undefined;
+    const stallTimeoutSec = budgets.stallTimeoutSec;
+    const stallTimeoutMs = stallTimeoutSec * 1000;
+    // Plan 026 (CD-03) — turn budget: one turn = one consolidated assistant
+    // message (chunking-independent; tool/thinking events never count).
+    // 0/unset = unlimited. `turnsExceeded` mirrors `timedOut`/`stalled`.
+    let turnsExceeded = false;
+    let fireMaxTurns: (() => void) | undefined;
+    const maxTurns = budgets.maxTurns;
+    const budgetBreached = (): boolean => timedOut || stalled || turnsExceeded;
+    const budgetMessages: Record<
+      'timeout' | 'stalled-stream' | 'max-turns',
+      string
+    > = {
+      timeout: `Agent timed out after ${timeoutSec}s`,
+      'stalled-stream': `Agent stalled: no provider events for ${stallTimeoutSec}s`,
+      'max-turns': `Agent exceeded max-turns budget (${maxTurns})`,
+    };
+    const resetStallDeadline = (): void => {
+      if (stallTimeoutMs <= 0 || budgetBreached()) return;
+      lastEventAt = new Date().toISOString();
+      if (stallHandle) clearTimeout(stallHandle);
+      stallHandle = setTimeout(() => {
+        fireStall?.();
+      }, stallTimeoutMs);
+    };
     const manifestUpdates = new Set<Promise<void>>();
     let manifestUpdateError: Error | null = null;
 
@@ -949,7 +1004,12 @@ export async function runAgent(
     };
 
     const handleEvent = (event: AgentEvent): void => {
-      if (timedOut) return;
+      if (budgetBreached()) return;
+
+      // Plan 026 — ANY provider event proves the stream is advancing.
+      // (The synthetic run_stalled event never passes through here — it
+      // is emitted from the race arm — so it cannot reset the deadline.)
+      resetStallDeadline();
 
       stats.total++;
       switch (event.type) {
@@ -961,9 +1021,19 @@ export async function runAgent(
           break;
         case 'message':
           stats.messages++;
+          // Plan 026 (CD-03) — breach check at the turn-count increment.
+          // The breaching message itself is still persisted below.
+          if (maxTurns > 0 && stats.messages > maxTurns) {
+            fireMaxTurns?.();
+          }
           break;
         case 'thinking':
           stats.thinking++;
+          break;
+        case 'run_stalled':
+          // Synthetic watchdog diagnosis (plan 026) — emitted by the race
+          // arm directly, never through this funnel; arm kept defensive
+          // for adapters that might surface it.
           break;
         case 'session_error':
           stats.errors++;
@@ -1142,17 +1212,17 @@ export async function runAgent(
         })
         .then(async (result) => {
           adapterSettled = true;
-          if (timedOut) return result;
+          if (budgetBreached()) return result;
           await drainTrackedManifestUpdates();
-          if (timedOut) return result;
+          if (budgetBreached()) return result;
           // Manifest: status → completing right before terminal-condition wait
           // (workshop 002 §Write points).
           await updateManifest(runDir, { status: 'completing' });
-          if (timedOut) return result;
+          if (budgetBreached()) return result;
           const terminal = await awaitTerminalCondition(result, () =>
-            timedOut ? 0 : pendingForwarderCount(),
+            budgetBreached() ? 0 : pendingForwarderCount(),
           );
-          if (timedOut) return terminal;
+          if (budgetBreached()) return terminal;
           if (forwarderErrors.length > 0) throw forwarderErrors[0];
           if (terminal.status === 'completed') {
             inboxForwarder?.commit();
@@ -1163,15 +1233,63 @@ export async function runAgent(
         .finally(closeForwarders);
       const timeoutPromise = new Promise<never>((_, reject) => {
         timeoutHandle = setTimeout(() => {
+          if (budgetBreached()) return;
           timedOut = true;
-          reject(new Error(`Agent timed out after ${config.timeout ?? 300}s`));
+          reject(new Error(budgetMessages.timeout));
         }, timeoutMs);
       });
-      agentResult = await Promise.race([runPromise, timeoutPromise]);
+      // Plan 026 (CD-02) — the stall arm. The synthetic run_stalled event
+      // is emitted HERE (not via handleEvent) so it cannot reset the
+      // deadline or re-trigger the arm.
+      const stallPromise = new Promise<never>((_, reject) => {
+        fireStall = () => {
+          if (budgetBreached()) return;
+          stalled = true;
+          const stalledEvent: AgentEvent = {
+            type: 'run_stalled',
+            timestamp: new Date().toISOString(),
+            data: {
+              stallTimeoutSec,
+              ...(lastEventAt && { lastEventAt }),
+            },
+          };
+          stats.total++;
+          try {
+            fs.appendFileSync(eventsPath, `${JSON.stringify(stalledEvent)}\n`);
+          } catch {
+            // best-effort — run.json + completed.json still carry the stall
+          }
+          if (onEvent) onEvent(stalledEvent);
+          reject(new Error(budgetMessages['stalled-stream']));
+        };
+        // Arm the initial deadline — a run that emits nothing at all must
+        // still stall rather than wait for the wall-clock budget.
+        resetStallDeadline();
+      });
+      // Plan 026 (CD-03) — the turn-budget arm; fired synchronously from
+      // handleEvent's message-count increment.
+      const maxTurnsPromise = new Promise<never>((_, reject) => {
+        fireMaxTurns = () => {
+          if (budgetBreached()) return;
+          turnsExceeded = true;
+          reject(new Error(budgetMessages['max-turns']));
+        };
+      });
+      agentResult = await Promise.race([
+        runPromise,
+        timeoutPromise,
+        stallPromise,
+        maxTurnsPromise,
+      ]);
     } catch (error) {
-      if (timedOut) {
+      if (budgetBreached()) {
         try {
-          await adapter.terminate(activeSessionId);
+          // Plan 026 (CD-01) — bounded: a terminate() hanging on dead RPC
+          // must never block the terminal writes below.
+          await withDeadline(
+            adapter.terminate(activeSessionId),
+            cleanupGraceMs,
+          );
         } catch {
           /* best-effort */
         }
@@ -1184,7 +1302,11 @@ export async function runAgent(
           }
         }
         agentResult = {
-          output: `Agent timed out after ${config.timeout ?? 300}s`,
+          output: timedOut
+            ? budgetMessages.timeout
+            : stalled
+              ? budgetMessages['stalled-stream']
+              : budgetMessages['max-turns'],
           sessionId: '',
           status: 'killed',
           exitCode: 124,
@@ -1203,6 +1325,7 @@ export async function runAgent(
       }
     } finally {
       if (timeoutHandle) clearTimeout(timeoutHandle);
+      if (stallHandle) clearTimeout(stallHandle);
       closeForwarders();
     }
 
@@ -1385,11 +1508,25 @@ export async function runAgent(
     // Final manifest patch — flush any pending throttled counters and mark
     // the run completed/failed so attach commands can render an honest
     // capability label even before they read completed.json.
+    //
+    // Plan 026 — budget reasons ride this patch. More-specific reasons
+    // (permission-denied, provider-stream-aborted) were already persisted
+    // above and take precedence (preservation invariant).
+    const budgetReason = timedOut
+      ? ('timeout' as const)
+      : stalled
+        ? ('stalled-stream' as const)
+        : turnsExceeded
+          ? ('max-turns' as const)
+          : undefined;
     await drainTrackedManifestUpdates();
     await flushManifestThrottled(runDir);
     await updateManifest(runDir, {
       status: resultStatus === 'completed' ? 'completed' : 'failed',
       sessionId: agentResult.sessionId || null,
+      ...(budgetReason &&
+        !denialState.terminalFired &&
+        !streamAborted && { terminalReason: budgetReason }),
       counters: {
         events: stats.total,
         toolCalls: stats.toolCalls,

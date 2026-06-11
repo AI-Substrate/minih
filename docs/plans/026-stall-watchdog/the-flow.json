@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "slug": "stall-watchdog",
+  "plan_dir": "docs/plans/026-stall-watchdog",
+  "cursor": "review",
+  "recommended_next": "fix-1",
+  "nodes": [
+    {
+      "id": "start",
+      "type": "research",
+      "label": "Kickoff — issue #44 stall watchdog",
+      "status": "done",
+      "ran_at": "2026-06-11T11:29:26Z",
+      "user_input": "lets do the watchdog. might need to do some research with perplexity on to what can cause this to happen in copilod sdk, also make sure we have latest copilot sdk as part of this work.. Flow though explore, spec, (workshops if needed), architect, validate and then ready. for spec phae we will do simple mode hten defer to you for other choices. I want to come back to a ready to execute plan i can review.",
+      "note": "Fresh start; branch 026-stall-watchdog; verbatim ask in original-ask.md",
+      "artifacts": ["original-ask.md"],
+      "next": ["research"]
+    },
+    {
+      "id": "research",
+      "type": "research",
+      "label": "Explore — runner lifecycle, SDK surface, Perplexity stall causes",
+      "status": "done",
+      "ran_at": "2026-06-11T11:50:00Z",
+      "note": "CD-01: timeout cleanup awaits (terminate/abort/destroy/disconnect) can hang forever, blocking every terminal write — the #44 mechanism. CD-02: no inactivity detection; idlePromise settles only on session.idle/error. SDK latest is 1.0.1 (not 1.0.61 — bad read; Perplexity claims for nonexistent versions discarded). Harness doctor ok.",
+      "artifacts": ["research-dossier.md"],
+      "next": ["spec"]
+    },
+    {
+      "id": "spec",
+      "type": "spec",
+      "label": "Specify (Simple mode) — CS-3, 11 ACs, Behavior Contract",
+      "status": "done",
+      "ran_at": "2026-06-11T12:00:00Z",
+      "note": "Mode Simple set by Jordan; delegated choices recorded in Clarifications (Full TDD, targeted mocks, hybrid docs, workshop skipped — contested topics settled in § Behavior Contract). Non-goals: Windows CI, E170 behavior change, upstream root-cause.",
+      "artifacts": ["stall-watchdog-spec.md"],
+      "next": ["backpressure"]
+    },
+    {
+      "id": "backpressure",
+      "type": "backpressure",
+      "label": "Backpressure survey — Certainty: Partial",
+      "status": "done",
+      "ran_at": "2026-06-11T12:05:00Z",
+      "command": "/eng-harness-flow --event post-spec --spec docs/plans/026-stall-watchdog/stall-watchdog-spec.md",
+      "note": "9/11 ACs BUILDABLE on existing vitest/built-CLI harness; AC-9/AC-10 ride EXISTS sensors (sdk-check, vocabulary guard). Two ABSENT rows are deliberate (Windows non-goal; live-SDK chaos inferential). Phase 0 folded into opening TDD tasks.",
+      "artifacts": ["backpressure-coverage.md"],
+      "next": ["plan"]
+    },
+    {
+      "id": "plan",
+      "type": "plan",
+      "label": "Architect → READY (gates 3 PASS / 4 N/A) + validate-v2 fix pass",
+      "status": "done",
+      "ran_at": "2026-06-11T12:20:00Z",
+      "note": "Simple single-phase plan, T000–T011, Full TDD. validate-v2: 4 parallel validators; 16/18 file:line claims confirmed; fixes applied (BC-5 trigger matrix, early type-widening, run_stalled switch arms, no-self-reset test, forceStop risk row). Status READY.",
+      "artifacts": ["stall-watchdog-plan.md"],
+      "next": ["build"]
+    },
+    {
+      "id": "build",
+      "type": "phase",
+      "label": "Implement — T000–T011, Full TDD",
+      "status": "done",
+      "ran_at": "2026-06-11T20:45:00Z",
+      "user_input": "build it",
+      "command": "/the-flow 6 --plan \"docs/plans/026-stall-watchdog/stall-watchdog-plan.md\"",
+      "note": "All 12 tasks done, all 11 ACs met. just fft exit 0 — 1310 tests (+42 new). SDK 1.0.1 (destroy() removal discovered + handled). Phase-end seam: 2 frictions buffered (DL-001 SDK-method-surface sensor gap, SUGG-001 no CLI fake-adapter seam) → drain presented. #44 comment drafted, not posted. Nothing committed — awaits review.",
+      "artifacts": ["execution.log.md", "issue-44-comment.md"],
+      "next": ["review"]
+    },
+    {
+      "id": "review",
+      "type": "phase",
+      "label": "Code review (stage 7) — REQUEST_CHANGES",
+      "status": "in_progress",
+      "ran_at": "2026-06-11T22:30:00Z",
+      "command": "/the-flow 7 review --plan \"docs/plans/026-stall-watchdog/stall-watchdog-plan.md\"",
+      "note": "REQUEST_CHANGES — 1 HIGH (F001: adapter suppresses consolidated assistant.message after streaming deltas, so --max-turns misses normal streamed turns; AC-4 confidence 60%), 4 MED (F002 fireMaxTurns init ordering, F003 manifest classification, F004 resume budget evidence, F005 runs passthrough evidence), 2 LOW (barrel manifest rows). F001+F002 verified real against source. Overall coverage confidence 84%. Fix loop routed via fix-tasks.md; milestone completes on clean re-review.",
+      "artifacts": ["reviews/review.md", "reviews/fix-tasks.md"],
+      "next": ["merge"]
+    },
+    {
+      "id": "fix-1",
+      "type": "phase",
+      "label": "Fix pass — FT-001…FT-005, then re-review",
+      "status": "known",
+      "branch_of": "review",
+      "command": "/the-flow 6 implement --plan \"docs/plans/026-stall-watchdog/stall-watchdog-plan.md\"",
+      "next": ["review"]
+    },
+    {
+      "id": "merge",
+      "type": "merge",
+      "label": "Merge (PROCEED-gated)",
+      "status": "assumed",
+      "next": []
+    }
+  ],
+  "agents": []
+}

@@ -9,6 +9,10 @@ import type {
 import type { AgentEvent } from '../../src/adapter/events.js';
 import { SdkCopilotAdapter } from '../../src/adapter/sdk-copilot.js';
 
+function neverSettles<T>(): Promise<T> {
+  return new Promise<T>(() => {});
+}
+
 class MockSession implements ICopilotSession {
   readonly sessionId = 'mock-session';
   readonly sendCalls: Array<{ prompt: string }> = [];
@@ -17,7 +21,10 @@ class MockSession implements ICopilotSession {
   disconnectCalls = 0;
   unsubscribeCalls = 0;
   abortCalls = 0;
-  destroyCalls = 0;
+  // Plan 026 T003 — opt-in hang modes simulating a wedged CLI subprocess
+  // that never answers JSON-RPC.
+  hangAbort = false;
+  hangDisconnect = false;
 
   async send(options: { prompt: string }): Promise<string> {
     this.sendCalls.push(options);
@@ -38,14 +45,12 @@ class MockSession implements ICopilotSession {
 
   async abort(): Promise<void> {
     this.abortCalls++;
+    if (this.hangAbort) return neverSettles();
   }
 
   async disconnect(): Promise<void> {
     this.disconnectCalls++;
-  }
-
-  async destroy(): Promise<void> {
-    this.destroyCalls++;
+    if (this.hangDisconnect) return neverSettles();
   }
 
   emit(event: CopilotSessionEventLike): void {
@@ -58,11 +63,43 @@ class MockSession implements ICopilotSession {
 class MockClient implements ICopilotClient {
   createSessionCalls: CopilotSessionConfig[] = [];
   resumeSessionCalls: CopilotResumeSessionConfig[] = [];
+  forceStopCalls = 0;
+  hangResume = false;
 
   constructor(private readonly session: MockSession) {}
 
   async createSession(config?: CopilotSessionConfig): Promise<ICopilotSession> {
     this.createSessionCalls.push(config ?? {});
+    return this.session;
+  }
+
+  async resumeSession(
+    _sessionId: string,
+    config?: CopilotResumeSessionConfig,
+  ): Promise<ICopilotSession> {
+    this.resumeSessionCalls.push(config ?? {});
+    if (this.hangResume) return neverSettles();
+    return this.session;
+  }
+
+  async stop(): Promise<unknown> {
+    return undefined;
+  }
+
+  async forceStop(): Promise<void> {
+    this.forceStopCalls++;
+  }
+}
+
+/** A 1.0.1-shaped client that does NOT expose forceStop (risk row: absent). */
+class MockClientWithoutForceStop implements ICopilotClient {
+  resumeSessionCalls: CopilotResumeSessionConfig[] = [];
+
+  constructor(private readonly session: MockSession) {}
+
+  async createSession(
+    _config?: CopilotSessionConfig,
+  ): Promise<ICopilotSession> {
     return this.session;
   }
 
@@ -385,6 +422,31 @@ describe('SdkCopilotAdapter.run', () => {
     });
   });
 
+  // Plan 026 T003 — the run-`finally` disconnect is deadline-bounded: a
+  // wedged subprocess must not block run() from returning its result.
+  it('returns its result within the cleanup budget when disconnect hangs', async () => {
+    const session = new MockSession();
+    session.hangDisconnect = true;
+    const adapter = new SdkCopilotAdapter(new MockClient(session), {
+      cleanupRungTimeoutMs: 20,
+    });
+
+    const runPromise = adapter.run({ prompt: 'start' });
+    await waitFor(() => session.sendCalls.length === 1);
+    session.emit({
+      type: 'assistant.message',
+      data: { content: 'done', messageId: 'm1' },
+    });
+    session.emit({ type: 'session.idle', data: {} });
+
+    const started = Date.now();
+    const result = await runPromise;
+    expect(Date.now() - started).toBeLessThan(2000);
+    expect(result.status).toBe('completed');
+    expect(result.output).toBe('done');
+    expect(session.disconnectCalls).toBe(1);
+  });
+
   it('normalizes skill load and invocation SDK events', async () => {
     const session = new MockSession();
     const adapter = new SdkCopilotAdapter(new MockClient(session));
@@ -422,5 +484,83 @@ describe('SdkCopilotAdapter.run', () => {
     ).toMatchObject({
       data: { name: 'grill-me', path: '/skills/grill-me/SKILL.md' },
     });
+  });
+});
+
+// Plan 026 T003 — bounded cleanup ladder. No code path between a kill
+// trigger and the terminal artifact writes may await an unbounded SDK
+// promise; any hung/failed rung escalates to client.forceStop().
+describe('SdkCopilotAdapter.terminate (bounded cleanup)', () => {
+  it('aborts and disconnects gracefully without forceStop', async () => {
+    const session = new MockSession();
+    const client = new MockClient(session);
+    const adapter = new SdkCopilotAdapter(client, { cleanupRungTimeoutMs: 20 });
+
+    const result = await adapter.terminate('mock-session');
+
+    expect(result).toMatchObject({
+      sessionId: 'mock-session',
+      status: 'killed',
+      exitCode: 137,
+    });
+    expect(session.abortCalls).toBe(1);
+    expect(session.disconnectCalls).toBe(1);
+    expect(client.forceStopCalls).toBe(0);
+  });
+
+  it('returns within budget and escalates to forceStop when abort hangs', async () => {
+    const session = new MockSession();
+    session.hangAbort = true;
+    const client = new MockClient(session);
+    const adapter = new SdkCopilotAdapter(client, { cleanupRungTimeoutMs: 20 });
+
+    const started = Date.now();
+    const result = await adapter.terminate('mock-session');
+
+    expect(Date.now() - started).toBeLessThan(2000);
+    expect(result.status).toBe('killed');
+    expect(client.forceStopCalls).toBe(1);
+  });
+
+  it('returns within budget and escalates when resumeSession itself hangs', async () => {
+    const session = new MockSession();
+    const client = new MockClient(session);
+    client.hangResume = true;
+    const adapter = new SdkCopilotAdapter(client, { cleanupRungTimeoutMs: 20 });
+
+    const started = Date.now();
+    const result = await adapter.terminate('mock-session');
+
+    expect(Date.now() - started).toBeLessThan(2000);
+    expect(result.status).toBe('killed');
+    expect(client.forceStopCalls).toBe(1);
+  });
+
+  it('escalates when a rung rejects (wedged RPC) rather than hangs', async () => {
+    const session = new MockSession();
+    session.abort = async () => {
+      session.abortCalls++;
+      throw new Error('rpc dead');
+    };
+    const client = new MockClient(session);
+    const adapter = new SdkCopilotAdapter(client, { cleanupRungTimeoutMs: 20 });
+
+    const result = await adapter.terminate('mock-session');
+
+    expect(result.status).toBe('killed');
+    expect(client.forceStopCalls).toBe(1);
+  });
+
+  it('skips escalation gracefully when the client has no forceStop', async () => {
+    const session = new MockSession();
+    session.hangAbort = true;
+    const client = new MockClientWithoutForceStop(session);
+    const adapter = new SdkCopilotAdapter(client, { cleanupRungTimeoutMs: 20 });
+
+    const started = Date.now();
+    const result = await adapter.terminate('mock-session');
+
+    expect(Date.now() - started).toBeLessThan(2000);
+    expect(result.status).toBe('killed');
   });
 });

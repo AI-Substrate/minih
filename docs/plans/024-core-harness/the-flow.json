@@ -2,7 +2,7 @@
   "schema_version": 1,
   "slug": "core-harness",
   "plan_dir": "docs/plans/024-core-harness",
-  "cursor": "build",
+  "cursor": "review",
   "recommended_next": "merge",
   "agents": [],
   "nodes": [
@@ -81,6 +81,19 @@
         "docs/how/engineering-harness.md",
         "docs/plans/024-core-harness/execution.log.md"
       ],
+      "next": ["review"]
+    },
+    {
+      "id": "review",
+      "type": "review",
+      "label": "Code review (plan-7) — APPROVE, 0 HIGH/CRITICAL",
+      "status": "done",
+      "ran_at": "2026-06-11T07:39:00Z",
+      "note": "plan-7-v2 ran post-/compact (user-driven). Verdict APPROVE — no fix-tasks.md. Overall coverage confidence 94% across all 11 ACs; domain compliance and anti-reinvention tables clean. 6 non-blocking follow-ups: F001 MED boot 'read-only' contract vs ignored dist/ emission from just check's build; F002 MED governance doc says `minih retros --slug` but the CLI flag is `--agent`; F003 MED boot's runAudit soft-skips ALL parsed npm-audit errors as offline (should fail on non-network errors); F004/F005 LOW cli+runner domain History rows missing 024 entry; F006 LOW eng-harness Concepts table should name entry points incl. `harness instructions boot`.",
+      "artifacts": [
+        "docs/plans/024-core-harness/reviews/review.md",
+        "docs/plans/024-core-harness/reviews/_computed.diff"
+      ],
       "next": ["merge"]
     },
     {
@@ -103,7 +116,7 @@
       "command": "/eng-harness-flow --event phase-end --plan-dir docs/plans/024-core-harness --json",
       "branch_of": "build",
       "note": "First call with S0+S2+S4 all holding — setup segment retired. decision: noop on drain (buffer empty — DL-001 already a committed record); next_suggested: retro --harvest (offered, not auto-run).",
-      "next": ["merge"]
+      "next": ["review"]
     },
     {
       "id": "merge",

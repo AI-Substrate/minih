@@ -20,6 +20,7 @@ flowchart TD
   harness_preflight_001["Pre-implement seam → redirect (S2 owed — T001 is the provisioning)"]:::harness
   build["Phase 1: Implementation (13/13, ACs 1–11 verified live)"]:::done
   harness_phaseend_001["Phase-end seam → noop (buffer drained at AC-6; zone now OPEN: S0+S2+S4 hold)"]:::harness
+  review["Code review (plan-7) — APPROVE, 0 HIGH/CRITICAL, 94% coverage confidence; 6 non-blocking follow-ups (3 MED · 3 LOW)"]:::done
   merge["Merge"]:::assumed
 
   said_research>"🗣 let's get plan research done. using harness concept, evaluate this repo for wrapping…"]:::said
@@ -35,10 +36,10 @@ flowchart TD
   said_plan -.- plan
   said_build -.- build
 
-  research --> spec --> backpressure_001 --> plan --> build --> merge
+  research --> spec --> backpressure_001 --> plan --> build --> review --> merge
   backpressure_001 -.-> harness_setup_001 -.-> plan
   plan -.-> harness_preflight_001 -.-> build
-  build -.-> harness_phaseend_001 -.-> merge
+  build -.-> harness_phaseend_001 -.-> review
 ```
 
 Legend: done / wip / blocked / known / assumed; 🗣 user input; 🟪 harness loop.

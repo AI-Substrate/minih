@@ -85,6 +85,8 @@
 | `AgentDefinition.outsideContract` / `AgentDefinition.coordination` | Type field | preamble-builder (P2 — peer contract injection), cli (P5 outside-context, init --coordinated) |
 | `inbox-message.json` / `outside-state.json` / `inside-state.json` / `state-history-entry.json` | JSON Schema | mcp (P4 AJV input/output validation), cli (P5 outside-send validation) |
 
+**Named external consumer**: the eng-harness harvest reads runner-produced retro evidence only via published CLI envelopes (`minih retros`, `minih difficulties`) at the process boundary — never by importing runner or reading run-dir files (see `docs/domains/eng-harness/domain.md`).
+
 ## Concepts
 
 | Concept | Definition |

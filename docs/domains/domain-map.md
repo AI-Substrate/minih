@@ -7,6 +7,7 @@ flowchart TD
     mcp["mcp<br/>private inside server, hidden baked context,<br/>six backend-safe inbox/state tools,<br/>bounded multi-type inbox long-poll, spawn config"]
     adapter["adapter<br/>copilot-sdk wrapper, normalized events,<br/>SessionSender, fake adapter tests"]
     measurement["measurement<br/>conceptual contracts, metric vocabulary,<br/>proof levels, traceability, authority/redaction,<br/>benchmark and pulse semantics"]
+    eng_harness["eng-harness<br/>.harness/ substrate: governance contract,<br/>composite boot envelope, friction capture,<br/>committed retro records"]
 
     cli -- "runAgent, listAgents, resolveAgent,<br/>findRunSession, validators, display,<br/>outside inbox/state helpers" --> runner
     cli -- "buildInsideMcpServerConfig<br/>for coordinated runs" --> mcp
@@ -15,6 +16,7 @@ flowchart TD
     runner -- "IAgentAdapter,<br/>AgentEvent, AgentResult,<br/>SessionSender" --> adapter
     measurement -. "contracts implemented by runner facts,<br/>cli surfaces, and agent packs" .-> runner
     cli -. "renders and orchestrates measurement contracts" .-> measurement
+    eng_harness -. "observes via minih CLI envelopes<br/>(process boundary)" .-> cli
 ```
 
 - **cli** depends on **runner** for agent discovery, execution, session lookup, validation, display, context detection, inbox/state path helpers, state persistence helpers, ULIDs, typed runner errors, and outside peer command implementation.
@@ -24,8 +26,9 @@ flowchart TD
 - **runner** depends on **adapter** contracts (`IAgentAdapter`, `AgentEvent`, `AgentResult`, `SessionSender`) and remains SDK- and MCP-independent.
 - **adapter** has no internal domain dependencies; its only external implementation dependency is `@github/copilot-sdk`.
 - **measurement** is a conceptual contract domain, not a runtime import layer. Its contracts are implemented by owning domains: runner owns deterministic facts, CLI owns user surfaces, agents/companions provide cited interpretation, and human pulse remains aggregate human-provided evidence.
+- **eng-harness** is the session-level dev-loop harness (`.harness/` substrate on the global harness-core CLI). Its single dashed edge is conceptual, not an import: boot shells `minih doctor` and harvest reads `minih retros` envelopes **at the process boundary**. Zero inbound edges — no minih domain may depend on it; minih builds and ships identically with `.harness/` deleted.
 
-Import direction: `cli → {mcp, runner, adapter}`, `mcp → runner`, `runner → adapter`. No upward imports; runner does not import mcp.
+Import direction: `cli → {mcp, runner, adapter}`, `mcp → runner`, `runner → adapter`, and `eng-harness → cli` (process boundary, never imports). No upward imports; runner does not import mcp.
 
 ## Health Summary
 
@@ -36,3 +39,4 @@ Import direction: `cli → {mcp, runner, adapter}`, `mcp → runner`, `runner �
 | mcp | Private inside server config, six backend-safe inbox/state tools, bounded `inbox_list.waitMs`/`waitForAny` long-poll | runner | Healthy: inside-only, no public server command |
 | adapter | SDK session/event abstraction and `SessionSender` | External SDK only | Healthy: no runner/CLI/MCP imports |
 | measurement | Vocabulary, traceability, proof levels, scorecard categories, authority/redaction rules, benchmark semantics, pulse semantics | none at runtime | Healthy: conceptual contract domain only |
+| eng-harness | Boot envelope (`harness boot --json`), committed records (`.harness/records/`), governance contract | cli envelopes at the process boundary (never imports) | Healthy: zero inbound edges by rule |

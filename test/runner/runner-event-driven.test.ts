@@ -306,6 +306,87 @@ describe('runAgent event-driven terminal flow', () => {
     ]);
   });
 
+  // T009 (plan 025, FX012/AC-6) — an aborted stream must leave a diagnosis:
+  // the event in events.ndjson AND terminalReason in run.json.
+  it('maps provider_stream_aborted to run.json terminalReason', async () => {
+    const definition = createAgent('aborted-stream');
+    const fake = new FakeAgentAdapter({ status: 'failed', exitCode: 1 });
+    fake.setQueuedRun(
+      [
+        [
+          {
+            type: 'text_delta',
+            timestamp: '2026-01-01T00:00:00Z',
+            data: { content: 'par', messageId: 'm1' },
+          },
+          {
+            type: 'provider_stream_aborted',
+            timestamp: '2026-01-01T00:00:01Z',
+            data: { messageId: 'm1', reason: 'stream died' },
+          },
+        ],
+      ],
+      { suppressFinalIdle: true },
+    );
+
+    const result = await runAgent(
+      fake,
+      definition,
+      { slug: 'aborted-stream' },
+      undefined,
+      tmpDir,
+    );
+
+    expect(result.metadata.result).toBe('failed');
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(result.runDir, 'run.json'), 'utf-8'),
+    );
+    expect(manifest.terminalReason).toBe('provider-stream-aborted');
+    expect(manifest.status).toBe('failed');
+
+    const persisted = fs
+      .readFileSync(path.join(result.runDir, 'events.ndjson'), 'utf-8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    const aborts = persisted.filter(
+      (event) => event.type === 'provider_stream_aborted',
+    );
+    expect(aborts).toHaveLength(1);
+    expect(aborts[0].data).toMatchObject({
+      messageId: 'm1',
+      reason: 'stream died',
+    });
+  });
+
+  it('leaves terminalReason unset for a normal settle', async () => {
+    const definition = createAgent('clean-stream');
+    const fake = new FakeAgentAdapter({ output: validSystemOutput() });
+    fake.setQueuedRun([
+      [
+        {
+          type: 'message',
+          timestamp: '2026-01-01T00:00:00Z',
+          data: { content: 'all good' },
+        },
+      ],
+    ]);
+
+    const result = await runAgent(
+      fake,
+      definition,
+      { slug: 'clean-stream' },
+      undefined,
+      tmpDir,
+    );
+
+    expect(result.metadata.result).toBe('completed');
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(result.runDir, 'run.json'), 'utf-8'),
+    );
+    expect(manifest.terminalReason).toBeUndefined();
+  });
+
   it('uses the runner timeout as the outer terminal guard', async () => {
     const definition = createAgent('timeout-events');
     const fake = new FakeAgentAdapter({

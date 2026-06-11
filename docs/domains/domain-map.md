@@ -9,7 +9,7 @@ flowchart TD
     measurement["measurement<br/>conceptual contracts, metric vocabulary,<br/>proof levels, traceability, authority/redaction,<br/>benchmark and pulse semantics"]
     eng_harness["eng-harness<br/>.harness/ substrate: governance contract,<br/>composite boot envelope, friction capture,<br/>committed retro records"]
 
-    cli -- "runAgent, listAgents, resolveAgent,<br/>findRunSession, validators, display,<br/>outside inbox/state helpers" --> runner
+    cli -- "runAgent, listAgents, resolveAgent,<br/>findRunSession, validators, display,<br/>outside inbox/state helpers,<br/>run inventory + pid probe,<br/>reconcileRuns + reconcile lock" --> runner
     cli -- "buildInsideMcpServerConfig<br/>for coordinated runs" --> mcp
     cli -- "SdkCopilotAdapter,<br/>ICopilotClient runtime" --> adapter
     mcp -- "run-scoped inbox/state paths,<br/>state helpers, schemas, ulid" --> runner
@@ -19,7 +19,7 @@ flowchart TD
     eng_harness -. "observes via minih CLI envelopes<br/>(process boundary)" .-> cli
 ```
 
-- **cli** depends on **runner** for agent discovery, execution, session lookup, validation, display, context detection, inbox/state path helpers, state persistence helpers, ULIDs, typed runner errors, and outside peer command implementation.
+- **cli** depends on **runner** for agent discovery, execution, session lookup, validation, display, context detection, inbox/state path helpers, state persistence helpers, ULIDs, typed runner errors, outside peer command implementation, and — since plan 025 — the pid-liveness probe, run inventory rows, and the reconcile healer + lock (`reconcileRuns`, `withReconcileLock`, `ReconcileLockHeldError`).
 - **cli** depends on **mcp** only as the composition root for coordinated inside-server spawn config (`buildInsideMcpServerConfig`). The user-facing outside commands remain CLI/runner file operations, not direct MCP tool calls.
 - **cli** depends on **adapter** to instantiate `SdkCopilotAdapter` and the SDK runtime client.
 - **mcp** depends on **runner** for run-scoped coordination paths, state helpers, schemas, shared coordination types, and ULID generation. MCP never calls CLI.

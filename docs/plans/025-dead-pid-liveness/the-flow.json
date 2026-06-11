@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "slug": "dead-pid-liveness",
+  "plan_dir": "docs/plans/025-dead-pid-liveness",
+  "cursor": "merge",
+  "recommended_next": null,
+  "agents": [],
+  "nodes": [
+    {
+      "id": "research",
+      "type": "research",
+      "label": "Evidence: FX dossiers reconciled — designs hold, 0% implemented; proof strategy answered",
+      "status": "done",
+      "ran_at": "2026-06-11T08:30:00Z",
+      "user_input": "go after group 1, not sure how we prove hte fix though. work on branch",
+      "note": "8-subagent dossier (58 findings). Headlines: status.ts is the LAST liveness path not probing the pid (isProcessAliveDefault already shipped + used by resolver since plan-016 FX009-prior and run-inventory since plan 023); all three 018 dossiers survive drift untouched and none is implemented; plan 023 pre-built FX011's discovery walker. Proof question ANSWERED: injection-pattern unit tests (precedent test/runner/run-resolver.test.ts:204-252) + real-reaped-process CLI smoke. Gotchas: isProcessAliveDefault lacks the EPERM-conservative error spec (CF-03, verified by direct read after a subagent mis-report); 'dead' verdict is a documented jq-filter breaking change (CF-02); three liveness vocabularies need a unification decision (CF-01). 4 open questions queued for /plan-1b clarify. Ship order: FX009 → FX012 → FX011.",
+      "artifacts": ["docs/plans/025-dead-pid-liveness/research-dossier.md"],
+      "next": ["spec"]
+    },
+    {
+      "id": "spec",
+      "type": "spec",
+      "label": "Spec — CS-3, Simple, trio staged (FX009 → FX012 → FX011)",
+      "status": "done",
+      "ran_at": "2026-06-11T08:57:17Z",
+      "user_input": "yes (run /plan-1b); clarify answers: Full trio staged · Unify on 'dead' · Exported verdict fn · Upgrade shared probe · Simple mode · Hybrid testing · Targeted mocks · Hybrid docs",
+      "note": "8/8 clarify cap used across two batches; Round 2 skipped (no NEW domains, no markers left). All four dossier open questions resolved: scope = full trio staged in one Simple plan; runs-list liveness unifies on 'dead' (023 demotion uncommitted, free to change); injection seam = exported verdict fn with optional {isProcessAlive} deps; shared isProcessAliveDefault upgraded to FX009-3 error spec (ESRCH→dead, EPERM→alive, EINVAL→dead) rippling to resolver+inventory deliberately. Mode: user chose Simple over the Full recommendation — CS-3 (P=7: S2 I1 D1 N0 F1 T2, confidence 0.85) supports it. 13 testable ACs incl. deterministic-proof AC-11 and breaking-change docs AC-12. No workshops (designs pre-specced by validated 018 dossiers).",
+      "artifacts": [
+        "docs/plans/025-dead-pid-liveness/dead-pid-liveness-spec.md"
+      ],
+      "next": ["backpressure"]
+    },
+    {
+      "id": "backpressure",
+      "type": "backpressure",
+      "label": "Backpressure — Partial; tiny Phase 0 (seams-first)",
+      "status": "done",
+      "ran_at": "2026-06-11T09:07:35Z",
+      "user_input": "yes",
+      "command": "/eng-harness-flow --event post-spec --spec docs/plans/025-dead-pid-liveness/dead-pid-liveness-spec.md",
+      "note": "Router envelope: route → eng-harness-2-backpressure (adoption gate S0+S2+S4 holds; boot degraded with known caveats). Survey: 16 existing sensors inventoried (just fft gate, 110-file vitest suite, CI PR gate, injected-predicate liveness tests, fake adapter, subprocess CLI harness, lock + atomic-write tests). Certainty PARTIAL: regression net EXISTS, every new-behaviour AC is BUILDABLE, nothing material ABSENT. Key discovery: TWO injection seams must exist before sensors are reachable — exported verdict fn (AC-1/3/9/11) and a kill-fn seam in isProcessAliveDefault (AC-5: EPERM is unproducible against real pids in CI; run-eligibility.test.ts tests the real probe in exactly one place). Recommended Phase 0 is tiny: the seams + reaped-pid smoke helper + optional docs-grep — they are the plan's FIRST TASKS, not an infrastructure phase. Dep-direction analyzer explicitly not recommended (low risk, plan-7 covers).",
+      "artifacts": [
+        "docs/plans/025-dead-pid-liveness/backpressure-coverage.md"
+      ],
+      "next": ["plan"]
+    },
+    {
+      "id": "plan",
+      "type": "plan",
+      "label": "Plan — READY, 17 tasks, validated with fixes",
+      "status": "done",
+      "ran_at": "2026-06-11T09:30:54Z",
+      "user_input": "contnue",
+      "note": "plan-3-v3-architect in Simple mode: 17 tasks (T000-T016, incl. 2 harness seam rows), staged FX009 → FX012 → FX011 with backpressure's seams-first ordering folded in (T001 kill seam + T002 verdict-fn extraction before any behavior). Gates 4 PASS / 3 N/A → READY. Verification scout confirmed all dossier anchors, upgraded two facts (computeLiveness already injectable; RunLiveness lives in types.ts:453-458). validate-v2 ran 4 agents → VALIDATED WITH FIXES: real catches fixed in-place (run-inventory walkers are private — T010 now exports them; healed-'crashed' matrix case resequenced T003→T010 after the type exists; TTY color/icon ternaries default-fall-through would silently swallow 'dead' — T004 now demands explicit arms + assertions; T013 pinned to exact line targets AGENTS.md:99/:161 + AGENTS_README:1116/:1140-1153 + dist re-bundle note; resolver mtime-only asymmetry documented as deliberate). Forward-Compat matrix: all 5 downstream consumers PASS. Validation Record appended to plan.",
+      "artifacts": [
+        "docs/plans/025-dead-pid-liveness/dead-pid-liveness-plan.md"
+      ],
+      "next": ["build"]
+    },
+    {
+      "id": "build",
+      "type": "phase",
+      "label": "Implementation — DONE: 17/17 tasks, 13/13 ACs, fft green (1260 tests)",
+      "status": "done",
+      "ran_at": "2026-06-11T10:35:18Z",
+      "user_input": "run it",
+      "note": "plan-6-v2-implement-phase (plain variant, Simple mode, inline tasks). Pre-implement boot seam: first run UNHEALTHY (lint — hand-cranked the-flow.json formatting; fixed) → degraded (session baseline). Seams-first held: T001 kill-fn probe seam (ESRCH→dead, EPERM→alive, EINVAL/unknown→dead) + T002 exported computeStatusVerdict landed before any behavior, all TDD red→green. Shipped FX009 (verdict 'dead' + pid/pidAlive/lastEventAt envelope; TTY ternaries upgraded to Record<StatusVerdict,…> so tsc enforces exhaustiveness), FX012 (provider_stream_aborted adapter event, latest-in-flight tracking, runner→run.json terminalReason mapping, fake suppressFinalIdle seam), FX011 (reconcile core + lock + minih reconcile CLI, E190, preservation invariant b2), vocabulary unify (runs list 'dead'; healed 'crashed' rows leave --active), docs migration (CHANGELOG jq snippet + 5 surfaces + NEW run-liveness.md) + 7-guard vocabulary test (incl. dist-bundle staleness + outside.md byte budget), domain History/Composition currency. Discoveries: pre-existing E171 resolver gap on dead-only slugs (documented, plan-7 fix-loop candidate); companion outside.md was 98.9% of doctor's 8KB cap (trimmed + guard). Phase-end retro drained 3 observations to .harness/records/retro/2026-06-11/002-025-dead-pid-liveness.md. Nothing committed yet.",
+      "artifacts": [
+        "docs/plans/025-dead-pid-liveness/execution.log.md",
+        "src/runner/reconcile.ts",
+        "src/runner/reconcile-lock.ts",
+        "src/cli/commands/reconcile.ts",
+        "docs/how/run-liveness.md",
+        ".harness/records/retro/2026-06-11/002-025-dead-pid-liveness.md"
+      ],
+      "next": ["review"]
+    },
+    {
+      "id": "review",
+      "type": "review",
+      "label": "Code review — APPROVE (91% coverage confidence); 4 MEDIUM + 2 LOW findings → fix pass done, fft 1265/0",
+      "status": "done",
+      "ran_at": "2026-06-11T10:53:35Z",
+      "user_input": "code review is running in athoer agent",
+      "note": "Ran in a parallel agent session (the-flow stage 7). APPROVE — no HIGH/CRITICAL, no fix-tasks file. 6 findings: F001 MEDIUM reconcile slug+--all scope ambiguity (envelope reports all:true while still scoping to the slug); F002 MEDIUM lock steal race can surface raw ENOENT/EEXIST instead of the promised E190; F003 MEDIUM AC-10 TTY/crashed render proof indirect (65% AC confidence); F004 MEDIUM runner domain docs omit the reconcile-lock public contract that CLI now imports via the barrel; F005 LOW domain-map cli→runner edge + runner Concepts stale for liveness/reconcile; F006 LOW plan-022 close-out artifacts bundled in the 025 diff (split-commit suggested). Overall coverage confidence 91%; anti-reinvention clean; doctrine clean. Mid-seam: issue #44 (live-pid stalled-stream — the complementary quadrant of #24, not the same failure) triaged and commented; stall-watchdog + run-budget follow-up queued as plan 026. FIX PASS (user: 'fix pass'): all six findings addressed TDD red→green — F001 `--all`+slug/--run now E108; F002 lock steal window race-hardened (competitor unlink ENOENT tolerated, completed-steal EEXIST → ReconcileLockHeldError/E190); F003 NEW forced-isTTY render smoke through the built CLI (commander v13 eval-context gotcha → wrapper file), AC-10 evidence corrected; F004 reconcile-lock reclassified internal→contract + runner domain.md Composition/Contracts/Concepts rows; F005 domain-map edge/prose updated; F006 deferred to commit time (plan-022 close-out gets its own commit). +5 tests; full suite 1265 passed / 0 failed; 2 insights buffered for the merge-seam retro drain.",
+      "artifacts": [
+        "docs/plans/025-dead-pid-liveness/reviews/review.md",
+        "docs/plans/025-dead-pid-liveness/reviews/_computed.diff",
+        "test/cli/status-tty-render.test.ts",
+        "test/runner/reconcile-lock-race.test.ts"
+      ],
+      "next": ["merge"]
+    },
+    {
+      "id": "merge",
+      "type": "merge",
+      "label": "Merge — via GitHub PR (stage-8 in-repo merge skipped by user decision); flow complete",
+      "status": "done",
+      "ran_at": "2026-06-11T11:14:21Z",
+      "user_input": "yeah commit and push, mark the flow as complete as we wil be merging via pr",
+      "note": "User chose PR-based merge over the stage-8 in-repo merge, closing the flow at the commit/push seam. Plan-complete harness seam fired: 2-entry observe buffer (fix-pass insights) drained to the retro record before committing. Two commits per review F006: (1) chore — plan-022 close-out artifacts split out; (2) feat — plans 023 (parallel run ops, previously uncommitted) + 025 (dead-pid liveness) with BREAKING CHANGE footer, closes #24. Branch 025-dead-pid-liveness pushed to origin; merge executes on GitHub.",
+      "artifacts": [
+        ".harness/records/retro/2026-06-11/003-025-dead-pid-liveness-fix-pass.md"
+      ],
+      "next": []
+    }
+  ]
+}

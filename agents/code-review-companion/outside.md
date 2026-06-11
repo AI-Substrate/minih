@@ -38,7 +38,7 @@ RUN_ID=$(minih status code-review-companion 2>/dev/null | jq -r '.data | select(
 echo "Run: $RUN_ID"
 ```
 
-The `verdict: 'active'` filter is load-bearing — `minih status` defaults to "latest run" which may be a completed one.
+The `verdict: 'active'` filter is load-bearing — `minih status` defaults to "latest run" which may be a completed one. (`verdict: 'dead'` = process gone; heal via `minih reconcile`.)
 
 **Boot failures**: `E122 GH_TOKEN not set` (export explicitly — Copilot CLI doesn't reliably inherit); `E205 COORDINATION_WRITE_DENIED` (see [permissions.md](../../docs/how/permissions.md#coordinated-agents)); no active run after 12s (wait 30s more, check `minih status` + `agents/code-review-companion/runs/`).
 

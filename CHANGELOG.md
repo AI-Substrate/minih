@@ -1,5 +1,31 @@
 # Changelog
 
+## Plan 025 — dead-pid liveness (release-please will format on merge)
+
+### ⚠ BREAKING CHANGES
+
+- **`minih status` verdict vocabulary gains `dead`** (FX009): a run whose manifest claims a live process but whose recorded pid no longer exists now reports `verdict: "dead"` — previously it reported `active` (within 60s of the crash) or `stale`. `dead` is **terminal**: the run will never complete. `minih runs list` reports liveness `dead` for the same runs (previously `stale`).
+- **Migration for jq consumers** — polling loops must treat `dead` (and healed `crashed`) as terminal:
+
+  ```bash
+  # BEFORE — spins forever on a crashed run:
+  if [ "$VERDICT" = "completed" ] || [ "$VERDICT" = "failed" ]; then break; fi
+
+  # AFTER:
+  case "$VERDICT" in
+    completed|failed|dead) break ;;
+  esac
+  ```
+
+  Filters like `select(.verdict == "active")` keep working and get *more* accurate (dead runs no longer masquerade as active).
+
+### Features
+
+- **Status pid probe (FX009)**: `minih status` probes the recorded pid for non-terminal manifests; envelope gains `pid`, `pidAlive`, `lastEventAt` when probed; TTY renders `☠ dead` distinctly. Probe error spec: ESRCH→dead, **EPERM→alive** (exists, not ours), EINVAL/unknown→dead.
+- **Stream-abort diagnosis (FX012)**: the adapter emits `provider_stream_aborted` (latest in-flight messageId) when the provider stream dies mid-message; the runner records `terminalReason: 'provider-stream-aborted'` in run.json.
+- **`minih reconcile [slug] [--run <id>] [--all]` (FX011)**: heals dead-pid run records to `status: 'crashed'` + `terminalReason: 'pid-vanished'`; never overwrites an existing terminalReason; idempotent; lock-guarded (new error `E190 RECONCILE_IN_PROGRESS`). `--all` is mutually exclusive with a slug/`--run` (E108); lost lock-steal races surface as E190, never as raw fs errors.
+- New guide: `docs/how/run-liveness.md` — the full liveness model, vocabulary, and migration notes.
+
 ## Plan 018 — agent permissions (release-please will format on merge)
 
 ### Features

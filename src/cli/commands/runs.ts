@@ -35,7 +35,7 @@ export function registerRunsCommand(program: Command): void {
   runs
     .command('list')
     .description('List active or recent runs across all agents')
-    .option('--active', 'Only show active/stale live-run rows')
+    .option('--active', 'Only show active/stale/dead live-run rows')
     .option('--all', 'Include historical rows, bounded by --limit')
     .option('--slug <slug>', 'Filter to one agent slug')
     .option('--limit <count>', 'Maximum rows to return (default: 50)', '50')

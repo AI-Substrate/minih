@@ -232,6 +232,40 @@ describe('FakeAgentAdapter', () => {
     ]);
   });
 
+  // T008 (plan 025) — abort-scenario seam: an aborted stream never goes
+  // idle, so the final turn's auto-idle must be suppressible.
+  it('setQueuedRun suppressFinalIdle drops only the last auto-idle', async () => {
+    const fake = new FakeAgentAdapter();
+    fake.setQueuedRun(
+      [
+        [
+          {
+            type: 'message',
+            timestamp: '2026-01-01T00:00:00.000Z',
+            data: { content: 'turn one' },
+          },
+        ],
+        [
+          {
+            type: 'provider_stream_aborted',
+            timestamp: '2026-01-01T00:00:01.000Z',
+            data: { messageId: 'm2', reason: 'stream died' },
+          },
+        ],
+      ],
+      { suppressFinalIdle: true },
+    );
+    const events: AgentEvent[] = [];
+
+    await fake.run({ prompt: 'test', onEvent: (event) => events.push(event) });
+
+    expect(events.map((event) => event.type)).toEqual([
+      'message',
+      'session_idle',
+      'provider_stream_aborted',
+    ]);
+  });
+
   it('emitPendingMessagesModified records fake queue-depth observations', () => {
     const fake = new FakeAgentAdapter();
     fake.emitPendingMessagesModified(3);

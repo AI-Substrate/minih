@@ -56,8 +56,16 @@ export async function listRunInventory(
         input,
       });
       if (!row) continue;
-      if (input.active && !['active', 'stale'].includes(row.liveness)) {
-        continue;
+      // 'dead' stays in the --active view: those rows surfaced as 'stale'
+      // before plan 025 and are exactly the runs needing attention. Healed
+      // runs (manifest 'crashed') have left the attention queue — that is
+      // what `minih reconcile` is for — so they drop out of --active.
+      if (input.active) {
+        const unhealedDead =
+          row.liveness === 'dead' && row.manifestStatus !== 'crashed';
+        if (!['active', 'stale'].includes(row.liveness) && !unhealedDead) {
+          continue;
+        }
       }
       rows.push(row);
     }
@@ -186,10 +194,14 @@ function computeLiveness(
   if (!manifest) return 'unknown';
   if (manifest.status === 'completed') return 'completed';
   if (manifest.status === 'failed') return 'failed';
+  // Plan 025 FX011 — healed by reconcile: terminal, but the truthful
+  // liveness is still 'dead' (vocabulary unified with `minih status`).
+  if (manifest.status === 'crashed') return 'dead';
   if (manifest.status === 'stale') return 'stale';
   if (ACTIVE_STATUSES.has(manifest.status)) {
     const isAlive = input.isProcessAlive ?? isProcessAliveDefault;
-    if (manifest.pid != null && !isAlive(manifest.pid)) return 'stale';
+    // Plan 025 CF-01 — a dead pid is 'dead', not 'stale' (stale = live but quiet).
+    if (manifest.pid != null && !isAlive(manifest.pid)) return 'dead';
     const threshold = input.staleThresholdMs ?? DEFAULT_STALE_THRESHOLD_MS;
     const now = (input.now ?? Date.now)();
     const updated = Date.parse(manifest.updatedAt);
@@ -210,7 +222,8 @@ async function readCompletedMetadata(
   }
 }
 
-async function listAgentSlugs(agentsDir: string): Promise<string[]> {
+/** Walk agent slugs under an agents dir (exported for reconcile, plan 025). */
+export async function listAgentSlugs(agentsDir: string): Promise<string[]> {
   try {
     const entries = await fs.readdir(agentsDir, { withFileTypes: true });
     return entries
@@ -223,7 +236,8 @@ async function listAgentSlugs(agentsDir: string): Promise<string[]> {
   }
 }
 
-async function listRunDirs(
+/** Walk run dirs under one agent dir (exported for reconcile, plan 025). */
+export async function listRunDirs(
   slugDir: string,
 ): Promise<Array<{ runId: string; runDir: string }>> {
   try {

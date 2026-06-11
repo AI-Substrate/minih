@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "slug": "dead-pid-liveness",
+  "plan_dir": "docs/plans/025-dead-pid-liveness",
+  "mode": "Simple",
+  "current_stage": "complete",
+  "pending_command": null,
+  "intent": "Fix Group 1 (issue #24): minih status lies about dead runs. Implement via the pre-specced FX009 pid-liveness probe (+ decide FX011 reconcile / FX012 provider_stream_aborted), reconciled against current code, with a deterministic way to prove the fix. Work on branch 025-dead-pid-liveness.",
+  "milestones_total": 5,
+  "milestones_done": 5,
+  "last_checkpoint_at": "2026-06-11T11:14:21Z",
+  "compacted_seams": ["post-research", "post-plan"],
+  "status": "complete"
+}

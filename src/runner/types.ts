@@ -556,6 +556,12 @@ export interface RunInventoryRow {
   liveness: RunLiveness;
   manifestStatus: LiveRunStatus | null;
   result: CompletedMetadata['result'] | null;
+  /**
+   * Plan 026 review FT-005 — WHY the run terminalized, passed through from
+   * run.json so `runs` and `status` agree (AC-7). Absent when the run ended
+   * without a recorded reason.
+   */
+  terminalReason?: LiveRunManifest['terminalReason'];
   label?: string;
   paramsSummary?: RunParamsSummary;
   startedAt: string | null;

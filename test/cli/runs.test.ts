@@ -141,6 +141,48 @@ describe('minih runs list', () => {
     });
   });
 
+  // FT-005 (plan 026 review F005) — `runs` passes terminalReason through so
+  // operators can see WHY a run failed without opening run.json (AC-7).
+  it('passes terminalReason through for failed runs', () => {
+    const runId = '2026-06-08T00-00-03-000Z-d';
+    const runDir = makeRun('alpha', runId);
+    fs.writeFileSync(
+      path.join(runDir, 'run.json'),
+      JSON.stringify(
+        makeManifest({
+          slug: 'alpha',
+          runId,
+          runDir,
+          status: 'failed',
+          terminalReason: 'stalled-stream',
+        }),
+      ),
+    );
+    fs.writeFileSync(
+      path.join(runDir, 'completed.json'),
+      JSON.stringify(
+        makeCompleted({ slug: 'alpha', runId, result: 'failed' }),
+      ),
+    );
+
+    const result = run([
+      '--agents-dir',
+      agentsDir,
+      'runs',
+      'list',
+      '--all',
+      '--slug',
+      'alpha',
+    ]);
+
+    const envelope = JSON.parse(result.stdout);
+    expect(envelope.data.runs[0]).toMatchObject({
+      runId,
+      liveness: 'failed',
+      terminalReason: 'stalled-stream',
+    });
+  });
+
   // T005 (plan 025, AC-4) — end-to-end through the built CLI with the REAL
   // probe. The fixture pid exceeds PID_MAX on macOS (99998) and Linux
   // (4194304), so the kill-0 probe deterministically reports it gone.

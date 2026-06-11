@@ -111,6 +111,40 @@ export async function resolveRun(
  * `No active run found` with no explanation that stale-active
  * candidates were filtered.
  */
+export async function listActiveRunCandidates(input: ResolveRunInput): Promise<{
+  candidates: ActiveRunCandidate[];
+  diagnostics: ResolverDiagnostic[];
+}> {
+  const agentsDir = input.agentsDir ?? path.join(process.cwd(), 'agents');
+  const slugDir = path.join(agentsDir, input.slug);
+  try {
+    const stat = await fs.stat(slugDir);
+    if (!stat.isDirectory()) return { candidates: [], diagnostics: [] };
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return { candidates: [], diagnostics: [] };
+    }
+    throw err;
+  }
+  const { active, diagnostics } = await collectActiveRuns(
+    input.slug,
+    slugDir,
+    input,
+  );
+  return {
+    candidates: active.map((a) => ({
+      runId: a.runId,
+      startedAt: a.manifest.startedAt,
+      sessionId: a.manifest.sessionId,
+      ...(a.manifest.label && { label: a.manifest.label }),
+      ...(a.manifest.paramsSummary && {
+        paramsSummary: a.manifest.paramsSummary,
+      }),
+    })),
+    diagnostics,
+  };
+}
+
 export async function resolveRunWithDiagnostics(
   input: ResolveRunInput,
 ): Promise<{
@@ -194,6 +228,48 @@ async function resolveLatestActive(
   resolved: ResolvedRun | null;
   diagnostics: ResolverDiagnostic[];
 }> {
+  const { active, diagnostics } = await collectActiveRuns(slug, slugDir, input);
+
+  if (active.length === 0) return { resolved: null, diagnostics };
+
+  if (active.length > 1) {
+    const list: ActiveRunCandidate[] = active.map((a) => ({
+      runId: a.runId,
+      startedAt: a.manifest.startedAt,
+      sessionId: a.manifest.sessionId,
+      ...(a.manifest.label && { label: a.manifest.label }),
+      ...(a.manifest.paramsSummary && {
+        paramsSummary: a.manifest.paramsSummary,
+      }),
+    }));
+    throw new MultipleActiveRunsError(slug, list);
+  }
+
+  const sole = active[0];
+  if (!sole) return { resolved: null, diagnostics };
+  const resolved = await projectActive(
+    slug,
+    sole.runId,
+    sole.runDir,
+    sole.manifest,
+    diagnostics,
+    input,
+  );
+  return { resolved, diagnostics };
+}
+
+async function collectActiveRuns(
+  _slug: string,
+  slugDir: string,
+  input: ResolveRunInput,
+): Promise<{
+  active: Array<{
+    runId: string;
+    runDir: string;
+    manifest: LiveRunManifest;
+  }>;
+  diagnostics: ResolverDiagnostic[];
+}> {
   const candidates = await listRunDirs(slugDir);
   const active: Array<{
     runId: string;
@@ -214,9 +290,6 @@ async function resolveLatestActive(
       throw err;
     }
     if (!manifest) {
-      // Missing or torn — does it have a completed.json? Then it's a
-      // legitimate completed run; ignore for active search. Else,
-      // record a diagnostic so the user knows we skipped it.
       const hasCompleted = await fileExists(
         path.join(c.runDir, 'completed.json'),
       );
@@ -229,13 +302,6 @@ async function resolveLatestActive(
       continue;
     }
     if (ACTIVE_STATUSES.has(manifest.status)) {
-      // FX009 — PID-liveness filter. A manifest claiming active is only
-      // really active if its owning process exists. Without this, a
-      // crashed `minih run` (Ctrl-C, kill -9, OOM) leaves status="active"
-      // forever and every later `minih view` / `minih attach` (no --run)
-      // hits MultipleActiveRunsError. The `pid != null` guard handles
-      // freshly-booting runs that haven't written their pid yet — those
-      // pass through and the time-based stale threshold catches them.
       const isAlive = input.isProcessAlive ?? isProcessAliveDefault;
       if (manifest.pid != null && !isAlive(manifest.pid)) {
         diagnostics.push({
@@ -244,32 +310,21 @@ async function resolveLatestActive(
         });
         continue;
       }
+      const threshold = input.staleThresholdMs ?? DEFAULT_STALE_THRESHOLD_MS;
+      const now = (input.now ?? Date.now)();
+      const updated = Date.parse(manifest.updatedAt);
+      if (Number.isFinite(updated) && now - updated > threshold) {
+        diagnostics.push({
+          runId: c.runId,
+          message: `manifest.status="${manifest.status}" but updatedAt ${manifest.updatedAt} is stale — skipping active candidate`,
+        });
+        continue;
+      }
       active.push({ runId: c.runId, runDir: c.runDir, manifest });
     }
   }
 
-  if (active.length === 0) return { resolved: null, diagnostics };
-
-  if (active.length > 1) {
-    const list: ActiveRunCandidate[] = active.map((a) => ({
-      runId: a.runId,
-      startedAt: a.manifest.startedAt,
-      sessionId: a.manifest.sessionId,
-    }));
-    throw new MultipleActiveRunsError(slug, list);
-  }
-
-  const sole = active[0];
-  if (!sole) return { resolved: null, diagnostics };
-  const resolved = await projectActive(
-    slug,
-    sole.runId,
-    sole.runDir,
-    sole.manifest,
-    diagnostics,
-    input,
-  );
-  return { resolved, diagnostics };
+  return { active, diagnostics };
 }
 
 async function resolveLatestCompleted(

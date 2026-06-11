@@ -18,6 +18,7 @@
 import * as path from 'node:path';
 import type { Command } from 'commander';
 import {
+  listActiveRunCandidates,
   MultipleActiveRunsError,
   type ResolvedRun,
   type ResolverDiagnostic,
@@ -40,13 +41,17 @@ export function registerViewCommand(program: Command): void {
       'Target run id (forces by-id resolution; otherwise latest-active falls back to latest-completed)',
     )
     .option(
+      '--latest',
+      'Explicitly choose the newest active run when multiple active runs exist',
+    )
+    .option(
       '--agents-dir <dir>',
       'Override agents directory (default cwd/agents)',
     )
     .action(
       async (
         slug: string,
-        opts: { run?: string; agentsDir?: string },
+        opts: { run?: string; latest?: boolean; agentsDir?: string },
       ): Promise<void> => {
         let resolved: ResolvedRun | null = null;
         let resolverDiagnostics: ResolverDiagnostic[] = [];
@@ -55,6 +60,7 @@ export function registerViewCommand(program: Command): void {
             slug,
             opts.run,
             opts.agentsDir,
+            opts.latest,
           );
           resolved = result.resolved;
           resolverDiagnostics = result.diagnostics;
@@ -194,6 +200,7 @@ async function resolveRunWithFallback(
   slug: string,
   runIdFlag: string | undefined,
   agentsDirOverride: string | undefined,
+  latest: boolean | undefined,
 ): Promise<{
   resolved: ResolvedRun | null;
   diagnostics: ResolverDiagnostic[];
@@ -204,6 +211,28 @@ async function resolveRunWithFallback(
       mode: { kind: 'by-id', runId: runIdFlag },
       agentsDir: agentsDirOverride,
     });
+  }
+  if (latest) {
+    const active = await listActiveRunCandidates({
+      slug,
+      mode: { kind: 'latest-active' },
+      agentsDir: agentsDirOverride,
+    });
+    const newest = active.candidates.sort((a, b) =>
+      b.runId.localeCompare(a.runId),
+    )[0];
+    if (newest) {
+      if (active.candidates.length > 1) {
+        process.stderr.write(
+          `Warning: --latest selected newest active run from ${active.candidates.length} candidates.\n`,
+        );
+      }
+      return resolveRunWithDiagnostics({
+        slug,
+        mode: { kind: 'by-id', runId: newest.runId },
+        agentsDir: agentsDirOverride,
+      });
+    }
   }
   // Try latest-active first; on miss, fall back to latest-completed.
   // `latest-any` already does this AND carries forward active-search

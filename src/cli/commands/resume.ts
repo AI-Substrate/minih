@@ -37,8 +37,10 @@ import {
   displaySummary,
   findRunSession,
   isProcessAliveDefault,
+  listActiveRunCandidates,
   listAgents,
   loadMcpConfig,
+  MultipleActiveRunsError,
   PrettyDisplay,
   type ResumeLockContent,
   resolveAgent,
@@ -262,7 +264,30 @@ export function registerResumeCommand(program: Command): void {
           return;
         }
 
-        // Resolve the run to resume.
+        // Resolve the run to resume. Active ambiguity pre-scan: findRunSession
+        // is completed-only, so it would otherwise miss N-active/0-completed.
+        const activeAmbiguity = await resolveResumeActiveAmbiguity({
+          slug,
+          agentsDir,
+          runId: opts.run,
+        });
+        if (activeAmbiguity) {
+          exitWithEnvelope(
+            formatError(
+              'resume',
+              ErrorCodes.AMBIGUOUS_RUN_ID,
+              `Multiple active runs found for "${slug}". Pass --run <runId> or inspect with minih runs list --active --slug ${slug}.`,
+              {
+                slug,
+                candidates: activeAmbiguity.candidates,
+                remedies: [
+                  `minih runs list --active --slug ${slug}`,
+                  `minih resume ${slug} --run <runId>`,
+                ],
+              },
+            ),
+          );
+        }
         const session = findRunSession(slug, agentsDir, opts.run);
         if (!session) {
           const hint = opts.run
@@ -424,6 +449,21 @@ export function registerResumeCommand(program: Command): void {
         }
       },
     );
+}
+
+async function resolveResumeActiveAmbiguity(opts: {
+  slug: string;
+  agentsDir: string;
+  runId?: string;
+}): Promise<MultipleActiveRunsError | null> {
+  if (opts.runId) return null;
+  const active = await listActiveRunCandidates({
+    slug: opts.slug,
+    mode: { kind: 'latest-active' },
+    agentsDir: opts.agentsDir,
+  });
+  if (active.candidates.length <= 1) return null;
+  return new MultipleActiveRunsError(opts.slug, active.candidates);
 }
 
 interface RunResumedArgs {

@@ -1,0 +1,121 @@
+{
+  "schema_version": 1,
+  "slug": "parallel-param-smoke-parallel-operations",
+  "plan_dir": "docs/plans/023-parallel-param-smoke-parallel-operations",
+  "cursor": "merge",
+  "recommended_next": null,
+  "agents": [
+    {
+      "kind": "companion",
+      "slug": "code-review-companion",
+      "runId": "2026-06-09T13-00-07-113Z-caf6",
+      "covers": ["build"],
+      "status": "completed",
+      "note": "Reported F001-F004; implementation fixed all four and reran just fft. Farewell retro read via minih inside retro show."
+    }
+  ],
+  "nodes": [
+    {
+      "id": "research",
+      "type": "research",
+      "label": "Evidence",
+      "status": "done",
+      "ran_at": "2026-06-07T23:20:00Z",
+      "user_input": "Run a parallel smoke and collect evidence for a future plan; keep batch out of scope for now.",
+      "note": "Initial evidence captured: three same-slug minih runs completed in parallel with distinct params/run IDs; tracking worked with explicit --run but latest-run defaults were ambiguous.",
+      "artifacts": [
+        "docs/plans/023-parallel-param-smoke-parallel-operations/initial-evidence.md"
+      ],
+      "next": ["spec"]
+    },
+    {
+      "id": "spec",
+      "type": "spec",
+      "label": "Spec",
+      "status": "done",
+      "ran_at": "2026-06-07T23:28:00Z",
+      "user_input": "Simple mode; Full TDD; targeted mocks; hybrid docs.",
+      "note": "Spec scoped the work to core run visibility and ambiguity safety: runs list/status, run labels, params summaries, and no batch orchestration.",
+      "artifacts": [
+        "docs/plans/023-parallel-param-smoke-parallel-operations/parallel-param-smoke-parallel-operations-spec.md"
+      ],
+      "next": ["plan"]
+    },
+    {
+      "id": "workshop-001",
+      "type": "workshop",
+      "label": "Ambiguous latest-run guard and params summary contract",
+      "status": "done",
+      "branch_of": "spec",
+      "ran_at": "2026-06-07T23:40:00Z",
+      "user_input": "Workshop it: ambiguous latest-run guard behavior and params-summary redaction before architecture.",
+      "note": "Workshop selected hard E170 ambiguity errors, read-only --latest escape hatches, explicit --run for mutating commands, and bounded/redacted paramsSummary metadata.",
+      "artifacts": [
+        "docs/plans/023-parallel-param-smoke-parallel-operations/workshops/001-ambiguous-latest-run-guard-and-params-summary-contract.md"
+      ],
+      "next": ["plan"]
+    },
+    {
+      "id": "plan",
+      "type": "plan",
+      "label": "Architecture Plan",
+      "status": "done",
+      "ran_at": "2026-06-08T00:00:00Z",
+      "user_input": "yes",
+      "note": "Architecture plan is READY in Simple mode. It defines one implementation phase with Full TDD tasks for runner metadata, runs list/status, ambiguity guards, and docs/help discoverability.",
+      "artifacts": [
+        "docs/plans/023-parallel-param-smoke-parallel-operations/parallel-param-smoke-parallel-operations-plan.md"
+      ],
+      "next": ["build"]
+    },
+    {
+      "id": "validation-001",
+      "type": "validation",
+      "label": "Plan validation",
+      "status": "done",
+      "branch_of": "plan",
+      "ran_at": "2026-06-08T00:05:00Z",
+      "user_input": "validation run?",
+      "note": "validate-v2 style pass completed: one HIGH connect/resume ambiguity-planning issue was fixed in the plan; remaining medium/low findings were recorded in the Validation Record for implementation-time follow-up.",
+      "artifacts": [
+        "docs/plans/023-parallel-param-smoke-parallel-operations/parallel-param-smoke-parallel-operations-plan.md"
+      ],
+      "next": ["build"]
+    },
+    {
+      "id": "build",
+      "type": "phase",
+      "label": "Build: Core parallel operations convenience",
+      "status": "done",
+      "ran_at": "2026-06-09T03:27:00Z",
+      "user_input": "yes",
+      "note": "Implemented run labels, params summaries, runs list/status, active ambiguity guards, docs/help, and domain docs. Companion reported four findings; all were fixed and just fft passed.",
+      "artifacts": [
+        "docs/plans/023-parallel-param-smoke-parallel-operations/execution.log.md"
+      ],
+      "next": ["merge"]
+    },
+    {
+      "id": "validation-002",
+      "type": "validation",
+      "label": "Branch validation (fft + live smoke)",
+      "status": "done",
+      "branch_of": "merge",
+      "ran_at": "2026-06-11T04:20:00Z",
+      "user_input": "start with tier 1, then move in to the others please.",
+      "note": "Two-tier backpressure validation on feat/023-parallel-runs: just fft PASS (1185 passed / 16 skipped); live smoke booted 3 concurrent parallel-param-smoke runs — runs list --active showed labels+paramsSummary, status <slug> failed E170 with 3 candidates, --latest returned selection metadata, bulk --run x3 and --from (with bogus target) returned degraded row E171, per-run markers proved param isolation. Auto-harvested retros independently reproduced #37 and demonstrated #39.",
+      "artifacts": ["docs/retros/parallel-param-smoke.md"],
+      "next": ["merge"]
+    },
+    {
+      "id": "merge",
+      "type": "merge",
+      "label": "Merge (PR #41)",
+      "status": "done",
+      "ran_at": "2026-06-11T04:22:15Z",
+      "user_input": "we just came from main, no need for merge stuff. lets do a pr please.",
+      "note": "Skipped /plan-8 merge analysis — branch was cut from fresh main minutes earlier, so there was no upstream drift to analyze. Shipped as PR #41 (https://github.com/AI-Substrate/minih/pull/41) after branch validation. This state lands on main via the PR itself, so merge=done is self-fulfilling at merge time.",
+      "next": []
+    }
+  ]
+}

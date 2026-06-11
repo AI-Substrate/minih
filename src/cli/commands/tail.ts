@@ -11,7 +11,10 @@ import chalk from 'chalk';
 import { type Command, InvalidArgumentError } from 'commander';
 import {
   displayEvent,
+  listActiveRunCandidates,
+  MultipleActiveRunsError,
   resolveAgent,
+  resolveRunWithDiagnostics,
   validateSlug,
 } from '../../runner/index.js';
 import { assertOutsideContext } from '../preaction-context.js';
@@ -33,6 +36,10 @@ export function registerTailCommand(program: Command): void {
     })
     .option('--run <runId>', 'Specific run ID (default: latest)')
     .option(
+      '--latest',
+      'Explicitly choose the newest active run when multiple active runs exist',
+    )
+    .option(
       '--lines <count>',
       'Number of recent events to show before following, or in snapshot mode',
       parseLineCount,
@@ -45,7 +52,12 @@ export function registerTailCommand(program: Command): void {
     .action(
       (
         slug: string,
-        opts: { run?: string; lines: number; snapshot?: boolean },
+        opts: {
+          run?: string;
+          latest?: boolean;
+          lines: number;
+          snapshot?: boolean;
+        },
       ) => {
         const agentsDir = program.opts().agentsDir ?? 'agents';
 
@@ -61,109 +73,154 @@ export function registerTailCommand(program: Command): void {
           process.exit(1);
         }
 
-        const runsDir = path.join(definition.dir, 'runs');
-        if (!fs.existsSync(runsDir)) {
-          process.stderr.write(chalk.red(`No runs found for "${slug}".\n`));
-          process.exit(1);
-        }
-
-        // Find target run
-        let runId: string;
-        if (opts.run) {
-          runId = opts.run;
-        } else {
-          const entries = fs
-            .readdirSync(runsDir, { withFileTypes: true })
-            .filter((e) => e.isDirectory())
-            .sort((a, b) => b.name.localeCompare(a.name));
-          if (entries.length === 0) {
-            process.stderr.write(chalk.red(`No runs found for "${slug}".\n`));
-            process.exit(1);
-          }
-          runId = entries[0].name;
-        }
-
-        const eventsPath = path.join(runsDir, runId, 'events.ndjson');
-        const completedPath = path.join(runsDir, runId, 'completed.json');
-
-        process.stderr.write(
-          `\n  ${chalk.bold('Tailing:')} ${chalk.cyan(slug)} / ${chalk.dim(runId)}\n`,
-        );
-        process.stderr.write(
-          `  ${chalk.bold('Events:')}  ${chalk.dim(eventsPath)}\n`,
-        );
-        if (opts.snapshot) {
-          process.stderr.write(`  ${chalk.bold('Mode:')}    snapshot\n\n`);
-        } else {
-          process.stderr.write(`  Press ${chalk.bold('Ctrl+C')} to stop\n\n`);
-        }
-
-        let bytesRead = 0;
-        const existingEvents = readRecentEventLines(eventsPath, opts.lines);
-        bytesRead = existingEvents.bytesRead;
-        if (existingEvents.hasEarlier) {
-          const omitted =
-            existingEvents.skippedLineCount === undefined
-              ? 'earlier events omitted'
-              : `${existingEvents.skippedLineCount} earlier events`;
-          process.stderr.write(chalk.dim(`  ... (${omitted})\n\n`));
-        }
-        for (const line of existingEvents.lines) {
-          try {
-            displayEvent(JSON.parse(line));
-          } catch {
-            /* skip malformed */
-          }
-        }
-
-        if (opts.snapshot) {
-          displayCompletionSummary(completedPath);
-          return;
-        }
-
-        // Poll for new events
-        const poll = setInterval(() => {
-          if (!fs.existsSync(eventsPath)) return;
-          const stat = fs.statSync(eventsPath);
-          if (stat.size <= bytesRead) return;
-
-          const fd = fs.openSync(eventsPath, 'r');
-          const buf = Buffer.alloc(stat.size - bytesRead);
-          fs.readSync(fd, buf, 0, buf.length, bytesRead);
-          fs.closeSync(fd);
-          bytesRead = stat.size;
-
-          for (const line of buf
-            .toString('utf-8')
-            .split('\n')
-            .filter(Boolean)) {
-            try {
-              displayEvent(JSON.parse(line));
-            } catch {
-              /* skip malformed */
+        void resolveTailTarget({
+          slug,
+          runId: opts.run,
+          latest: opts.latest,
+          agentsDir,
+        })
+          .then((resolved) => {
+            if (!resolved) {
+              process.stderr.write(chalk.red(`No runs found for "${slug}".\n`));
+              process.exit(1);
             }
-          }
-        }, 200);
-
-        // Watch for completion
-        const completionPoll = setInterval(() => {
-          if (fs.existsSync(completedPath)) {
-            clearInterval(poll);
-            clearInterval(completionPoll);
-            displayCompletionSummary(completedPath);
-            process.exit(0);
-          }
-        }, 500);
-
-        // Ctrl+C
-        process.on('SIGINT', () => {
-          clearInterval(poll);
-          clearInterval(completionPoll);
-          process.stderr.write(chalk.dim('\n  Stopped tailing.\n'));
-          process.exit(0);
-        });
+            tailResolvedRun(slug, resolved.runId, resolved.runDir, opts);
+          })
+          .catch((err: unknown) => {
+            if (err instanceof MultipleActiveRunsError) {
+              process.stderr.write(
+                chalk.red(
+                  `Multiple active runs found for "${slug}". Pass --run <runId> or inspect with minih runs list --active --slug ${slug}.\n`,
+                ),
+              );
+              for (const candidate of err.candidates) {
+                process.stderr.write(chalk.dim(`  ${candidate.runId}\n`));
+              }
+              process.exit(1);
+            }
+            throw err;
+          });
       },
     );
+}
+
+async function resolveTailTarget(opts: {
+  slug: string;
+  runId?: string;
+  latest?: boolean;
+  agentsDir: string;
+}): Promise<{ runId: string; runDir: string } | null> {
+  if (opts.latest && !opts.runId) {
+    const active = await listActiveRunCandidates({
+      slug: opts.slug,
+      mode: { kind: 'latest-active' },
+      agentsDir: opts.agentsDir,
+    });
+    const newest = active.candidates.sort((a, b) =>
+      b.runId.localeCompare(a.runId),
+    )[0];
+    if (newest) {
+      const resolved = await resolveRunWithDiagnostics({
+        slug: opts.slug,
+        mode: { kind: 'by-id', runId: newest.runId },
+        agentsDir: opts.agentsDir,
+      });
+      return resolved.resolved
+        ? { runId: resolved.resolved.runId, runDir: resolved.resolved.runDir }
+        : null;
+    }
+  }
+  const resolved = await resolveRunWithDiagnostics({
+    slug: opts.slug,
+    mode: opts.runId
+      ? { kind: 'by-id', runId: opts.runId }
+      : { kind: 'latest-any' },
+    agentsDir: opts.agentsDir,
+  });
+  return resolved.resolved
+    ? { runId: resolved.resolved.runId, runDir: resolved.resolved.runDir }
+    : null;
+}
+
+function tailResolvedRun(
+  slug: string,
+  runId: string,
+  runDir: string,
+  opts: { lines: number; snapshot?: boolean },
+): void {
+  const eventsPath = path.join(runDir, 'events.ndjson');
+  const completedPath = path.join(runDir, 'completed.json');
+
+  process.stderr.write(
+    `\n  ${chalk.bold('Tailing:')} ${chalk.cyan(slug)} / ${chalk.dim(runId)}\n`,
+  );
+  process.stderr.write(
+    `  ${chalk.bold('Events:')}  ${chalk.dim(eventsPath)}\n`,
+  );
+  if (opts.snapshot) {
+    process.stderr.write(`  ${chalk.bold('Mode:')}    snapshot\n\n`);
+  } else {
+    process.stderr.write(`  Press ${chalk.bold('Ctrl+C')} to stop\n\n`);
+  }
+
+  let bytesRead = 0;
+  const existingEvents = readRecentEventLines(eventsPath, opts.lines);
+  bytesRead = existingEvents.bytesRead;
+  if (existingEvents.hasEarlier) {
+    const omitted =
+      existingEvents.skippedLineCount === undefined
+        ? 'earlier events omitted'
+        : `${existingEvents.skippedLineCount} earlier events`;
+    process.stderr.write(chalk.dim(`  ... (${omitted})\n\n`));
+  }
+  for (const line of existingEvents.lines) {
+    try {
+      displayEvent(JSON.parse(line));
+    } catch {
+      /* skip malformed */
+    }
+  }
+
+  if (opts.snapshot) {
+    displayCompletionSummary(completedPath);
+    return;
+  }
+
+  const poll = setInterval(() => {
+    if (!fs.existsSync(eventsPath)) return;
+    const stat = fs.statSync(eventsPath);
+    if (stat.size <= bytesRead) return;
+
+    const fd = fs.openSync(eventsPath, 'r');
+    const buf = Buffer.alloc(stat.size - bytesRead);
+    fs.readSync(fd, buf, 0, buf.length, bytesRead);
+    fs.closeSync(fd);
+    bytesRead = stat.size;
+
+    for (const line of buf.toString('utf-8').split('\n').filter(Boolean)) {
+      try {
+        displayEvent(JSON.parse(line));
+      } catch {
+        /* skip malformed */
+      }
+    }
+  }, 200);
+
+  const completionPoll = setInterval(() => {
+    if (fs.existsSync(completedPath)) {
+      clearInterval(poll);
+      clearInterval(completionPoll);
+      displayCompletionSummary(completedPath);
+      process.exit(0);
+    }
+  }, 500);
+
+  process.on('SIGINT', () => {
+    clearInterval(poll);
+    clearInterval(completionPoll);
+    process.stderr.write(chalk.dim('\n  Stopped tailing.\n'));
+    process.exit(0);
+  });
 }
 
 function parseLineCount(value: string): number {

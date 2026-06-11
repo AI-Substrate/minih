@@ -78,6 +78,10 @@ export interface AgentRunConfig {
   skillDirectories?: string[];
   /** Skill names disabled/excluded by the CLI resolver. */
   disabledSkills?: string[];
+  /** Optional human-readable run label persisted for inventory/status views. */
+  label?: string;
+  /** Bounded/redacted params display metadata persisted for inventory/status views. */
+  paramsSummary?: RunParamsSummary;
   /** Optional domain-supplied MCP servers created after runId/runDir are known. */
   insideMcpServerFactory?: (
     context: InsideMcpServerFactoryContext,
@@ -184,6 +188,14 @@ export interface RetrospectiveCoordination {
 }
 
 /** Metadata written to completed.json after each run. */
+export interface RunParamsSummary {
+  schemaVersion: 1;
+  display: Record<string, string>;
+  truncated: boolean;
+  redactedKeys: string[];
+  omittedKeys?: string[];
+}
+
 export interface CompletedMetadata {
   slug: string;
   runId: string;
@@ -206,6 +218,10 @@ export interface CompletedMetadata {
   resumedFromRunId?: string;
   /** Velocity data — compounding improvement tracking */
   velocity?: VelocityData;
+  /** Optional human-readable run label for inventory/status views. */
+  label?: string;
+  /** Bounded/redacted params display metadata for inventory/status views. */
+  paramsSummary?: RunParamsSummary;
   /**
    * Plan 018 / FX008 — populated when the run failed via the 5-signal
    * permission-denial protocol. Mirrors `LiveRunManifest.permissionError`
@@ -357,6 +373,10 @@ export interface LiveRunManifest {
     kind: 'none' | 'file-command-lane';
     commandLanePath?: string;
   };
+  /** Optional human-readable run label for inventory/status views. */
+  label?: string;
+  /** Bounded/redacted params display metadata for inventory/status views. */
+  paramsSummary?: RunParamsSummary;
   counters: {
     events: number;
     toolCalls: number;
@@ -459,6 +479,33 @@ export interface ActiveRunCandidate {
   runId: string;
   startedAt: string;
   sessionId: string | null;
+  label?: string;
+  paramsSummary?: RunParamsSummary;
+}
+
+export interface RunInventoryRow {
+  slug: string;
+  runId: string;
+  liveness: RunLiveness;
+  manifestStatus: LiveRunStatus | null;
+  result: CompletedMetadata['result'] | null;
+  label?: string;
+  paramsSummary?: RunParamsSummary;
+  startedAt: string | null;
+  updatedAt: string | null;
+  completedAt: string | null;
+  pid: number | null;
+  model: string | null;
+  sessionId: string | null;
+  eventCount: number;
+  toolCallCount: number;
+  diagnostics: ResolverDiagnostic[];
+}
+
+export interface RunStatusRow extends RunInventoryRow {
+  target: string;
+  found: boolean;
+  error?: { code: string; message: string };
 }
 
 // ---------------------------------------------------------------------------

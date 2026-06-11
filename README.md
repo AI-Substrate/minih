@@ -178,6 +178,7 @@ Execute an agent.
 minih run my-agent
 minih run my-agent --model claude-sonnet-4 --timeout 600
 minih run my-agent --param file_path=src/main.ts --param depth=3
+minih run my-agent --label review-a  # Label rows in minih runs list/status
 minih run my-agent --dry-run    # Preview prompt without executing
 minih run my-agent --verbose    # Old-style timestamped event log
 ```
@@ -193,6 +194,7 @@ minih run my-agent --verbose    # Old-style timestamped event log
 | `--skill <name>` | Load only a named skill from configured sources (repeatable) |
 | `--disable-skill <name>` | Disable/exclude a skill by name (repeatable) |
 | `--no-skills` | Disable `.minih.json` skills for this invocation |
+| `--label <label>` | Human-readable run label shown by `minih runs list/status` |
 | `--dry-run` | Preview assembled prompt without executing |
 | `--verbose` | Show all events with timestamps (default: pretty streaming) |
 
@@ -266,6 +268,23 @@ minih init my-agent --no-output    # Skip output-schema.json
 
 List past runs for an agent with timestamps and status. Resumed runs show a `↩` indicator.
 
+### `minih runs list` / `minih runs status`
+
+Use these when you have multiple runs in flight, especially same-slug runs launched from parallel shells.
+
+```bash
+minih run worker --label case-a --param id=a &
+minih run worker --label case-b --param id=b &
+
+minih runs list --active                  # active/stale runs across all agents
+minih runs list --all --slug worker       # bounded history for one slug
+minih runs status --run worker/<runId> --run worker/<otherRunId>
+```
+
+Rows include the agent slug, run ID, liveness, timestamps, counters, model/session IDs, optional label, and a bounded/redacted params summary. Public rows intentionally identify runs by `slug` + `runId`; use follow-up commands with explicit `--run <runId>` rather than inspecting run folders directly.
+
+When more than one active run exists for a slug, single-run commands that default to "latest" refuse with E170 and list candidates. Pass `--run <runId>` to target one run, or use read-only `--latest` where the command supports intentionally choosing the newest active run.
+
 ### `minih resume <slug> <message>`
 
 Send a follow-up message to a completed agent session. The session retains full conversation history — the agent remembers what it did in the original run.
@@ -319,6 +338,8 @@ Follow a running agent's event stream in real time, or print a bounded snapshot.
 minih tail my-agent
 minih tail my-agent --run <runId> --lines 20 --snapshot
 ```
+
+If several active runs share the same slug, pass `--run <runId>` or inspect candidates first with `minih runs list --active --slug <slug>`.
 
 ### Global Options
 

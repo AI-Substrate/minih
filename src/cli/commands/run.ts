@@ -16,6 +16,7 @@ import { buildInsideMcpServerConfig } from '../../mcp/index.js';
 import type { AgentRunConfig } from '../../runner/index.js';
 import {
   buildInsidePreamble,
+  buildRunParamsSummary,
   coordinationRunLocation,
   displayEvent,
   displayHeader,
@@ -28,6 +29,7 @@ import {
   resolveAgent,
   runAgent,
   SYSTEM_OUTPUT_INSTRUCTIONS,
+  validateRunLabel,
   validateSlug,
 } from '../../runner/index.js';
 import {
@@ -95,6 +97,10 @@ export function registerRunCommand(program: Command): void {
         return acc;
       },
       [] as string[],
+    )
+    .option(
+      '--label <label>',
+      'Human-readable label for run inventory/status rows',
     )
     .option('--dry-run', 'Preview assembled prompt without executing')
     .option('--verbose', 'Show all events with timestamps (verbose mode)')
@@ -170,6 +176,7 @@ export function registerRunCommand(program: Command): void {
           reasoning?: string | false;
           timeout?: string;
           param?: string[];
+          label?: string;
           dryRun?: boolean;
           verbose?: boolean;
           human?: boolean;
@@ -234,6 +241,21 @@ export function registerRunCommand(program: Command): void {
             ),
           );
         }
+
+        const labelResult = validateRunLabel(opts.label);
+        if (!labelResult.ok) {
+          exitWithEnvelope(
+            formatError(
+              'run',
+              ErrorCodes.INVALID_ARGS,
+              labelResult.error ?? 'Invalid run label.',
+            ),
+          );
+        }
+
+        const paramsSummary = buildRunParamsSummary(
+          Object.keys(params).length > 0 ? params : undefined,
+        );
 
         const DEFAULT_MODEL = 'claude-opus-4.6';
         const model =
@@ -405,6 +427,8 @@ export function registerRunCommand(program: Command): void {
             : (definition.timeout ?? DEFAULT_TIMEOUT),
           cwd: process.cwd(),
           params: Object.keys(params).length > 0 ? params : undefined,
+          ...(labelResult.label && { label: labelResult.label }),
+          ...(paramsSummary && { paramsSummary }),
           ...(permissionsOverride && { permissionsOverride }),
           insideMcpServerFactory: ({ runId, runDir, agentSlug, agentsDir }) =>
             buildInsideMcpServerConfig({
@@ -681,6 +705,12 @@ export function registerRunCommand(program: Command): void {
                   runId: result.metadata.runId,
                   runDir: result.runDir,
                   sessionId: result.metadata.sessionId,
+                  ...(result.metadata.label && {
+                    label: result.metadata.label,
+                  }),
+                  ...(result.metadata.paramsSummary && {
+                    paramsSummary: result.metadata.paramsSummary,
+                  }),
                   result: result.metadata.result,
                   durationMs: result.metadata.durationMs,
                   validated: result.metadata.validated,

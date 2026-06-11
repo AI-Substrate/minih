@@ -13,7 +13,10 @@ import Table from 'cli-table3';
 import type { Command } from 'commander';
 import {
   findRunSession,
+  listActiveRunCandidates,
+  MultipleActiveRunsError,
   resolveAgent,
+  resolveRunWithDiagnostics,
   validateSlug,
 } from '../../runner/index.js';
 import {
@@ -30,12 +33,17 @@ export function registerConnectCommand(program: Command): void {
       'Print copilot CLI command to resume an agent session interactively',
     )
     .option('--run <runId>', 'Connect to a specific run (default: latest)')
+    .option(
+      '--latest',
+      'Explicitly choose the newest active run when multiple active runs exist',
+    )
     .option('--list', 'List all runs with their session IDs')
     .action(
-      (
+      async (
         slug: string,
         opts: {
           run?: string;
+          latest?: boolean;
           list?: boolean;
         },
       ) => {
@@ -147,8 +155,32 @@ export function registerConnectCommand(program: Command): void {
           return;
         }
 
-        // Default: print connect command for latest (or specific) run
-        const session = findRunSession(slug, agentsDir, opts.run);
+        // Default: print connect command for latest (or specific) run.
+        const activeSelection = await resolveConnectActiveSelection({
+          slug,
+          agentsDir,
+          runId: opts.run,
+          latest: opts.latest,
+        });
+        if (activeSelection instanceof MultipleActiveRunsError) {
+          exitWithEnvelope(
+            formatError(
+              'connect',
+              ErrorCodes.AMBIGUOUS_RUN_ID,
+              `Multiple active runs found for "${slug}". Pass --run <runId> or inspect with minih runs list --active --slug ${slug}.`,
+              {
+                slug,
+                candidates: activeSelection.candidates,
+                remedies: [
+                  `minih runs list --active --slug ${slug}`,
+                  `minih connect ${slug} --run <runId>`,
+                ],
+              },
+            ),
+          );
+        }
+        const session =
+          activeSelection?.session ?? findRunSession(slug, agentsDir, opts.run);
         if (!session) {
           const hint = opts.run
             ? `Run "${opts.run}" not found or has no session.`
@@ -184,8 +216,58 @@ export function registerConnectCommand(program: Command): void {
             runId: session.runId,
             runDir: session.runDir,
             command,
+            ...(activeSelection?.selection && {
+              selection: activeSelection.selection,
+            }),
           }),
         );
       },
     );
+}
+
+async function resolveConnectActiveSelection(opts: {
+  slug: string;
+  agentsDir: string;
+  runId?: string;
+  latest?: boolean;
+}): Promise<
+  | {
+      session: { sessionId: string; runId: string; runDir: string };
+      selection: { mode: 'latest'; ambiguousCandidates: number };
+    }
+  | MultipleActiveRunsError
+  | null
+> {
+  if (opts.runId) return null;
+  const active = await listActiveRunCandidates({
+    slug: opts.slug,
+    mode: { kind: 'latest-active' },
+    agentsDir: opts.agentsDir,
+  });
+  if (active.candidates.length > 1 && !opts.latest) {
+    return new MultipleActiveRunsError(opts.slug, active.candidates);
+  }
+  if (!opts.latest || active.candidates.length === 0) return null;
+  const newest = active.candidates.sort((a, b) =>
+    b.runId.localeCompare(a.runId),
+  )[0];
+  if (!newest) return null;
+  const resolved = await resolveRunWithDiagnostics({
+    slug: opts.slug,
+    mode: { kind: 'by-id', runId: newest.runId },
+    agentsDir: opts.agentsDir,
+  });
+  const sessionId = resolved.resolved?.manifest?.sessionId;
+  if (!resolved.resolved || !sessionId) return null;
+  return {
+    session: {
+      sessionId,
+      runId: resolved.resolved.runId,
+      runDir: resolved.resolved.runDir,
+    },
+    selection: {
+      mode: 'latest',
+      ambiguousCandidates: active.candidates.length,
+    },
+  };
 }

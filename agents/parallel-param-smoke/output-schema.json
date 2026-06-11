@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "summary",
+    "retrospective",
+    "requestedId",
+    "targetDir",
+    "markerPath",
+    "markerExists",
+    "markerRunId",
+    "message"
+  ],
+  "properties": {
+    "summary": { "type": "string" },
+    "retrospective": { "$ref": "https://minih.dev/schemas/retrospective.json" },
+    "requestedId": { "type": "string" },
+    "targetDir": {
+      "type": "string",
+      "pattern": "^scratch/agent-runs/[A-Za-z0-9_-]+$"
+    },
+    "markerPath": {
+      "type": "string",
+      "pattern": "^scratch/agent-runs/[A-Za-z0-9_-]+/marker\\.json$"
+    },
+    "markerExists": { "const": true },
+    "markerRunId": { "type": "string", "minLength": 1 },
+    "message": { "type": ["string", "null"] }
+  },
+  "additionalProperties": true
+}

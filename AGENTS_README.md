@@ -1186,13 +1186,24 @@ minih inspect my-agent > /tmp/full-prompt.md  # Save for review
 minih inspect my-agent | wc -w                # Word count
 ```
 
-### Browse run history
+### Browse run history and active runs
 
 ```bash
-minih history my-agent           # Table of past runs with status, duration, validation
-minih last-run my-agent          # Latest run dir and report path
+minih history my-agent           # Table of past runs for one slug
+minih runs list --active         # Active/stale runs across all agent slugs
+minih runs list --all --slug my-agent
+minih runs status --run my-agent/<runId> --run other-agent/<runId>
 minih validate my-agent          # Re-validate latest output against schema
 ```
+
+Use `minih runs list` when you launch several runs in parallel or when multiple active runs share one slug. Give parallel launches labels so the rows are recognizable:
+
+```bash
+minih run my-agent --label case-a --param id=a &
+minih run my-agent --label case-b --param id=b &
+```
+
+Follow-up commands should use explicit `--run <runId>`. When several active runs share a slug, minih refuses ambiguous latest-run defaults with E170 and lists candidates/remedies; read-only commands may offer `--latest` as an explicit newest-active escape hatch. Do not inspect run-directory files directly just to identify a run — use the CLI surfaces.
 
 ### Resume a completed session
 
@@ -1233,6 +1244,7 @@ minih run <slug> --model gpt-5.4          # Override model
 minih run <slug> --reasoning xhigh        # Set reasoning effort
 minih run <slug> --timeout 1200           # Override timeout (seconds)
 minih run <slug> --param key=value        # Pass input parameters (repeatable)
+minih run <slug> --label case-a           # Label rows in runs list/status
 minih run <slug> --mcp-config config.json # Load MCP servers from file
 minih run <slug> --skill-source .agents --skill minih-test-skill # Load a named local skill
 minih skills discover                    # List configured/discovered skills
@@ -1243,6 +1255,8 @@ minih status <slug>                       # One-shot liveness check (active/stal
 minih status <slug> -n 10                 # Show last 10 turns instead of 5
 minih tail <slug>                         # Follow live event stream (Ctrl+C to stop)
 minih tail <slug> --lines 20 --snapshot   # Print recent events and exit
+minih runs list --active                  # Cross-agent active/stale inventory
+minih runs status --run <slug>/<runId>    # Bulk explicit status rows (repeat --run)
 minih list                                # Show all agents with descriptions
 minih history <slug>                      # Past runs with status, duration, velocity trend
 minih last-run <slug>                     # Latest run directory and report path

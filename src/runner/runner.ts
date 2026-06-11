@@ -438,6 +438,8 @@ export async function runAgent(
       sessionId: null,
       model: config.model ?? null,
       control: { available: coordinationEnabled, kind: 'none' },
+      ...(config.label && { label: config.label }),
+      ...(config.paramsSummary && { paramsSummary: config.paramsSummary }),
       counters: { events: 0, toolCalls: 0, messages: 0, errors: 0 },
     };
     if (isResumeInPlace) {
@@ -549,6 +551,10 @@ export async function runAgent(
             eventCount: 0,
             toolCallCount: 0,
             artifacts: listArtifacts(runDir),
+            ...(config.label && { label: config.label }),
+            ...(config.paramsSummary && {
+              paramsSummary: config.paramsSummary,
+            }),
           },
           validation: null,
           runDir,
@@ -827,6 +833,8 @@ export async function runAgent(
           eventCount: 1,
           toolCallCount: 0,
           artifacts: [],
+          ...(config.label && { label: config.label }),
+          ...(config.paramsSummary && { paramsSummary: config.paramsSummary }),
           // FX008-4 — surface the denial reason so the CLI can route to
           // ErrorCodes.COORDINATION_WRITE_DENIED (E205) instead of generic
           // AGENT_EXECUTION_FAILED (E120).
@@ -1327,6 +1335,8 @@ export async function runAgent(
       eventCount: stats.total,
       toolCallCount: stats.toolCalls,
       artifacts,
+      ...(config.label && { label: config.label }),
+      ...(config.paramsSummary && { paramsSummary: config.paramsSummary }),
       ...(config.resumedFromRunId && {
         resumedFromRunId: config.resumedFromRunId,
       }),

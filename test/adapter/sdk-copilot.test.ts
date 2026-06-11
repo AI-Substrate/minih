@@ -188,7 +188,9 @@ describe('SdkCopilotAdapter.run', () => {
     expect(session.disconnectCalls).toBe(1);
   });
 
-  it('resets duplicate suppression at idle boundaries for queued turns', async () => {
+  // Updated for FT-001 (plan 026 review F001): the streamed turn's
+  // consolidated message now flows through instead of being suppressed.
+  it('emits consolidated messages for streamed and unstreamed queued turns', async () => {
     const session = new MockSession();
     const adapter = new SdkCopilotAdapter(new MockClient(session));
     const events: AgentEvent[] = [];
@@ -220,6 +222,7 @@ describe('SdkCopilotAdapter.run', () => {
     expect(events.map((event) => event.type)).toEqual([
       'session_start',
       'text_delta',
+      'message',
       'session_idle',
       'message',
       'session_idle',
@@ -229,6 +232,47 @@ describe('SdkCopilotAdapter.run', () => {
         (event) => event.type === 'message' && event.data.messageId === 'm2',
       ),
     ).toBeDefined();
+  });
+
+  // FT-001 (plan 026 review F001) — the consolidated assistant.message must
+  // still reach onEvent when deltas streamed: it is the single turn-accounting
+  // signal the runner counts for --max-turns. Display dedup is downstream
+  // (pretty.ts / human-view-model.ts coalesce by messageId) — never the
+  // adapter's job.
+  it('emits exactly one consolidated message event per streamed turn', async () => {
+    const session = new MockSession();
+    const adapter = new SdkCopilotAdapter(new MockClient(session));
+    const events: AgentEvent[] = [];
+
+    const runPromise = adapter.run({
+      prompt: 'start',
+      onEvent: (event) => events.push(event),
+    });
+
+    await waitFor(() => session.sendCalls.length === 1);
+    session.emit({
+      type: 'assistant.message_delta',
+      data: { deltaContent: 'hel', messageId: 'm1' },
+    });
+    session.emit({
+      type: 'assistant.message_delta',
+      data: { deltaContent: 'lo', messageId: 'm1' },
+    });
+    session.emit({
+      type: 'assistant.message',
+      data: { content: 'hello', messageId: 'm1' },
+    });
+    session.emit({ type: 'session.idle', data: {} });
+
+    const result = await runPromise;
+
+    expect(result.output).toBe('hello');
+    const messages = events.filter((event) => event.type === 'message');
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.data).toMatchObject({
+      content: 'hello',
+      messageId: 'm1',
+    });
   });
 
   it('returns failed status when session error fires before idle', async () => {

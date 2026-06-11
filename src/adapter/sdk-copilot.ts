@@ -168,27 +168,23 @@ export class SdkCopilotAdapter implements IAgentAdapter {
     try {
       let output = '';
       let hasStreamedThinking = false;
-      let hasStreamedText = false;
       let idleSettled = false;
 
       const idlePromise = new Promise<void>((resolve, reject) => {
         const unsubscribe = session.on((event: CopilotSessionEventLike) => {
-          // Suppress duplicate consolidated events.
-          // SDK emits deltas during streaming, then re-emits full consolidated
-          // content after the turn. We skip the duplicates.
+          // Suppress the duplicate consolidated reasoning the SDK re-emits
+          // after reasoning deltas. The consolidated assistant.message is NOT
+          // suppressed (plan 026 review F001): it is the single
+          // turn-accounting `message` event the runner counts for --max-turns.
+          // Display dedup by messageId happens downstream (pretty.ts,
+          // human-view-model.ts).
           if (event.type === 'assistant.reasoning_delta') {
             hasStreamedThinking = true;
           }
           if (event.type === 'assistant.message_delta') {
-            hasStreamedText = true;
             inFlightMessage = { messageId: event.data?.messageId };
           }
           if (event.type === 'assistant.reasoning' && hasStreamedThinking) {
-            return;
-          }
-          if (event.type === 'assistant.message' && hasStreamedText) {
-            output = event.data?.content ?? '';
-            inFlightMessage = null;
             return;
           }
 
@@ -204,7 +200,6 @@ export class SdkCopilotAdapter implements IAgentAdapter {
 
           if (isSessionIdleEvent(event)) {
             hasStreamedThinking = false;
-            hasStreamedText = false;
             inFlightMessage = null;
             if (!idleSettled) {
               idleSettled = true;

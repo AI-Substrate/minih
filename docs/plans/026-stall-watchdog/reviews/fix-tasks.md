@@ -65,3 +65,5 @@ The exact patch may differ; the invariant is that streaming chunks do not produc
 - [x] FT-004 evidence added or cited — `d713af9`: shared `resolveEffectiveBudgets` + unit pins + resume-in-place run.json recording test
 - [x] FT-005 evidence added or cited — `4b3d20f`: `RunInventoryRow.terminalReason` passthrough + unit + built-CLI tests
 - [ ] Re-run `/the-flow 7 review --plan /Users/jordanknight/substrate/minih/docs/plans/026-stall-watchdog/stall-watchdog-plan.md` and achieve zero HIGH/CRITICAL findings
+
+> **Companion-mode disposition (2026-06-12)**: the fix pass ran under stage 6c with a live `code-review-companion` (run `2026-06-12T08-39-31-885Z-544e`) that reviewed every FT commit plus the full range `752945f..a75d435` — farewell envelope: **zero findings, six APPROVE summaries**. Per stage-6c doctrine the companion review supersedes a stage-7 re-run; the row above stays available if a fresh review artifact is preferred before merge.

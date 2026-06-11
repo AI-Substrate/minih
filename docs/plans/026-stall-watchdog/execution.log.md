@@ -133,3 +133,12 @@ Run in **companion mode** (stage 6c): `code-review-companion` run `2026-06-12T08
 - `just fft` exit 0 — **1319 tests passed / 16 skipped (123 files; +9 new this pass)**, biome clean (one format reflow in `runs.test.ts` absorbed), tsc clean, `sdk-check ✓ 1.0.1 (latest)`.
 - Friction captured in-flight: `DL-002` (difficulty) — per-task commits land unformatted; format errors surface only at phase-end fft. Candidate encoding: per-commit `npx biome check --write` in the companion-mode per-task checklist.
 - Companion findings: none received as of the final code commit (asynchronous; reconciliation in the debrief below).
+
+## Companion debrief (stage 62 Step 9)
+
+- Drain ping sent at `a75d435`; companion kept reviewing (no inline reply) so `control:stop` followed after two monitor windows; run `2026-06-12T08-39-31-885Z-544e` completed cleanly (~28 min, 10 peer updates).
+- **Farewell verdict: zero findings.** Per the envelope: "the streamed-turn accounting fix restores one consolidated message event per assistant turn, the budget race arms now exist before adapter.run(), the Domain Manifest rows match the touched contract surfaces, resume budget evidence is present, and runs inventory now passes terminalReason through." Coordination notes record **six APPROVE summaries** (one per FT review-request + final range sweep).
+- **Findings reconciliation: nothing to reconcile** — findings[] is empty; no finding-typed messages arrived during the phase.
+- **Companion magicWand (follow-up candidate, not auto-filed)**: `outside inbox send --type task --stop-after-summary` — auto-queue `control:stop` once the companion summarizes the final review request (would have saved the two monitor windows above).
+- Companion difficulties (its own retro): MH-001 vitest `--runInBand` unsupported here; MH-002 large final-range `git diff` overflowed its tool display. Both worked around.
+- Observation for the protocol: the companion's APPROVE summaries did not surface via `outside inbox list` (sender-filter showed nothing inbound) — the farewell envelope was the reliable channel.

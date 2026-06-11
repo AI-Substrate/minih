@@ -248,3 +248,13 @@
 - **magicWand** (target: coordination): Add a coordination-level briefing digest field that includes canonical plan/spec/workshop absolute paths and active task status in a machine-readable shape, so the companion can orient without re-discovering files heuristically.
 - difficulties:
   - [annoying] knowledge: The orientation prompt required selecting the latest plan/workshop, but directory discovery via the glob tool did not return docs/plans folders or the workshop file even though shell find did. (workaround: Used shell find from the project root and then read the explicit workshop path from the outside briefing.)
+
+## 2026-06-11T23:07:18.912Z — code-review-companion / 2026-06-12T08-39-31-885Z-544e
+
+- runId: 2026-06-12T08-39-31-885Z-544e
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-06-12T08-39-31-885Z-544e
+- summary: Reviewed the complete plan 026 fix pass from baseline 752945f through a75d435, including FT-001 through FT-005 and the final docs/history closeout. I found no issues: the streamed-turn accounting fix restores one consolidated message event per assistant turn, the budget race arms now exist before adapter.run(), the Domain Manifest rows match the touched contract surfaces, resume budget evidence is present, and runs inventory now passes terminalReason through.
+- **magicWand** (target: coordination): Add a coordination-level final-review helper, e.g. `outside inbox send --type task --stop-after-summary`, that automatically queues control:stop once the companion sends a summary for the final review request.
+- difficulties:
+  - [annoying] test: I attempted `npx vitest run ... --runInBand`, but this repo's Vitest CLI does not support that option. (workaround: Reran the focused suite with the repo-supported `npx vitest run <files>` invocation.)
+  - [annoying] debug: A large final-range `git diff` command overflowed the tool display and was saved to a temporary capture instead of being directly reviewable in the transcript. (workaround: Switched to targeted file views and smaller searches, then cleaned up the temporary capture.)

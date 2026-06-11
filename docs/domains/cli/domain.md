@@ -52,6 +52,8 @@
 | `doctor` outside-contract checks | CLI | Agent authors keeping `outside.md` current and bounded |
 | `run --dry-run` | CLI | Agent authors inspecting the exact coordinated inside prompt without launching the SDK |
 
+**Named external consumer**: the eng-harness boot (`.harness/extensions/boot/`) consumes `minih doctor` exit signals and envelope stdout as an external observer at the process boundary — never an import (see `docs/domains/eng-harness/domain.md`).
+
 ## Concepts
 
 | Concept | Definition |

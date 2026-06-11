@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "slug": "core-harness",
+  "plan_dir": "docs/plans/024-core-harness",
+  "mode": "Simple",
+  "current_stage": "complete",
+  "pending_command": null,
+  "intent": "Upgrade minih's engineering harness to harness core (the `harness` CLI): evaluate the repo for wrapping, mapping existing harness concepts (retros/magicWand, fft gate, eng-harness skills) into the CLI's extension/loop model — embrace and replace, no duplicate systems, no repo-local install.",
+  "milestones_total": 5,
+  "milestones_done": 5,
+  "last_checkpoint_at": "2026-06-11T07:50:00Z",
+  "compacted_seams": [],
+  "status": "complete",
+  "pr_url": "https://github.com/AI-Substrate/minih/pull/43"
+}

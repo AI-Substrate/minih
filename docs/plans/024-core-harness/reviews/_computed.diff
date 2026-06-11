@@ -1,0 +1,1965 @@
+diff --git a/.gitignore b/.gitignore
+index 1970b16..2c1c329 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -150,3 +150,6 @@ session-store.db*
+ 
+ # Local scratch — screenshots, pane dumps, paste artifacts (not committed)
+ scratch/
++
++# Engineering-harness transient scratch (defense-in-depth above the CLI's self-healed nested .gitignore)
++.harness/temp/
+diff --git a/.harness/engineering-harness.md b/.harness/engineering-harness.md
+new file mode 100644
+index 0000000..d5dbbfd
+--- /dev/null
++++ b/.harness/engineering-harness.md
+@@ -0,0 +1,273 @@
++# Engineering Harness — minih
++
++> **AGENTS START HERE → `harness instructions`** — the CLI's baked agent
++> briefing (envelope contract, role split, discovery loop). Then
++> `harness instructions boot` for the boot verb's briefing. `harness help` and
++> `harness doctor --json` complete the one-hop orientation.
++
++**Version**: 2.0.0 (migrated from `docs/project-rules/harness.md` v1.0.0)
++**Created**: 2026-05-10 · **Migrated**: 2026-06-11 (plan 024-core-harness)
++**Maturity Level**: L2
++**Project Type**: cli
++
++## Purpose
++
++This harness defines minih's session-level engineering feedback loop — Boot →
++Backpressure → Observe → Retro → Improve — running on **harness-core** (the
++global `harness` CLI). It is agent-operable, but it is not merely an "agent
++harness"; it is the project contract for proving minih itself can be built,
++exercised through supported CLI surfaces, and observed without reading private
++run files directly.
++
++It is distinct from the **minih product harness** (the retrospective machinery
++minih's runner ships to its own users, writing `docs/retros/`). This document
++governs the loop for *developing* minih; the product harness is observed, never
++written, from here (see § Legacy read paths).
++
++## Boot command
++
++```bash
++harness boot --json    # composite read-only readiness proof (~17s warm; target <60s) — `time harness boot` to query
++```
++
++Boot proves the environment and re-orients the agent in one envelope: five
++read-only sensors plus an orientation digest (branch, governance location, the
++friction-capture command, the mutating commit gate). See § Boot sensors for the
++composition. `just build` remains the quick rebuild during iteration; boot is
++the session-start proof, not the build loop.
++
++## Health check
++
++```bash
++harness doctor --json    # harness substrate: toolchain, extensions loaded, conventions
++minih doctor             # product health — shelled by boot sensor 4 (see Finding 01 note in § Boot sensors)
++```
++
++Healthy reading: `harness doctor` exits 0 with extensions `1 loaded, 0 failed,
++0 conflict(s)`. Boot's own verdict vocabulary is `ok / degraded / error` — and
++**day-one degraded is honest**, not broken (§ Boot sensors).
++
++## Interact method
++
++- **Primary**: Terminal CLI — two surfaces, one dialect rule (§ Harness-core contract).
++- **Harness verbs**: `harness boot`, `harness observe`, `harness record`,
++  `harness instructions [verb]`, `harness doctor`, `harness help`, `harness new`,
++  `harness docs`, `harness skills`.
++- **minih commands** (the system under development):
++  - `minih doctor` — validates agent conventions and project health surfaces.
++  - `minih list` — lists available agents through the public CLI envelope.
++  - `minih check <slug> --file <path>` — validates explicit files against agent schemas.
++  - `minih status <slug> --run <runId>` — inspects run status without reading run-directory files directly.
++  - `minih tail <slug> --run <runId> --snapshot --lines N` — observes bounded event output through the CLI.
++  - `minih retros --slug <slug>` — reads retrospective evidence through the CLI.
++- **Auth Strategy**: None for build, doctor, list, check, status, tail, retros,
++  and all harness verbs. Running SDK-backed agents may require
++  `GH_TOKEN=$(gh auth token)` in the spawning shell.
++- **Auth Detection**: Prefer CLI error envelopes and `gh auth status`/`gh auth token`
++  for SDK-backed workflows.
++
++## Observe method
++
++- **Response capture**: JSON envelopes on stdout; human-readable tables and
++  pretty output on stderr (both CLIs follow this convention).
++- **Logs**: Use `minih tail`, `minih last-run`, `minih validate`, `minih retros`.
++  Do not read `agents/<slug>/runs/<runId>/...` files directly (§ Dogfood Rules).
++- **Friction capture**: `harness observe "<what>" --kind <kind>` — one silent
++  line per event into the gitignored buffer (`.harness/temp/`); drained to a
++  committed record via `harness record retro --slug <plan-slug>` at retro time.
++- **Evidence paths**:
++  - `.harness/records/<type>/` — committed harness records (`harness record`).
++  - `.harness/temp/` — uncommitted observe scratch (self-gitignored; repo-level ignore as defense-in-depth).
++  - the active plan's `execution.log.md` — committed phase evidence.
++  - `./scratch/evidence/` — ad hoc command captures (gitignored).
++
++## Harness-core contract
++
++Recorded contract surface (no checkout pinning — the global CLI is an
++npm-linked dev checkout and a deliberate moving target; this section is the
++drift detector):
++
++- **Version at migration**: harness-core **0.2.0**.
++- **Envelope**: every verb returns `{command, status, data, error?, next_action?, timestamp}`
++  with `status ∈ ok | degraded | unconfigured | error` mapping to exits
++  **0 / 0 / 2 / 1**.
++- **Core verbs**: `help`, `doctor`, `instructions`, `new`, `docs`, `skills`,
++  `record`, `observe`. There is **no `init` verb yet** (E108) — governance is
++  hand-written here; adopting `harness init` when it ships is a recorded
++  follow-up, not a dependency.
++- **Records**: `harness record [type] --slug <slug>` →
++  `.harness/records/<type>/<YYYY-MM-DD>/<NNN>-<slug>.md` (frontmatter owned by
++  the CLI's template).
++- **Observe flags**: `--kind` (difficulty | magic-wand | gift | insight |
++  coordination | improvement-suggestion | confusion), `--target`, `--severity`,
++  `--workaround`, `--suggested-encoding`, `--agent`, `--list`, `--clear`.
++- **Extension contract**: `.harness/extensions/<name>/extension.ts`
++  default-exports a `HarnessVerb`; `VerbContext` provides `exec/fs/env/git/clock`
++  plus `ok/degraded/unconfigured/error`. TS loads via jiti; the contract import
++  is type-only (erased at runtime — no repo-local package).
++- **Dialect rule**: always bare **`harness`** (and the `engh` alias). The CLI is
++  installed globally; **never `npx harness`, never `npm install` it into this
++  repo.** Everything this repo writes — docs, skills, AGENTS.md, governance —
++  uses the bare dialect.
++
++## Boot sensors (as built)
++
++The boot verb (`.harness/extensions/boot/extension.ts`) is a hand-written
++composite — `--wrap` would lose status nuance. Five read-only sensors, in order:
++
++| # | Sensor | Command | fail → | warn → |
++|---|--------|---------|--------|--------|
++| 1 | lint | `npx biome check .` (read-only, never `--write`) | error | — |
++| 2 | typecheck | `npx tsc --noEmit` | error | — |
++| 3 | build+test | `just check` (= `npm run build` + `npm test`; runs **no** biome) | error | — |
++| 4 | minih-doctor | `minih doctor`, then `minih doctor --strict` | error (plain run fails) | warn (plain passes, `--strict` fails ⇒ warnings present) |
++| 5 | audit | `npm audit --audit-level=high --json` | error (unparseable, online) | warn (high+critical > 0); **skipped** when registry unreachable/offline — skipped means *unproven*, never gates |
++
++Verdict mapping: any `fail` → envelope `error` (exit 1); any `warn` →
++`degraded` (exit 0); else `ok` (exit 0). `data.sensors` carries per-sensor
++outcomes; `data.orientation` is the re-orientation digest.
++
++**Finding 01 — why sensor 4 runs doctor twice.** The 024 spec's sensor
++composition named `minih doctor --json`, but `minih doctor` has no `--json`
++flag (live-probed in `dist` and `src/cli/commands/doctor.ts`; only `--strict`
++exists). Warning detection is therefore deterministic via the exit-code pair:
++the plain run catches hard errors, the `--strict` run turns warnings into a
++non-zero exit — no prose scraping, no src change. Captured as observe entry
++DL-001; the follow-up candidate is adding `--json` MinihEnvelope output to
++`minih doctor` (a src change, out of 024 scope). Note: `harness doctor --json`
++exists and is unrelated to this gap.
++
++**Degraded is honest.** The day-one verdict is `degraded` — known `minih doctor`
++warnings plus a known high/critical advisory chain in dependencies. That is the
++truthful state of the tree, surfaced with `next_action` naming each warning.
++Treat `degraded` as workable-with-awareness; do not "fix" boot to hide it.
++
++**Boot never mutates.** Read-only proven by byte-identical
++`git status --porcelain` across a run (AC-4). The mutating gate — `just fft`,
++which runs `biome format --write` — belongs at commit time, never in boot.
++
++## Phase Gates
++
++Use the narrowest gate that proves the phase's contract, then run `just fft` before commit or push.
++
++| Domain / Work Type | Boot | Interact | Observe | Narrow Gate |
++|--------------------|------|----------|---------|-------------|
++| docs / planning | N/A | Read linked plan/domain docs | `git --no-pager diff --check` | `git --no-pager diff --check` |
++| runner | `just build` | Focused runner tests | Vitest output | `npx vitest run test/runner/<file>.test.ts` |
++| cli | `just build` | Built `minih ...` command | JSON envelope stdout + stderr diagnostics | `npx vitest run test/cli/<file>.test.ts` |
++| mcp | `just build` | MCP server/spawn tests | Vitest output | `npx vitest run test/mcp/<file>.test.ts` |
++| adapter | `just build` | Fake adapter tests unless SDK behavior is required | Vitest output | targeted adapter test |
++| measurement contracts | `just build` | Schema/proof/registry tests | AJV/Vitest output | `npx vitest run test/runner/schemas.test.ts test/runner/measurement/*.test.ts` |
++| eng-harness | `harness boot` | `harness <verb> --json` | Envelope `data` + `.harness/records/` | `harness boot --json` |
++| release / pre-commit | `just build` | Full pipeline | CLI/test/audit output | `just fft` |
++
++## Dogfood Rules
++
++- Use the minih CLI to inspect minih runs. Do not `cat`, `tail`, `grep`, or `jq` files under `agents/<slug>/runs/<runId>/` directly.
++- If a needed run artifact has no CLI surface, record the CLI gap before using emergency direct file access — file it as
++  `harness observe "<the gap>" --kind magic-wand` (MW) so it survives to the retro.
++- Treat JSON envelopes as the machine contract and stderr as human-readable diagnostics.
++- For source-code phases, start or verify code-review-companion before editing source code.
++- Keep measurement work local-first and evidence-backed: runner facts are authoritative; agents and companions may only add cited interpretation.
++- Capture engineering friction the moment it happens: `harness observe "<what>" --kind <kind>` — one line now beats a
++  reconstructed memory at retro time. The buffer is gitignored scratch; nothing lands in history until `harness record retro` drains it.
++
++## Maturity Assessment
++
++| Level | Status | Notes |
++|-------|--------|-------|
++| L0: No harness | No | minih has named build, test, CLI, and observation commands. |
++| L1: Manual boot + CLI | Yes | A human or agent can build and run CLI commands. |
++| L2: Auto boot + CLI health | Yes | `harness boot` provides one-command automated proof (build, test, lint, typecheck, doctor, audit) with a deterministic envelope verdict. |
++| L3: Full interaction + evidence | Partial | CLI observation surfaces exist and the observe → record loop now standardizes friction evidence into `.harness/records/`; retro-driven *encoded* improvements have not yet shipped from this loop. |
++| L4: Self-healing | No | The harness does not auto-recover from failed builds, stale SDK auth, or broken agent configs. |
++
++Current: **L2** — minih boots and health-checks through one deterministic
++command with structured evidence capture; the improvement loop is standing
++(observe buffer + committed records) but has not yet shipped a retro-driven
++harness change.
++
++## Validation Checklist
++
++### Boot
++
++- [x] Single command starts full proof (`harness boot`)
++- [x] Health check endpoint/command exists and returns expected response
++- [x] Boot is idempotent and read-only
++- [ ] Handles port conflicts (not applicable for the core CLI; server-like commands must fail fast or own cleanup)
++- [ ] Clean shutdown on SIGTERM/SIGINT for long-running interactive views
++
++### Interact
++
++- [x] Agent can send input through terminal commands
++- [x] Agent can trigger core user-facing actions through the CLI
++- [x] Auth is automated or unnecessary for local health paths
++- [x] Auth expiry is detected with a clear error message for SDK-backed runs
++
++### Observe
++
++- [x] Agent can read output through CLI JSON envelopes and stderr diagnostics
++- [x] Evidence capture works through `harness observe` / `harness record` and redirected CLI output
++- [x] Structured output available
++
++### Operate
++
++- [x] Bootstrap doc explains harness to new agents (`harness instructions boot` + this contract)
++- [x] Example validation script exists as a committed copy-paste command (modernized into the deep guide — see footer)
++- [x] Named commands exist in `justfile` and `package.json`
++
++## Validation Checklist for Agents
++
++Before implementation:
++
++1. Boot: run `harness boot --json` and read the verdict (`degraded` = workable-with-awareness; `error` = fix the named sensor first).
++2. Interact: run the narrow CLI/test command for the phase (§ Phase Gates).
++3. Observe: capture the command result through stdout/stderr or the active plan's execution log; file friction as `harness observe` the moment it bites.
++4. Validate: run the phase's narrow test gate; before commit/push, run `just fft`.
++
++The copy-paste validation block lives in the deep guide (see footer) in its
++modernized `harness boot`-based form.
++
++## Injection map
++
++minih's extant flow is the SDD `plan-*` pipeline guided by `the-flow` — a
++**self-firing host**: its skills call `/eng-harness-flow --event …` at every
++seam, so no extra weaving into flow files is needed. The AGENTS.md harness
++block is the cold-start cue for sessions that begin *outside* the flow.
++
++| Seam event | Fires from | What fires it |
++|------------|-----------|---------------|
++| `session-start` | `the-flow` entry / `/plan-1a` | the flow's session-start seam step; outside the flow, the AGENTS.md cold-start cue (`harness boot` at session start) covers it |
++| `post-spec` | `the-flow` at `awaiting-1b` — the backpressure seam | recommended pre-architect step: `/eng-harness-flow --event post-spec --spec <path>` |
++| `pre-implement` | `/plan-6` step 2a (the plan's T-row N.0 / T000) | self-fired before any task starts |
++| `phase-end` | `/plan-6` step 7 (the plan's T-row N.z / T012) | self-fired after all tasks and outputs |
++| `plan-complete` | `/plan-8` after the merge executes | long-horizon reflection |
++
++(`task-pause` exists in the router's seam vocabulary; here it is manual-only —
++an operator fires it at a natural pause when wanted.)
++
++## Legacy read paths
++
++- **`docs/retros/*.md`** — the minih **product** harness's retro ledgers,
++  written by minih's runner (auto-append) and `minih harvest`. For the
++  engineering harness these are a **READ-only harvest source**, consumed via
++  the minihToUniversal mapping at retro-harvest time. **Writers under
++  `.harness/` are prohibited from targeting `docs/retros/`** — the product
++  harness owns that path; the engineering harness records land in
++  `.harness/records/` only.
++- **`docs/project-rules/harness.md`** — the previous home of this contract;
++  now a dated deprecation pointer to this file.
++
++## History
++
++| Date | Plan | Change | Maturity Before -> After |
++|------|------|--------|--------------------------|
++| 2026-05-10 | 020-minih-harness-measurement | Created MiniH engineering harness contract for Boot -> Interact -> Observe measurement prerequisite. | L0 -> L2 |
++| 2026-05-10 | 020-minih-harness-measurement | Validated Boot with `just build`, Interact with `minih doctor`/`minih list`, and Observe with redirected JSON evidence in `scratch/evidence/`. | L2 -> L2 |
++| 2026-05-10 | 020-minih-harness-measurement | Used the engineering harness to validate Phase 1 contracts with focused measurement/schema tests and the full `just fft` gate. | L2 -> L2 |
++| 2026-06-11 | 024-core-harness | Migrated governance onto harness-core 0.2.0: composite `harness boot` (5 read-only sensors), observe → record friction loop, injection map, legacy read-path declaration; old doc reduced to a deprecation pointer. | L2 -> L2 |
++
++---
++
++Deep guide (loop narrative, friction lifecycle, copy-paste validation block):
++[`docs/how/engineering-harness.md`](../docs/how/engineering-harness.md)
+diff --git a/.harness/extensions/boot/extension.ts b/.harness/extensions/boot/extension.ts
+new file mode 100644
+index 0000000..3b73ba1
+--- /dev/null
++++ b/.harness/extensions/boot/extension.ts
+@@ -0,0 +1,177 @@
++import type {
++  HarnessVerb,
++  VerbContext,
++} from '@ai-substrate/engineering-harness/contract';
++
++type Outcome = 'pass' | 'warn' | 'fail' | 'skipped';
++
++interface SensorResult {
++  sensor: string;
++  command: string;
++  outcome: Outcome;
++  detail: string;
++}
++
++const NETWORK_ERRORS =
++  /ENOTFOUND|EAI_AGAIN|ENETUNREACH|ECONNREFUSED|ETIMEDOUT|EAUDITNOREGISTRY/i;
++
++function tail(text: string, lines = 5): string {
++  const trimmed = text.trim();
++  if (trimmed === '') return '';
++  return trimmed.split('\n').slice(-lines).join('\n');
++}
++
++async function runSimple(
++  ctx: VerbContext,
++  sensor: string,
++  command: string,
++  args: string[],
++): Promise<SensorResult> {
++  const r = await ctx.exec(command, args);
++  return {
++    sensor,
++    command: [command, ...args].join(' '),
++    outcome: r.ok ? 'pass' : 'fail',
++    detail: r.ok ? 'clean' : tail(r.stderr || r.stdout) || `exit ${r.code}`,
++  };
++}
++
++// minih doctor has no --json envelope yet (observed as DL-001), so warnings
++// are detected deterministically via exit codes: a plain run catches hard
++// errors, a --strict run turns warnings into a non-zero exit.
++async function runMinihDoctor(ctx: VerbContext): Promise<SensorResult> {
++  const command = 'minih doctor (+ --strict for warning detection)';
++  const plain = await ctx.exec('minih', ['doctor']);
++  if (!plain.ok) {
++    return {
++      sensor: 'minih-doctor',
++      command,
++      outcome: 'fail',
++      detail: tail(plain.stderr || plain.stdout) || `exit ${plain.code}`,
++    };
++  }
++  const strict = await ctx.exec('minih', ['doctor', '--strict']);
++  if (!strict.ok) {
++    return {
++      sensor: 'minih-doctor',
++      command,
++      outcome: 'warn',
++      detail: 'warnings present — run `minih doctor` for the list',
++    };
++  }
++  return { sensor: 'minih-doctor', command, outcome: 'pass', detail: 'clean' };
++}
++
++interface AuditJson {
++  error?: { code?: string; summary?: string };
++  metadata?: { vulnerabilities?: Record<string, number> };
++}
++
++// Findings are never masked; an unreachable registry soft-skips instead of
++// failing (the repo's sdk-check recipe sets the offline-tolerance precedent).
++async function runAudit(ctx: VerbContext): Promise<SensorResult> {
++  const command = 'npm audit --audit-level=high --json';
++  const r = await ctx.exec('npm', ['audit', '--audit-level=high', '--json']);
++  let parsed: AuditJson | null = null;
++  try {
++    parsed = JSON.parse(r.stdout) as AuditJson;
++  } catch {
++    parsed = null;
++  }
++  if (parsed?.error) {
++    return {
++      sensor: 'audit',
++      command,
++      outcome: 'skipped',
++      detail: `registry unavailable (${parsed.error.code ?? 'unknown'}) — soft-skipped`,
++    };
++  }
++  if (!parsed) {
++    if (NETWORK_ERRORS.test(r.stderr)) {
++      return {
++        sensor: 'audit',
++        command,
++        outcome: 'skipped',
++        detail: 'offline — soft-skipped',
++      };
++    }
++    return {
++      sensor: 'audit',
++      command,
++      outcome: 'fail',
++      detail: tail(r.stderr) || 'unparseable npm audit output',
++    };
++  }
++  const vulns = parsed.metadata?.vulnerabilities ?? {};
++  const high = vulns.high ?? 0;
++  const critical = vulns.critical ?? 0;
++  if (high + critical > 0) {
++    return {
++      sensor: 'audit',
++      command,
++      outcome: 'warn',
++      detail: `${critical} critical, ${high} high — run \`npm audit --audit-level=high\` for detail`,
++    };
++  }
++  return {
++    sensor: 'audit',
++    command,
++    outcome: 'pass',
++    detail: 'no high/critical vulnerabilities',
++  };
++}
++
++const boot: HarnessVerb = {
++  name: 'boot',
++  summary:
++    'Read-only readiness proof: biome check, tsc --noEmit, just check, minih doctor, npm audit.',
++  description:
++    'Composite session-start sensor for developing minih. Runs five read-only checks and returns one honest envelope: ok (all pass), degraded (doctor warnings or high/critical audit findings), error (any sensor hard-fails). The audit sensor soft-skips when the registry is unreachable. Never mutates the tree — the mutating gate (`just fft`) belongs at commit time.',
++  async run(ctx) {
++    const sensors: SensorResult[] = [];
++    sensors.push(await runSimple(ctx, 'lint', 'npx', ['biome', 'check', '.']));
++    sensors.push(await runSimple(ctx, 'typecheck', 'npx', ['tsc', '--noEmit']));
++    sensors.push(await runSimple(ctx, 'build+test', 'just', ['check']));
++    sensors.push(await runMinihDoctor(ctx));
++    sensors.push(await runAudit(ctx));
++
++    const orientation = {
++      what: 'session-level engineering harness for developing minih — distinct from the minih product harness that writes docs/retros/',
++      branch: ctx.git.currentBranch(),
++      governance: ctx.fs.exists('.harness/engineering-harness.md')
++        ? '.harness/engineering-harness.md'
++        : 'owed — migrating from docs/project-rules/harness.md (plan 024-core-harness)',
++      capture_friction: 'harness observe "<what>" --kind <kind>',
++      pre_commit_gate:
++        'just fft (mutating — runs biome format --write); boot itself never writes',
++      briefing: 'harness instructions boot',
++    };
++
++    const failed = sensors.filter((s) => s.outcome === 'fail');
++    const warned = sensors.filter((s) => s.outcome === 'warn');
++
++    if (failed.length > 0) {
++      return ctx.error(
++        'E1',
++        `boot failed: ${failed.map((s) => s.sensor).join(', ')}`,
++        {
++          details: { sensors, orientation },
++          next_action: `Fix the failing sensor(s) first: ${failed
++            .map((s) => `${s.sensor} (${s.command})`)
++            .join('; ')}`,
++        },
++      );
++    }
++    if (warned.length > 0) {
++      return ctx.degraded(
++        { sensors, orientation },
++        `Ready to work, with caveats: ${warned
++          .map((s) => `${s.sensor} — ${s.detail}`)
++          .join('; ')}`,
++      );
++    }
++    return ctx.ok({ sensors, orientation });
++  },
++};
++
++export default boot;
+diff --git a/.harness/extensions/boot/instructions.md b/.harness/extensions/boot/instructions.md
+new file mode 100644
+index 0000000..798ea35
+--- /dev/null
++++ b/.harness/extensions/boot/instructions.md
+@@ -0,0 +1,42 @@
++# `harness boot` — agent briefing
++
++## What this verb computes (the deterministic part)
++
++Five read-only sensors, in order, returning one envelope:
++
++1. `lint` — `npx biome check .` (read-only; never `--write`)
++2. `typecheck` — `npx tsc --noEmit`
++3. `build+test` — `just check` (`npm run build` + `npm test`)
++4. `minih-doctor` — `minih doctor`, then `minih doctor --strict`; plain-pass +
++   strict-fail means warnings-only (minih doctor has no `--json` envelope yet,
++   so exit codes are the deterministic signal — observed as DL-001)
++5. `audit` — `npm audit --audit-level=high --json`; unreachable registry
++   soft-skips (sdk-check precedent), findings are never masked
++
++Verdict mapping: any sensor `fail` → `error` (exit 1); doctor warnings or
++high/critical vulnerabilities → `degraded` (exit 0); all pass → `ok` (exit 0).
++`skipped` never gates. `data.sensors` carries per-sensor outcomes;
++`data.orientation` is the machine-readable re-orientation digest (branch,
++governance location, the friction-capture command, the mutating commit gate).
++
++## Your role (the inference part)
++
++- Treat `degraded` as workable-with-awareness: read which sensors warned and
++  judge whether the warnings touch the code you are about to change. The
++  day-one state is honestly degraded (known minih doctor warnings + a known
++  high/critical advisory chain) — do not "fix" boot to hide that.
++- On `error`, fix the named sensor before starting feature work; the failure
++  detail in the envelope is the evidence.
++- Boot proves the environment; it does not run `just fft` — that gate mutates
++  the tree (biome format `--write`) and belongs at commit time, not session
++  start.
++
++## Watch out for
++
++- `just check` runs the full test suite; a known intermittent flake lives in
++  `test/runner/agent-pack/extractor.test.ts`. A lone failure there may be the
++  flake — re-run before concluding the tree is broken, and capture the event:
++  `harness observe "<what happened>" --kind difficulty`.
++- The audit sensor is network-dependent; `skipped` means *unproven*, not safe.
++- minih-doctor warning detection rides `--strict`'s exit code; it cannot count
++  warnings — run `minih doctor` yourself for the list.
+diff --git a/.harness/records/retro/2026-06-11/001-024-core-harness.md b/.harness/records/retro/2026-06-11/001-024-core-harness.md
+new file mode 100644
+index 0000000..6f83676
+--- /dev/null
++++ b/.harness/records/retro/2026-06-11/001-024-core-harness.md
+@@ -0,0 +1,32 @@
++---
++schema_version: "1.0"
++retro_id: "2026-06-11T07:07:55Z-claude-code-024a"
++agent: "claude-code"
++plan_id: "024-core-harness"
++started_at: "2026-06-11T06:14:33Z"
++ended_at: "2026-06-11T07:07:55Z"
++summary: "Plan 024-core-harness setup excursion + build: stood up the .harness/ substrate on harness-core 0.2.0 (composite boot, governance migration, friction loop). One difficulty captured live during boot authoring and drained here — the spec's sensor-composition line assumed a minih doctor --json flag that does not exist."
++entries:
++  - id: DL-001
++    kind: difficulty
++    description: "Spec sensor composition names 'minih doctor --json' but minih doctor has no --json flag (checked dist and src/cli/commands/doctor.ts) — only --strict exists"
++    target: plan
++    severity: annoying
++    workaround: "boot composite runs minih doctor twice: plain exit code detects errors, --strict exit code detects warnings (no prose scraping, no src change)"
++    suggested_encoding: "follow-up candidate: add --json MinihEnvelope output to minih doctor (src change, out of 024 scope)"
++    system:
++      compound:
++        status: open
++        source: agent-self
++        first_seen_at: "2026-06-11T06:14:33Z"
++---
++
++# Retro — 024-core-harness
++
++First committed engineering-harness record for minih: the observe → record
++round-trip proven end-to-end (AC-6). DL-001 is the spec-drift find from the
++boot-authoring excursion; its deterministic workaround (the plain + `--strict`
++exit-code pair) is documented in governance § Boot sensors and in
++`harness instructions boot`. The encode candidate (`--json` envelope output for
++`minih doctor`) stays open as a post-024 follow-up — it is a `src/` change and
++out of this plan's scope by spec Non-Goal.
+diff --git a/AGENTS.md b/AGENTS.md
+index 8d7d0fa..a9f895f 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -4,7 +4,7 @@
+ 
+ **The harness IS the product. We MUST be exemplar users.** That means: NEVER `cat`/`tail`/`grep`/`jq` files under `agents/<slug>/runs/<runId>/` directly. ALWAYS go through the `minih` CLI. Every time you bypass the CLI, you skip a UX gap that real users will hit — and you set a bad pattern in this very document for the next agent reading it.
+ 
+-**This rule is non-negotiable.** If the CLI doesn't expose what you need, that's a missing surface — file it as MW/fix dossier and use `cat` only AFTER raising the gap explicitly with the user. Don't silently bypass.
++**This rule is non-negotiable.** If the CLI doesn't expose what you need, that's a missing surface — file it as MW/fix dossier (`harness observe "<the gap>" --kind magic-wand`) and use `cat` only AFTER raising the gap explicitly with the user. Don't silently bypass.
+ 
+ **Equivalence table** (read left-to-right; if you reach for the left, use the right instead):
+ 
+@@ -41,6 +41,18 @@ Ask: "Could `minih X` answer this?" If yes, use that. If no, the gap is the answ
+ 
+ ---
+ 
++## Engineering harness — session start
++
++**Start every session with `harness boot --json`.** minih's engineering harness runs on the global harness-core CLI — always bare `harness` (the `engh` alias also works); **never `npm install` it into this repo**. Boot runs five read-only sensors (lint, typecheck, build+test, minih doctor, audit) and returns one JSON envelope: `ok` / `degraded` (workable-with-awareness — read `next_action` for the named caveats) / `error` (fix the named sensor before feature work). For orientation, run `harness instructions` (then `harness instructions boot`). The governance contract lives at [`.harness/engineering-harness.md`](.harness/engineering-harness.md).
++
++**File friction the moment it bites**: `harness observe "<what>" --kind <kind>` — one silent line into gitignored scratch (`.harness/temp/`); it round-trips to a committed record at retro time via `harness record retro --slug <plan-slug>`.
++
++If the eng-harness skills are missing from your agent CLI: `npx skills@latest add AI-Substrate/harness-engineering -a claude-code -g -y`.
++
++Deep guide — loop narrative, friction lifecycle, narrow gates, copy-paste validation: [`docs/how/engineering-harness.md`](docs/how/engineering-harness.md).
++
++---
++
+ ## Build, Test, Lint
+ 
+ ```bash
+diff --git a/docs/domains/cli/domain.md b/docs/domains/cli/domain.md
+index fc46cee..c41583f 100644
+--- a/docs/domains/cli/domain.md
++++ b/docs/domains/cli/domain.md
+@@ -52,6 +52,8 @@
+ | `doctor` outside-contract checks | CLI | Agent authors keeping `outside.md` current and bounded |
+ | `run --dry-run` | CLI | Agent authors inspecting the exact coordinated inside prompt without launching the SDK |
+ 
++**Named external consumer**: the eng-harness boot (`.harness/extensions/boot/`) consumes `minih doctor` exit signals and envelope stdout as an external observer at the process boundary — never an import (see `docs/domains/eng-harness/domain.md`).
++
+ ## Concepts
+ 
+ | Concept | Definition |
+diff --git a/docs/domains/domain-map.md b/docs/domains/domain-map.md
+index 64a6ab3..354abbf 100644
+--- a/docs/domains/domain-map.md
++++ b/docs/domains/domain-map.md
+@@ -7,6 +7,7 @@ flowchart TD
+     mcp["mcp<br/>private inside server, hidden baked context,<br/>six backend-safe inbox/state tools,<br/>bounded multi-type inbox long-poll, spawn config"]
+     adapter["adapter<br/>copilot-sdk wrapper, normalized events,<br/>SessionSender, fake adapter tests"]
+     measurement["measurement<br/>conceptual contracts, metric vocabulary,<br/>proof levels, traceability, authority/redaction,<br/>benchmark and pulse semantics"]
++    eng_harness["eng-harness<br/>.harness/ substrate: governance contract,<br/>composite boot envelope, friction capture,<br/>committed retro records"]
+ 
+     cli -- "runAgent, listAgents, resolveAgent,<br/>findRunSession, validators, display,<br/>outside inbox/state helpers" --> runner
+     cli -- "buildInsideMcpServerConfig<br/>for coordinated runs" --> mcp
+@@ -15,6 +16,7 @@ flowchart TD
+     runner -- "IAgentAdapter,<br/>AgentEvent, AgentResult,<br/>SessionSender" --> adapter
+     measurement -. "contracts implemented by runner facts,<br/>cli surfaces, and agent packs" .-> runner
+     cli -. "renders and orchestrates measurement contracts" .-> measurement
++    eng_harness -. "observes via minih CLI envelopes<br/>(process boundary)" .-> cli
+ ```
+ 
+ - **cli** depends on **runner** for agent discovery, execution, session lookup, validation, display, context detection, inbox/state path helpers, state persistence helpers, ULIDs, typed runner errors, and outside peer command implementation.
+@@ -24,8 +26,9 @@ flowchart TD
+ - **runner** depends on **adapter** contracts (`IAgentAdapter`, `AgentEvent`, `AgentResult`, `SessionSender`) and remains SDK- and MCP-independent.
+ - **adapter** has no internal domain dependencies; its only external implementation dependency is `@github/copilot-sdk`.
+ - **measurement** is a conceptual contract domain, not a runtime import layer. Its contracts are implemented by owning domains: runner owns deterministic facts, CLI owns user surfaces, agents/companions provide cited interpretation, and human pulse remains aggregate human-provided evidence.
++- **eng-harness** is the session-level dev-loop harness (`.harness/` substrate on the global harness-core CLI). Its single dashed edge is conceptual, not an import: boot shells `minih doctor` and harvest reads `minih retros` envelopes **at the process boundary**. Zero inbound edges — no minih domain may depend on it; minih builds and ships identically with `.harness/` deleted.
+ 
+-Import direction: `cli → {mcp, runner, adapter}`, `mcp → runner`, `runner → adapter`. No upward imports; runner does not import mcp.
++Import direction: `cli → {mcp, runner, adapter}`, `mcp → runner`, `runner → adapter`, and `eng-harness → cli` (process boundary, never imports). No upward imports; runner does not import mcp.
+ 
+ ## Health Summary
+ 
+@@ -36,3 +39,4 @@ Import direction: `cli → {mcp, runner, adapter}`, `mcp → runner`, `runner 
+ | mcp | Private inside server config, six backend-safe inbox/state tools, bounded `inbox_list.waitMs`/`waitForAny` long-poll | runner | Healthy: inside-only, no public server command |
+ | adapter | SDK session/event abstraction and `SessionSender` | External SDK only | Healthy: no runner/CLI/MCP imports |
+ | measurement | Vocabulary, traceability, proof levels, scorecard categories, authority/redaction rules, benchmark semantics, pulse semantics | none at runtime | Healthy: conceptual contract domain only |
++| eng-harness | Boot envelope (`harness boot --json`), committed records (`.harness/records/`), governance contract | cli envelopes at the process boundary (never imports) | Healthy: zero inbound edges by rule |
+diff --git a/docs/domains/eng-harness/domain.md b/docs/domains/eng-harness/domain.md
+new file mode 100644
+index 0000000..c92ce1f
+--- /dev/null
++++ b/docs/domains/eng-harness/domain.md
+@@ -0,0 +1,66 @@
++# Domain: eng-harness
++
++**Purpose**: Session-level engineering harness for *developing* minih, running on harness-core (the global `harness` CLI). Owns the `.harness/` substrate — governance contract, composite boot verb, friction-capture loop, committed retro records — plus the AGENTS.md routing block and the deep guide. It proves the dev environment and captures engineering friction; it never participates in minih's runtime.
++
++## Boundary
++
++**Owns**: `.harness/engineering-harness.md` (governance/BIO contract), `.harness/extensions/` (the composite `boot` verb + agent briefings), `.harness/records/` (committed harness records), `.harness/temp/` (gitignored observe scratch), the AGENTS.md engineering-harness block, `docs/how/engineering-harness.md`
++
++**Excludes**: The minih **product** harness — runner's retro ledger writers and `minih harvest` targeting `docs/retros/` (runner/cli domains own those; eng-harness reads them only at harvest time, see Rules). The harness-core CLI itself (upstream `harness-engineering` repo — consumed globally, never vendored). minih source (`src/**`, `dist/**` — this plan makes zero src changes). The eng-harness skills (installed globally at the user level, not in this repo).
++
++### Hard boundary rules
++
++1. **Shell-wrappers only** — extensions invoke repo commands via `ctx.exec` and **never import from `src/` or `dist/`**; the only import is the type-only harness-core contract, erased at runtime (jiti).
++2. **Zero inbound edges** — no minih domain (cli, runner, mcp, adapter, measurement) may depend on, import from, or reference eng-harness; minih builds, tests, and ships identically with `.harness/` deleted.
++3. **Envelope-only observation** — eng-harness observes minih exclusively through published CLI envelopes and exit codes at the process boundary (`minih doctor` exit signals, `minih retros --json`, …); it never reads minih's private run files (the dogfood rule applies to the harness too).
++4. **Single one-way map edge** — `eng-harness → cli` (process boundary, never imports); no other edges exist on the domain map.
++
++## Composition
++
++| File | Classification | Purpose |
++|------|---------------|---------|
++| `.harness/engineering-harness.md` | contract | Governance: BIO contract, harness-core contract surface, boot sensors as built, Phase Gates, Dogfood Rules, Injection map, legacy read paths, History |
++| `.harness/extensions/boot/extension.ts` | internal | Composite boot verb — five read-only sensors → one envelope verdict (024) |
++| `.harness/extensions/boot/instructions.md` | contract | Agent briefing served by `harness instructions boot` |
++| `.harness/records/retro/**` | internal | Committed retro records created by `harness record retro` (dated, CLI-templated frontmatter) |
++| `.harness/temp/` | internal | Gitignored observe scratch (self-gitignored + repo-level defense-in-depth) |
++| `docs/how/engineering-harness.md` | contract | The one deep guide: loop narrative, command map, copy-paste validation block |
++
++## Contracts
++
++| Contract | Type | Consumers |
++|----------|------|-----------|
++| `harness boot --json` envelope | CLI envelope | Dev-session agents (session-start proof), plan-6 pre-implement seam, AC batteries |
++| `harness record retro --slug <slug>` → `.harness/records/retro/<date>/<NNN>-<slug>.md` | CLI + path contract | Retro drain (observe buffer → committed record), harvest |
++| Governance BIO contract (`.harness/engineering-harness.md`) | Document contract | eng-harness-flow router (S2 file-exists signal; S3 `## Injection map` signal), boot orientation digest, future agents |
++| `harness instructions boot` briefing | CLI | Any agent about to run or interpret boot |
++
++## Concepts
++
++| Concept | Definition |
++|---------|-----------|
++| Composite boot | One `harness boot` run executes five read-only sensors and folds them into a single envelope verdict — `ok` / `degraded` / `error`. Hand-written (not `--wrap`) because wrapping one command would lose per-sensor status nuance. |
++| Sensor | One deterministic check inside boot (lint, typecheck, build+test, minih-doctor, audit) with outcome `pass / warn / fail / skipped`. `skipped` means *unproven* (e.g. registry offline) and never gates. |
++| Envelope | The harness-core return contract: `{command, status, data, error?, next_action?, timestamp}`, status ∈ `ok / degraded / unconfigured / error` → exits 0/0/2/1. Machine contract on stdout; humans read stderr. |
++| Degraded-is-honest | `degraded` is a truthful "workable-with-awareness" verdict, not a failure — day one it names known minih-doctor warnings + a known advisory chain. Boot is never tuned to hide it. |
++| Observe buffer | `harness observe "<what>" --kind <kind>` appends one silent line to gitignored `.harness/temp/` scratch — friction captured the moment it bites, zero ceremony. |
++| Retro record | `harness record retro --slug <plan>` drains buffered observations into a committed, dated record under `.harness/records/retro/` — the durable end of the friction loop. |
++| Governance | The BIO contract at `.harness/engineering-harness.md`: what boots the system, how to interact/observe, phase gates, dogfood rules, maturity snapshot, history. The router's S2 setup signal. |
++| Injection map | The `## Injection map` governance section recording where the SDD flow self-fires `/eng-harness-flow --event <seam>` — usage made structural, not remembered. The router's S3 signal. |
++
++## Tests & Validation
++
++| Area | Validation |
++|------|-----------|
++| Substrate shape + envelope legality + read-only proof + friction round-trip | Behavioral AC battery (AC-1 … AC-6) run live and captured in `docs/plans/024-core-harness/execution.log.md` — real verbs, envelope assertions, no mocks, no test infra |
++| Extension loads cleanly | `harness doctor --json` → extensions layer `1 loaded, 0 failed, 0 conflicts` |
++| Lint discipline | `extension.ts` is biome-clean under repo-wide `npx biome check .` (records are `.md`, biome-inert) |
++| Repo gate | `just fft` green with the substrate in the tree (AC-11) |
++
++No vitest suite by design: the domain's testing strategy is Lightweight behavioral verification through the real CLI surface (spec § Testing Strategy).
++
++## History
++
++| Phase | Changes |
++|-------|---------|
++| 024-core-harness | Domain created and **registered as the sixth domain by user decision**, overriding the research dossier's keep-`.harness`-outside-the-registry lean (DB-08): the boundary is real and worth enforcing (zero inbound edges, envelope-only observation), so it earns registry visibility rather than a tooling footnote. **Revisit note**: if the meta-domain's registry presence proves heavier than its value (e.g. domain tooling starts assuming every registered domain has `src/` + vitest), demote to a registry tooling note and keep this doc as the boundary contract. Delivered: governance migration onto harness-core 0.2.0, composite boot (built in the 024 setup excursion, verified here), observe→record loop, AGENTS.md routing, docs/how guide. |
+diff --git a/docs/domains/registry.md b/docs/domains/registry.md
+index c5ae81e..7b836e7 100644
+--- a/docs/domains/registry.md
++++ b/docs/domains/registry.md
+@@ -7,3 +7,4 @@
+ | mcp | minih | Active | Inside-only coordination MCP server: six backend-safe inbox/state tools, hidden baked context, private spawn config, cleanup/leak regression |
+ | cli | minih | Active | User-facing composition root: run/resume/connect/list/doctor/check/history/tail/status/inspect/difficulties plus coordinated scaffolding, outside peer commands, and MCP server wiring |
+ | measurement | minih | Active | Conceptual measurement contract: metric vocabulary, traceability, proof levels, scorecard categories, authority/redaction rules, benchmark semantics, pulse semantics, and reporting guardrails |
++| eng-harness | minih | Active | Session-level dev-loop harness on harness-core: `.harness/` substrate (governance, composite boot, friction capture, committed retro records), AGENTS.md routing, zero inbound edges — observes minih only via CLI envelopes at the process boundary |
+diff --git a/docs/domains/runner/domain.md b/docs/domains/runner/domain.md
+index a9df5fa..516e165 100644
+--- a/docs/domains/runner/domain.md
++++ b/docs/domains/runner/domain.md
+@@ -85,6 +85,8 @@
+ | `AgentDefinition.outsideContract` / `AgentDefinition.coordination` | Type field | preamble-builder (P2 — peer contract injection), cli (P5 outside-context, init --coordinated) |
+ | `inbox-message.json` / `outside-state.json` / `inside-state.json` / `state-history-entry.json` | JSON Schema | mcp (P4 AJV input/output validation), cli (P5 outside-send validation) |
+ 
++**Named external consumer**: the eng-harness harvest reads runner-produced retro evidence only via published CLI envelopes (`minih retros`, `minih difficulties`) at the process boundary — never by importing runner or reading run-dir files (see `docs/domains/eng-harness/domain.md`).
++
+ ## Concepts
+ 
+ | Concept | Definition |
+diff --git a/docs/how/engineering-harness.md b/docs/how/engineering-harness.md
+new file mode 100644
+index 0000000..90eccd3
+--- /dev/null
++++ b/docs/how/engineering-harness.md
+@@ -0,0 +1,143 @@
++# The engineering harness — how it works and how to use it
++
++minih's **engineering harness** is the session-level feedback loop for *developing minih*, running on **harness-core** (the global `harness` CLI). It answers three questions deterministically: *does the environment work right now?* (boot), *what friction did this session hit?* (observe → retro), and *what should the harness prove next?* (improve). The lean contract lives in [`.harness/engineering-harness.md`](../../.harness/engineering-harness.md); this guide is the deep narrative.
++
++Don't confuse it with the **minih product harness** — the retrospective machinery minih ships to its own users (runner auto-append + `minih harvest`, writing `docs/retros/`). That one is part of the product. This one is for the people and agents building the product. The engineering harness *reads* `docs/retros/` at harvest time and never writes it.
++
++## The loop
++
++**Boot → Backpressure → Observe → Retro → Improve**, then back to Boot. It cycles — it never "completes".
++
++| Beat | What happens | Command |
++|------|--------------|---------|
++| Boot | Prove the environment runs before touching it | `harness boot --json` |
++| Backpressure | Pre-architect: which acceptance criteria can deterministic sensors *prove*, vs. eyeball? | fired by the SDD flow at the post-spec seam |
++| Observe | Capture friction the moment it bites — one silent line | `harness observe "<what>" --kind <kind>` |
++| Retro | Drain the buffer into a committed record at phase/session end | `harness record retro --slug <plan-slug>` |
++| Improve | Encode the fix — a new sensor, verb, or recipe — so the next session starts smarter | `harness new <verb>`, justfile recipes, … |
++
++The SDD pipeline self-fires the loop's seams (`/eng-harness-flow --event …` from the flow skills) — see the governance doc's `## Injection map`. Outside the pipeline, the AGENTS.md block is the cold-start cue.
++
++## Boot: the session-start proof
++
++```bash
++harness boot --json
++```
++
++A hand-written composite verb (`.harness/extensions/boot/`) that runs five **read-only** sensors in order — lint (`npx biome check .`), typecheck (`npx tsc --noEmit`), build+test (`just check`), `minih doctor` (twice — see below), `npm audit --audit-level=high --json` — and folds them into one envelope: `ok` (all pass) / `degraded` (warnings present — workable with awareness) / `error` (a sensor hard-failed; fix it before feature work). `data.sensors` carries per-sensor outcomes; `data.orientation` re-orients a fresh agent (branch, governance path, the friction command, the commit gate).
++
++Before running or interpreting it, read its briefing:
++
++```bash
++harness instructions boot
++```
++
++### Degraded is honest
++
++Day one, boot reports **`degraded`** — known `minih doctor` warnings plus a known high/critical advisory chain in the dependency tree. That is the *truthful* state of the tree, with `next_action` naming each caveat. Resist two temptations: treating `degraded` as failure (it exits 0; you can work), and "fixing" boot so it reads `ok` (that's hiding the signal, not improving the system). The verdict improves when the underlying warnings are actually fixed.
++
++### Why `minih doctor` runs twice
++
++`minih doctor` has no `--json` flag (only `--strict`) — observed as friction entry DL-001 during setup. So boot detects warnings deterministically via exit codes: a plain run catches hard errors, a `--strict` run turns warnings into a non-zero exit. No prose scraping, no src change. The follow-up candidate (adding `--json` envelope output to `minih doctor`) is recorded in the governance doc.
++
++### Boot never mutates
++
++Boot's read-only property is part of its contract (proven by byte-identical `git status --porcelain` across a run). The mutating gate — `just fft`, which runs `biome format --write` — belongs at commit time:
++
++```bash
++just build   # quick rebuild during iteration (~2s)
++just check   # build + test (what boot's sensor 3 runs)
++just fft     # full mutating gate — required before every commit/push
++```
++
++## Observe → Retro: the friction loop
++
++The harness only compounds if friction gets captured when it's cheap (the moment it happens) and drained somewhere durable (a committed record). Lifecycle:
++
++1. **Capture** (zero ceremony, gitignored):
++
++   ```bash
++   harness observe "minih doctor has no --json flag; had to pair plain + --strict exit codes" \
++     --kind difficulty --target plan --severity annoying \
++     --workaround "exit-code pair" --suggested-encoding "add --json to minih doctor"
++   ```
++
++   Kinds: `difficulty | magic-wand | gift | insight | coordination | improvement-suggestion | confusion`. Entries land in `.harness/temp/<agent>/` — self-gitignored by the CLI, plus a repo-level `.gitignore` entry as defense-in-depth. Nothing reaches git history at this stage.
++
++2. **Inspect** the buffer any time:
++
++   ```bash
++   harness observe --list --json
++   ```
++
++3. **Drain** at retro time (phase/session end) into a committed, dated record:
++
++   ```bash
++   harness record retro --slug <plan-slug>
++   # → .harness/records/retro/<YYYY-MM-DD>/<NNN>-<plan-slug>.md
++   ```
++
++   The record's frontmatter shape is owned by the CLI's template — fill the entries from the buffer, commit the record, then empty the buffer:
++
++   ```bash
++   harness observe --clear
++   ```
++
++4. **Harvest** (cross-plan curation) reads committed records — and, for back-compat, the product harness's `docs/retros/*.md` ledgers as a READ-only legacy source via the minihToUniversal mapping. Writers under `.harness/` never target `docs/retros/`.
++
++## Narrow gates: prove the phase, not the world
++
++Use the narrowest gate that proves the phase's contract (full table: governance § Phase Gates), then `just fft` before commit/push:
++
++```bash
++npx vitest run test/runner/<file>.test.ts    # runner work
++npx vitest run test/cli/<file>.test.ts       # cli work
++npx vitest run test/mcp/<file>.test.ts       # mcp work
++harness boot --json                          # eng-harness work — the narrow gate IS the boot
++git --no-pager diff --check                  # docs / planning work
++just fft                                     # release / pre-commit, always
++```
++
++## Copy-paste harness validation
++
++The modernized session-start validation block (successor to the old `docs/project-rules/harness.md` block — now `harness boot`-based):
++
++```bash
++set -e
++mkdir -p scratch/evidence
++harness doctor --json > scratch/evidence/harness-doctor.json
++harness boot --json > scratch/evidence/harness-boot.json    # exit 0 covers ok AND degraded
++minih doctor > scratch/evidence/minih-doctor.json 2> scratch/evidence/minih-doctor.stderr
++test -s scratch/evidence/harness-doctor.json
++test -s scratch/evidence/harness-boot.json
++test -s scratch/evidence/minih-doctor.json
++```
++
++(`scratch/` is gitignored; committed phase evidence belongs in the active plan's `execution.log.md`.)
++
++## Commit types: harness work never cuts a release
++
++Commits touching only `.harness/` and docs use **non-releasing** conventional-commit types:
++
++```bash
++git commit -m "chore(harness): <what changed in the substrate>"
++git commit -m "docs(harness): <what changed in harness docs>"
++```
++
++release-please's default ruleset treats `chore`/`docs` as non-releasing, and this repo's config sets no type overrides — so harness housekeeping never bumps minih's version. Anything touching `src/` is normal product work (`feat:`/`fix:`) and out of this guide's scope.
++
++## Dialect and locality
++
++- **Bare `harness`, always.** The CLI is installed globally (npm-linked dev checkout; `engh` is an alias). Never `npx harness`, never `npm install` it into this repo. The recorded contract surface (version, verbs, envelope, record paths) lives in governance § Harness-core contract — that section is the drift detector when the global CLI moves.
++- **Skills are global, not repo-local.** The eng-harness skill family (the `/eng-harness-flow` router and friends) installs into your agent CLI, not into minih:
++
++  ```bash
++  npx skills@latest add AI-Substrate/harness-engineering -a claude-code -g -y
++  ```
++
++## Pointers
++
++- Lean contract: [`.harness/engineering-harness.md`](../../.harness/engineering-harness.md) — boot sensors as built, phase gates, dogfood rules, injection map, history.
++- Boot briefing: `harness instructions boot` (served from `.harness/extensions/boot/instructions.md`).
++- Agent routing: [`AGENTS.md`](../../AGENTS.md) § Engineering harness — session start.
++- Domain boundary: [`docs/domains/eng-harness/domain.md`](../domains/eng-harness/domain.md) — the four hard rules.
+diff --git a/docs/plans/024-core-harness/.the-flow-state.json b/docs/plans/024-core-harness/.the-flow-state.json
+new file mode 100644
+index 0000000..d4b090e
+--- /dev/null
++++ b/docs/plans/024-core-harness/.the-flow-state.json
+@@ -0,0 +1,14 @@
++{
++  "schema_version": 1,
++  "slug": "core-harness",
++  "plan_dir": "docs/plans/024-core-harness",
++  "mode": "Simple",
++  "current_stage": "awaiting-7",
++  "pending_command": "/plan-7-v2-code-review --plan \"docs/plans/024-core-harness/core-harness-plan.md\"",
++  "intent": "Upgrade minih's engineering harness to harness core (the `harness` CLI): evaluate the repo for wrapping, mapping existing harness concepts (retros/magicWand, fft gate, eng-harness skills) into the CLI's extension/loop model — embrace and replace, no duplicate systems, no repo-local install.",
++  "milestones_total": 5,
++  "milestones_done": 4,
++  "last_checkpoint_at": "2026-06-11T07:15:00Z",
++  "compacted_seams": [],
++  "status": "active"
++}
+diff --git a/docs/plans/024-core-harness/core-harness-plan.md b/docs/plans/024-core-harness/core-harness-plan.md
+new file mode 100644
+index 0000000..4ec0207
+--- /dev/null
++++ b/docs/plans/024-core-harness/core-harness-plan.md
+@@ -0,0 +1,171 @@
++# Core Harness Implementation Plan
++
++**Mode**: Simple
++**Plan Version**: 1.0.0
++**Created**: 2026-06-11
++**Spec**: [core-harness-spec.md](./core-harness-spec.md)
++**Status**: READY
++
++## Gate Matrix
++
++| Gate | Check | Status | Notes |
++|------|-------|--------|-------|
++| G1 | Clarify | PASS | 9 clarifications resolved 2026-06-11; zero `[NEEDS CLARIFICATION]` markers; Open Questions: none |
++| G2 | Constitution | N/A | No `docs/project-rules/constitution.md` |
++| G3 | Architecture | N/A | No `docs/project-rules/architecture.md` (AGENTS.md import-direction rules honored: eng-harness has zero imports) |
++| G4 | ADR Compliance | N/A | No `docs/adr/` |
++| G5 | Structure | PASS | All required sections present; cross-references resolve |
++| G6 | Testing Alignment | PASS | Lightweight strategy: every task has a behavioral Done-When; T010 is the AC verification battery; zero mocks |
++| G7 | Domain Completeness | PASS | All 4 spec domains present; NEW eng-harness has domain.md/registry/map setup tasks (T005–T007); manifest covers all touched files |
++
++## Summary
++
++minih's session-level engineering harness moves onto harness-core: the `.harness/` substrate (partially live since the setup excursion on this branch — composite boot built, verified `degraded`-honest and read-only) gets completed with migrated governance, committed retro records, repo-level temp hygiene, AGENTS.md routing in the bare-`harness` dialect, registration of **eng-harness as the sixth domain** with a strict one-way boundary, and one deep guide in docs/how/. The product harness (`docs/retros/` writers) is untouched; governance declares it a legacy READ path for harvest. Completion is proven behaviorally: the spec's 11 acceptance criteria run as real commands, ending with repo-wide `just fft` green.
++
++## Target Domains
++
++| Domain | Status | Relationship | Role |
++|--------|--------|-------------|------|
++| cli | existing | consume | Boot shells `minih doctor` and reads its deterministic exit signals (see Finding 01); cli domain doc lists eng-harness as a named external consumer |
++| runner | existing | consume | Retro read-bridge source — observed only via CLI envelopes (`runs`, `difficulties`, `retros --json`); runner domain doc lists eng-harness as a named external consumer |
++| measurement | existing | consume | Vocabulary donor: governance cites its fact-vs-interpretation authority model and proof-level framing; no file changes |
++| eng-harness | **NEW** | create | Sixth registered domain: `.harness/**` substrate, composite boot, friction capture, governance, AGENTS.md routing block, docs/how guide |
++
++## Domain Manifest
++
++| File | Domain | Classification | Rationale |
++|------|--------|---------------|-----------|
++| `.harness/engineering-harness.md` | eng-harness | contract | Governance: BIO contract, Phase Gates, History, Injection map, legacy-read-path declaration |
++| `.harness/extensions/boot/extension.ts` | eng-harness | internal | Composite boot verb — already built in setup excursion; T010 verifies, no rebuild |
++| `.harness/extensions/boot/instructions.md` | eng-harness | contract | Agent briefing served by `harness instructions boot` |
++| `.harness/records/retro/**` (first record) | eng-harness | internal | Created by draining DL-001 via `harness record retro --slug 024-core-harness` (AC-6) |
++| `.gitignore` | eng-harness | cross-domain | Repo-shared file: add `.harness/temp/` defense-in-depth entry |
++| `AGENTS.md` | eng-harness | cross-domain | Repo-shared routing surface: harness block above "Build, Test, Lint" |
++| `docs/project-rules/harness.md` | eng-harness | cross-domain | Reduced to a dated deprecation pointer (content migrates out) |
++| `docs/domains/eng-harness/domain.md` | eng-harness | contract | New domain doc, mirrors sibling structure |
++| `docs/domains/registry.md` | eng-harness | cross-domain | Shared registry: add sixth row |
++| `docs/domains/domain-map.md` | eng-harness | cross-domain | Shared map: node + one-way dashed edge + Health Summary row |
++| `docs/domains/cli/domain.md` | cli | cross-domain | Add named-external-consumer note under § Contracts |
++| `docs/domains/runner/domain.md` | runner | cross-domain | Add named-external-consumer note under § Contracts |
++| `docs/how/engineering-harness.md` | eng-harness | contract | The one deep guide (Documentation Strategy: docs/how only) |
++
++## Key Findings
++
++| # | Impact | Finding | Action |
++|---|--------|---------|--------|
++| 01 | Critical | **`minih doctor --json` does not exist** (live-probed: dist and `src/cli/commands/doctor.ts`; only `--strict`). The spec's sensor-composition line assumed it. Captured as observe-buffer entry DL-001 during setup. Distinct from `harness doctor --json`, which exists and serves AC-2. | Boot (already built) detects deterministically via exit-code pair: plain run → hard errors, `--strict` run → warnings. T001 documents the as-built mechanism in governance; "add `--json` to minih doctor" is recorded as a follow-up candidate (src change — spec Non-Goal) |
++| 02 | High | The setup excursion on this branch already delivered S0 + S4: boot extension built via `harness new` + hand-filled composite, verified `loaded`/biome-clean, first run `degraded` in ~17s with read-only tree proof. `harness observe` is a core verb in 0.2.0; `.harness/temp/` self-gitignores | Plan **verifies** boot (T010) rather than re-building; remaining scope is governance, records, hygiene, routing, domain registration, docs |
++| 03 | High | All inbound references to `docs/project-rules/harness.md` live in frozen plan history (docs/plans/009, 020 artifacts) — zero live code/skill/tooling references | T002's deprecation pointer is safe; historical plan docs are never edited retroactively |
++| 04 | High | biome's `vcs.useIgnoreFile: true` means gitignored paths are invisible to `biome check`; records are `.md` (biome-inert) | T003's repo-level `.harness/temp/` ignore entry simultaneously resolves the PS-05 biome exposure; only `extension.ts` needs biome-clean discipline (already verified) |
++| 05 | High | Harness-core 0.2.0 contract surface live-confirmed: `harness record [type] --slug <slug>` → `.harness/records/<type>/`; observe flags (`--kind/--target/--severity/--workaround/--suggested-encoding/--agent/--list/--clear`); VerbContext (`exec/fs/env/git/clock` + `ok/degraded/unconfigured/error`); no `init` verb (E108) | T001 records exactly this version + contract surface in governance (R1 mitigation: record contract, no pinning) |
++| 06 | High | AGENTS.md already opens with the dogfood rule and "file it as MW" language; "Build, Test, Lint" is the first operational section | T004 inserts ONE block between them and extends the existing MW sentence with `harness observe --kind magic-wand` — no duplicate rule text |
++
++## Implementation
++
++**Objective**: Complete the `.harness/` substrate around the already-live composite boot — governance, records, hygiene, routing, domain registration, docs — and prove all 11 spec ACs behaviorally.
++**Testing Approach**: Lightweight (from spec): deterministic behavioral verification by running the real verbs and asserting envelope contracts; no mocks, no new test infra.
++
++### Tasks
++
++| Status | ID | Task | Domain | Path(s) | Done When | Notes |
++|--------|-----|------|--------|---------|-----------|-------|
++| [x] | T000 | **Harness pre-flight** — `/eng-harness-flow --event pre-implement --phase "Phase 1" --plan-dir docs/plans/024-core-harness` | — | — | Router envelope handled; verdict narrated verbatim before any edit | _Harness seam — advisory, never a gate_ |
++| [x] | T001 | Write `.harness/engineering-harness.md`: migrate Purpose + Boot/Interact/Observe contract, Phase Gates table (+ eng-harness row: narrow gate `harness boot`), **Dogfood Rules (migrated + extended with the observe verb)**, Maturity Assessment + Validation Checklist, History (3 L0→L2 rows preserved verbatim, migration entry appended); add § Harness-core contract (version 0.2.0 + surface per Finding 05, dialect rule: bare `harness`), § Boot sensors **as built** (composite incl. the plain+`--strict` doctor mechanism, Finding 01; degraded-is-honest note per R2), § Injection map (five seams self-fired by the SDD flow + AGENTS.md cold-start cue), § Legacy read paths (`docs/retros/*.md` = harvest READ source via minihToUniversal mapping; writers prohibited from targeting it from `.harness/`). Content map covers every old-file section: the agent copy-paste validation block modernizes into docs/how (T009); the empty USER CONTENT block is dropped intentionally | eng-harness | `.harness/engineering-harness.md` | AC-7 + AC-8 textual checks pass; every threshold from the old Phase Gates table names its query command; Injection map names all five seams + the AGENTS.md cold-start cue (no TODO stubs); § Boot sensors explains the Finding 01 deviation in plan-7-reviewable terms; router signal D flips (S2 = file exists at the canonical path) **and** the `## Injection map` section satisfies the S3 inject rung's separate durable signal | Consumes the setup excursion's proposed injection map; no old-file section may be silently lost (T002 destroys what T001/T009 don't carry) |
++| [x] | T002 | Reduce `docs/project-rules/harness.md` to a dated deprecation pointer (one paragraph → new canonical path; preserve nothing else) | eng-harness | `docs/project-rules/harness.md` | File ≤ ~10 lines, names `.harness/engineering-harness.md` + migration date + plan 024; AC-7 second clause | Safe per Finding 03 |
++| [x] | T003 | Add repo-level `.harness/temp/` entry to `.gitignore` (defense-in-depth above the CLI's self-healed nested ignore) | eng-harness | `.gitignore` | Repo-level `.gitignore` contains the `.harness/temp/` entry (read check); `git check-ignore -v .harness/temp/x` confirms ignoring works; nested self-healed `.gitignore` verified present by reading it (no destructive move-aside test); biome exposure closed per Finding 04 | |
++| [x] | T004 | Insert AGENTS.md harness block immediately above `## Build, Test, Lint`: session-start cue (`harness boot` → read envelope; `harness instructions` for orientation), friction one-liner (`harness observe "<what>" --kind <kind>`), extend the existing MW/dogfood sentence with `--kind magic-wand`, skills-missing one-liner (`npx skills@latest add AI-Substrate/harness-engineering -a claude-code -g -y`), bare-`harness` dialect throughout | eng-harness | `AGENTS.md` | AC-9: block sits above "Build, Test, Lint"; `git diff` shows zero `npx harness` occurrences; MW rule extended not duplicated (Finding 06) | |
++| [x] | T005 | Create `docs/domains/eng-harness/domain.md` mirroring sibling structure (Boundary / Composition / Contracts / Concepts / Tests & Validation / History): Purpose, Owns/Excludes from spec sketch, the **four hard boundary rules** (shell-wrappers only — no `src/`/`dist/` imports; zero inbound edges; envelope-only observation; single `eng-harness → cli` map edge), § Concepts table (boot, sensor, envelope, observe buffer, retro record, governance, injection map), History row recording the register-vs-tooling-note decision + revisit note (DB-08 override) | eng-harness | `docs/domains/eng-harness/domain.md` | AC-10 clause 2: domain.md exists with all four rules present verbatim-equivalent; History carries the decision + revisit note | NEW-domain setup; source dir `.harness/` already exists (Finding 02); the map edge is T007's clause |
++| [x] | T006 | Add `eng-harness` row to the domain registry (Owner: minih, Status: Active, Purpose: session-level dev-loop harness) | eng-harness | `docs/domains/registry.md` | AC-10 clause 1: sixth row present | |
++| [x] | T007 | Update domain map: `eng_harness` node, **dashed one-way edge** `eng-harness -.observes via minih CLI envelopes (process boundary).-> cli`, Health Summary row (Exposes: boot envelope, records; Depends On: cli envelopes at process boundary; Boundary: zero inbound), import-direction line gains "eng-harness → cli (process boundary, never imports)" | eng-harness | `docs/domains/domain-map.md` | AC-10 clause 4: one-way edge rendered; zero inbound edges shown | Mirrors measurement's dashed conceptual-edge precedent |
++| [x] | T008 | Add named-external-consumer notes: cli `§ Contracts` ("eng-harness boot consumes `minih doctor` exit signals + envelope stdout as an external observer") and runner `§ Contracts` ("eng-harness harvest reads retro evidence only via published CLI envelopes") | cli, runner | `docs/domains/cli/domain.md`, `docs/domains/runner/domain.md` | AC-10 final clause: both docs name eng-harness as external consumer | Cross-domain edits, one line each |
++| [x] | T009 | Write `docs/how/engineering-harness.md`: loop narrative (Boot → Backpressure → Observe → Retro → Improve), verb briefing pointers (`harness instructions boot`), records/temp lifecycle, commit-type rule (`chore(harness):` / `docs(harness):` — non-releasing, PS-07), narrow-gate command map (PL-15), the modernized agent copy-paste validation block (from the old harness.md, now `harness boot`-based), degraded-is-honest explainer, dialect + skills-locality notes; then add backlinks TO this guide in the two surfaces created earlier (governance § footer, AGENTS block) | eng-harness | `docs/how/engineering-harness.md`, `.harness/engineering-harness.md`, `AGENTS.md` | Guide exists, linked from both surfaces (backlink edits applied after T001/T004 creation — all three paths touched); explains every command it names with a copy-paste form | Lean-contract/deep-narrative split (PL-11) |
++| [x] | T010 | **AC verification battery** (run + capture in execution log): AC-1 substrate-shape probes (`reports/harnessability/` intentionally absent — created post-merge by the assessment skill, spec Non-Goal); AC-2 `harness doctor --json` (installed:1/failed:0/conflicts:0, no convention complaints); AC-3 `harness boot --json` envelope legality (status ∈ vocabulary, exits 0/0/2/1, `next_action` on non-ok, per-sensor data + orientation digest); AC-4 byte-identical `git status --porcelain` before/after boot; AC-5 stage a deliberately mis-formatted scratch `.json` in a **non-gitignored path** (e.g. repo root) — `just check` (= build+test, runs no biome) stays green while boot's lint sensor fails (that asymmetry IS the proof, QT-08), then clean up and re-verify; AC-6 friction round-trip — `harness observe --list --json` shows DL-001, `harness record retro --slug 024-core-harness` creates the record (capture the actual path from the command output; expected shape `.harness/records/retro/<date>/<NNN>-024-core-harness.md`, live-confirmed), populate it from the buffer (frontmatter validity is owned by the CLI template — fft treats `.md` as inert, Finding 04), `harness observe --clear` empties | eng-harness | `.harness/**`, execution log | Each AC's exact command sequence passes; evidence quoted in the execution log (AC-5 must show staged-file → failing envelope → cleanup → clean re-run, so plan-7 can replay it) | AC-6 drain produces the first committed record, completing AC-1's `records/retro/` requirement |
++| [x] | T011 | Repo-wide gate + commit hygiene: `just fft` green; commits touching only `.harness/` + docs use `chore(harness):` / `docs(harness):` | eng-harness | repo-wide | AC-11: fft passes; commit log shows non-releasing types for harness/docs commits (release-please default ruleset treats `chore`/`docs` as non-releasing; repo config sets no type overrides — verified) | Format-then-commit discipline per R5 |
++| [x] | T012 | **Harness phase-end** — `/eng-harness-flow --event phase-end --plan-dir docs/plans/024-core-harness` | — | — | Router envelope handled at phase end (router decides drain-vs-harvest; buffer may already be empty after T010 — `noop` is a valid outcome) | _Harness seam — advisory, never a gate_ |
++
++### Acceptance Criteria
++
++- [x] AC-1 Substrate shape: governance, boot extension + instructions, `records/retro/` (first record), gitignored `temp/` exist; router signals C/D/E pass
++- [x] AC-2 Doctor clean: boot loaded (1/0/0), zero convention complaints
++- [x] AC-3 Boot envelope honest: exit 0, `ok|degraded` (degraded expected day one), per-sensor data + orientation digest, `next_action` on non-ok
++- [x] AC-4 Boot read-only: `git status --porcelain` byte-identical across a boot run
++- [x] AC-5 Boot catches the observed failure class: staged mis-formatted `.json` → lint sensor fails (covers what `just check` misses)
++- [x] AC-6 Friction loop round-trips: observe → temp buffer (tree clean) → `--list` shows it → `record retro --slug 024-core-harness` → committed record → `--clear` empties
++- [x] AC-7 Governance migrated: Phase Gates + History (L0→L2 preserved, migration entry appended) in new home; old file a dated pointer; thresholds queryable
++- [x] AC-8 Legacy read path declared: `docs/retros/*.md` named as harvest READ source; `.harness/` writers prohibited from targeting it
++- [x] AC-9 AGENTS.md routes: block above "Build, Test, Lint", bare dialect (zero `npx harness` in diff), MW rule extended with `--kind magic-wand`
++- [x] AC-10 Domain registered: registry row; domain.md with Purpose, Owns/Excludes, four hard rules, History decision note; map one-way edge; cli + runner consumer notes
++- [x] AC-11 Gate green: repo-wide `just fft` passes; harness/docs commits use non-releasing types
++
++### Risks
++
++| Risk | Likelihood | Impact | Mitigation |
++|------|------------|--------|------------|
++| R1 Global `harness` is a moving target (0.2.0, npm-linked dev checkout; version drifted 0.1.0→0.2.0 live mid-session) | Medium | Medium | Record contract only (decided): governance pins version + contract surface (Finding 05); boot evidence names the version; no checkout pinning |
++| R2 Day-one `degraded` reads as failure | Medium | Low | Governance + boot `next_action` name the known degraded inputs; AC-3 codifies degraded-as-honest; docs/how explainer (T009) |
++| R3 Invocation dialect drift (`npx harness` vs bare) | Medium | Low | Everything 024 writes uses bare `harness`; AC-9 greps the diff; governance records the dialect rule |
++| R4 jiti TS loading quirks in extensions | Low | Medium | `extension.ts` is dependency-free (type-only contract import) — already verified loaded (Finding 02); AC-2 re-checks |
++| R5 Scaffold files fail biome (PL-03 class) | Medium | Low | Boot extension already biome-clean; records are `.md`; format-then-commit discipline; AC-11 gates |
++| R6 `harness init` ships mid-build and conflicts with hand-written governance | Low | Low | Governance doc is ours regardless; init adoption is a recorded follow-up, not a dependency |
++| R7 Spec text still names `minih doctor --json` (Finding 01) | Certain | Low | Deviation documented here + in governance + DL-001; spec body untouched (clarification re-entry available via `/plan-2-v2-clarify` if Jordan wants the spec line amended) |
++| R8 Router signal definitions evolve with the skill family (same moving target as R1) | Low | Low | Probes are advisory, never gates; T001 satisfies both the S2 signal (file at canonical path) and the S3 signal (`## Injection map` section) independently, so drift in either definition degrades gracefully |
++
++## Harness Seams
++
++- **Entry point**: `/eng-harness-flow --event <seam> [--phase <id>] [--plan-dir <p>] --json` — the single door to the engineering harness; child skills are private and never named in this plan.
++- **Backpressure** (post-spec seam): ran before this plan and returned **redirect** (S2 governance + S4 boot were missing — the gap this plan fills). No `backpressure-coverage.md` was produced; the redirect evidence itself shaped this plan. No Phase 0 applies — this plan **is** the backpressure-establishment work.
++- **Pre-implement** (`--event pre-implement`): fired by `/plan-6` at phase start (T000); verdict narrated verbatim from the router's envelope (`healthy / SLOW / UNHEALTHY / UNAVAILABLE`). `UNAVAILABLE` is not an error — falls back to standard testing.
++- **Phase end** (`--event phase-end`): fired by `/plan-6` at the phase seam (T012); `--event plan-complete` fires at merge (plan-8).
++- **Best-effort**: every item above is advisory and never blocks; the router decides what the harness does at each seam.
++
++---
++
++## Validation Record (2026-06-11)
++
++### Validation Thesis
++
++**Raison d'être**: Complete minih's migration onto harness-core (governance, records, hygiene, routing, domain registration, docs around the already-live composite boot) so the engineering loop (Boot → Backpressure → Observe → Retro → Improve) becomes operable, embracing minih's existing harness concepts rather than duplicating them.
++
++**Value claim**: Session-start proof becomes one deterministic command; friction capture round-trips to committed records; governance becomes queryable at its canonical router-visible location; future agents route from AGENTS.md with zero installs.
++
++**Artifact promise**: A plan-6 implementer executes T000–T012 with minimal clarification; completion provable via 11 ACs; the router's setup gate (S2 governance) flips from owed to satisfied.
++
++**Intended beneficiaries**: plan-6 implementer (primary), future dev-session agents, plan-7 reviewer, harness-engineering upstream (friction evidence).
++
++**Proof target**: Implementation
++
++**Evidence standard**: Exact files + runnable Done-When commands; ACs equivalent to the spec's 11; findings grounded in live probes.
++
++**Thesis source**: core-harness-spec.md (Summary l.13, Goals l.15–25, ACs l.77–89) + original-ask.md
++
++**Thesis verdict**: Advanced
++
++**Main thesis risk**: Boot was built in the prior setup excursion — if that excursion's decisions aren't transmitted, the "already verified" assumption fails; mitigated by T010 re-verification and the self-documenting extension source.
++
++---
++
++| Agent | Lenses Covered | Thesis Axes Covered | Issues | Verdict |
++|-------|---------------|---------------------|--------|---------|
++| Coherence | System Behavior, Integration & Ripple, Edge Cases, Hidden Assumptions | Downstream Usefulness | 1 CRITICAL fixed, 1 HIGH fixed, 2 MEDIUM fixed | ⚠️ → ✅ |
++| Risk & Completeness | Evidence Sufficiency, Edge Cases, Deployment & Ops, Technical Constraints | Implementation Readiness, Safety to Change | 4 MEDIUM fixed (2 false positives discarded: AC-5 premise, "row-4 probe"), 2 LOW fixed | ⚠️ → ✅ |
++| Thesis Alignment | Thesis Alignment, Proof-Level Fit, Evidence Sufficiency, Domain Boundaries, Concept Documentation | Thesis Alignment, Proof-Level Fit | 1 MEDIUM fixed, 3 LOW (2 fixed, 1 by-design) | ✅ |
++| Forward-Compatibility | Forward-Compatibility, Integration & Ripple, Technical Constraints, Deployment & Ops | Downstream Usefulness, Contract Integrity | 1 HIGH fixed, 2 MEDIUM fixed, 1 LOW noted | ⚠️ → ✅ |
++
++Lens coverage: 12/15. Notable validator false positive corrected during synthesis: one agent asserted `just check` runs biome (it is `build + test` — no biome), which is precisely the gap AC-5 proves; T010 now states the asymmetry explicitly to prevent the same misreading downstream. A validator probe incidentally live-confirmed spec AC-6's record path shape (`.harness/records/retro/<date>/<NNN>-<slug>.md`); probe residue was removed.
++
++### Forward-Compatibility Matrix
++
++| Consumer | Requirement | Failure Mode | Verdict | Evidence |
++|----------|-------------|--------------|---------|----------|
++| plan-6-v2-implement-phase | Directly executable 7-column tasks with runnable Done-Whens | test boundary | ✅ | T001–T012 executable; Simple mode consumed directly, no plan-5 expansion |
++| eng-harness-flow router setup gate | Signal D (governance file at canonical path) + S3 (`## Injection map`) + signal E (temp + records) | contract drift | ✅ (post-fix) | T001 Done-When now satisfies S2 and S3 signals independently; E covered by T003 + T010 |
++| plan-7-v2-code-review | ACs + Gate Matrix reviewable; no false contract drift from spec's `minih doctor --json` wording | contract drift | ✅ (post-fix) | Finding 01 + R7 document the deviation; T001 Done-When requires governance to explain it in reviewer-readable terms; T010 log must be replayable |
++| Release pipeline (release-please) | `chore(harness):`/`docs(harness):` non-releasing | lifecycle ownership | ✅ | Default conventional-commit ruleset; repo config sets no type overrides; T011 Done-When records the verification |
++
++**Thesis alignment**: Value claim advanced at the target Implementation proof level (tasks specified at contract level with content design consciously delegated per the spec's unworkshopped "Governance content map" note); main risk is the setup-excursion dependency, mitigated by T010 re-verification.
++
++**Outcome alignment**: The plan, as shipped, advances the VPO outcome — "so the eng-harness skills loop (Boot → Backpressure → Observe → Retro → Improve) becomes operable here, embracing minih's existing harness concepts rather than duplicating them" — with the three named conditions (signal-D probe alignment, Finding-01 governance documentation, replayable T010 evidence) now folded into the task table.
++
++**Standalone?**: No — four named downstream consumers.
++
++Overall: VALIDATED WITH FIXES
+diff --git a/docs/plans/024-core-harness/core-harness-spec.md b/docs/plans/024-core-harness/core-harness-spec.md
+new file mode 100644
+index 0000000..704939d
+--- /dev/null
++++ b/docs/plans/024-core-harness/core-harness-spec.md
+@@ -0,0 +1,124 @@
++# Core Harness — wrap minih with the harness-core engineering substrate
++
++**Mode**: Simple
++
++📚 Specification incorporates findings from research-dossier.md (69 findings, 8 subagents, 2026-06-11).
++
++## Research Context
++
++The dossier established: minih already runs a compiled-in *product* feedback harness (AJV-enforced agent retros → `docs/retros/`); harness core adds the *session-level* engineering harness for whoever develops this repo. Key constraints discovered: the global `harness` CLI is **v0.2.0 npm-linked to a live dev checkout** (DC-10); the eng-harness skills' setup rung hard-codes a repo-local npm install that the operator forbids — everything we write must use the bare-`harness` dialect (IC-03/IC-10); a prior-generation governance doc exists at `docs/project-rules/harness.md` claiming maturity L2 (DE-08); `just fft` mutates the tree so boot needs a hand-written composite verb (QT-01); biome checks `.harness/**/*.{ts,json}` and `.harness/temp/` is unprotected today (PS-01/PS-05); `docs/retros/` is a shipped product contract — read-bridge only (DB-04/DE-03).
++
++## Summary
++
++Stand up the `.harness/` engineering-harness substrate in the minih repo, driven by the globally-installed `harness` CLI (no repo-local install): migrate governance from `docs/project-rules/harness.md` to `.harness/engineering-harness.md`, build a hand-written read-only composite `boot` verb, establish the records/temp storage split with correct gitignore/biome hygiene, route future agents via an AGENTS.md block, declare `docs/retros/` a legacy read path for retro harvest, and add the domain-registry tooling note — so the eng-harness skills loop (Boot → Backpressure → Observe → Retro → Improve) becomes operable here, embracing minih's existing harness concepts rather than duplicating them.
++
++## Goals
++
++- `.harness/` substrate matching the router's canonical signal shape (IC-01): `engineering-harness.md`, `extensions/boot/`, `records/retro/`, `temp/` (gitignored), with `reports/harnessability/` reserved for the assessment skill.
++- Governance migrated: Phase Gates, Boot definition, and the History table (L0→L2 record preserved, new entry appended) move to `.harness/engineering-harness.md`; `docs/project-rules/harness.md` becomes a deprecation pointer. Every threshold stated in governance must be queryable (PL-05, PL-09).
++- A hand-written, **read-only** composite `boot` verb emitting an honest envelope (`ok|degraded|unconfigured|error`, exits 0/0/2/1) with per-sensor results and a machine-readable orientation digest (PL-13). Sensor composition (decided): `biome check` + `tsc --noEmit` + `just check` + `minih doctor --json` (parse envelope status, never exit code) + unmasked `npm audit --audit-level=high --json` (offline → soft-skip, sdk-check precedent).
++- Friction capture live end-to-end: `harness observe` → `.harness/temp/` buffer (self-gitignored + repo-level ignore entry) → drain → `harness record retro` → committed `.harness/records/retro/**` that pass `just fft`.
++- AGENTS.md harness block at the top (before "Build, Test, Lint"), bare-`harness` dialect throughout, dogfood rule extended ("file it as magicWand" → `harness observe --kind magic-wand`).
++- `docs/retros/` declared a **legacy read path** for `eng-harness-4-retro --harvest` in governance — minih's writers untouched (answers the #39 tension without code changes).
++- Domain registration (user decision, overriding the dossier's DB-08 lean): **eng-harness becomes the sixth registered domain** — `registry.md` row, `docs/domains/eng-harness/domain.md` (contracts, composition, boundaries), `domain-map.md` updated with a one-way `eng-harness → cli` consumption edge and **zero inbound edges**; `cli` and `runner` domain docs list eng-harness as a named external consumer. The DB-07 rule is encoded as the domain's hard boundary: extensions are shell-wrappers only — no `src/`/`dist/` imports, ever.
++- One deep guide at `docs/how/engineering-harness.md` (lean-contract/deep-narrative split per PL-11), including the narrow-gate command map (PL-15).
++- Repo-wide `just fft` green at completion; all scaffolded files biome-clean (PL-03).
++
++## Non-Goals
++
++- **No repo-local npm install** of harness-engineering (operator rule; everything is cwd-relative).
++- **No `src/` changes**: #37 (env injection), #39 (configurable ledger destination), the QT-10 flake, and minih CLI additions are out of scope — recorded as follow-up candidates only.
++- **No migration or redirection of `docs/retros/` writers** — product contract stays intact.
++- **No harnessability assessment run** in this plan — the substrate reserves its directory; running `eng-harness-0-harnessability-assessment` is a separate, post-merge activity.
++- **No changes to the eng-harness skills themselves** (they live in the harness-engineering repo); dialect conflicts are routed around in what we write here.
++- **No project-local skills install** — eng-harness skills stay global-only (decided); the AGENTS.md block carries the one-liner install command for the missing-skills case.
++- **No pinning of the harness-engineering checkout** — governance records version + contract surface instead (decided).
++
++## Target Domains
++
++| Domain | Status | Relationship | Role in This Feature |
++|--------|--------|-------------|---------------------|
++| cli | existing | **consume** | Boot shells `minih doctor --json` and parses the `MinihEnvelope` status (never exit codes); harness gets listed as a named envelope consumer |
++| runner | existing | **consume** | Retro read-bridge source — observed only via CLI envelopes (`runs`, `difficulties`, `retros --json`), never direct `agents/*/runs/` reads |
++| measurement | existing | **consume** | Vocabulary donor: governance/boot reporting cites its fact-vs-interpretation authority model and proof-level framing; boundary untouched |
++| eng-harness | **NEW** | **create** | Sixth registered domain: the `.harness/` substrate, composite boot verb, friction capture, and governance — registered in `docs/domains/` with a strict one-way boundary |
++
++### New Domain Sketches
++
++#### eng-harness [NEW]
++- **Purpose**: The repo's own dev-loop harness — deterministic session-start proof (boot), friction capture (observe/records), and governance — for agents/humans developing minih. Registered per user decision (Clarifications 2026-06-11), overriding the dossier's keep-outside-registry lean (DB-08); revisit note retained in domain.md History.
++- **Boundary Owns**: `.harness/**` (extensions, records, temp, reports), `.harness/engineering-harness.md` governance, the AGENTS.md routing block, the docs/how guide.
++- **Boundary Excludes**: minih-as-product-harness (agent retro contract, `docs/retros/` writers, difficulties aggregation — runner/cli domains); the justfile recipes themselves (consumed, not owned); the eng-harness skills (external family).
++- **Hard boundary rules** (encoded in domain.md): (1) extensions are shell-wrappers — no `src/`/`dist/` imports from `.harness/` (DB-07); (2) **zero inbound edges** — no registered product domain may import from or depend on eng-harness; (3) observation only via published CLI envelopes (DB-06); (4) domain-map edge: `eng-harness → cli` (process-boundary consumption), nothing else.
++
++## Testing Strategy
++
++- **Approach**: Lightweight — deterministic behavioral verification, no new test infra.
++- **Rationale**: `.harness/extensions/*.ts` is invisible to vitest/tsc by design (PS-03/PS-04); the verbs ARE the sensors, so verification means running them and asserting envelope contracts.
++- **Focus Areas**: envelope legality (`status` ∈ vocabulary, exit codes 0/1/2, `next_action` on non-ok); boot read-only proof (`git status --porcelain` unchanged); gitignore efficacy (`git check-ignore .harness/temp/x`); biome cleanliness of every scaffolded file; router signal probes (governance/boot/substrate present); full `just fft` at the end.
++- **Excluded**: unit tests for extension internals; e2e of the skills loop choreography (skill-owned); harnessability scoring.
++- **Mock Usage**: Avoid mocks entirely — boot genuinely shells `just`/`biome`/`tsc`/`minih`/`npm audit`; verification runs real verbs. The only tolerated simulation is exercising boot's offline path by observing its behavior when the network step soft-skips (matching `sdk-check` precedent).
++
++## Documentation Strategy
++
++- **Location**: `docs/how/engineering-harness.md` only.
++- **Rationale**: matches the repo's established lean-contract + deep-how-to split (PL-11): `.harness/engineering-harness.md` stays terse and queryable; the narrative (loop stages, verb briefings, commit-type rule `chore(harness):`/`docs(harness):`, narrow-gate command map) lives in docs/how/. README is product-facing and untouched.
++
++## Complexity
++
++- **Score**: CS-3 (medium)
++- **Breakdown**: S=1, I=1, D=1, N=1, F=1, T=1 (P=6)
++- **Confidence**: 0.85
++- **Assumptions**: global `harness` v0.2.0 contract surface stays stable for the build window (envelope, VerbContext, record placement, observe flags); `just`/`biome`/`node` remain on PATH (harness doctor hard-codes them, DC-09).
++- **Dependencies**: global `harness` CLI (linked checkout `/Users/jordanknight/substrate/harness-engineering`); eng-harness skills ×7 (global); minih CLI built (`dist/`) for `minih doctor` composition.
++- **Risks**: see Risks & Assumptions.
++- **Phases**: 1 (Simple mode — substrate + boot + routing + docs in one phase with ordered tasks).
++
++## Acceptance Criteria
++
++1. **Substrate shape**: `.harness/engineering-harness.md`, `.harness/extensions/boot/extension.ts` + `instructions.md`, `.harness/records/retro/` (with `.gitkeep` or first record), and a gitignored `.harness/temp/` exist; eng-harness-flow's setup signals C/D/E all pass.
++2. **Doctor clean**: `harness doctor --json` from repo root reports the boot extension loaded (`installed: 1, failed: 0, conflicts: 0`) and zero convention complaints (including temp-gitignore protection).
++3. **Boot envelope honest**: `harness boot --json` exits 0 with `status: ok` or `degraded` (degraded expected day one — `minih doctor` 74 warnings + audit findings, QT-06/QT-07), `data` carrying per-sensor results and the orientation digest; `next_action` present whenever status ≠ ok.
++4. **Boot is read-only**: `git status --porcelain` output is byte-identical before and after `harness boot` (no `biome format --write`, no file mutations).
++5. **Boot catches the observed failure class**: with a deliberately mis-formatted scratch `.json` committed to a temp branch (or staged), boot reports the lint sensor failing — proving it covers what `just check` alone missed (QT-08).
++6. **Friction loop round-trips**: `harness observe "<test>" --kind difficulty --severity annoying` writes to `.harness/temp/`; `git status` stays clean; `harness observe --list --json` returns the entry; `harness record retro --slug 024-core-harness` creates `.harness/records/retro/<date>/<NNN>-024-core-harness.md`; `harness observe --clear` empties the buffer.
++7. **Governance migrated**: `.harness/engineering-harness.md` contains the Phase Gates and History table from `docs/project-rules/harness.md` (L0→L2 entries preserved, new migration entry appended); the old file is reduced to a dated deprecation pointer; every threshold in the new doc names the command that queries it.
++8. **Legacy read path declared**: governance names `docs/retros/*.md` as a harvest legacy READ source (minihToUniversal mapping per IC-09) and prohibits writers from targeting it from `.harness/`.
++9. **AGENTS.md routes**: a harness block sits above "Build, Test, Lint" using only bare `harness …` invocations (zero `npx harness` occurrences in the diff), and extends the dogfood rule with `harness observe --kind magic-wand`.
++10. **Domain registered**: `docs/domains/registry.md` carries an `eng-harness` row (Active); `docs/domains/eng-harness/domain.md` exists with Purpose, Owns/Excludes, the four hard boundary rules (shell-wrappers only, zero inbound edges, envelope-only observation, single `eng-harness → cli` map edge), and a History note recording the register-vs-tooling-note decision; `domain-map.md` shows the one-way edge; `cli` and `runner` domain docs list eng-harness as a named external consumer.
++11. **Gate green**: `just fft` passes repo-wide after all files land (scaffolds biome-clean; records markdown-inert); commits touching only `.harness/`/docs use non-releasing types (`chore(harness):`/`docs(harness):`, PS-07).
++
++## Risks & Assumptions
++
++| # | Risk | Mitigation |
++|---|------|-----------|
++| R1 | Global `harness` is a moving target (v0.2.0, npm-linked to live dev checkout on `feat/cli-bin-engh`) — behavior shifts on rebuild | Decided: record contract only. Governance records the version + contract surface (envelope, VerbContext, record placement, observe flags); boot evidence names the version; no checkout pinning |
++| R2 | Day-one `degraded` reads as failure to a casual observer | Governance + boot `next_action` explain the known degraded inputs (minih doctor warnings, audit findings); AC-3 codifies degraded-as-honest |
++| R3 | Skill-family invocation dialect drift (`npx harness` vs bare) | Everything 024 writes uses bare `harness`; governance notes the dialect rule; skills themselves out of scope |
++| R4 | jiti TS loading quirks in extensions | Keep `extension.ts` dependency-free (type-only contract import or JSDoc); verified via `harness doctor` load check (AC-2) |
++| R5 | Scaffold files fail biome (the recurring PL-03 class) | Format-then-commit discipline baked into tasks; AC-11 gates on `just fft` |
++| R6 | `harness init` ships upstream mid-build and conflicts with hand-written governance | Checked the linked checkout during research window; governance doc is ours regardless — init adoption is a future follow-up |
++
++## Open Questions
++
++- (none remaining after Clarifications — see below)
++
++## Workshop Opportunities
++
++| Topic | Type | Why Workshop | Key Questions |
++|-------|------|--------------|---------------|
++| Boot envelope & orientation digest schema | API Contract | The digest (canonical paths, plan state, sensor results) becomes a contract future agents parse; worth pinning fields before build | Which fields are stable v1? How do sensor results nest? What does `unconfigured` tier mean per sensor (e.g. GH_TOKEN absent)? |
++| Governance content map | Other | Optional — migration from `docs/project-rules/harness.md` is mostly mechanical, but deciding what is *queryable* vs prose could use 20 minutes of design | Which thresholds become doctor/boot checks? What moves to docs/how vs stays in governance? |
++
++## Clarifications
++
++### Session 2026-06-11
++
++- Q: Workflow Mode? → A: **Simple** (CS-3, single tooling layer, no src/ changes).
++- Q: Testing strategy? → A: **Lightweight** — deterministic behavioral envelope checks; no new test infra (extensions invisible to vitest/tsc by design).
++- Q: Mock usage? → A: **Avoid mocks entirely** — real command runs; offline paths exercised behaviorally.
++- Q: Documentation strategy? → A: **docs/how/ only** — one `docs/how/engineering-harness.md` deep guide; governance stays lean per PL-11.
++- Q: Domain review — keep eng-harness outside the registry (research lean DB-08) or register it? → A: **Register as real domain** (user override): sixth registry row + `docs/domains/eng-harness/domain.md` + domain-map one-way edge; hard boundary rules preserve everything DB-07/DB-06 protected.
++- Q: Boot verb composition? → A: **Composite** — `biome check` + `tsc --noEmit` + `just check` + `minih doctor --json` (parse status) + unmasked `npm audit` (offline→skip) + orientation digest (~17s, full CI-equivalence).
++- Q: Pin strategy for the moving-target harness CLI? → A: **Record contract only** — governance records version + contract surface; no checkout pinning (it's the operator's own dev checkout).
++- Q: Skills locality? → A: **Global only** — no project-local install; AGENTS.md carries the install one-liner for the missing-skills case.
+diff --git a/docs/plans/024-core-harness/execution.log.md b/docs/plans/024-core-harness/execution.log.md
+new file mode 100644
+index 0000000..a3fe04b
+--- /dev/null
++++ b/docs/plans/024-core-harness/execution.log.md
+@@ -0,0 +1,119 @@
++# Execution Log — 024-core-harness, Phase 1: Implementation
++
++**Plan**: [core-harness-plan.md](./core-harness-plan.md) · **Mode**: Simple · **Started**: 2026-06-11T06:57:28Z
++**Testing approach**: Lightweight — behavioral verification by running real verbs and asserting envelope contracts; no mocks.
++
++---
++
++## T000 — Harness pre-flight (pre-implement seam)
++
++**Fired**: `/eng-harness-flow --event pre-implement --phase "Phase 1: Implementation" --plan-dir docs/plans/024-core-harness --json`
++
++Router envelope (derived from live signals, stateless):
++
++- `decision: redirect` · `missing_rung: S2-governance` · `actual_stage: setup`
++- S0 ✓ — `harness doctor --json` → `status: ok`; extensions layer `1 loaded, 0 failed, 0 conflict(s)`; toolchain ok (node, just, biome); branch `024-core-harness`
++- S4 ✓ — boot extension loaded (built + run in the setup excursion on this branch)
++- S2 ✗ — `.harness/engineering-harness.md` absent → engineering zone closed; loop boot verdict narrated verbatim: **`UNAVAILABLE`** (governance owed)
++- Observe buffer intact: `harness observe --list --json` shows exactly DL-001 (the `minih doctor --json` spec-drift difficulty) — preserved for the AC-6 drain in T010
++
++Per plan-6 §2a, `UNAVAILABLE` is not an error → noted, proceeding with standard testing. This redirect is the expected pre-T001 state (plan § Harness Seams): **T001 IS the governance provisioning that flips S2.** No human override needed — the plan was validated against exactly this signal state.
++
++Working-tree baseline at phase start: `git status --porcelain` shows only `?? .harness/` and `?? docs/plans/024-core-harness/` on branch `024-core-harness` — no unrelated changes to sweep into harness commits.
++
++---
++
++## T001 — Governance written: `.harness/engineering-harness.md`
++
++Migrated the full v1.0.0 contract from `docs/project-rules/harness.md` and added the four harness-core sections. Content map (no section silently lost):
++
++| Old section | Destination |
++|---|---|
++| Purpose | migrated, loop updated to Boot → Backpressure → Observe → Retro → Improve; product-vs-engineering harness distinction added |
++| Boot / Health | modernized: `harness boot --json` is the session proof; `just build` kept as the iteration rebuild; boot-time threshold names its query (`time harness boot`) |
++| Interact / Observe | migrated verbatim-equivalent (minih command tables intact) + harness verbs and the observe→record evidence paths |
++| Phase Gates | migrated verbatim + new `eng-harness` row (narrow gate `harness boot --json`) |
++| Dogfood Rules | all 5 migrated; MW rule extended with `harness observe --kind magic-wand`; new friction-capture rule appended |
++| Maturity + both Validation Checklists | migrated; L2 current (honest: no retro-driven encoded improvement shipped yet); L3 row notes the strengthened evidence rung |
++| Validation Checklist for Agents | 4-step list migrated (`harness boot` based); copy-paste block → modernizes into docs/how (T009) |
++| History | 3 L0→L2 rows preserved verbatim + migration row appended (L2 -> L2) |
++| USER CONTENT block (empty) | dropped intentionally |
++
++New sections: **§ Harness-core contract** (0.2.0 surface per Finding 05; bare-`harness` dialect rule; no-`init`/E108 note), **§ Boot sensors (as built)** (5-sensor table; Finding 01 explained in reviewer terms — plain+`--strict` exit-code pair, DL-001, follow-up candidate; degraded-is-honest per R2; read-only rule), **§ Injection map** (all 5 seams + AGENTS.md cold-start cue + task-pause-is-manual note; no TODO stubs), **§ Legacy read paths** (docs/retros = READ-only harvest source via minihToUniversal; `.harness/` writers prohibited).
++
++**Verified**: file exists at canonical path (S2 flips on commit) · exactly one `## Injection map` heading (S3) · all five seam names present · AC-8 phrases present (`READ-only harvest source`, `prohibited`) · zero TODO stubs · the single `npx harness` occurrence is the dialect rule naming the anti-pattern (AC-9's grep targets AGENTS.md, not governance).
++
++## T002 — `docs/project-rules/harness.md` → dated deprecation pointer
++
++Reduced to 9 lines: names `.harness/engineering-harness.md`, migration date 2026-06-11, plan 024-core-harness, and the historical-plans-unedited note. Safe per Finding 03 (zero live inbound references). AC-7 second clause satisfied.
++
++## T003 — Repo-level `.harness/temp/` gitignore entry
++
++Appended `.harness/temp/` to `.gitignore` (with defense-in-depth comment). **Verified non-destructively**: `git check-ignore -v .harness/temp/x` → attributed to `.gitignore:155` (repo-level entry live); nested self-healed `.harness/temp/.gitignore` read back intact (`*` + comment) — no move-aside test. Biome exposure closed per Finding 04 (`vcs.useIgnoreFile: true` makes gitignored paths invisible to `biome check`).
++
++## T004 — AGENTS.md harness routing block
++
++Two edits, per Finding 06: (1) new `## Engineering harness — session start` section inserted immediately above `## Build, Test, Lint` — session-start cue (`harness boot --json` → read envelope; `harness instructions` orientation; governance link), friction one-liner (`harness observe`), skills-missing one-liner (`npx skills@latest add …`); (2) the existing MW/dogfood sentence at the top extended in place with `` `harness observe "<the gap>" --kind magic-wand` `` — no duplicate rule text.
++
++**AC-9 verified**: `git diff AGENTS.md | grep -c "npx harness"` → **0**; exactly one added `magic-wand` line (the rule extension); block heading at line 44, `## Build, Test, Lint` at line 54 → block sits above ✓. Bare dialect throughout.
++
++## T005 — `docs/domains/eng-harness/domain.md` created
++
++Mirrors sibling structure (Boundary / Composition / Contracts / Concepts / Tests & Validation / History). All **four hard boundary rules** present as a numbered list: (1) shell-wrappers only — no `src/`/`dist/` imports, type-only contract import erased by jiti; (2) zero inbound edges — minih ships identically with `.harness/` deleted; (3) envelope-only observation at the process boundary; (4) single one-way map edge `eng-harness → cli`. Concepts table carries the seven planned concepts (composite boot, sensor, envelope, degraded-is-honest, observe buffer, retro record, governance, injection map). History row records the register-vs-tooling-note decision (user override of dossier lean DB-08) **with revisit note** (demote to a registry tooling note if meta-domain registry presence proves heavier than its value). AC-10 clause 2 satisfied.
++
++## T006 — Registry sixth row
++
++`docs/domains/registry.md` gains the `eng-harness | minih | Active` row (purpose: session-level dev-loop harness, zero inbound edges, envelope-only observation). AC-10 clause 1 satisfied.
++
++## T007 — Domain map updated
++
++`eng_harness` node added to the mermaid; **dashed one-way edge** `eng_harness -. "observes via minih CLI envelopes (process boundary)" .-> cli` (mirrors measurement's conceptual-edge precedent — zero inbound edges rendered); prose bullet explains the conceptual edge + delete-`.harness/`-and-nothing-breaks property; import-direction line extended with "`eng-harness → cli` (process boundary, never imports)"; Health Summary row added (Exposes: boot envelope, records, governance · Depends On: cli envelopes at process boundary · Boundary: zero inbound by rule). AC-10 clause 4 satisfied.
++
++## T008 — cli + runner named-external-consumer notes
++
++One line each under § Contracts: cli — "eng-harness boot consumes `minih doctor` exit signals and envelope stdout as an external observer at the process boundary — never an import"; runner — "eng-harness harvest reads runner-produced retro evidence only via published CLI envelopes (`minih retros`, `minih difficulties`) … never by importing runner or reading run-dir files". AC-10 final clause satisfied.
++
++## T009 — `docs/how/engineering-harness.md` + backlinks
++
++The one deep guide (Documentation Strategy: docs/how only): loop narrative (Boot → Backpressure → Observe → Retro → Improve, with the per-beat command table), boot section with degraded-is-honest explainer + the Finding 01 twice-run rationale + boot-never-mutates, friction lifecycle (observe → temp buffer → record retro → clear → harvest incl. the docs/retros legacy READ path), narrow-gate command map (PL-15), the **modernized copy-paste validation block** (old harness.md block, now `harness boot --json`-based with exit-0-covers-ok-and-degraded note), commit-type rule (`chore(harness):`/`docs(harness):` non-releasing, PS-07), dialect + skills-locality notes. Every named command appears in a copy-paste fenced form. All three Done-When paths touched: guide created; governance footer backlink added; AGENTS.md block backlink added (lean-contract/deep-narrative split per PL-11).
++
++## T010 — AC verification battery (all live, evidence below)
++
++**AC-2 — Doctor clean** ✓ `harness doctor --json` → `status: ok`; extensions layer `1 loaded, 0 failed, 0 conflict(s)`; `conventions: []` (zero complaints); boot extension `status: loaded`.
++
++**AC-3 — Boot envelope honest** ✓ `harness boot --json` → exit **0**, `status: degraded` (expected day one); sensors `[lint pass, typecheck pass, build+test pass, minih-doctor warn, audit warn]`; orientation digest carries all six keys (`branch, briefing, capture_friction, governance, pre_commit_gate, what`) — and `orientation.governance` now reads `.harness/engineering-harness.md` (the T001 flip visible in boot's own output); `next_action` on non-ok: *"Ready to work, with caveats: minih-doctor — warnings present — run `minih doctor` for the list; audit — 1 critical, 1 high — run `npm audit --audit-level=high`…"*.
++
++**AC-4 — Boot read-only** ✓ `git status --porcelain` captured before/after the AC-3 boot run → `cmp` byte-identical.
++
++**AC-5 — Boot catches the observed failure class** ✓ (replayable sequence, QT-08):
++1. Staged `ac5-lint-bait.json` at **repo root** (non-gitignored — `git check-ignore` confirms; valid JSON, deliberately mis-formatted).
++2. `just check` → exit **0**, suite green (`check: build test` — runs **no** biome; that asymmetry IS the proof).
++3. `harness boot --json` → exit **1**, `status: error`, `E1 — boot failed: lint`, lint sensor `fail`, `next_action: "Fix the failing sensor(s) first: lint (npx biome check .)"`.
++4. `rm ac5-lint-bait.json` → clean re-run: exit **0**, `status: degraded`, lint sensor back to `pass`.
++
++**AC-6 — Friction loop round-trips** ✓
++1. `harness observe --list --json` → exactly `[('DL-001','difficulty','annoying')]`.
++2. `harness record retro --slug 024-core-harness` → **actual path from command output**: `.harness/records/retro/2026-06-11/001-024-core-harness.md` (matches the expected dated shape exactly); CLI-templated frontmatter scaffold confirmed.
++3. Record populated from the buffer — DL-001 fields carried verbatim (description/target/severity/workaround/suggested_encoding, `compound.status: open`); frontmatter shape owned by the CLI template (biome-inert `.md`, Finding 04).
++4. `harness observe --clear` → ok; `--list` → `[]` empty.
++
++**AC-1 — Substrate shape** ✓ governance + boot extension + instructions + first committed record under `records/retro/` all exist; `.harness/temp/` gitignored (`git check-ignore` ✓); `reports/harnessability/` **intentionally absent** (post-merge assessment activity, spec Non-Goal). Router signals: C (working boot — ran 3× this battery), D (governance file), E (temp + records/retro) all satisfiable.
++
++## T011 — Repo-wide gate + commit hygiene
++
++`just fft` → **exit 0** (lint → format → build → typecheck → test → audit → sdk-check, full pipeline green; format step produced zero mutations beyond this phase's edits). Audit step surfaced the known advisory chain — **7 vulnerabilities (5 moderate, 1 high, 1 critical)** — and continued by design (`audit: npm audit --audit-level=high || true`); same chain boot's `degraded` verdict names; surfaced + deferred explicitly (transitive deps, R2 known-degraded inputs), not ignored. release-please verification: `release-please-config.json` sets `release-type: node` + pre-major bump flags only — **no `changelog-types`/type overrides**, so the default ruleset applies and `chore:`/`docs:` are non-releasing. Commits (AC-11):
++
++- `85ef669` `chore(harness): stand up .harness substrate on harness-core 0.2.0 (plan 024)` — `.harness/**`, `.gitignore`, `AGENTS.md`
++- `81ec083` `docs(harness): register eng-harness as the sixth domain + deep guide (plan 024)` — `docs/domains/**`, `docs/how/`, deprecation pointer
++
++## T012 — Harness phase-end seam
++
++Fired `/eng-harness-flow --event phase-end --plan-dir docs/plans/024-core-harness --json` (router already loaded this session; stateless re-derivation from live signals). **Setup gate now fully holds for the first time: S0 ✓ S2 ✓ S4 ✓ — the engineering zone is open** (T001's governance flipped S2 mid-phase, exactly as planned). Envelope: `decision: noop` on drain — observe buffer **EMPTY** (DL-001 was already drained into the committed record during the AC-6 round-trip), which the plan names as a valid outcome; `next_suggested: eng-harness-4-retro --harvest` (offered per print-then-offer, not auto-run — best-effort, never blocks).
++
++---
++
++## Phase complete — Phase 1: Implementation (13/13 tasks)
++
++All tasks T000–T012 `[x]`; all 11 acceptance criteria verified live and ticked in the plan. Deliverables: governance at `.harness/engineering-harness.md` (S2/S3 router signals live), deprecation pointer, repo-level temp ignore, AGENTS.md routing block (bare dialect, AC-9 grep-clean), eng-harness registered as the sixth domain (domain.md four hard rules / registry / map one-way edge / cli+runner consumer notes), `docs/how/engineering-harness.md` deep guide with backlinks, AC battery evidence above (replayable), `just fft` green, two non-releasing commits + plan bookkeeping. Spec deviation R7 stands documented (spec's literal `minih doctor --json` line; Finding 01 + governance + DL-001 record); amendable via `/plan-2-v2-clarify` if wanted. Progress tracking maintained inline per-task (plan-6a equivalent: task table + this log kept current throughout).
++
++**Next**: `/plan-7-v2-code-review --plan "docs/plans/024-core-harness/core-harness-plan.md"` (Simple mode).
+diff --git a/docs/plans/024-core-harness/original-ask.md b/docs/plans/024-core-harness/original-ask.md
+new file mode 100644
+index 0000000..8d0550e
+--- /dev/null
++++ b/docs/plans/024-core-harness/original-ask.md
+@@ -0,0 +1,10 @@
++# Original ask — core-harness
++**Captured**: 2026-06-11T04:44:16Z  ·  **By**: /the-flow
++
++> let's get plan research done. using  harness concept, aevaluate this erpo for wrapping. harness cli has doco in it on how extensons work etc, and also how the harness loop works etc. we also have acces to the harness skills that we will use (the flow skill tells us how to do this).
++
++Earlier framing from the same session (verbatim):
++
++> first we are going to upgrade our harness to the harness core - which is the "harness" command. run --help on that command now to orient.
++
++> now, the thing is we already  have harness concepts in this repo that this will embrace and replace. just note thta nugget away before i give you the kickoff nod. no need to install the harnes command its already availble... please dont do stuff like that.
+diff --git a/docs/plans/024-core-harness/research-dossier.md b/docs/plans/024-core-harness/research-dossier.md
+new file mode 100644
+index 0000000..b3e806f
+--- /dev/null
++++ b/docs/plans/024-core-harness/research-dossier.md
+@@ -0,0 +1,287 @@
++# Research Report: Upgrade minih's engineering harness to harness core (the `harness` CLI)
++
++**Generated**: 2026-06-11T04:58:38Z
++**Research Query**: "Upgrade minih's engineering harness to harness core (the global `harness` CLI): evaluate this repo for wrapping. Use the CLI's bundled docs (extensions, verbs, records, the harness loop) and the installed eng-harness skills. Map the harness concepts minih already has (retros/magicWand harvesting, AGENTS_README philosophy, just fft gate, eng-harness skills) so harness core embraces and replaces them rather than duplicating. No repo-local install of the CLI — it is already available globally."
++**Mode**: Plan-Associated (`docs/plans/024-core-harness/`)
++**FlowSpace**: Available (repo indexed, markdown sections included)
++**Findings**: 69 across 8 subagents (IA×10, DC×10, PS×10, QT×10, IC×10, DE×10, PL×15 — top-loaded here, full detail per section — DB×8)
++**Harness seam (session-start)**: eng-harness-flow router installed globally; minih has **no repo-local harness substrate** (`.harness/` absent, 0 extensions per `harness doctor`) — this plan IS the setup work. Standard testing applies meanwhile.
++
++---
++
++## Executive Summary
++
++### What It Does
++minih already runs a complete, *compiled-in* feedback harness for its spawned agents: a schema-enforced retrospective contract (workedWell/confusing/magicWand), auto-harvest into `docs/retros/*.md`, difficulties aggregation, and a doctor that audits the loop. The harness-core upgrade adds the *session-level* engineering harness — the global `harness` CLI's extension/record/observe substrate plus the eng-harness skills loop (Boot → Backpressure → Observe → Retro → Improve) — for the agent **operating** this repo, not the agents minih spawns.
++
++### Business Purpose
++Close the gap the ledger documents over and over: friction noticed by the *session* agent (the Claude driving the repo) has no deterministic capture surface today, governance prose drifts from runtime truth, and the repo's dev-loop knowledge lives in skill prose instead of encoded verbs. Harness core is the encode-don't-document fix — and minih's own philosophy is its direct ancestor (the severity enum `blocking|degrading|annoying` is character-for-character identical on both sides — DE-02).
++
++### Key Insights
++1. **Two harnesses, one vocabulary — keep the writers separate.** minih-as-product-harness (AJV-enforced agent retros → `docs/retros/`) and the engineering harness (honour-system session capture → `.harness/`) are parallel channels of the same lineage. Never funnel one through the other; bridge **read-side only** (DB-02, DB-04, DE-03, DE-10).
++2. **The global CLI is a moving target**: `harness` on PATH is **v0.2.0**, npm-linked to the local dev checkout `/Users/jordanknight/substrate/harness-engineering` (branch `feat/cli-bin-engh`) — it silently changes when that checkout rebuilds. Everything operational is cwd-relative, so global-only usage works; the plan must pin the *contract*, not the binary (DC-10).
++3. **A prior-generation governance doc already exists**: `docs/project-rules/harness.md` (plan 020, maturity L2, Boot = `just build` + `minih doctor`). The canonical path the current skills probe is `.harness/engineering-harness.md` — content must migrate (history table preserved) or boot reports UNAVAILABLE beside a stale L2 claim (DE-08, IC-01, IC-06).
++4. **Boot cannot wrap `just fft` verbatim** — fft's `format` step runs `biome format --write .` (mutates the tree) and its audit/sdk tails are `|| true`-softened. The recommended composite: `biome check` + `tsc --noEmit` + `just check` + `minih doctor --json` (parse envelope, not exit code) + unmasked `npm audit` → full CI-equivalence in ~17s (QT-01, QT-06, QT-08).
++
++### Quick Stats
++- **Components**: minih feedback loop ≈ 8 src files (validator, retro-ledger, runner harvest, harvest/difficulties/retros/doctor/check commands); harness-core substrate to create: `.harness/{extensions,records,temp,reports}` + governance doc
++- **Dependencies**: global `harness` v0.2.0 (commander + jiti only, Node ≥22); eng-harness skills ×7 global; zero new npm deps for minih
++- **Test Coverage**: 110 test files / 1201 tests (1185 pass, 16 env-gated skips) in ~12.5s; one live flake found (QT-10)
++- **Complexity**: Medium — file scaffolding is trivial; the real work is contract alignment (invocation dialects, governance migration, read-bridges)
++- **Prior Learnings**: 15 relevant discoveries (4+ recurring frictions directly answered by this upgrade)
++- **Domains**: 5 registered product domains; `.harness/` should stay **outside** the registry with a tooling note (DB-08)
++
++---
++
++## How It Currently Works
++
++### minih's compiled-in feedback loop (the thing being embraced)
++
++| Stage | Surface | Location |
++|---|---|---|
++| Contract taught | `SYSTEM_OUTPUT_INSTRUCTIONS` injected into every prompt (incl. mandatory `minih check` self-validation, magicWand framing, MH-001 difficulty IDs) | `src/runner/runner.ts:187-288` (IA-02) |
++| Contract enforced | AJV against bundled `retrospective.json` (workedWell≥10 / confusing≥10 / magicWand≥20 chars; `magicWandTarget: project\|minih\|coordination`; difficulties `{category, description, severity: blocking\|degrading\|annoying, workaround?}`) | `src/schemas/retrospective.json`, `src/runner/validator.ts:241-313` (IA-01, IA-06) |
++| Auto-harvest | Runner appends to `docs/retros/<slug>.md` (+ `<planId>.md` via `MINIH_PLAN_ID`) at every terminal branch; crash stubs `> ⚠️` in `finally`; kill-switch `MINIH_NO_AUTO_HARVEST=1`; idempotent on literal `runId: <id>` | `src/runner/runner.ts:87-184,1382-1439`, `src/runner/retro-ledger.ts:117-261` (IA-03, IA-04) |
++| Explicit harvest | `minih harvest <slug> [--run\|--since]` — ignores the kill-switch by design | `src/cli/commands/harvest.ts` (IA-05) |
++| Aggregate | `minih retros` (inside+outside, target filter), `minih difficulties` (recomputed from run artifacts, exact-string frequency) | `src/cli/commands/{retros,difficulties}.ts` (IA-06, IA-08) |
++| Audit | `minih doctor` flags unharvested retros + >1MB ledgers; currently **degraded** (74 warnings) on this branch | `src/cli/commands/doctor.ts:452-536` (IA-08, QT-06) |
++
++Friction state lives in exactly two places: per-run `report.json` (source of truth) and `docs/retros/*.md` (curated ledger, 10 files / ~510 lines). **There is no in-flight session buffer** — minih goes straight from run artifact to permanent ledger. That missing middle is harness-core's clearest net-new contribution (IA-10).
++
++### The harness-core substrate (the thing being adopted)
++
++- **Envelope**: every command emits `{command, status: ok|degraded|unconfigured|error, data, error?, next_action?, timestamp}`; exits 0 (ok/degraded), 2 (unconfigured), 1 (error); `next_action` required on non-ok (DC-01).
++- **Extensions**: `.harness/extensions/<name>/extension.ts` + `instructions.md`; default-export `HarnessVerb` with injected `VerbContext` (`ctx.exec`, `ctx.ok/degraded/unconfigured/error`); discovery is strictly **cwd-relative** (`<cwd>/.harness/extensions/`, one level deep); TS loaded via jiti at runtime — zero toolchain needed in minih (DC-02, DC-03).
++- **`harness new <name> [--wrap "<cmd>"]`**: scaffolds an immediately-loadable verb; wrap maps child exit 0→ok, non-zero→error(E1) — loses nuance, so minih's boot needs a hand-written `run()` (DC-04).
++- **Records**: `harness record <type>` → `.harness/records/<type>/<YYYY-MM-DD>/<NNN>-<slug>.md`; record type = 4-field contract `{kind:'record', type, description, template}`; core `retro` template carries `system.compound` lifecycle (`open|suggested|encoded|wontfix|stale|dismissed`), and its `target` comment already names `minih` (DC-05, DC-07).
++- **Observe**: `harness observe "<desc>" --kind difficulty|magic-wand|gift|insight|coordination|improvement-suggestion|confusion [--severity blocking|degrading|annoying] [--workaround] [--suggested-encoding] [--agent <bucket>]` → `.harness/temp/<bucket>/session-buffer.md`, self-gitignored on first capture (DC-06).
++- **No `.harness/` dir → `record` is `unconfigured` exit 2** and writes nothing. `harness doctor` in minih today: status ok, 0 extensions, toolchain layer hard-codes `node, just, biome` checks (DC-05, DC-09).
++
++### The skills loop above the CLI
++
++The `eng-harness-flow` router decides setup-vs-loop from repo signals A–J; the canonical on-disk shape it probes (IC-01):
++
++```
++.harness/engineering-harness.md          ← D: governance (canonical and ONLY location)
++.harness/extensions/boot/                ← C: working boot verb
++.harness/temp/ + .harness/records/retro/ ← E: loop substrate
++.harness/reports/harnessability/         ← F: assessment (latest.json is a load-bearing sentinel)
++```
++
++Setup rungs S0 install → S1 scout → S2 governance ("owed, not provisioned" — the `harness init` writer doesn't exist yet) → S3 inject → S4 boot (built LAST). Seams: `session-start|post-spec|pre-implement|task-pause|phase-end|plan-complete`. Boot verdicts `HEALTHY / SLOW(>45s) / UNHEALTHY / UNAVAILABLE`; retro lifecycle observe → `[s/t/p/e/d/a]` drain → `record retro` → `--clear`; harvest scans `.harness/records/retro/**` **plus legacy paths including `docs/retros/*.md`** with the `minihToUniversal` block mapping (IC-02, IC-06, IC-08, IC-09).
++
++---
++
++## Architecture & Design
++
++### Component Map (post-upgrade target shape)
++
++```
++minih repo
++├── .harness/
++│   ├── engineering-harness.md      # governance — migrated from docs/project-rules/harness.md
++│   ├── extensions/boot/            # hand-written composite verb (shell-wrapper ONLY)
++│   ├── records/retro/              # committed session retros (harness record retro)
++│   ├── reports/harnessability/     # skill-written assessment (latest.json sentinel)
++│   └── temp/                       # gitignored observe buffer (self-healing .gitignore)
++├── docs/retros/                    # UNCHANGED — minih product ledger; legacy READ path for harvest
++├── docs/project-rules/harness.md   # deprecate/redirect after content migration
++└── AGENTS.md                       # + harness-core session-start block at top (before Build/Test/Lint)
++```
++
++### Design rules established by the evidence
++1. **Extensions are shell-wrappers** — spawn `just`/`minih`, parse JSON envelopes, map exit codes. `.harness/` importing `src/`/`dist/` would create an unregistered second composition root invisible to domain health tracking (DB-07).
++2. **Harness observes through CLI envelopes only** — the 023 run-inventory projection deliberately omits `runDir`; direct `agents/*/runs/` reads from `.harness/` violate both that redaction decision and the AGENTS.md dogfood rule (DB-06, DE-04).
++3. **One canonical governance source** — `.harness/engineering-harness.md`; every threshold it states must be queryable (PL-05, PL-09).
++4. **Read-pure verbs** — boot/doctor never write; healing is a separate verb (repo precedent FX009, PL-10).
++
++### System Boundaries
++- **minih-as-product-harness** (runner/cli/measurement domains): agents' AJV-enforced retros about project/minih/coordination. Ships to every downstream minih user via `minih init`.
++- **engineering-harness** (`.harness/`, justfile, this plan): the session loop for whoever develops THIS repo. Owned by nobody today; stays outside the domain registry with a tooling note (DB-02, DB-08).
++- **The dogfood join**: minih runs its own agents against itself, so product retros with `magicWandTarget: "minih"` ARE engineering-harness signal — the existing enum is the selector for the read-bridge (DB-02, DB-04).
++
++---
++
++## Dependencies & Integration
++
++### What the upgrade depends on
++| Dependency | Type | Purpose | Risk if changed |
++|---|---|---|---|
++| global `harness` v0.2.0 (symlink → `~/substrate/harness-engineering@feat/cli-bin-engh`) | Required | the CLI substrate | **HIGH — moving target**: rebuilding/branch-switching that checkout silently changes behavior. Record version + contract surface in the plan; treat the contract as the dependency, not the binary (DC-10) |
++| `just`, `biome`, `node` on PATH | Required | `harness doctor` toolchain layer hard-codes all three | CI for any harness-doctor step needs them installed (DC-09) |
++| eng-harness skills ×7 (global `~/.agents/skills/`) | Required | the loop choreography | three invocation dialects coexist (`harness X` / `npx harness X` / `npx --no-install harness X`) — see Critical Finding 02 |
++| `docs/plans/<ord>-<slug>/` layout | Existing | backpressure artifact home | already conforms (IC-07) |
++
++### What depends on this (consumers of the result)
++- **the-flow / SDD pipeline**: fires `--event` seams through the router; consumes `backpressure-coverage.md` at plan-3 (IC-02, IC-07).
++- **Future session agents**: AGENTS.md routes them through `harness doctor`/boot at session start (DE-04).
++- **`minih doctor` audit**: keeps owning `docs/retros/` health — untouched (DE-03).
++
++---
++
++## Quality & Testing
++
++- **Gate landscape**: `just fft` = lint → **format (MUTATES: `biome format --write .`)** → build → typecheck → test → audit(`|| true`) → sdk-check(always exit 0). `just check` = build + test, honest exits, ~14s. CI quality-gate = biome check / build / tsc / test / soft audit / dist-artifact checks, Node 20+22, ~2m30s (QT-01..QT-04).
++- **CI's "Agent Doctor" job is softer than it looks**: `doctor 2>/dev/null | jq .` without pipefail — only fails on unparseable JSON (QT-05). A real boot parsing the envelope `status` field beats CI here.
++- **`minih doctor` status taxonomy** is `ok|degraded|error` but exits 0 for degraded — boot must parse JSON, never exit codes. Currently degraded: 74 warnings (mostly plan-018 per-agent permissions notes + unharvested retros). A doctor-composing boot reports **degraded on day one** — honest, expect it (QT-06).
++- **npm audit reality**: 7 vulns (5 moderate / 1 high / **1 critical**); the high (`fast-uri` via **ajv — a production dependency**) and critical (vitest, dev) are invisible to every current gate thanks to `|| true`. Unmasked audit in boot = the clearest "honest boot beats current gates" win (QT-07).
++- **Risk quantified for boot=`just check` alone**: the only CI failure in the last 8 runs was a biome **format** failure on a docs JSON — the exact step `check` omits; adding `biome check` (+0.7s) + `tsc --noEmit` (+1.3s) closes the entire observed divergence (QT-08, PL-03).
++- **Known flake**: `test/runner/agent-pack/extractor.test.ts:595-613` ("rejects zero-length entry name") failed 1 of 3 consecutive local runs — a false-positive source for boot's error signal; fix it or give boot a retry-once rule (QT-10).
++- **16 skipped tests are deliberate env gates** (`MINIH_E2E`, `MINIH_REGRESSION`, `MINIH_PGREP`) — default boot's `ok` honestly means "deterministic suite green", not "e2e-verified" (QT-09).
++
++### Boot wrap candidates (QT synthesis)
++
++| Candidate | Proves | Misses | Cost | Honesty |
++|---|---|---|---|---|
++| `just test` | 1185 tests | compile, lint, typecheck, vulns | ~12.5s | binary; flake risk |
++| `just check` | compile + tests | lint/format (the observed CI failure class), vulns | ~14s | honest exits |
++| `just fft` | everything CI proves | **mutates tree**; audit/sdk soft-failed | ~20s+net | disqualified for read-only boot |
++| **Recommended composite** | `biome check` + `tsc --noEmit` + `just check` + `minih doctor --json` (parse status) + unmasked `npm audit --audit-level=high --json` (offline→skip) | live SDK/e2e (env-gated → `unconfigured` tier) | ~17s + ~2s net | fully controllable ok/degraded/unconfigured/error |
++
++---
++
++## Modification Considerations
++
++### ✅ Safe to create/modify
++1. `.harness/` tree — invisible to tsc (`include: src/**` only), vitest (`test/**` only), npm pack (`files: ["dist","LICENSE"]` allowlist) (PS-03, PS-04, PS-06).
++2. Markdown records — biome 2.4 doesn't check markdown at all; records are toolchain-inert (PS-01, PS-10).
++3. AGENTS.md harness block — natural slot at the very top, before "Build, Test, Lint" (DE-04).
++
++### ⚠️ Modify with caution
++1. **Any `.ts`/`.json` under `.harness/`** — biome's `files.includes: ["**", "!!**/dist"]` DOES descend into dot-directories (verified empirically with the repo's binary): unformatted scaffolds fail `just fft` at step 1 (lint runs BEFORE format) and CI. Mitigation: biome-format everything scaffolded before committing; gitignoring `.harness/temp/` also shields it via `vcs.useIgnoreFile: true` (PS-01, PS-02, PS-09).
++2. **.gitignore** — no `.harness` entry exists today; `.harness/temp/` must be added (repo-style commented block). The CLI self-heals a *nested* `.harness/temp/.gitignore` on first capture, but the repo-level entry is still the convention (PS-05, DC-06).
++3. **Commit types** — release-please does NOT path-filter: `feat:`/`fix:` commits touching only `.harness/` records bump the package version. Use `chore(harness):` / `docs(harness):` (PS-07).
++4. **`docs/project-rules/harness.md`** — migrate content (Boot=`just build`+`minih doctor`, Phase Gates, History L0→L2) into `.harness/engineering-harness.md`, then deprecate/redirect (DE-08).
++
++### 🚫 Danger zones
++1. **minih's auto-harvest into `docs/retros/`** — compiled product behavior + doctor invariant + downstream-user contract (`minih init` scaffolds it everywhere). Do NOT redirect or migrate the files; harvest reads it as a legacy path (DE-03, DB-04, PL-02/issue #39).
++2. **The AJV-enforced report.json contract** — never funnel spawned-agent retros through `harness observe`; they are parallel channels (DE-02).
++3. **`.harness/extensions` importing `src/`** — boundary violation; shell-wrappers only (DB-07).
++4. **The harnessability `latest.json` sentinel** — nothing harness-core does may clobber it; setup detection depends on it (IC-05).
++
++---
++
++## Prior Learnings (From Previous Implementations)
++
++✓ 15 findings surfaced from ~45 ledger blocks — 10 from the legacy minih ledger (`docs/retros/`, 10 files), 5 from plan execution logs / fix dossiers; compound `.retro.md` format **absent** in this repo.
++
++| ID | Type | Source | Key Insight | Action |
++|----|------|--------|-------------|--------|
++| PL-01 | gotcha+wand (4+ agents, 6 wks) | parallel-param-smoke + 3 ledgers | MINIH_* env empty in agent shells (#37); wands ask for `minih env`/`minih params` | Harness context must be queryable, not documentation-promised; doctor-verify any documented env var |
++| PL-02 | debt | 023 execution log | Harvest destination hardcoded to `docs/retros/` (#39) | Declare docs/retros the legacy-READ path in `--harvest`; don't fork the ledger |
++| PL-03 | gotcha ×2 | 023 + 008 logs | First `fft` after ANY new JSON fails on biome format | Re-run gate after any edit before push; format scaffolds; gitignore temp |
++| PL-04 | insight | 023 log | 3-tier branch validation (fft / live smoke / companion) worked; smoke runs double as retro generators | Template for harness gate/boot reporting |
++| PL-05 | gotcha+wand ×7 | code-review-companion ledger | idleBudgetMs in contract but invisible at runtime — agents guessed for 30-min windows | Every governance threshold queryable via a read command |
++| PL-06 | wand ×5 | companion + measurement ledgers | Reports manually reconstructed from inbox; want ledger-derived views | CLI computes derived views from on-disk records |
++| PL-07 | insight | companion ledger | Enumerated filters rot (root cause of plan-012 deafness) | Wildcard+exclude matching in harvest scanners |
++| PL-08 | decision | permission-prober ledger | Failure stubs clustered in one file exposed systemic preset bug at a glance | Carry stub-on-failure into harness records; identical stubs = high-priority recurrence |
++| PL-09 | gotcha+wand | permission-prober, code-review | Two truth surfaces disagreed (permission_status vs status) | One canonical governance source; doctor verifies derived surfaces |
++| PL-10 | decision | FX009 dossier | Heuristic liveness → false 'active' cost ~14.5 min; read-pure vs reconcile split | Boot/doctor probe-backed and read-only; repair behind separate verb |
++| PL-11 | decision | 008 log | doctor warns at 4KB on agent-facing contracts | Keep `.harness/` contracts terse; deep narrative in docs/how/ |
++| PL-12 | wand | measurement ledger | "Make the phase-end retro flow an executable command, not prose" — the harness-core thesis, asked for by the orchestrator itself | Frame 024 as fulfilling this wand; audit skill prose against real CLI flags |
++| PL-13 | wand ×3 | companion ledger | Sessions re-derive orientation heuristically; want machine-readable digest | Boot emits JSON orientation digest; tolerate any plan lifecycle shape |
++| PL-14 | unexpected | skills-smoke-test → plan 022 | Skill presence is a silent failure unless deterministically verifiable | Verify harness-skill install via discover/doctor pattern (plan-022 precedent) |
++| PL-15 | gotcha+wand ×3 | companion ledger | `--runInBand` failed 3×; narrow-gate cheat sheet never encoded | Encode command map in governance/boot output |
++
++**The headline**: PL-12 is the orchestrator literally requesting harness core before it existed ("Make the phase-end progress/retro/debrief flow an executable MiniH command rather than a prose skill checklist"). This upgrade is the answer to the ledger's own most-repeated wishes.
++
++---
++
++## Domain Context
++
++| Domain | Relationship | Relevant contracts |
++|---|---|---|
++| runner | bridge source | owns "magic wand feedback capture", retro-ledger, run inventory (deliberately omits `runDir`) |
++| cli | compose | `MinihEnvelope` designed for "External agents, CI" — boot is a natural named consumer of `doctor`/`check`/`runs --json` |
++| measurement | vocabulary donor | proof ladder L0-L6, fact-vs-interpretation authority, "reviewable mitigation" ≈ observe→drain→encode lifecycle; do NOT extend its boundary to own `.harness/` |
++| adapter, mcp | none | no feedback surfaces |
++
++**Domain action** (DB-08): keep `.harness/` **outside the registry**; add a "non-domain tooling" note to `registry.md`/domain-map naming the engineering-harness layer, and register the harness as a named external consumer in the cli + runner domain docs (three bridges: retro read-bridge, boot↔doctor/check, observe-via-envelope).
++
++---
++
++## Critical Discoveries
++
++### 🚨 Critical Finding 01: The global `harness` is v0.2.0 npm-linked to a live dev checkout
++**Impact**: Critical · **Source**: DC-10
++`~/.npm-global/lib/node_modules/@ai-substrate/engineering-harness` → symlink to `/Users/jordanknight/substrate/harness-engineering` (branch `feat/cli-bin-engh`). Version is **0.2.0**, not the 0.1.0 assumed at kickoff. The binary silently changes whenever that checkout rebuilds.
++**Required Action**: The plan must record the exact version + contract surface (envelope, VerbContext, record placement, observe flags) as the dependency. Consider asking the operator whether to pin (tag checkout) before building.
++
++### 🚨 Critical Finding 02: The skills' invocation dialects conflict with the no-install rule
++**Impact**: Critical · **Source**: IC-03, IC-10
++`eng-harness-0-setup` unconditionally runs `npm install github:AI-Substrate/harness-engineering` (even seeding `package.json` into non-Node repos), and three dialects coexist across the family (`harness X` / `npx harness X` / `npx --no-install harness X`) — with getting-started.md warning that bare `npx harness` fetches an unrelated registry package. Operator forbids repo-local install in minih.
++**Required Action**: The 024 flow must skip/override setup's S0 install rung (signal A already tolerates PATH-resolved `harness`) and standardize on bare `harness` invocations in everything 024 writes (governance, AGENTS.md block, boot instructions). The agents-readme "row 4" probe (`npx --no-install harness --version`) will report "fresh repo" forever here — the AGENTS.md block must route around it.
++
++### 🚨 Critical Finding 03: A prior-generation governance doc already claims L2
++**Impact**: High · **Source**: DE-08, IC-01
++`docs/project-rules/harness.md` (plan 020, legacy `engineering-harness-setup` generation): Boot = `just build` + `minih doctor`, Phase Gates, History L0→L2. Current skills read ONE location: `.harness/engineering-harness.md`.
++**Required Action**: migrate content + history, deprecate the old path — else boot reports UNAVAILABLE while a stale doc claims L2.
++
++### 🚨 Critical Finding 04: `just fft` mutates; `just check` misses the observed failure class
++**Impact**: High · **Source**: QT-01, QT-08
++fft runs `biome format --write .` (read-only boot disqualifier); check omits lint — the only recent real CI failure was a biome format error check can't see.
++**Required Action**: hand-written composite boot verb (recommended composite above); `harness new boot --wrap` alone is insufficient (DC-04 wrap loses status nuance too).
++
++### 🚨 Critical Finding 05: biome WILL check `.harness/**/*.{ts,json}`; `.harness/temp/` is unprotected today
++**Impact**: High · **Source**: PS-01, PS-02, PS-05 (verified empirically)
++`files.includes: ["**"]` descends into dot-dirs; gitignoring temp/ simultaneously fixes git noise AND biome exposure (`vcs.useIgnoreFile: true`). This is the same failure class that broke CI this week (PL-03).
++**Required Action**: scaffold-then-format discipline + repo-level `.harness/temp/` gitignore entry as part of the build.
++
++### 🚨 Critical Finding 06: Day-one degraded signals are real, not bugs
++**Impact**: Medium · **Source**: QT-06, QT-07, QT-10
++`minih doctor` = degraded (74 warnings); npm audit = 1 critical + 1 high (high on a **prod** path via ajv); one live test flake (1-of-3 observed). An honest boot will say `degraded` immediately.
++**Required Action**: plan should expect/accept degraded-at-birth, and decide whether to fix the flake (QT-10) and audit findings in scope or record them as known signal.
++
++---
++
++## Recommendations
++
++### If executing this upgrade (the likely plan shape)
++1. **Substrate**: create `.harness/` per the router's canonical shape (IC-01); migrate governance from `docs/project-rules/harness.md`; gitignore temp/.
++2. **Boot**: hand-written composite verb (shell-wrapper only): `biome check` + `tsc --noEmit` + `just check` + `minih doctor --json` (parse status) + unmasked audit (offline→skip) → ok/degraded/unconfigured/error. Emit a machine-readable orientation digest (PL-13).
++3. **Records/observe**: adopt as-is — `.harness/records/retro/` committed (commit-type `chore(harness):`), temp gitignored; minih's `docs/retros/` declared a legacy READ path for harvest (answers #39's tension without code changes).
++4. **Routing**: AGENTS.md harness block at top, bare-`harness` dialect, dogfood rule extended ("file it as magicWand" → `harness observe --kind magic-wand`).
++5. **Domains**: registry tooling note + named-consumer entries in cli/runner domain docs (DB-08).
++6. **Out of scope but adjacent**: fixing #37 (env injection), #39 (configurable ledger), the QT-10 flake — note as candidates, don't blend in.
++
++### What NOT to do
++- Don't `npm install` anything (operator rule; everything works cwd-relative).
++- Don't migrate/redirect `docs/retros/` writers.
++- Don't let `.harness/extensions` import `src/`.
++- Don't wrap `just fft` as boot.
++- Don't register `.harness` as a product domain.
++
++---
++
++## External Research Opportunities
++
++No hard external gaps — the CLI's bundled docs + the local harness-engineering checkout answered everything the code couldn't (the one gap IA flagged, the retro record vocabulary, was resolved internally by DC-07).
++
++One optional, locally-answerable check: **`harness init` roadmap** — the skills call S2 governance "owed, not provisioned" pending a future `harness init` writer (IC-04), and setup tolerates `init` being an unknown command. Before the plan writes governance by hand, glance at `/Users/jordanknight/substrate/harness-engineering` (it's the linked checkout) for an in-flight `init` implementation to avoid building what's about to ship.
++
++---
++
++## Appendix: Core file inventory
++
++| File | Purpose |
++|---|---|
++| `src/runner/runner.ts:87-288,594-626,1382-1439` | prompt contract, env injection, auto-harvest |
++| `src/runner/retro-ledger.ts` | legacy block-format writer (runId-idempotent, atomic) |
++| `src/schemas/retrospective.json` | the enforced retro contract |
++| `src/cli/commands/{harvest,difficulties,retros,doctor,check}.ts` | feedback-loop CLI surface |
++| `justfile` | gate recipes (fft mutates; check honest) |
++| `biome.json` / `tsconfig.json` / `vitest.config.ts` / `.gitignore` / `package.json` | collision surfaces (PS-01..PS-06) |
++| `docs/project-rules/harness.md` | legacy governance to migrate |
++| `docs/retros/*.md` (10 files) | product ledger — legacy read path |
++| `~/.agents/skills/eng-harness-*` (7 skills) | the loop choreography |
++| `/Users/jordanknight/substrate/harness-engineering` | the linked CLI source (v0.2.0) |
++
++## Next Steps
++
++- **Recommended**: `/plan-1b-v3-specify-and-clarify` to spec the wrap (scope question to settle there: substrate+boot only, vs also the read-bridge verb and domain-doc notes).
++- The post-spec backpressure seam (`/eng-harness-flow --event post-spec`) is unusually meaty here — the work is literally about deterministic sensors.
++
++---
++
++**Research Complete**: 2026-06-11T04:58:38Z
++**Report Location**: `docs/plans/024-core-harness/research-dossier.md`
+diff --git a/docs/plans/024-core-harness/the-flow.json b/docs/plans/024-core-harness/the-flow.json
+new file mode 100644
+index 0000000..dec1ac2
+--- /dev/null
++++ b/docs/plans/024-core-harness/the-flow.json
+@@ -0,0 +1,116 @@
++{
++  "schema_version": 1,
++  "slug": "core-harness",
++  "plan_dir": "docs/plans/024-core-harness",
++  "cursor": "build",
++  "recommended_next": "merge",
++  "agents": [],
++  "nodes": [
++    {
++      "id": "research",
++      "type": "research",
++      "label": "Evidence: evaluate repo for harness-core wrapping",
++      "status": "done",
++      "ran_at": "2026-06-11T04:58:38Z",
++      "user_input": "let's get plan research done. using  harness concept, aevaluate this erpo for wrapping. harness cli has doco in it on how extensons work etc, and also how the harness loop works etc. we also have acces to the harness skills that we will use (the flow skill tells us how to do this).",
++      "note": "8-subagent dossier (69 findings). Headlines: global harness is v0.2.0 linked to a live dev checkout; skills' npm-install rung conflicts with the no-install rule (use bare `harness`); prior governance doc at docs/project-rules/harness.md (L2) must migrate to .harness/engineering-harness.md; just fft mutates (boot needs hand-written composite); docs/retros stays minih-owned, read-bridge only; .harness stays outside the domain registry.",
++      "artifacts": ["docs/plans/024-core-harness/research-dossier.md"],
++      "next": ["spec"]
++    },
++    {
++      "id": "spec",
++      "type": "spec",
++      "label": "Spec",
++      "status": "done",
++      "ran_at": "2026-06-11T05:10:00Z",
++      "user_input": "specif now",
++      "note": "CS-3 Simple; Lightweight behavioral testing, no mocks, docs/how only. 9 clarifications in one session — headline: user OVERRODE the dossier's keep-outside-registry lean: eng-harness becomes the sixth registered domain (one-way boundary, zero inbound edges). Boot = composite (biome+tsc+check+minih doctor+unmasked audit). Contract-only pinning; skills stay global. 11 ACs; 2 workshop opportunities flagged (boot envelope schema, governance content map).",
++      "artifacts": ["docs/plans/024-core-harness/core-harness-spec.md"],
++      "next": ["backpressure-001"]
++    },
++    {
++      "id": "backpressure-001",
++      "type": "backpressure",
++      "label": "Post-spec seam → router REDIRECT (setup gate)",
++      "status": "done",
++      "ran_at": "2026-06-11T05:25:00Z",
++      "user_input": "yes",
++      "command": "/eng-harness-flow --event post-spec --spec docs/plans/024-core-harness/core-harness-spec.md --json",
++      "note": "Router decision: redirect. S0 install holds (CLI 0.2.0, doctor ok) but S2 governance + S4 boot are missing, so the engineering zone (incl. the backpressure survey) is closed — exactly what this plan builds. No coverage artifact produced; the gate evidence itself feeds /plan-3. Live bonus: harness --version drifted 0.1.0 → 0.2.0 mid-session, demonstrating dossier Critical Finding 01 (linked-checkout moving target).",
++      "next": ["plan"]
++    },
++    {
++      "id": "harness-setup-001",
++      "type": "harness-boot",
++      "label": "Setup excursion: eng-harness-0-setup → .harness substrate + composite boot",
++      "status": "done",
++      "ran_at": "2026-06-11T06:18:04Z",
++      "user_input": "run the harness setup skill. no need to instal harness as its alerady present (harness command and engh alias it too)",
++      "command": "/eng-harness-0-setup",
++      "branch_of": "backpressure-001",
++      "note": "S0 verified, never installed (harness+engh both real bins, v0.2.0, doctor ok; `harness init` absent — E108 — governance stays owed). S1 assessment declined per spec Non-Goal. S3 injection map: host flow self-fires all five seams; AGENTS.md weave deferred to the plan (it is an AC). S4 boot authored via `harness new` + hand-filled composite (5 sensors): verdict degraded day-one — doctor warnings + 1 critical/1 high audit — 17s wall, read-only proven (tree fingerprint unchanged). Live finds: minih doctor has NO --json flag (spec drift, captured as DL-001 via `harness observe`; boot detects warnings via plain+--strict exit-code pair instead); `harness observe` is a core verb in 0.2.0; .harness/temp self-gitignores.",
++      "artifacts": [
++        ".harness/extensions/boot/extension.ts",
++        ".harness/extensions/boot/instructions.md"
++      ],
++      "next": ["plan"]
++    },
++    {
++      "id": "plan",
++      "type": "plan",
++      "label": "Architecture Plan (READY, validated)",
++      "status": "done",
++      "ran_at": "2026-06-11T06:38:39Z",
++      "user_input": "yes run",
++      "note": "plan-3-v3 emitted READY first pass: Simple mode, 13 tasks (T000–T012 incl. 2 advisory seam rows), gates 4 PASS / 3 N/A. validate-v2 auto-ran: 4 parallel agents, 12/15 lenses — verdict VALIDATED WITH FIXES (1 CRITICAL T009 backlink paths, 2 HIGH T005 clause + signal-D/S3 precision, plus content-map completeness and clarity MEDIUMs — all applied). Thesis: Advanced at Implementation level, evidence Strong. Notable: a validator falsely claimed `just check` runs biome (it is build+test — the very gap AC-5 proves); a validator probe live-confirmed AC-6's record path shape; probe residue removed, DL-001 still buffered.",
++      "artifacts": ["docs/plans/024-core-harness/core-harness-plan.md"],
++      "next": ["build"]
++    },
++    {
++      "id": "build",
++      "type": "phase",
++      "label": "Phase 1: Implementation (13/13, ACs 1–11 verified live)",
++      "status": "done",
++      "ran_at": "2026-06-11T07:15:00Z",
++      "user_input": "yeah thanks, just priefly a para on where we are and what we get after this",
++      "note": "plan-6 ran all 13 tasks. Governance migrated to .harness/engineering-harness.md (S2+S3 router signals flipped mid-phase — setup gate now fully holds, engineering zone open); old doc → 9-line dated pointer; repo-level temp ignore; AGENTS.md routing block (AC-9: zero npx-harness in diff, MW rule extended in place); eng-harness registered as sixth domain (four hard rules, registry row, one-way dashed map edge, cli+runner consumer notes); docs/how deep guide + backlinks. AC battery all green: doctor 1/0/0; boot degraded-honest exit 0 with full orientation digest; read-only byte-identical; AC-5 asymmetry proven (just check green while boot lint fails on staged bait, then clean re-run); AC-6 round-trip drained DL-001 to .harness/records/retro/2026-06-11/001-024-core-harness.md then cleared. just fft exit 0 (audit surfaced known 5-moderate/1-high/1-critical chain, || true by design). Commits 85ef669 chore(harness) + 81ec083 docs(harness) — non-releasing types verified against release-please config (no overrides). Phase-end seam: noop (buffer already drained), next_suggested harvest.",
++      "artifacts": [
++        ".harness/engineering-harness.md",
++        ".harness/records/retro/2026-06-11/001-024-core-harness.md",
++        "docs/domains/eng-harness/domain.md",
++        "docs/how/engineering-harness.md",
++        "docs/plans/024-core-harness/execution.log.md"
++      ],
++      "next": ["merge"]
++    },
++    {
++      "id": "harness-preflight-001",
++      "type": "harness-boot",
++      "label": "Pre-implement seam → redirect (S2 owed — T001 is the provisioning)",
++      "status": "done",
++      "ran_at": "2026-06-11T06:55:10Z",
++      "command": "/eng-harness-flow --event pre-implement --phase \"Phase 1: Implementation\" --plan-dir docs/plans/024-core-harness --json",
++      "branch_of": "build",
++      "note": "decision: redirect, missing_rung S2-governance; loop boot UNAVAILABLE narrated verbatim (not an error — proceed with standard testing). Doctor ok, boot loaded 1/0/0, DL-001 buffer intact.",
++      "next": ["build"]
++    },
++    {
++      "id": "harness-phaseend-001",
++      "type": "harness-retro",
++      "label": "Phase-end seam → noop (buffer drained at AC-6; zone now open)",
++      "status": "done",
++      "ran_at": "2026-06-11T07:15:00Z",
++      "command": "/eng-harness-flow --event phase-end --plan-dir docs/plans/024-core-harness --json",
++      "branch_of": "build",
++      "note": "First call with S0+S2+S4 all holding — setup segment retired. decision: noop on drain (buffer empty — DL-001 already a committed record); next_suggested: retro --harvest (offered, not auto-run).",
++      "next": ["merge"]
++    },
++    {
++      "id": "merge",
++      "type": "merge",
++      "label": "Merge",
++      "status": "assumed",
++      "next": []
++    }
++  ]
++}
+diff --git a/docs/plans/024-core-harness/the-flow.md b/docs/plans/024-core-harness/the-flow.md
+new file mode 100644
+index 0000000..134ed26
+--- /dev/null
++++ b/docs/plans/024-core-harness/the-flow.md
+@@ -0,0 +1,44 @@
++# Flow — core-harness
++
++Generated from `the-flow.json`.
++
++```mermaid
++flowchart TD
++  classDef done fill:#d9f7d9,stroke:#2e7d32,color:#111
++  classDef wip fill:#ffe7c2,stroke:#ef6c00,color:#111
++  classDef blocked fill:#ffd6d6,stroke:#c62828,color:#111
++  classDef known fill:#dde8f3,stroke:#546e7a,color:#111
++  classDef assumed fill:#f5f5f5,stroke:#9e9e9e,stroke-dasharray: 5 5,color:#555
++  classDef said fill:#fff7cc,stroke:#b58900,color:#111
++  classDef harness fill:#EDE7F6,stroke:#673AB7,color:#111
++
++  research["Evidence: evaluate repo for harness-core wrapping"]:::done
++  spec["Spec (CS-3, Simple)"]:::done
++  backpressure_001["Post-spec seam → router REDIRECT (S2+S4 missing — the gap IS this plan)"]:::harness
++  harness_setup_001["Setup excursion: substrate + composite boot LIVE (degraded, honest)"]:::harness
++  plan["Architecture Plan (READY, validated — 4-agent validate-v2, fixes applied)"]:::done
++  harness_preflight_001["Pre-implement seam → redirect (S2 owed — T001 is the provisioning)"]:::harness
++  build["Phase 1: Implementation (13/13, ACs 1–11 verified live)"]:::done
++  harness_phaseend_001["Phase-end seam → noop (buffer drained at AC-6; zone now OPEN: S0+S2+S4 hold)"]:::harness
++  merge["Merge"]:::assumed
++
++  said_research>"🗣 let's get plan research done. using harness concept, evaluate this repo for wrapping…"]:::said
++  said_spec>"🗣 specif now — Simple; Lightweight; no mocks; docs/how only; register eng-harness as real domain; composite boot; contract-only pinning; skills global"]:::said
++  said_backpressure_001>"🗣 yes"]:::said
++  said_harness_setup_001>"🗣 run the harness setup skill. no need to install harness as it's already present (harness command and engh alias too)"]:::said
++  said_plan>"🗣 yes run"]:::said
++  said_build>"🗣 yeah thanks, just briefly a para on where we are and what we get after this"]:::said
++  said_research -.- research
++  said_spec -.- spec
++  said_backpressure_001 -.- backpressure_001
++  said_harness_setup_001 -.- harness_setup_001
++  said_plan -.- plan
++  said_build -.- build
++
++  research --> spec --> backpressure_001 --> plan --> build --> merge
++  backpressure_001 -.-> harness_setup_001 -.-> plan
++  plan -.-> harness_preflight_001 -.-> build
++  build -.-> harness_phaseend_001 -.-> merge
++```
++
++Legend: done / wip / blocked / known / assumed; 🗣 user input; 🟪 harness loop.
+diff --git a/docs/project-rules/harness.md b/docs/project-rules/harness.md
+index a9133db..e368f28 100644
+--- a/docs/project-rules/harness.md
++++ b/docs/project-rules/harness.md
+@@ -1,135 +1,9 @@
+-# Engineering Harness
+-
+-**Version**: 1.0.0
+-**Created**: 2026-05-10
+-**Maturity Level**: L2
+-**Project Type**: cli
+-
+-## Purpose
+-
+-This harness defines MiniH's engineering feedback loop: Boot -> Interact -> Observe -> Validate. It is agent-operable, but it is not merely an "agent harness"; it is the project contract for proving MiniH itself can be built, exercised through supported CLI surfaces, and observed without reading private run files directly.
+-
+-## Boot
+-
+-- **Command**: `just build`
+-- **Health Check**: `minih doctor`
+-- **Expected Response**: A JSON envelope on stdout with a successful doctor result, plus any human-readable diagnostics on stderr.
+-- **Boot Time**: target 30-60s
+-- **Idempotent**: Yes - `just build` rebuilds `dist/`, and the globally linked `minih` binary points at this checkout's `dist/cli/index.js`.
+-
+-## Interact
+-
+-- **Primary**: Terminal CLI
+-- **Endpoints / Commands**:
+-  - `minih doctor` - validates agent conventions and project health surfaces.
+-  - `minih list` - lists available agents through the public CLI envelope.
+-  - `minih check <slug> --file <path>` - validates explicit files against agent schemas.
+-  - `minih status <slug> --run <runId>` - inspects run status without reading run-directory files directly.
+-  - `minih tail <slug> --run <runId> --snapshot --lines N` - observes bounded event output through the CLI.
+-  - `minih retros --slug <slug>` - reads retrospective evidence through the CLI.
+-- **Auth Strategy**: None for build, doctor, list, check, status, tail, and retros. Running SDK-backed agents may require `GH_TOKEN=$(gh auth token)` in the spawning shell.
+-- **Auth Expiry**: N/A for local CLI health; SDK-backed agent runs fail with a clear auth/token error when credentials are absent or expired.
+-- **Auth Detection**: Prefer CLI error envelopes and `gh auth status`/`gh auth token` for SDK-backed workflows.
+-
+-## Observe
+-
+-- **Response capture**: JSON envelopes on stdout; human-readable tables and pretty output on stderr.
+-- **Screenshots**: N/A for the core CLI harness.
+-- **Logs**: Use `minih tail`, `minih last-run`, `minih validate`, and `minih retros`. Do not read `agents/<slug>/runs/<runId>/...` files directly.
+-- **Evidence directory**: `./scratch/evidence/` for ad hoc command captures; committed phase evidence belongs in the active plan's task `execution.log.md`.
+-
+-## Maturity Assessment
+-
+-| Level | Status | Notes |
+-|-------|--------|-------|
+-| L0: No harness | No | MiniH has named build, test, CLI, and observation commands. |
+-| L1: Manual boot + CLI | Yes | A human or agent can build and run CLI commands. |
+-| L2: Auto boot + CLI health | Yes | `just build` plus `minih doctor` provide an automated boot and health check. |
+-| L3: Full interaction + evidence | Partial | CLI observation surfaces exist, but phase-specific evidence scripts are not yet standardized. |
+-| L4: Self-healing | No | The harness does not auto-recover from failed builds, stale SDK auth, or broken agent configs. |
+-
+-Current: **L2** - MiniH can be built and checked through public CLI surfaces, with structured output available for evidence capture.
+-
+-## Validation Checklist
+-
+-### Boot
+-
+-- [x] Single command starts full stack
+-- [x] Health check endpoint/command exists and returns expected response
+-- [x] Boot is idempotent
+-- [ ] Handles port conflicts (not applicable for the core CLI; server-like commands must fail fast or own cleanup)
+-- [ ] Clean shutdown on SIGTERM/SIGINT for long-running interactive views
+-
+-### Interact
+-
+-- [x] Agent can send input through terminal commands
+-- [x] Agent can trigger core user-facing actions through the CLI
+-- [x] Auth is automated or unnecessary for local health paths
+-- [x] Auth expiry is detected with a clear error message for SDK-backed runs
+-
+-### Observe
+-
+-- [x] Agent can read output through CLI JSON envelopes and stderr diagnostics
+-- [x] Evidence capture works through redirected CLI output and `scratch/evidence/`
+-- [x] Structured output available
+-
+-### Operate
+-
+-- [x] Bootstrap doc explains harness to new agents
+-- [x] Example validation script exists as a committed copy-paste command
+-- [x] Named commands exist in `justfile` and `package.json`
+-
+-## Phase Gates
+-
+-Use the narrowest gate that proves the phase's contract, then run `just fft` before commit or push.
+-
+-| Domain / Work Type | Boot | Interact | Observe | Narrow Gate |
+-|--------------------|------|----------|---------|-------------|
+-| docs / planning | N/A | Read linked plan/domain docs | `git --no-pager diff --check` | `git --no-pager diff --check` |
+-| runner | `just build` | Focused runner tests | Vitest output | `npx vitest run test/runner/<file>.test.ts` |
+-| cli | `just build` | Built `minih ...` command | JSON envelope stdout + stderr diagnostics | `npx vitest run test/cli/<file>.test.ts` |
+-| mcp | `just build` | MCP server/spawn tests | Vitest output | `npx vitest run test/mcp/<file>.test.ts` |
+-| adapter | `just build` | Fake adapter tests unless SDK behavior is required | Vitest output | targeted adapter test |
+-| measurement contracts | `just build` | Schema/proof/registry tests | AJV/Vitest output | `npx vitest run test/runner/schemas.test.ts test/runner/measurement/*.test.ts` |
+-| release / pre-commit | `just build` | Full pipeline | CLI/test/audit output | `just fft` |
+-
+-## Dogfood Rules
+-
+-- Use the MiniH CLI to inspect MiniH runs. Do not `cat`, `tail`, `grep`, or `jq` files under `agents/<slug>/runs/<runId>/` directly.
+-- If a needed run artifact has no CLI surface, record the CLI gap before using emergency direct file access.
+-- Treat JSON envelopes as the machine contract and stderr as human-readable diagnostics.
+-- For source-code phases, start or verify code-review-companion before editing source code.
+-- Keep measurement work local-first and evidence-backed: runner facts are authoritative; agents and companions may only add cited interpretation.
+-
+-## Validation Checklist for Agents
+-
+-Before implementation:
+-
+-1. Boot: run `just build`.
+-2. Interact: run the narrow CLI/test command for the phase.
+-3. Observe: capture the command result through stdout/stderr or the active plan's execution log.
+-4. Validate: run the phase's narrow test gate; before commit/push, run `just fft`.
+-
+-Copy-paste harness validation:
+-
+-```bash
+-set -e
+-just build
+-mkdir -p scratch/evidence
+-minih doctor > scratch/evidence/harness-doctor.json 2> scratch/evidence/harness-doctor.stderr
+-minih list > scratch/evidence/harness-list.json 2> scratch/evidence/harness-list.stderr
+-test -s scratch/evidence/harness-doctor.json
+-test -s scratch/evidence/harness-list.json
+-```
+-
+-## History
+-
+-| Date | Plan | Change | Maturity Before -> After |
+-|------|------|--------|--------------------------|
+-| 2026-05-10 | 020-minih-harness-measurement | Created MiniH engineering harness contract for Boot -> Interact -> Observe measurement prerequisite. | L0 -> L2 |
+-| 2026-05-10 | 020-minih-harness-measurement | Validated Boot with `just build`, Interact with `minih doctor`/`minih list`, and Observe with redirected JSON evidence in `scratch/evidence/`. | L2 -> L2 |
+-| 2026-05-10 | 020-minih-harness-measurement | Used the engineering harness to validate Phase 1 contracts with focused measurement/schema tests and the full `just fft` gate. | L2 -> L2 |
+-
+-<!-- USER CONTENT START -->
+-<!-- Project-specific harness notes, custom boot sequences, domain-specific setup -->
+-<!-- USER CONTENT END -->
++# Engineering Harness — MOVED
++
++> **Deprecated 2026-06-11** (plan 024-core-harness). This contract migrated to
++> **[`.harness/engineering-harness.md`](../../.harness/engineering-harness.md)** —
++> the canonical governance doc for minih's engineering harness, now running on
++> harness-core (the global `harness` CLI). All content (Boot/Interact/Observe
++> contract, Phase Gates, Dogfood Rules, Maturity, History) lives there; nothing
++> remains here. Historical plan documents referencing this path are intentionally
++> left unedited.

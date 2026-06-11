@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "slug": "core-harness",
+  "plan_dir": "docs/plans/024-core-harness",
+  "cursor": "build",
+  "recommended_next": "merge",
+  "agents": [],
+  "nodes": [
+    {
+      "id": "research",
+      "type": "research",
+      "label": "Evidence: evaluate repo for harness-core wrapping",
+      "status": "done",
+      "ran_at": "2026-06-11T04:58:38Z",
+      "user_input": "let's get plan research done. using  harness concept, aevaluate this erpo for wrapping. harness cli has doco in it on how extensons work etc, and also how the harness loop works etc. we also have acces to the harness skills that we will use (the flow skill tells us how to do this).",
+      "note": "8-subagent dossier (69 findings). Headlines: global harness is v0.2.0 linked to a live dev checkout; skills' npm-install rung conflicts with the no-install rule (use bare `harness`); prior governance doc at docs/project-rules/harness.md (L2) must migrate to .harness/engineering-harness.md; just fft mutates (boot needs hand-written composite); docs/retros stays minih-owned, read-bridge only; .harness stays outside the domain registry.",
+      "artifacts": ["docs/plans/024-core-harness/research-dossier.md"],
+      "next": ["spec"]
+    },
+    {
+      "id": "spec",
+      "type": "spec",
+      "label": "Spec",
+      "status": "done",
+      "ran_at": "2026-06-11T05:10:00Z",
+      "user_input": "specif now",
+      "note": "CS-3 Simple; Lightweight behavioral testing, no mocks, docs/how only. 9 clarifications in one session — headline: user OVERRODE the dossier's keep-outside-registry lean: eng-harness becomes the sixth registered domain (one-way boundary, zero inbound edges). Boot = composite (biome+tsc+check+minih doctor+unmasked audit). Contract-only pinning; skills stay global. 11 ACs; 2 workshop opportunities flagged (boot envelope schema, governance content map).",
+      "artifacts": ["docs/plans/024-core-harness/core-harness-spec.md"],
+      "next": ["backpressure-001"]
+    },
+    {
+      "id": "backpressure-001",
+      "type": "backpressure",
+      "label": "Post-spec seam → router REDIRECT (setup gate)",
+      "status": "done",
+      "ran_at": "2026-06-11T05:25:00Z",
+      "user_input": "yes",
+      "command": "/eng-harness-flow --event post-spec --spec docs/plans/024-core-harness/core-harness-spec.md --json",
+      "note": "Router decision: redirect. S0 install holds (CLI 0.2.0, doctor ok) but S2 governance + S4 boot are missing, so the engineering zone (incl. the backpressure survey) is closed — exactly what this plan builds. No coverage artifact produced; the gate evidence itself feeds /plan-3. Live bonus: harness --version drifted 0.1.0 → 0.2.0 mid-session, demonstrating dossier Critical Finding 01 (linked-checkout moving target).",
+      "next": ["plan"]
+    },
+    {
+      "id": "harness-setup-001",
+      "type": "harness-boot",
+      "label": "Setup excursion: eng-harness-0-setup → .harness substrate + composite boot",
+      "status": "done",
+      "ran_at": "2026-06-11T06:18:04Z",
+      "user_input": "run the harness setup skill. no need to instal harness as its alerady present (harness command and engh alias it too)",
+      "command": "/eng-harness-0-setup",
+      "branch_of": "backpressure-001",
+      "note": "S0 verified, never installed (harness+engh both real bins, v0.2.0, doctor ok; `harness init` absent — E108 — governance stays owed). S1 assessment declined per spec Non-Goal. S3 injection map: host flow self-fires all five seams; AGENTS.md weave deferred to the plan (it is an AC). S4 boot authored via `harness new` + hand-filled composite (5 sensors): verdict degraded day-one — doctor warnings + 1 critical/1 high audit — 17s wall, read-only proven (tree fingerprint unchanged). Live finds: minih doctor has NO --json flag (spec drift, captured as DL-001 via `harness observe`; boot detects warnings via plain+--strict exit-code pair instead); `harness observe` is a core verb in 0.2.0; .harness/temp self-gitignores.",
+      "artifacts": [
+        ".harness/extensions/boot/extension.ts",
+        ".harness/extensions/boot/instructions.md"
+      ],
+      "next": ["plan"]
+    },
+    {
+      "id": "plan",
+      "type": "plan",
+      "label": "Architecture Plan (READY, validated)",
+      "status": "done",
+      "ran_at": "2026-06-11T06:38:39Z",
+      "user_input": "yes run",
+      "note": "plan-3-v3 emitted READY first pass: Simple mode, 13 tasks (T000–T012 incl. 2 advisory seam rows), gates 4 PASS / 3 N/A. validate-v2 auto-ran: 4 parallel agents, 12/15 lenses — verdict VALIDATED WITH FIXES (1 CRITICAL T009 backlink paths, 2 HIGH T005 clause + signal-D/S3 precision, plus content-map completeness and clarity MEDIUMs — all applied). Thesis: Advanced at Implementation level, evidence Strong. Notable: a validator falsely claimed `just check` runs biome (it is build+test — the very gap AC-5 proves); a validator probe live-confirmed AC-6's record path shape; probe residue removed, DL-001 still buffered.",
+      "artifacts": ["docs/plans/024-core-harness/core-harness-plan.md"],
+      "next": ["build"]
+    },
+    {
+      "id": "build",
+      "type": "phase",
+      "label": "Phase 1: Implementation (13/13, ACs 1–11 verified live)",
+      "status": "done",
+      "ran_at": "2026-06-11T07:15:00Z",
+      "user_input": "yeah thanks, just priefly a para on where we are and what we get after this",
+      "note": "plan-6 ran all 13 tasks. Governance migrated to .harness/engineering-harness.md (S2+S3 router signals flipped mid-phase — setup gate now fully holds, engineering zone open); old doc → 9-line dated pointer; repo-level temp ignore; AGENTS.md routing block (AC-9: zero npx-harness in diff, MW rule extended in place); eng-harness registered as sixth domain (four hard rules, registry row, one-way dashed map edge, cli+runner consumer notes); docs/how deep guide + backlinks. AC battery all green: doctor 1/0/0; boot degraded-honest exit 0 with full orientation digest; read-only byte-identical; AC-5 asymmetry proven (just check green while boot lint fails on staged bait, then clean re-run); AC-6 round-trip drained DL-001 to .harness/records/retro/2026-06-11/001-024-core-harness.md then cleared. just fft exit 0 (audit surfaced known 5-moderate/1-high/1-critical chain, || true by design). Commits 85ef669 chore(harness) + 81ec083 docs(harness) — non-releasing types verified against release-please config (no overrides). Phase-end seam: noop (buffer already drained), next_suggested harvest.",
+      "artifacts": [
+        ".harness/engineering-harness.md",
+        ".harness/records/retro/2026-06-11/001-024-core-harness.md",
+        "docs/domains/eng-harness/domain.md",
+        "docs/how/engineering-harness.md",
+        "docs/plans/024-core-harness/execution.log.md"
+      ],
+      "next": ["merge"]
+    },
+    {
+      "id": "harness-preflight-001",
+      "type": "harness-boot",
+      "label": "Pre-implement seam → redirect (S2 owed — T001 is the provisioning)",
+      "status": "done",
+      "ran_at": "2026-06-11T06:55:10Z",
+      "command": "/eng-harness-flow --event pre-implement --phase \"Phase 1: Implementation\" --plan-dir docs/plans/024-core-harness --json",
+      "branch_of": "build",
+      "note": "decision: redirect, missing_rung S2-governance; loop boot UNAVAILABLE narrated verbatim (not an error — proceed with standard testing). Doctor ok, boot loaded 1/0/0, DL-001 buffer intact.",
+      "next": ["build"]
+    },
+    {
+      "id": "harness-phaseend-001",
+      "type": "harness-retro",
+      "label": "Phase-end seam → noop (buffer drained at AC-6; zone now open)",
+      "status": "done",
+      "ran_at": "2026-06-11T07:15:00Z",
+      "command": "/eng-harness-flow --event phase-end --plan-dir docs/plans/024-core-harness --json",
+      "branch_of": "build",
+      "note": "First call with S0+S2+S4 all holding — setup segment retired. decision: noop on drain (buffer empty — DL-001 already a committed record); next_suggested: retro --harvest (offered, not auto-run).",
+      "next": ["merge"]
+    },
+    {
+      "id": "merge",
+      "type": "merge",
+      "label": "Merge",
+      "status": "assumed",
+      "next": []
+    }
+  ]
+}

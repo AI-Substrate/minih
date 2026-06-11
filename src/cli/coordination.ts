@@ -246,6 +246,22 @@ export function resolveCoordinationRunOrExit(
     });
     if (activeRuns.length === 1) {
       targetRunId = activeRuns[0].name;
+    } else if (activeRuns.length > 1) {
+      exitWithEnvelope(
+        formatError(
+          commandName,
+          ErrorCodes.AMBIGUOUS_RUN_ID,
+          `Multiple active runs found for "${slug}". Pass --run <runId> to choose the coordination conversation.`,
+          {
+            slug,
+            candidates: activeRuns.map((entry) => ({ runId: entry.name })),
+            remedies: [
+              `minih runs list --active --slug ${slug}`,
+              `${commandName} ${slug} --run <runId>`,
+            ],
+          },
+        ),
+      );
     } else if (entries.length === 1) {
       targetRunId = entries[0].name;
     } else {

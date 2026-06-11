@@ -99,6 +99,7 @@ describe('view command — help signposting', () => {
     expect(result.exitCode).toBe(0);
     const text = result.stdout.toString('utf-8');
     expect(text).toMatch(/--run/);
+    expect(text).toMatch(/--latest/);
     expect(text).toMatch(/latest-active/);
     expect(text).toMatch(/latest-completed/);
   });

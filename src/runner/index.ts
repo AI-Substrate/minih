@@ -234,6 +234,15 @@ export {
   detectRunState,
   isProcessAliveDefault,
 } from './run-eligibility.js';
+export type {
+  GetRunStatusesInput,
+  ListRunInventoryInput,
+} from './run-inventory.js';
+export {
+  getRunStatuses,
+  listRunInventory,
+  summarizeStatusRows,
+} from './run-inventory.js';
 export { RUN_LOCK_HELD, RunLockHeldError } from './run-lock.js';
 export {
   flushThrottled as flushManifestThrottled,
@@ -241,8 +250,17 @@ export {
   updateManifest,
   writeManifest,
 } from './run-manifest.js';
+export type { RunLabelValidationResult } from './run-params-summary.js';
+export {
+  buildRunParamsSummary,
+  validateRunLabel,
+} from './run-params-summary.js';
 export type { ResolveRunInput } from './run-resolver.js';
-export { resolveRun, resolveRunWithDiagnostics } from './run-resolver.js';
+export {
+  listActiveRunCandidates,
+  resolveRun,
+  resolveRunWithDiagnostics,
+} from './run-resolver.js';
 export {
   computeVelocity,
   MINIH_ENV_KEYS,
@@ -284,8 +302,11 @@ export type {
   ResolvedRun,
   ResolverDiagnostic,
   RunEventStats,
+  RunInventoryRow,
   RunLiveness,
+  RunParamsSummary,
   RunResolveMode,
+  RunStatusRow,
   Side,
   SideState,
   StateHistoryEntry,

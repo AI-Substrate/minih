@@ -89,6 +89,7 @@ describe('resolveRun latest-active', () => {
     const result = await resolveRun({
       slug: 'demo',
       mode: { kind: 'latest-active' },
+      staleThresholdMs: Number.MAX_SAFE_INTEGER,
       isProcessAlive: allAlive,
     });
     expect(result?.runId).toBe('01HRUN_ACTIVE_SOLO_AAAAAAA');
@@ -126,6 +127,7 @@ describe('resolveRun latest-active', () => {
       resolveRun({
         slug: 'demo',
         mode: { kind: 'latest-active' },
+        staleThresholdMs: Number.MAX_SAFE_INTEGER,
         isProcessAlive: allAlive,
       }),
     ).rejects.toMatchObject({
@@ -141,6 +143,7 @@ describe('resolveRun latest-active', () => {
     const result = await resolveRun({
       slug: 'demo',
       mode: { kind: 'latest-active' },
+      staleThresholdMs: Number.MAX_SAFE_INTEGER,
       isProcessAlive: allAlive,
     });
     expect(result).toBeNull();
@@ -165,13 +168,14 @@ describe('resolveRun latest-active', () => {
     const result = await resolveRun({
       slug: 'demo',
       mode: { kind: 'latest-active' },
+      staleThresholdMs: Number.MAX_SAFE_INTEGER,
       isProcessAlive: allAlive,
     });
     expect(result?.runId).toBe(runIdGood);
     expect(result?.diagnostics.some((d) => d.runId === runIdBad)).toBe(true);
   });
 
-  it('reports liveness "stale" when manifest updatedAt exceeds the threshold', async () => {
+  it('skips stale-by-updatedAt manifests for latest-active resolution', async () => {
     const runId = '01HRUN_ACTIVE_STALE_AAAAAAAA';
     const dir = makeRunFolder('demo', runId);
     await writeManifest(
@@ -190,7 +194,7 @@ describe('resolveRun latest-active', () => {
       staleThresholdMs: 1000,
       isProcessAlive: allAlive,
     });
-    expect(result?.liveness).toBe('stale');
+    expect(result).toBeNull();
   });
 
   // FX009 — PID-liveness filter regression. A manifest claiming active
@@ -231,6 +235,7 @@ describe('resolveRun latest-active', () => {
       const result = await resolveRun({
         slug: 'demo',
         mode: { kind: 'latest-active' },
+        staleThresholdMs: Number.MAX_SAFE_INTEGER,
         isProcessAlive: isAlive,
       });
 
@@ -275,6 +280,7 @@ describe('resolveRun latest-active', () => {
       const result = await resolveRun({
         slug: 'demo',
         mode: { kind: 'latest-active' },
+        staleThresholdMs: Number.MAX_SAFE_INTEGER,
         isProcessAlive: isAlive,
       });
 
@@ -300,6 +306,7 @@ describe('resolveRun latest-active', () => {
         mode: { kind: 'latest-active' },
         // Predicate would reject any pid (always false) — but null pid
         // never reaches it, so the run still resolves.
+        staleThresholdMs: Number.MAX_SAFE_INTEGER,
         isProcessAlive: () => false,
       });
       expect(result?.runId).toBe(runId);

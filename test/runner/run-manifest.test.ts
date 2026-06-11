@@ -34,6 +34,29 @@ describe('writeManifest / readManifest', () => {
     expect(read?.runDir).toBe(runDir);
   });
 
+  it('round-trips optional label and paramsSummary fields', async () => {
+    const manifest = makeManifest({
+      runDir,
+      status: 'starting',
+      label: 'id=1',
+      paramsSummary: {
+        schemaVersion: 1,
+        display: { id: '1' },
+        truncated: false,
+        redactedKeys: [],
+      },
+    });
+    await writeManifest(runDir, manifest);
+    const read = await readManifest(runDir);
+    expect(read?.label).toBe('id=1');
+    expect(read?.paramsSummary).toEqual({
+      schemaVersion: 1,
+      display: { id: '1' },
+      truncated: false,
+      redactedKeys: [],
+    });
+  });
+
   it('returns null when run.json is missing', async () => {
     const read = await readManifest(runDir);
     expect(read).toBeNull();

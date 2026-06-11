@@ -32,6 +32,7 @@ import { registerQuickstartCommand } from './commands/quickstart.js';
 import { registerResumeCommand } from './commands/resume.js';
 import { registerRetrosCommand } from './commands/retros.js';
 import { registerRunCommand } from './commands/run.js';
+import { registerRunsCommand } from './commands/runs.js';
 import { registerSkillsCommand } from './commands/skills.js';
 import { registerStateCommand } from './commands/state.js';
 import { registerStatusCommand } from './commands/status.js';
@@ -73,6 +74,7 @@ program.hook('preAction', (thisCommand) => {
 registerQuickstartCommand(program);
 registerListCommand(program);
 registerRunCommand(program);
+registerRunsCommand(program);
 registerResumeCommand(program);
 registerSkillsCommand(program);
 registerOutsideCommand(program);

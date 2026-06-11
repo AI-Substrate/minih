@@ -30,3 +30,11 @@
 - runDir: /Users/jordanknight/substrate/minih/agents/coordination-smoke-test/runs/2026-04-30T12-32-48-501Z-93ce
 - summary: Coordination smoke test completed successfully. All 9 steps verified: inbox_list found 1 outside message matching disk, inbox_send persisted reply with ackOf, inbox_ack wrote ack line, state_get returned synthetic defaults (no files yet), state_set created inside.json with status=reviewing, state_transition moved to complete with history line, final summary sent, reply chain exercised end-to-end (outside follow-up ackOf matched step 2 reply, chain-link reply ackOf matched follow-up), and wait_for_any woke on state.peer.changed event within 1750ms.
 - **magicWand** (target: coordination): Make state_get return an explicit 'exists: false' field (or null state) when the file doesn't exist on disk yet, rather than synthesizing a fake 'idle' state with a fresh timestamp. This would make the verify-on-disk contract trivial — agents could assert file existence based on the tool response alone.
+
+> ⚠️ ## 2026-05-17T04:55:13.025Z — coordination-smoke-test / 2026-05-17T14-53-20-724Z-841c
+>
+> - runId: 2026-05-17T14-53-20-724Z-841c
+> - runDir: /Users/jordanknight/substrate/minih/agents/coordination-smoke-test/runs/2026-05-17T14-53-20-724Z-841c
+> - result: failed
+> - magicWand: (unavailable — run terminated as failed)
+> - stderr (last line): permission denied: kind=shell blocked by preset/overrides

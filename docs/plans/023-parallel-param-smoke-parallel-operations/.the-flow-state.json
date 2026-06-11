@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "slug": "parallel-param-smoke-parallel-operations",
+  "plan_dir": "docs/plans/023-parallel-param-smoke-parallel-operations",
+  "mode": "Simple",
+  "current_stage": "awaiting-8",
+  "pending_command": "/plan-8-v2-merge --plan \"docs/plans/023-parallel-param-smoke-parallel-operations\" --target main",
+  "intent": "Add core convenience for parallel minih operations, starting with cross-agent run listing/status surfaces, ambiguity safety for latest-run defaults, and run labels/params summaries. Keep batch orchestration out of scope for now.",
+  "milestones_total": 5,
+  "milestones_done": 4,
+  "last_checkpoint_at": "2026-06-09T03:27:00Z",
+  "compacted_seams": [],
+  "status": "active"
+}

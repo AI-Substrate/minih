@@ -239,3 +239,12 @@
 - difficulties:
   - [annoying] knowledge: The orient default assumes a tasks/ phase folder exists, but the active plan was READY with no tasks tree yet. (workaround: Reported phase none in the orientation and used the plan/spec/flight-plan/workshop/backpressure files as the current context.)
   - [annoying] debug: The glob tool returned no matches for docs/plans/022-minih-skills-config even though the files existed and view could list them. (workaround: Used view on the plan directory, then read the discovered file paths directly.)
+
+## 2026-06-09T03:22:30.108Z — code-review-companion / 2026-06-09T13-00-07-113Z-caf6
+
+- runId: 2026-06-09T13-00-07-113Z-caf6
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-06-09T13-00-07-113Z-caf6
+- summary: Reviewed the final working tree for Plan 023 and sent four correlated findings to the outside peer: two HIGH correctness issues around stale-active E170 filtering and cross-agent inventory ordering, plus two MEDIUM contract gaps around runs status --from row-level errors and incomplete read-only --latest semantics.
+- **magicWand** (target: coordination): Add a coordination-level briefing digest field that includes canonical plan/spec/workshop absolute paths and active task status in a machine-readable shape, so the companion can orient without re-discovering files heuristically.
+- difficulties:
+  - [annoying] knowledge: The orientation prompt required selecting the latest plan/workshop, but directory discovery via the glob tool did not return docs/plans folders or the workshop file even though shell find did. (workaround: Used shell find from the project root and then read the explicit workshop path from the outside briefing.)

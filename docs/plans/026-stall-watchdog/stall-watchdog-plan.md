@@ -34,13 +34,15 @@ Issue #44: runs whose provider stream silently stops advancing never reach a ter
 
 | File | Domain | Classification | Rationale |
 |------|--------|---------------|-----------|
-| src/adapter/deadline.ts (NEW) | adapter | internal | `withDeadline` helper for bounding SDK awaits (adapter owns it; runner may import — runner→adapter direction already exists via `interface.ts`) |
+| src/adapter/deadline.ts (NEW) | adapter | contract | `withDeadline`/`DEADLINE_EXPIRED` exported via the adapter barrel and imported by runner across the domain boundary (review FT-003: reclassified from internal) |
+| src/adapter/index.ts | adapter | contract | Barrel gains `withDeadline`, `DEADLINE_EXPIRED`, `DeadlineExpired`, `AgentStalledEvent`, `SdkCopilotAdapterOptions` exports (review FT-003: added) |
 | src/adapter/sdk-copilot.ts | adapter | internal | Bound `terminate()` rungs + run-`finally` `disconnect()`; escalate to `forceStop` |
 | src/adapter/copilot-types.ts | adapter | contract | `ICopilotClient` mirror gains optional `forceStop?(): Promise<void>` |
 | src/adapter/events.ts | adapter | contract | New synthetic `run_stalled` event creator (permission_denied precedent) |
 | src/adapter/fake.ts | adapter | internal | Test affordances: hang-mode `terminate`/`disconnect`, multi-message turn queues |
 | src/runner/runner.ts | runner | internal | Stall/turn race arms, flags mirror `timedOut`, bounded terminate call, terminal-reason writes |
 | src/runner/types.ts | runner | contract | `AgentRunConfig.stallTimeout/maxTurns`; `LiveRunManifest.budgets?`; `terminalReason` union + `'timeout' \| 'stalled-stream' \| 'max-turns'` |
+| src/runner/index.ts | runner | contract | Barrel gains `DEFAULT_TIMEOUT_SEC`/`DEFAULT_STALL_TIMEOUT_SEC` exports — the single default source run/resume share (review FT-003: added) |
 | src/cli/commands/run.ts | cli | internal | New flags + validation (E108); shared default; budgets echo |
 | src/cli/budget-flags.ts (NEW) | cli | internal | Shared budget-flag parser for run+resume (added during build — single E108 validation source instead of duplicating it) |
 | src/cli/commands/resume.ts | cli | internal | Same flags; default aligned to shared constant |

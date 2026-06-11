@@ -98,3 +98,38 @@ All tasks T000–T011 done; all 11 acceptance criteria met (checked in the plan 
 - **Final gate**: `just fft` exit 0 — 1310 tests passed / 16 skipped (122 files; +42 new tests this phase), biome clean, tsc clean, `sdk-check ✓ 1.0.1 (latest)`.
 - **Discoveries**: SDK 1.0.1 `destroy()` removal (logged, handled in T003); two manifest deviations logged in T007 (new `src/cli/budget-flags.ts`, dry-run-echo threading proof); behavior notes — stricter flag validation (`--timeout 0`/garbage now E108), `terminate()` no longer throws (escalates instead).
 - **Not done on purpose**: #44 closing comment is DRAFTED (`issue-44-comment.md`), not posted; nothing committed — everything awaits Jordan's review + the review stage.
+
+---
+
+# Fix pass — review 2026-06-12 REQUEST_CHANGES (FT-001…FT-005, companion mode)
+
+Run in **companion mode** (stage 6c): `code-review-companion` run `2026-06-12T08-39-31-885Z-544e` booted, briefed, and pinged at every commit boundary (fire-and-forget; protocol per [companion-mode docs](https://github.com/AI-Substrate/minih/blob/main/docs/how/companion-mode.md)). Pre-implement seam: `harness boot --json` → **degraded** (pre-existing minih-doctor warnings + npm audit advisories) → proceed with note. Baseline commit `752945f` (the reviewed build) cut first so fix commits diff cleanly.
+
+## FT-001 (HIGH, review F001) — streamed turns now count toward --max-turns — `ab0be14`
+
+- RED: new adapter test — deltas (m1×2) + consolidated `assistant.message` → expected exactly one `message` AgentEvent; failed with 0 (suppression ate it).
+- GREEN: removed the adapter's consolidated-message early-return. Key discovery: **display dedup already lives downstream** — `pretty.ts:132-146` suppresses via `inDeltaStream`/`lastDeltaMessageId`, and `human-view-model.ts` was *designed* to coalesce `text_delta` + final `message` by messageId (the suppression was starving it — streamed turns never finalized in `view`). `display.ts` renders `message` as a char-count line only. So the suppression only harmed accounting.
+- Updated the old idle-boundary test that pinned the buggy behavior; `hasStreamedText` removed (write-only after the fix). Runner-side chunking-independence already pinned (messages surrounded by deltas, `runner-stall.test.ts`).
+
+## FT-002 (review F002) — race arms built before adapter.run() — `dd9d7a0`
+
+- RED: new `SyncEmitAdapter` emits 3 `message` events synchronously inside `run()` with `maxTurns: 2` → drifted to `stalled-stream` (fireMaxTurns still undefined during emission).
+- GREEN: `timeoutPromise`/`stallPromise`/`maxTurnsPromise` constructed before `adapter.run()`; each arm carries a noop `.catch()` so a rejection fired during synchronous startup (before `Promise.race` attaches) is never unhandled. Stall clock now arms marginally earlier (covers adapter-startup hangs — intended).
+
+## FT-003 (review F003/F006/F007) — Domain Manifest currency — `1997b3f`
+
+- `src/adapter/deadline.ts` reclassified internal → **contract** (runner imports it via the adapter barrel); rows added for `src/adapter/index.ts` and `src/runner/index.ts`.
+
+## FT-004 (review F004) — resume positive-path budget evidence — `d713af9`
+
+- Extracted `resolveEffectiveBudgets` into `src/cli/budget-flags.ts` — the flag → frontmatter → shared-default resolution was duplicated across run/resume; both now call one helper. Unit tests pin resume semantics (flag wins; frontmatter wall-clock fallback; shared defaults; `--stall-timeout 0` disables). Runner test proves resume-in-place re-records effective budgets in run.json (`runner.ts:497` path).
+
+## FT-005 (review F005) — runs terminalReason passthrough — `4b3d20f`
+
+- `RunInventoryRow` gains optional `terminalReason` passed through verbatim from run.json in `projectRunRow`; `runs list --json` rows carry it (envelope passes rows untouched). Unit test (run-inventory) + built-CLI subprocess test seeded with `stalled-stream`. TTY table intentionally unchanged (compact; `status` owns the Reason line).
+
+## Fix-pass gate
+
+- `just fft` exit 0 — **1319 tests passed / 16 skipped (123 files; +9 new this pass)**, biome clean (one format reflow in `runs.test.ts` absorbed), tsc clean, `sdk-check ✓ 1.0.1 (latest)`.
+- Friction captured in-flight: `DL-002` (difficulty) — per-task commits land unformatted; format errors surface only at phase-end fft. Candidate encoding: per-commit `npx biome check --write` in the companion-mode per-task checklist.
+- Companion findings: none received as of the final code commit (asynchronous; reconciliation in the debrief below).

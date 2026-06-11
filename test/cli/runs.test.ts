@@ -160,9 +160,7 @@ describe('minih runs list', () => {
     );
     fs.writeFileSync(
       path.join(runDir, 'completed.json'),
-      JSON.stringify(
-        makeCompleted({ slug: 'alpha', runId, result: 'failed' }),
-      ),
+      JSON.stringify(makeCompleted({ slug: 'alpha', runId, result: 'failed' })),
     );
 
     const result = run([

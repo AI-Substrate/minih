@@ -59,9 +59,9 @@ The exact patch may differ; the invariant is that streaming chunks do not produc
 
 ## Re-Review Checklist
 
-- [ ] FT-001 fixed with regression coverage
-- [ ] FT-002 fixed or proven impossible with regression coverage
-- [ ] FT-003 manifest updates applied
-- [ ] FT-004 evidence added or cited
-- [ ] FT-005 evidence added or cited
+- [x] FT-001 fixed with regression coverage — `ab0be14`: suppression removed; adapter test pins one consolidated `message` per streamed turn
+- [x] FT-002 fixed or proven impossible with regression coverage — `dd9d7a0`: race arms built before `adapter.run()`; `SyncEmitAdapter` regression
+- [x] FT-003 manifest updates applied — `1997b3f`: deadline.ts → contract; adapter/runner barrel rows added
+- [x] FT-004 evidence added or cited — `d713af9`: shared `resolveEffectiveBudgets` + unit pins + resume-in-place run.json recording test
+- [x] FT-005 evidence added or cited — `4b3d20f`: `RunInventoryRow.terminalReason` passthrough + unit + built-CLI tests
 - [ ] Re-run `/the-flow 7 review --plan /Users/jordanknight/substrate/minih/docs/plans/026-stall-watchdog/stall-watchdog-plan.md` and achieve zero HIGH/CRITICAL findings

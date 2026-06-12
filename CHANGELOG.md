@@ -54,6 +54,19 @@
 - `permission_status` MCP tool (T-S2) for self-introspection by coordinated agents.
 - `permission-prober` agent pack + `minih probe --matrix all/--scenario/--ci` orchestrator (workshop 004) — security validation fleet that fires N parallel scenarios and cross-references each agent's self-report against events.ndjson + run.json truth (untrusted-by-default with nonce + schema gates).
 
+## [0.2.0](https://github.com/AI-Substrate/minih/compare/minih-v0.1.7...minih-v0.2.0) (2026-06-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* the status/runs verdict vocabulary gains terminal 'dead' (dead-pid runs previously reported 'active' or 'stale'). Polling loops must treat dead and crashed as terminal — see the CHANGELOG migration snippet and docs/how/run-liveness.md.
+
+### Features
+
+* add core parallel run visibility (plan 023) ([#41](https://github.com/AI-Substrate/minih/issues/41)) ([e468ff0](https://github.com/AI-Substrate/minih/commit/e468ff0a40e7f6b906ce8f6ab51b4c1332707ed2))
+* dead-pid liveness — terminal verdict 'dead', stream-abort diagnosis, minih reconcile (closes [#24](https://github.com/AI-Substrate/minih/issues/24)) ([#45](https://github.com/AI-Substrate/minih/issues/45)) ([03a22c6](https://github.com/AI-Substrate/minih/commit/03a22c66457eddfc31ea5d7a7987d04b3a1f1e7a))
+* stall watchdog + run budgets — guaranteed terminal artifacts for stalled runs ([#46](https://github.com/AI-Substrate/minih/issues/46)) ([8aab5df](https://github.com/AI-Substrate/minih/commit/8aab5df28e826aa0eb925131a725bf785e9ada08))
+
 ## [0.1.7](https://github.com/AI-Substrate/minih/compare/minih-v0.1.6...minih-v0.1.7) (2026-06-07)
 
 

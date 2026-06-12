@@ -332,13 +332,14 @@ export function registerStatusCommand(program: Command): void {
               formatError(
                 'status',
                 ErrorCodes.AMBIGUOUS_RUN_ID,
-                `Multiple active runs found for "${slug}". Pass --run <runId> or inspect with minih runs list --active --slug ${slug}.`,
+                `Multiple active runs found for "${slug}". Pass --run <runId>, use --latest for the newest, or inspect with minih runs list --active --slug ${slug}.`,
                 {
                   slug,
                   candidates: err.candidates,
                   remedies: [
                     `minih runs list --active --slug ${slug}`,
                     `minih status ${slug} --run <runId>`,
+                    `minih status ${slug} --latest`,
                   ],
                 },
               ),
@@ -408,6 +409,11 @@ export function registerStatusCommand(program: Command): void {
           }
           process.stderr.write(`  Run:      ${chalk.dim(runId)}\n`);
           if (result) process.stderr.write(`  Result:   ${result}\n`);
+          // Plan 026 — surface WHY a run terminalized (timeout /
+          // stalled-stream / max-turns / permission-denied / …).
+          if (terminalReason) {
+            process.stderr.write(`  Reason:   ${chalk.red(terminalReason)}\n`);
+          }
           if (sessionId)
             process.stderr.write(`  Session:  ${chalk.dim(sessionId)}\n`);
 

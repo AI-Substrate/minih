@@ -168,6 +168,9 @@ async function projectRunRow(opts: {
     liveness,
     manifestStatus: manifest?.status ?? null,
     result: completed?.result ?? null,
+    ...(manifest?.terminalReason && {
+      terminalReason: manifest.terminalReason,
+    }),
     ...(label && { label }),
     ...(paramsSummary && { paramsSummary }),
     startedAt: completed?.startedAt ?? manifest?.startedAt ?? null,

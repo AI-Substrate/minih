@@ -48,12 +48,42 @@ export interface AgentDefinition {
   permissions?: import('./permissions/policy.js').PermissionPolicy;
 }
 
+/**
+ * Plan 026 (CD-05) — the single default-timeout source shared by the
+ * runner and the CLI (`run` + `resume`). Seconds.
+ */
+export const DEFAULT_TIMEOUT_SEC = 900;
+
+/**
+ * Plan 026 — default inactivity (stall) budget in seconds. `0` disables
+ * the watchdog. Shared by the runner and the CLI (`run` + `resume`).
+ */
+export const DEFAULT_STALL_TIMEOUT_SEC = 300;
+
 /** Configuration for a single agent run. */
 export interface AgentRunConfig {
   slug: string;
   model?: string;
   reasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh';
   timeout?: number;
+  /**
+   * Plan 026 — inactivity watchdog budget in seconds: the run is declared
+   * `stalled-stream` when no provider event arrives within this window.
+   * `0` disables. Default 300.
+   */
+  stallTimeout?: number;
+  /**
+   * Plan 026 — turn budget: the run is declared `max-turns` once the
+   * count of consolidated assistant messages exceeds this. `0`/unset =
+   * unlimited.
+   */
+  maxTurns?: number;
+  /**
+   * Plan 026 — bound (ms) on the runner's own cleanup awaits (e.g.
+   * `adapter.terminate()`) after a kill trigger. Internal test seam;
+   * production uses the default.
+   */
+  cleanupGraceMs?: number;
   cwd?: string;
   params?: Record<string, unknown>;
   /** Session ID to resume — if set, uses resumeSession() instead of createSession() */
@@ -426,11 +456,30 @@ export interface LiveRunManifest {
    * adapter saw the stream die mid-message) and `pid-vanished` (FX011 —
    * `minih reconcile` healed a dead run). Writers must never overwrite an
    * existing value (preservation invariant, AC-FX11.9).
+   *
+   * Plan 026 widens again with the run-budget reasons: `timeout` (wall-clock
+   * budget hit), `stalled-stream` (inactivity watchdog — no provider event
+   * within the stall budget), `max-turns` (assistant-message budget hit).
+   * More-specific reasons (permission-denied, provider-stream-aborted) take
+   * precedence and are never overwritten by budget reasons.
    */
   terminalReason?:
     | 'permission-denied'
     | 'provider-stream-aborted'
-    | 'pid-vanished';
+    | 'pid-vanished'
+    | 'timeout'
+    | 'stalled-stream'
+    | 'max-turns';
+  /**
+   * Plan 026 — the effective run budgets, recorded at run start so
+   * operators can see what limits a run was under without consulting
+   * shell history. Absent on runs written before plan 026.
+   */
+  budgets?: {
+    timeoutSec: number;
+    stallTimeoutSec: number;
+    maxTurns: number;
+  };
   /**
    * Plan 018 R1 — populated alongside `terminalReason: 'permission-denied'`.
    * Shape mirrors the `permission-error.json` envelope without `meta.contractVersion`
@@ -507,6 +556,12 @@ export interface RunInventoryRow {
   liveness: RunLiveness;
   manifestStatus: LiveRunStatus | null;
   result: CompletedMetadata['result'] | null;
+  /**
+   * Plan 026 review FT-005 — WHY the run terminalized, passed through from
+   * run.json so `runs` and `status` agree (AC-7). Absent when the run ended
+   * without a recorded reason.
+   */
+  terminalReason?: LiveRunManifest['terminalReason'];
   label?: string;
   paramsSummary?: RunParamsSummary;
   startedAt: string | null;

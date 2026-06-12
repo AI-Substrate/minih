@@ -187,7 +187,9 @@ minih run my-agent --verbose    # Old-style timestamped event log
 |------|-------------|
 | `-m, --model <model>` | Model to use (default: `claude-opus-4.6`, override: `MINIH_DEFAULT_MODEL`) |
 | `-r, --reasoning <effort>` | Reasoning effort: low, medium, high, xhigh |
-| `-t, --timeout <seconds>` | Timeout in seconds (default: 300) |
+| `-t, --timeout <seconds>` | Wall-clock budget in seconds (default: agent frontmatter or 900) |
+| `--stall-timeout <seconds>` | Inactivity watchdog: fail the run when no provider event arrives for this many seconds; `0` disables (default: 300) |
+| `--max-turns <count>` | Fail the run after this many consolidated assistant messages; `0` = unlimited (default: 0) |
 | `-p, --param <key=value>` | Input parameter (repeatable) |
 | `--mcp-config <path>` | Load MCP servers from a JSON config file |
 | `--skill-source <alias-or-path>` | Load local skills from a source such as `.agents`, `global:agents`, or `path:<dir>` |
@@ -199,6 +201,25 @@ minih run my-agent --verbose    # Old-style timestamped event log
 | `--verbose` | Show all events with timestamps (default: pretty streaming) |
 
 **Display modes**: By default, `minih run` shows clean streaming output — thinking in gray italic, tool calls formatted with names, intent changes highlighted. Use `--verbose` for the timestamped line-per-event log. Non-TTY environments always use verbose mode.
+
+### Run budgets
+
+Every run is bounded by three budgets so it always reaches a terminal artifact, even when the provider stream silently dies mid-response (issue #44):
+
+| Budget | Flag (run + resume) | Default | `0` means | `run.json` `terminalReason` |
+|--------|---------------------|---------|-----------|------------------------------|
+| Wall-clock | `--timeout <seconds>` | agent frontmatter or 900 | invalid (E108) | `timeout` |
+| Inactivity (stall watchdog) | `--stall-timeout <seconds>` | 300 | disabled | `stalled-stream` |
+| Turns | `--max-turns <count>` | 0 | unlimited | `max-turns` |
+
+Semantics:
+
+- **Any provider event resets the stall watchdog** — text deltas, tool calls, thinking, everything. A stall fires only when the stream goes completely silent for the whole window. The synthetic `run_stalled` event is appended to `events.ndjson` when it fires.
+- **A turn is one consolidated assistant message** — streaming chunking, tool calls, and thinking never count toward `--max-turns`.
+- All three triggers write `run.json` `status: 'failed'` + the `terminalReason` above, write `completed.json` (`result: 'timeout'` for wall-clock, `'failed'` for stall/turns), and exit `124` — cleanup of the SDK subprocess is deadline-bounded and escalates to a force-stop, so a wedged provider can never block the terminal writes.
+- The effective budgets are recorded in `run.json` under `budgets: { timeoutSec, stallTimeoutSec, maxTurns }`; `minih status` surfaces the reason (`Reason:` line + `terminalReason` in the envelope).
+- **Known limitation (tool silence)**: a tool that legitimately runs longer than the stall window without emitting any event (e.g. a 6-minute build under the default 300s) will trip the watchdog. Raise `--stall-timeout` or pass `--stall-timeout 0` for such agents.
+- **Windows**: detached-run stall behavior is untested on Windows (see issue #44's sibling report copilot-cli#2525); the watchdog logic itself is platform-neutral.
 
 ### Skills config
 
@@ -314,7 +335,9 @@ minih resume code-review --run 2026-04-06T10-04-29-715Z-e94a "Elaborate on the s
 | Flag | Description |
 |------|-------------|
 | `--run <runId>` | Resume a specific run (default: latest) |
-| `-t, --timeout <seconds>` | Timeout in seconds (default: 300) |
+| `-t, --timeout <seconds>` | Wall-clock budget in seconds (default: agent frontmatter or 900 — shared with `run`) |
+| `--stall-timeout <seconds>` | Inactivity watchdog; `0` disables (default: 300) |
+| `--max-turns <count>` | Turn budget; `0` = unlimited (default: 0) |
 | `--verbose` | Show all events with timestamps |
 
 System output validation (summary + retrospective) is not enforced on resume — it's a quick follow-up, not a full agent report.

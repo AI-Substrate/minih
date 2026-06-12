@@ -7,6 +7,9 @@ export type {
   ICopilotClient,
   ICopilotSession,
 } from './copilot-types.js';
+// Plan 026 — deadline-bounding for SDK cleanup awaits.
+export type { DeadlineExpired } from './deadline.js';
+export { DEADLINE_EXPIRED, withDeadline } from './deadline.js';
 export type {
   AgentEvent,
   AgentEventBase,
@@ -16,6 +19,7 @@ export type {
   AgentResult,
   AgentRunOptions,
   AgentSessionEvent,
+  AgentStalledEvent,
   AgentStatus,
   AgentTextDeltaEvent,
   AgentThinkingEvent,
@@ -30,4 +34,5 @@ export type {
 export type { FakeAgentAdapterOptions } from './fake.js';
 export { FakeAgentAdapter } from './fake.js';
 export type { IAgentAdapter } from './interface.js';
+export type { SdkCopilotAdapterOptions } from './sdk-copilot.js';
 export { SdkCopilotAdapter } from './sdk-copilot.js';

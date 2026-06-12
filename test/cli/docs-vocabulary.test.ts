@@ -74,3 +74,47 @@ describe('dead-is-terminal vocabulary (plan 025 breaking change)', () => {
     expect(read('dist/AGENTS_README.md')).toBe(read('AGENTS_README.md'));
   });
 });
+
+// Plan 026 (AC-10) — the three budget terminalReason values must stay
+// documented on every surface operators and host agents read.
+describe('run-budget vocabulary (plan 026)', () => {
+  const REASONS = ['timeout', 'stalled-stream', 'max-turns'] as const;
+
+  it('README documents the budget flags, every reason, 0-semantics, and the tool-silence limitation', () => {
+    const doc = read('README.md');
+    expect(doc).toContain('--stall-timeout');
+    expect(doc).toContain('--max-turns');
+    for (const reason of REASONS) {
+      expect(doc).toContain(reason);
+    }
+    expect(doc).toContain('`0` disables');
+    expect(doc).toContain('tool silence');
+    expect(doc).toContain('Windows');
+  });
+
+  it('run-liveness.md carries all six terminalReason values', () => {
+    const doc = read('docs/how/run-liveness.md');
+    for (const reason of [
+      'permission-denied',
+      'provider-stream-aborted',
+      'pid-vanished',
+      ...REASONS,
+    ]) {
+      expect(doc).toContain(reason);
+    }
+  });
+
+  it('CHANGELOG covers the watchdog, the budget reasons, and the stricter flag validation', () => {
+    const doc = read('CHANGELOG.md');
+    expect(doc).toContain('stalled-stream');
+    expect(doc).toContain('max-turns');
+    expect(doc).toContain('E108');
+  });
+
+  it('AGENTS_README explains terminalReason budget values for polling hosts', () => {
+    const doc = read('AGENTS_README.md');
+    expect(doc).toContain('stalled-stream');
+    expect(doc).toContain('--stall-timeout');
+    expect(doc).toContain('max-turns');
+  });
+});

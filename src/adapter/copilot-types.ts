@@ -87,8 +87,9 @@ export interface ICopilotSession {
   sendAndWait(options: { prompt: string }, timeout?: number): Promise<unknown>;
   on(handler: (event: CopilotSessionEventLike) => void): () => void;
   abort(): Promise<void>;
+  // NOTE: SDK 1.0.1 removed session.destroy(); permanent deletion moved to
+  // client.deleteSession(sessionId). minih never deletes session state.
   disconnect(): Promise<void>;
-  destroy(): Promise<void>;
 }
 
 /** Subset of the SDK's ModelInfo shape we use for capability pre-flight. */
@@ -111,4 +112,10 @@ export interface ICopilotClient {
   start?(): Promise<unknown>;
   listModels?(): Promise<CopilotModelInfo[]>;
   stop(): Promise<unknown>;
+  /**
+   * SIGKILL the CLI subprocess (SDK 1.0.1 client.d.ts:192) — the only
+   * cleanup rung that cannot hang on JSON-RPC. Optional so client shapes
+   * without it skip escalation gracefully (plan 026).
+   */
+  forceStop?(): Promise<void>;
 }

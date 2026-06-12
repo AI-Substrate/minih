@@ -1163,6 +1163,8 @@ done
 
 If a run comes back `dead`, heal its record so inventories reflect the truth: `minih reconcile my-agent` flips it to `status: 'crashed'` + `terminalReason: 'pid-vanished'`. Tip: keep the `runId` from the launch envelope and poll with `minih status my-agent --run <runId>` — the no-`--run` form resolves the *latest live* run and reports `E171` when the only run died.
 
+**Run budgets (plan 026)**: failed runs carry a `terminalReason` in the status envelope telling you *why* — `timeout` (wall-clock budget, `--timeout`, default 900s), `stalled-stream` (no provider events for the stall window, `--stall-timeout`, default 300s, `0` disables), or `max-turns` (`--max-turns` consolidated-message budget, default unlimited). All three exit `124` and write `completed.json`, so polling loops terminate naturally — no special handling needed beyond reading `terminalReason` for the diagnosis. Long-silent tools (>300s with no events) can trip the stall watchdog; raise `--stall-timeout` for such agents.
+
 ### Follow a running agent in real-time
 
 ```bash

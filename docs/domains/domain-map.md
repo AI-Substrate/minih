@@ -13,7 +13,7 @@ flowchart TD
     cli -- "buildInsideMcpServerConfig<br/>for coordinated runs" --> mcp
     cli -- "SdkCopilotAdapter,<br/>ICopilotClient runtime" --> adapter
     mcp -- "run-scoped inbox/state paths,<br/>state helpers, schemas, ulid" --> runner
-    runner -- "IAgentAdapter,<br/>AgentEvent, AgentResult,<br/>SessionSender" --> adapter
+    runner -- "IAgentAdapter,<br/>AgentEvent, AgentResult,<br/>SessionSender, withDeadline" --> adapter
     measurement -. "contracts implemented by runner facts,<br/>cli surfaces, and agent packs" .-> runner
     cli -. "renders and orchestrates measurement contracts" .-> measurement
     eng_harness -. "observes via minih CLI envelopes<br/>(process boundary)" .-> cli
@@ -23,7 +23,7 @@ flowchart TD
 - **cli** depends on **mcp** only as the composition root for coordinated inside-server spawn config (`buildInsideMcpServerConfig`). The user-facing outside commands remain CLI/runner file operations, not direct MCP tool calls.
 - **cli** depends on **adapter** to instantiate `SdkCopilotAdapter` and the SDK runtime client.
 - **mcp** depends on **runner** for run-scoped coordination paths, state helpers, schemas, shared coordination types, and ULID generation. MCP never calls CLI.
-- **runner** depends on **adapter** contracts (`IAgentAdapter`, `AgentEvent`, `AgentResult`, `SessionSender`) and remains SDK- and MCP-independent.
+- **runner** depends on **adapter** contracts (`IAgentAdapter`, `AgentEvent`, `AgentResult`, `SessionSender`, and `withDeadline` for bounding cleanup awaits — plan 026) and remains SDK- and MCP-independent.
 - **adapter** has no internal domain dependencies; its only external implementation dependency is `@github/copilot-sdk`.
 - **measurement** is a conceptual contract domain, not a runtime import layer. Its contracts are implemented by owning domains: runner owns deterministic facts, CLI owns user surfaces, agents/companions provide cited interpretation, and human pulse remains aggregate human-provided evidence.
 - **eng-harness** is the session-level dev-loop harness (`.harness/` substrate on the global harness-core CLI). Its single dashed edge is conceptual, not an import: boot shells `minih doctor` and harvest reads `minih retros` envelopes **at the process boundary**. Zero inbound edges — no minih domain may depend on it; minih builds and ships identically with `.harness/` deleted.

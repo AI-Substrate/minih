@@ -48,6 +48,7 @@ import {
   validateSlug,
   waitForResumeLock,
 } from '../../runner/index.js';
+import { parseBudgetFlag, resolveEffectiveBudgets } from '../budget-flags.js';
 import {
   ErrorCodes,
   exitWithEnvelope,
@@ -64,6 +65,8 @@ const SIGTERM_GRACE_MS = 5_000;
 interface ResumeFlagOpts {
   run?: string;
   timeout?: string;
+  stallTimeout?: string;
+  maxTurns?: string;
   verbose?: boolean;
   human?: boolean;
   mcpConfig?: string;
@@ -179,7 +182,18 @@ export function registerResumeCommand(program: Command): void {
       'Allocate a NEW run dir (legacy behavior); SDK session continues',
     )
     .option('--yes', 'Bypass TTY confirmation for --takeover')
-    .option('-t, --timeout <seconds>', 'Timeout in seconds', '300')
+    .option(
+      '-t, --timeout <seconds>',
+      'Timeout in seconds (default: agent frontmatter or 900)',
+    )
+    .option(
+      '--stall-timeout <seconds>',
+      'Inactivity watchdog: fail the run when no provider event arrives for this many seconds; 0 disables (default: 300)',
+    )
+    .option(
+      '--max-turns <count>',
+      'Fail the run after this many consolidated assistant messages; 0 = unlimited (default: 0)',
+    )
     .option('--verbose', 'Show all events with timestamps (verbose mode)')
     .option(
       '--human',
@@ -233,6 +247,27 @@ export function registerResumeCommand(program: Command): void {
             ),
           );
         }
+
+        // Plan 026 — budget flags validate loudly (E108) before any run
+        // resolution or takeover side effects.
+        parseBudgetFlag(
+          'resume',
+          '--timeout',
+          opts.timeout,
+          'positive-seconds',
+        );
+        parseBudgetFlag(
+          'resume',
+          '--stall-timeout',
+          opts.stallTimeout,
+          'non-negative-seconds',
+        );
+        parseBudgetFlag(
+          'resume',
+          '--max-turns',
+          opts.maxTurns,
+          'non-negative-count',
+        );
 
         let message = messageArg ?? '';
         if (!message && !process.stdin.isTTY) {
@@ -581,9 +616,20 @@ async function runResumed(args: RunResumedArgs): Promise<void> {
     } | null;
   } = { ref: null };
 
+  // Plan 026 (CD-05) — resume shares run's default-timeout source
+  // (frontmatter-aware, then the shared constant; the '300' hardcode is gone).
+  // FT-004 — one resolution path with `run`, unit-pinned in
+  // test/cli/budget-flags.test.ts.
+  const effectiveBudgets = resolveEffectiveBudgets(
+    'resume',
+    opts,
+    definition.timeout,
+  );
   const config: AgentRunConfig = {
     slug,
-    timeout: Number.parseInt(opts.timeout ?? '300', 10),
+    timeout: effectiveBudgets.timeout,
+    stallTimeout: effectiveBudgets.stallTimeout,
+    maxTurns: effectiveBudgets.maxTurns,
     cwd: process.cwd(),
     sessionId: session.sessionId,
     resumedFromRunId: session.runId,

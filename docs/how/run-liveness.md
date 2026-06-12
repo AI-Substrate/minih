@@ -2,7 +2,8 @@
 
 > Shipped by plan 025 (`docs/plans/025-dead-pid-liveness/`). Fixes issue #24:
 > `minih status` used to report crashed runs as `active` — host agents polled,
-> saw "active", and had to go digging.
+> saw "active", and had to go digging. Plan 026 added the run budgets
+> (`timeout` / `stalled-stream` / `max-turns`) — see § Run budgets below.
 
 ## The vocabulary
 
@@ -11,7 +12,7 @@
 | `minih status` → `verdict` | `active` · `dead` · `stale` · `completed` · `failed` · `unknown` | `dead` = the manifest claims a live run but its recorded pid no longer exists. **Terminal** — the run will never finish. |
 | `minih runs list/status` → `liveness` | same set | `dead` covers both unhealed corpses (manifest still says `active`) and healed ones (manifest says `crashed`). |
 | `run.json` → `status` | `starting` · `active` · `idle` · `completing` · `completed` · `failed` · `crashed` · `stale` | `crashed` = written by `minih reconcile` when it healed a dead run. |
-| `run.json` → `terminalReason` | `permission-denied` · `provider-stream-aborted` · `pid-vanished` | *Why* the run ended abnormally. Writers never overwrite an existing value. |
+| `run.json` → `terminalReason` | `permission-denied` · `provider-stream-aborted` · `pid-vanished` · `timeout` · `stalled-stream` · `max-turns` | *Why* the run ended abnormally. Writers never overwrite an existing value; the plan-026 budget reasons yield to the more-specific diagnoses. |
 
 **`dead` vs `stale`**: `stale` is reserved for runs whose process is *alive*
 but quiet (no events for >60s — maybe thinking, maybe wedged). `dead` is
@@ -72,6 +73,32 @@ non-terminal manifests, and heals dead ones in place:
 After healing, the run drops out of `minih runs list --active` (the heal is
 what removes it from the attention queue) but still shows `liveness: 'dead'`
 in `--all`/default listings, with `manifestStatus: 'crashed'`.
+
+## Run budgets (plan 026)
+
+Liveness above is *post-mortem* truth-telling; the budgets are the
+*pre-mortem* guarantee that a run terminalizes by itself instead of becoming
+a corpse. Three budgets race the run (issue #44 — a provider stream that
+silently stops advancing settles neither `session.idle` nor `session.error`):
+
+| Trigger | `terminalReason` | `completed.json` `result` | Exit |
+|---------|------------------|---------------------------|------|
+| Wall-clock budget (`--timeout`, default 900s) | `timeout` | `timeout` | 124 |
+| Inactivity watchdog (`--stall-timeout`, default 300s, `0` disables) | `stalled-stream` | `failed` | 124 |
+| Turn budget (`--max-turns`, default unlimited) | `max-turns` | `failed` | 124 |
+
+All three write `run.json` `status: 'failed'`. The watchdog resets on **any**
+provider event and emits a synthetic `run_stalled` event into
+`events.ndjson` when it fires. Effective budgets are recorded in `run.json`
+`budgets: { timeoutSec, stallTimeoutSec, maxTurns }`.
+
+**Terminal-artifact-first invariant**: no code path between a budget trigger
+and the terminal writes awaits an unbounded SDK promise — every cleanup rung
+(resume → abort → disconnect) is deadline-bounded (~5s) and any hung or
+failed rung escalates to `client.forceStop()` (SIGKILL on the Copilot CLI
+subprocess). A wedged subprocess can therefore never produce the
+forever-`active` corpse this guide's `dead` vocabulary describes — budgets
+make `reconcile` a backstop, not the primary path.
 
 ## Migration notes for polling agents (breaking change)
 

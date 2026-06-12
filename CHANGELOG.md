@@ -1,5 +1,21 @@
 # Changelog
 
+## Plan 026 — stall watchdog + run budgets (release-please will format on merge)
+
+### Features
+
+- **Stall watchdog (issue #44)**: a run whose provider stream silently stops advancing now terminalizes by itself — `run.json` `status: 'failed'` + `terminalReason: 'stalled-stream'`, a synthetic `run_stalled` event in `events.ndjson`, `completed.json` `result: 'failed'`, exit `124`. Any provider event resets the watchdog; `--stall-timeout <seconds>` tunes it (default 300, `0` disables).
+- **`--max-turns <count>`** on `run` + `resume`: fail the run after N consolidated assistant messages (`terminalReason: 'max-turns'`; chunking/tool/thinking events never count; default unlimited).
+- **`terminalReason: 'timeout'`**: the existing wall-clock timeout now records *why* in `run.json` (it previously left no reason).
+- **Bounded SDK cleanup + force-stop escalation**: every cleanup await between a kill trigger and the terminal writes is deadline-bounded (~5s per rung); a hung or failed rung escalates to `client.forceStop()` (SIGKILL on the Copilot CLI subprocess). Terminal artifacts can no longer be blocked by a wedged provider — the root cause of #44's forever-`active` runs.
+- **Budgets recorded**: effective `budgets: { timeoutSec, stallTimeoutSec, maxTurns }` written to `run.json`; `minih status` prints a `Reason:` line for terminalized runs and passes `terminalReason` through its envelope; the E170 multiple-active-runs remedy now mentions `--latest`.
+- **Shared default timeout**: `run` and `resume` share one frontmatter-aware default (900s) — `resume`'s hardcoded 300s default is gone.
+- **SDK**: `@github/copilot-sdk` pinned to 1.0.1 (1.0.1 removed `session.destroy()`; the adapter's terminate ladder is now resume → abort → disconnect → force-stop).
+
+### Flag validation (stricter, technically breaking)
+
+- `--timeout` / `--stall-timeout` / `--max-turns` now validate loudly with `E108 INVALID_ARGS` on NaN, negative, fractional-turns, or trailing-garbage values (`--timeout 300abc` used to silently parse as 300; `--timeout 0` used to silently fall through to the default on `run` and fire instantly on `resume` — both are now E108).
+
 ## Plan 025 — dead-pid liveness (release-please will format on merge)
 
 ### ⚠ BREAKING CHANGES

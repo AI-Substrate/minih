@@ -34,6 +34,30 @@ function makeRunDir(slug: string, runId: string): string {
 }
 
 describe('listRunInventory', () => {
+  // FT-005 (plan 026 review F005) — inventory rows pass terminalReason
+  // through from run.json so `runs` can show WHY a run failed (AC-7).
+  it('passes terminalReason through from the manifest', async () => {
+    const runId = '2026-06-08T00-00-09-000Z-tr';
+    const dir = makeRunDir('alpha', runId);
+    await writeManifest(
+      dir,
+      makeManifest({
+        slug: 'alpha',
+        runId,
+        runDir: dir,
+        status: 'failed',
+        terminalReason: 'stalled-stream',
+      }),
+    );
+
+    const rows = await listRunInventory({ agentsDir, all: true });
+
+    expect(rows.find((r) => r.runId === runId)).toMatchObject({
+      liveness: 'failed',
+      terminalReason: 'stalled-stream',
+    });
+  });
+
   it('lists active runs across slugs with label and paramsSummary', async () => {
     const dirA = makeRunDir('alpha', '2026-06-08T00-00-00-000Z-a');
     const dirB = makeRunDir('bravo', '2026-06-08T00-00-01-000Z-b');

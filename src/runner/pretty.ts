@@ -46,6 +46,14 @@ export class PrettyDisplay {
           `\n${chalk.red(`  ❌ ${event.data.message ?? 'Session error'}`)}\n`,
         );
         break;
+      case 'run_stalled':
+        // Plan 026 — synthetic watchdog diagnosis; render it loudly so a
+        // live `--pretty` viewer sees why the run is being terminalized.
+        this.endStreams();
+        process.stderr.write(
+          `\n${chalk.red(`  ⏱ run stalled — no provider events for ${event.data.stallTimeoutSec}s`)}\n`,
+        );
+        break;
       case 'skills_loaded':
         this.endStreams();
         process.stderr.write(

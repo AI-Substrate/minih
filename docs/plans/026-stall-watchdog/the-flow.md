@@ -20,7 +20,7 @@ flowchart TD
     plan["Architect → READY + validate-v2 fix pass"]:::done
     build["Implement — T000–T011 done, 11/11 ACs, fft 1310 green"]:::done
     review["Code review (stage 7) — REQUEST_CHANGES → fixed → settled"]:::done
-    merge["Merge via PR (PROCEED-gated; posts #44 comment)"]:::known
+    merge["Merge via PR — branch pushed, PR open, closes #44 on merge"]:::done
 
     subgraph companion1["🤝 code-review-companion · run 2026-06-12T08-39-31-885Z-544e · 0 findings"]
         fix1["Fix pass — FT-001…FT-005 (companion mode)"]:::done
@@ -37,9 +37,11 @@ flowchart TD
     said_fix -.- fix1
     said_settle>"🗣 so all good for pr? … make sure the flow is closed out pre-pr please"]:::said
     said_settle -.- review
+    said_merge>"🗣 get a pr up please. mark the flow compelte first please"]:::said
+    said_merge -.- merge
 ```
 
 Legend: 🟩 done · 🟧 in progress · 🟥 blocked · 🟦 known next · ⬜ assumed · 🗣 user input · 🟪 harness loop · 🤝 companion
 
-**Now**: flow CLOSED OUT pre-PR. Review settled by companion supersession (stage-6c doctrine; disposition in `reviews/fix-tasks.md`) — all seven findings fixed (FT-001 `ab0be14` … FT-005 `4b3d20f`), companion farewell zero findings / six APPROVEs over `752945f..a75d435`, `just fft` exit 0 (1319 tests, +9). Retro buffer drained to `.harness/records/retro/2026-06-11/004-026-stall-watchdog.md` (DL-001 SDK method-surface pin, SUGG-001 fake-adapter seam, DL-002 per-commit format). Nine commits on `026-stall-watchdog`, not pushed. #44 comment drafted, posts at merge.
-**Next**: `/the-flow 8 merge --plan "docs/plans/026-stall-watchdog/stall-watchdog-plan.md"` — merge/PR analysis; executes only on typed `PROCEED`.
+**Now**: flow COMPLETE. All milestones done (5/5). Review settled by companion supersession (disposition in `reviews/fix-tasks.md`); retro buffer drained to `.harness/records/retro/2026-06-11/004-026-stall-watchdog.md`; branch `026-stall-watchdog` pushed and PR open against `main` with `Closes #44` — final gate `just fft` exit 0 (1319 tests / 16 skipped, +51 across build + fix pass), companion farewell zero findings.
+**Next**: merge the PR on GitHub — #44 closes automatically; the drafted `issue-44-comment.md` is available to post at merge. Plan-complete harness seam (`/eng-harness-flow --event plan-complete`) fires after merge.

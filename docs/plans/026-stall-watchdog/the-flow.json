@@ -2,8 +2,8 @@
   "schema_version": 1,
   "slug": "stall-watchdog",
   "plan_dir": "docs/plans/026-stall-watchdog",
-  "cursor": "review",
-  "recommended_next": "merge",
+  "cursor": "merge",
+  "recommended_next": null,
   "nodes": [
     {
       "id": "start",
@@ -96,9 +96,12 @@
     {
       "id": "merge",
       "type": "merge",
-      "label": "Merge via PR (PROCEED-gated; posts #44 comment)",
-      "status": "known",
-      "command": "/the-flow 8 merge --plan \"docs/plans/026-stall-watchdog/stall-watchdog-plan.md\"",
+      "label": "Merge via PR — branch pushed, PR open, closes #44 on merge",
+      "status": "done",
+      "ran_at": "2026-06-12T02:54:21Z",
+      "user_input": "get a pr up please. mark the flow compelte first please",
+      "note": "Flow marked COMPLETE on Jordan's go; merge handed off to a GitHub PR instead of the stage-8 local merge (PROCEED gate not needed — the PR itself is the gate). Branch 026-stall-watchdog pushed (9 commits, 752945f..85fac5e + this close-out); PR body carries the change summary, evidence (fft 1319/16, +51 tests), the review trail (stage-7 REQUEST_CHANGES → 7 FTs fixed → companion supersession, zero findings), and 'Closes #44'. The drafted issue-44-comment.md remains available to post at merge.",
+      "artifacts": ["issue-44-comment.md"],
       "next": []
     }
   ],

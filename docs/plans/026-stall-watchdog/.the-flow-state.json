@@ -3,12 +3,12 @@
   "slug": "stall-watchdog",
   "plan_dir": "docs/plans/026-stall-watchdog",
   "mode": "Simple",
-  "current_stage": "awaiting-8",
-  "pending_command": "/the-flow 8 merge --plan \"docs/plans/026-stall-watchdog/stall-watchdog-plan.md\"",
+  "current_stage": "complete",
+  "pending_command": null,
   "intent": "Stall watchdog + run budgets (--timeout/--max-turns) so stalled live runs reach a guaranteed terminal artifact (issue #44); includes Copilot SDK upgrade to latest",
   "milestones_total": 5,
-  "milestones_done": 4,
-  "last_checkpoint_at": "2026-06-11T23:10:00Z",
+  "milestones_done": 5,
+  "last_checkpoint_at": "2026-06-12T02:54:21Z",
   "compacted_seams": [],
-  "status": "active"
+  "status": "complete"
 }

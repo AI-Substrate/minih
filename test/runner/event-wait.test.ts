@@ -686,3 +686,77 @@ describe('waitForAny ↔ inbox_list unacked parity (#40 AC-4)', () => {
     expect(waitIds).toEqual(pollIds);
   });
 });
+
+describe('waitForAny — #40 loop + wildcard (Phase 2 AC-5)', () => {
+  it('AC-5 loop — unacked re-delivers across waits; an ack between waits suppresses it', async () => {
+    writeInbox('outside', [makeMessage('m1')]);
+    writeInbox('inside', []);
+
+    // Wait 1: m1 queued + unacked → delivered by the immediate pass.
+    const first = await waitForAny({
+      location: location(),
+      side: 'inside',
+      events: [{ kind: 'inbox.message' }],
+      waitMs: 200,
+      watchFactory: makeWatchFactory(new Map()),
+    });
+    expect(
+      first.events.map((e) =>
+        e.kind === 'inbox.message' ? e.data.message.id : '',
+      ),
+    ).toEqual(['m1']);
+
+    // Wait 2: still no ack → m1 re-delivers (durable unread, not consumed by read).
+    const second = await waitForAny({
+      location: location(),
+      side: 'inside',
+      events: [{ kind: 'inbox.message' }],
+      waitMs: 200,
+      watchFactory: makeWatchFactory(new Map()),
+    });
+    expect(
+      second.events.map((e) =>
+        e.kind === 'inbox.message' ? e.data.message.id : '',
+      ),
+    ).toEqual(['m1']);
+
+    // Ack m1 via an inside ack record → Wait 3 does NOT re-deliver → clean timeout.
+    fs.appendFileSync(
+      inboxLanePath(location(), 'inside'),
+      makeMessage('a1', 'ack', { sender: 'inside', ackOf: 'm1' }),
+    );
+    const third = await waitForAny({
+      location: location(),
+      side: 'inside',
+      events: [{ kind: 'inbox.message' }],
+      waitMs: 100,
+      watchFactory: makeWatchFactory(new Map()),
+    });
+    expect(third.events).toHaveLength(0);
+    expect(third.wait.timedOut).toBe(true);
+  });
+
+  it('AC-5 wildcard — a no-filter wait wakes on a brand-new/unknown type', async () => {
+    writeInbox('outside', []);
+    const index: WatcherIndex = new Map();
+    const wait = waitForAny({
+      location: location(),
+      side: 'inside',
+      events: [{ kind: 'inbox.message' }], // no filter → wildcard
+      waitMs: 30000,
+      watchFactory: makeWatchFactory(index),
+    });
+
+    fs.appendFileSync(
+      inboxLanePath(location(), 'outside'),
+      makeMessage('w1', 'a-type-never-seen-before'),
+    );
+    fireForFile(index, inboxLanePath(location(), 'outside'));
+
+    const result = await wait;
+    expect(result.events).toHaveLength(1);
+    if (result.events[0].kind === 'inbox.message') {
+      expect(result.events[0].data.message.type).toBe('a-type-never-seen-before');
+    }
+  });
+});

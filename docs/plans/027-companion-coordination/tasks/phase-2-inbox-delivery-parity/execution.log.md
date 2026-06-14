@@ -81,3 +81,10 @@ Added `describe('waitForAny ↔ inbox_list unacked parity (#40 AC-4)')` to `even
 - **Cap pinned (V-3)** — seeds are below the default `limit` (50) so both surfaces return the full set; the assertion compares full sets, not truncations, so a future `limit` change can't silently drift parity.
 - Parity is structural (both call the shared `listUnackedVisible`); this test pins it so an edit to one surface can't diverge from the other. **Green** (5 matched / pass).
 
+### T005 — loop + wildcard (AC-5) ✅
+
+- **loop** (`event-wait.test.ts`) — m1 queued + unacked is delivered on wait 1, **re-delivered** on wait 2 (durable unread — a read doesn't consume it), then an inside `ack`/`ackOf` record between waits suppresses re-delivery on wait 3 → clean timeout.
+- **wildcard, runner** (`event-wait.test.ts`) — a no-filter wait wakes on `a-type-never-seen-before` (append + fire).
+- **wildcard, MCP** (`tools-wait.test.ts`) — `waitForAnyTool` with `events:[{kind:'inbox.message'}]` (no filter) wakes on a pre-queued `brand-new-type` via the immediate pass, proving `parseInboxFilter → filterTypes=null → wildcard` end-to-end. No `wait.ts` change required (F3 verified, not modified).
+- **Evidence**: event-wait 24 + tools-wait 16 → **40/40 pass**. The "a brand-new type can never make a companion deaf" guarantee (AC-5) holds at both layers.
+

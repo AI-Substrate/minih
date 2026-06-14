@@ -87,3 +87,11 @@ A stale R1-era comment in `runner.ts` (it still claimed agents default to `yolo`
 **Difficulty MH-001 (coordination, "annoying"):** the briefing promised `control:stop` after the final reply, but the stop was delayed (I was applying F001 inline), so the companion idled out and self-stopped via idle-budget, writing the farewell itself. Captured for the retro. Lesson: send `control:stop` promptly once the last commit is pinged, or don't promise an imminent stop while still iterating.
 
 **Deviation note:** because the companion self-stopped before my F001-verify ping (`a7bcac5`) landed, that ping went unprocessed — the fix was self-verified against source + the passing CLI test instead. The companion's review otherwise covered every Phase-1 commit, so a separate post-hoc review pass is redundant.
+
+---
+
+## T0zz — Harness phase-end seam (`--event phase-end`)
+
+Fired `/eng-harness-flow --event phase-end` → engineering dispatch, **buffer non-empty** (SUGG-001 improvement-suggestion, COORD-001 coordination) → routed `eng-harness-4-retro --drain` (drain-before-harvest). The two observations are durably buffered in `.harness/temp/`; the drain/harvest persists them to `.harness/records/retro/` — best-effort (the interactive `[s/t/p/e/d/a]` retro prompt is the operator's, and a cross-plan harvest fires at plan-complete). Seam outcome: `decision: route`, `next_suggested: --harvest` at plan-complete.
+
+**Phase 1 closed.** 4 commits (`5ab51e1` T001, `57644c7` T002/T003, `a7bcac5` F001 fix, `181fc19` debrief); 8/8 targeted tests green; companion verdict APPROVE (1 MEDIUM, fixed); AC-1 + AC-2 both met. Verify-and-close held its shape — one new test file, one CLI case, one comment fix, one doc lane fix.

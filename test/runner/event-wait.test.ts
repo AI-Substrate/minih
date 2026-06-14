@@ -10,7 +10,6 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { waitForAny } from '../../src/runner/event-wait.js';
-import { pollInboxLane } from '../../src/runner/inbox-poll.js';
 import type {
   NativeWatcher,
   WatchEventType,
@@ -20,6 +19,7 @@ import {
   inboxLanePath,
   stateFilePath,
 } from '../../src/runner/folder.js';
+import { pollInboxLane } from '../../src/runner/inbox-poll.js';
 
 let tmpDir: string;
 let agentsDir: string;
@@ -756,7 +756,9 @@ describe('waitForAny — #40 loop + wildcard (Phase 2 AC-5)', () => {
     const result = await wait;
     expect(result.events).toHaveLength(1);
     if (result.events[0].kind === 'inbox.message') {
-      expect(result.events[0].data.message.type).toBe('a-type-never-seen-before');
+      expect(result.events[0].data.message.type).toBe(
+        'a-type-never-seen-before',
+      );
     }
   });
 });

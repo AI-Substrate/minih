@@ -88,3 +88,14 @@ Added `describe('waitForAny ↔ inbox_list unacked parity (#40 AC-4)')` to `even
 - **wildcard, MCP** (`tools-wait.test.ts`) — `waitForAnyTool` with `events:[{kind:'inbox.message'}]` (no filter) wakes on a pre-queued `brand-new-type` via the immediate pass, proving `parseInboxFilter → filterTypes=null → wildcard` end-to-end. No `wait.ts` change required (F3 verified, not modified).
 - **Evidence**: event-wait 24 + tools-wait 16 → **40/40 pass**. The "a brand-new type can never make a companion deaf" guarantee (AC-5) holds at both layers.
 
+### T006 — cleanup() re-entry guard + real-fs.watch race (Finding 03) ✅
+
+- **(a) splice-and-close** (`event-wait.ts`): `cleanup()` now drains `watchers` via `shift()` as it closes, so a re-entrant `cleanup()` finds an empty array and can't double-close. Hardens the plan-014 single-settle teardown (makes `cleanup()` self-idempotent, not solely reliant on the `settled` guard).
+- **(b) real-fs.watch race test** (`wait-for-any-fs.test.ts`): a `countingRealFactory` wraps the real `fs.watch` and counts native `close()` calls. Two tests register N=2 watchers (inbox + state.peer, inbox lane empty so the immediate pass registers rather than short-circuits) and assert `closes === 2` on **both** settle paths — fire (write outside.json mid-wait) and timeout. No leak, no double-close, under genuine watchers.
+- **Evidence**: wait-for-any-fs 4 + event-wait 24 → **28/28 pass**; tsc clean.
+
+### Whole-phase gate (AC-17)
+
+- `just fft`: lint ✓ · format ✓ · build ✓ · typecheck ✓ · **test 1334 passed / 1 failed** · audit/sdk-check (pending re-run). The single failure was `test/runner/agent-pack/extractor.test.ts > (gg) PaxHeader` — an **ENOENT tmpdir-isolation flake unrelated to this phase**: it passes **45/45 in isolation**, and `git diff 0952e62..HEAD` shows Phase 2 touched only `event-wait.ts`, `inbox-poll.ts`, `tools-wait.test.ts`, `event-wait.test.ts` (+ uncommitted `wait-for-any-fs.test.ts`). All four coordination suites in AC-17's regression scope (event-wait, inbox-poll, tools-wait, wait-for-any-fs) are green. Not a Phase 2 regression; left untouched (fixing an unrelated flake = scope creep). fft re-run below to confirm the flake clears.
+- **Formatting**: `biome check --write` reformatted 3 prior-commit files (inbox-poll.ts call wrap, event-wait.ts, event-wait.test.ts long-line wrap) — folded into the T006 commit.
+

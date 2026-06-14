@@ -119,7 +119,13 @@ export async function pollInboxLane(
   const waitMs = normalizeWaitMs(options.waitMs, options.maxWaitMs);
   const peerLane: Side = readLane === 'outside' ? 'inside' : 'outside';
 
-  const immediate = listUnackedVisible(location, readLane, options, peerLane, limit);
+  const immediate = listUnackedVisible(
+    location,
+    readLane,
+    options,
+    peerLane,
+    limit,
+  );
 
   if (waitMs === undefined || waitMs === 0) {
     return immediate;
@@ -221,7 +227,13 @@ function waitForMatching(
     const completeIfMatched = (): void => {
       let output: PollInboxResult;
       try {
-        output = listUnackedVisible(location, readLane, options, peerLane, limit);
+        output = listUnackedVisible(
+          location,
+          readLane,
+          options,
+          peerLane,
+          limit,
+        );
       } catch (error) {
         settle(() => reject(toPollError(error)));
         return;
@@ -233,7 +245,13 @@ function waitForMatching(
     const completeWithTimeout = (): void => {
       let output: PollInboxResult;
       try {
-        output = listUnackedVisible(location, readLane, options, peerLane, limit);
+        output = listUnackedVisible(
+          location,
+          readLane,
+          options,
+          peerLane,
+          limit,
+        );
       } catch (error) {
         settle(() => reject(toPollError(error)));
         return;

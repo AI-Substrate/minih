@@ -89,7 +89,7 @@ flowchart TD
         T003["T003: rewrite event-wait inbox.message branch"]:::completed
         T004["T004: parity test wait_for_any == inbox_list (AC-4)"]:::completed
         T005["T005: loop ack/no-ack + wildcard wake (AC-5)"]:::completed
-        T006["T006: cleanup() re-entry guard + fs.watch race"]:::pending
+        T006["T006: cleanup() re-entry guard + fs.watch race"]:::completed
         T0zz["T0zz: harness phase-end"]:::seam
 
         T000 --> T001 --> T002 --> T003
@@ -106,7 +106,7 @@ flowchart TD
         F2["src/runner/event-wait.ts"]:::completed
         F3["src/mcp/tools/wait.ts"]:::completed
         FT1["test/runner/event-wait.test.ts"]:::completed
-        FT2["test/runner/wait-for-any-fs.test.ts"]:::pending
+        FT2["test/runner/wait-for-any-fs.test.ts"]:::completed
         FT3["test/mcp/tools-wait.test.ts"]:::completed
     end
 
@@ -132,7 +132,7 @@ flowchart TD
 | [x] | T003 | Rewrite `event-wait.ts` `inbox.message` branch onto the unread/ack model: **(a)** add an immediate pass at entry that returns unacked matches already present (mirror `pollInboxLane:114-122` — settle `matched:true` if any); **(b)** the watcher re-reads and filters by **unacked** via `listUnackedVisible` (not `inboxIdSnapshot`); **(c)** delete the entry-snapshot path for inbox only; **(d)** the immediate pass must **short-circuit before** registering watchers/timeout (no dangling watcher or timer if it settles); **(e)** a torn/corrupt peer lane at the immediate pass maps deterministically to `EventWaitInboxCorruptError` (consistent with the watcher-fire path `:184-190`) — **not** the swallow-to-empty of today's `snapshotInboxIds`. `state.peer.changed`/`state.self.changed` keep snapshot-at-entry untouched. | runner | `src/runner/event-wait.ts` | T001 green; the `state.self.changed` self-write-filter test (the named regression anchor) + `state.*` watch tests unchanged; immediate-settle leaves close-count==0 / no post-settle registration; a RED test seeding a **torn peer lane at entry** rejects with `EventWaitInboxCorruptError`; single-settle teardown preserved | Workshop 001 Option A. Immediate pass fixes "queued-before, no later write" delivery; unacked watcher fixes re-delivery. (V-gaps #1 corrupt-lane, #2 settle-before-registration, #3 state regression anchor) |
 | [x] | T004 | **RED→GREEN parity**: for the same filter (and for no-filter), assert `waitForAny`'s `inbox.message` result set equals `pollInboxLane`/`inbox_list`'s unacked set over the same seeded lanes. **Pin the cap contract**: `pollInboxLane` applies `limit` (default 50) + `nextAfter`, `waitForAny` has neither — the parity test must either seed **below** the limit so both surfaces return the full set, or document that `event-wait` passes the same limit; assert identical sets, not coincidentally-equal truncations. | runner | `test/runner/event-wait.test.ts` | AC-4 green — same filter ⇒ identical unacked set across both surfaces; cap behaviour pinned so a future `limit` change can't silently drift parity; teardown single-settle intact | Parity falls out of the shared helper; this test pins it so a future edit to one can't drift the other. (V-gap #5 limit/cap) |
 | [x] | T005 | **Loop + wildcard**: (i) loop test — ack a delivered message between waits ⇒ **no** re-delivery; leave it unacked ⇒ re-delivery on the next wait. (ii) wildcard test — a no-filter `inbox.message` entry wakes on a message with a brand-new/unknown `type`. | runner + mcp | `test/runner/event-wait.test.ts`, `test/mcp/tools-wait.test.ts` | AC-5 green; the MCP `wait.ts` no-filter form (`filterTypes=null`) wakes on an unknown `type` | Workshop 001 §wildcard. Confirm `wait.ts`/prompt use the no-filter form; doc the "any outside message" wake |
-| [ ] | T006 | Add a `cleanup()` re-entry guard in `event-wait.ts` (splice the `watchers` array as you close, so a re-entrant `cleanup` can't double-close), and a **real-`fs.watch`** timeout-vs-fire race test asserting the watcher close-count is exactly N (no leak, no double-close). | runner | `src/runner/event-wait.ts`, `test/runner/wait-for-any-fs.test.ts` | Single-settle invariant pinned under a real watcher race; plan-014 teardown contract intact | Finding 03. Real-watch test goes in `wait-for-any-fs.test.ts`, **not** the Fake unit file |
+| [x] | T006 | Add a `cleanup()` re-entry guard in `event-wait.ts` (splice the `watchers` array as you close, so a re-entrant `cleanup` can't double-close), and a **real-`fs.watch`** timeout-vs-fire race test asserting the watcher close-count is exactly N (no leak, no double-close). | runner | `src/runner/event-wait.ts`, `test/runner/wait-for-any-fs.test.ts` | Single-settle invariant pinned under a real watcher race; plan-014 teardown contract intact | Finding 03. Real-watch test goes in `wait-for-any-fs.test.ts`, **not** the Fake unit file |
 | [ ] | T0zz | **Harness phase-end** — `/eng-harness-flow --event phase-end --plan-dir docs/plans/027-companion-coordination` | — | — | Router envelope handled at phase end (drain-vs-harvest is the router's call) | Harness seam (best-effort) |
 
 **Whole-phase gate** (AC-17): `just fft` exits 0 with the new tests included; no regression in the existing coordination suite (`event-wait.test.ts`, `inbox-poll.test.ts`, `tools-wait.test.ts`, `wait-for-any-fs.test.ts`, `runner-event-driven.test.ts`).

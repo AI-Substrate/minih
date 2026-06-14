@@ -91,14 +91,17 @@ export function waitForAny(opts: WaitForAnyOptions): Promise<WaitForAnyResult> {
         clearTimeout(timeout);
         timeout = undefined;
       }
-      for (const w of watchers) {
+      // Splice-and-close: drain the array as we close, so a re-entrant cleanup()
+      // can never double-close a watcher (the array is already empty by the time
+      // any second call runs). Hardens the plan-014 single-settle teardown.
+      while (watchers.length > 0) {
+        const w = watchers.shift();
         try {
-          w.close();
+          w?.close();
         } catch {
           // best-effort teardown — never throw from cleanup
         }
       }
-      watchers.length = 0;
     };
 
     const settle = (cb: () => void): void => {
@@ -344,7 +347,10 @@ function readUnackedPeer(
       waitForAny: filterTypes ?? undefined,
     }).messages;
   } catch (error) {
-    if (error instanceof InboxPollError && error.code === 'INBOX_POLL_CORRUPT') {
+    if (
+      error instanceof InboxPollError &&
+      error.code === 'INBOX_POLL_CORRUPT'
+    ) {
       throw new EventWaitInboxCorruptError(error.message);
     }
     throw error;

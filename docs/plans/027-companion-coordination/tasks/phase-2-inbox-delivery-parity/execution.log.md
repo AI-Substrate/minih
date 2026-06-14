@@ -99,3 +99,36 @@ Added `describe('waitForAny ↔ inbox_list unacked parity (#40 AC-4)')` to `even
 - `just fft`: lint ✓ · format ✓ · build ✓ · typecheck ✓ · **test 1334 passed / 1 failed** · audit/sdk-check (pending re-run). The single failure was `test/runner/agent-pack/extractor.test.ts > (gg) PaxHeader` — an **ENOENT tmpdir-isolation flake unrelated to this phase**: it passes **45/45 in isolation**, and `git diff 0952e62..HEAD` shows Phase 2 touched only `event-wait.ts`, `inbox-poll.ts`, `tools-wait.test.ts`, `event-wait.test.ts` (+ uncommitted `wait-for-any-fs.test.ts`). All four coordination suites in AC-17's regression scope (event-wait, inbox-poll, tools-wait, wait-for-any-fs) are green. Not a Phase 2 regression; left untouched (fixing an unrelated flake = scope creep). fft re-run below to confirm the flake clears.
 - **Formatting**: `biome check --write` reformatted 3 prior-commit files (inbox-poll.ts call wrap, event-wait.ts, event-wait.test.ts long-line wrap) — folded into the T006 commit.
 
+---
+
+## Phase 2 — complete
+
+**Acceptance criteria** (all met, computational):
+- **AC-3** ✅ — a message queued *before* `wait_for_any` is returned (T001 RED→GREEN via T003's immediate pass). Negative type-filter guard + corrupt-lane throw also pinned.
+- **AC-4** ✅ — `wait_for_any` ⇔ `inbox_list` unacked-set parity for the same filter (T004), cap contract pinned.
+- **AC-5** ✅ — wildcard wake on a brand-new/unknown type (runner + MCP) + durable-unread ack-loop (T005).
+- **AC-17** ✅ — `just fft` exits 0 (lint/format/build/typecheck/test/audit/sdk-check); coordination suite **68/68** (event-wait 24, inbox-poll 12, tools-wait 16, wait-for-any-fs 4, runner-event-driven 12). Zero regression. (One unrelated `agent-pack/extractor` flake cleared on re-run; passes 45/45 in isolation.)
+- **One consumed model** ✅ — `event-wait` + `inbox-poll` share the single exported `listUnackedVisible`; no parallel filter logic.
+
+**Commits** (branch `027-companion-coordination`):
+| SHA | Task | What |
+|-----|------|------|
+| `f86a0b9` | T002 | export `listUnackedVisible` from inbox-poll |
+| `ff0a1f2` | T001+T003 | #40 fix — immediate pass + unacked watcher |
+| `95be231` | T004 | wait_for_any ⇔ inbox_list parity pin |
+| `eff457e` | T005 | wildcard wake + ack-loop (runner + MCP) |
+| `812e468` | T006 | cleanup re-entry guard + real-fs.watch race |
+
+**Non-goals honoured**: no transport/envelope change; `state.*` watches keep snapshot-at-entry; no `coordinationMode`/ledger work (Phase 4); no live e2e proof (unit-level only — `MINIH_FAKE_ADAPTER` was dropped with Phase 0).
+
+**Harness**: pre-implement boot `degraded` (known minih-doctor + npm-audit baseline; code-quality sensors clean) → proceeded. Phase-end seam → observe buffer captured 2 genuine friction items (DL-001 extractor flake, SUGG-002 fft lint-before-format ordering); drain deferred to plan-complete.
+
+## Companion debrief
+
+- `code-review-companion` run `2026-06-15T09-22-20-918Z-e4d5`, briefed once, pinged at all 5 commit boundaries + a final drain ping.
+- **Findings: 0** — the companion sent no `finding`/`summary` reply across the entire phase (`peer.lastSendAt` stayed null through ~20 min and the drain ping). Clean review.
+- `control:stop` sent → run `completed`. **Farewell envelope** (`agents/code-review-companion/runs/2026-06-15T09-22-20-918Z-e4d5/output/report.json`):
+  - **findings: 0** — *"Reviewed Phase 2 … across six task pings and the final `f86a0b9^..812e468` range. No blocking or actionable issues: the shared `listUnackedVisible` helper preserves `pollInboxLane` behavior, `wait_for_any` now delivers pre-queued unacked inbox messages with correct lane direction and corrupt-lane handling, parity/loop/wildcard coverage is in place, and cleanup teardown has focused real-fs coverage."* (clean APPROVE-equivalent — it explicitly checked the lane direction + the V-1 corrupt-lane path.)
+  - **magicWand**: *"Add the planned inside `coordination_status`/`report_draft` MCP tool that derives tasksReceived/findingsSent/summaries/unresolved/report.findings from the durable inbox/state ledger, then pre-fills the farewell envelope so the companion doesn't hand-count or risk touching run-dir files during shutdown."*
+- **Reconciliation**: 0 findings to address/defer/dispute — clean. The magicWand is **already the plan's Phase 4** (`deriveCompanionLedger` → `coordination_status` MCP tool + draft farewell) — same independent re-derivation Phase 1's companion produced. No new follow-up dossier needed; it strengthens the case for Phase 4. Surfaced as a follow-up candidate only.
+

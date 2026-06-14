@@ -34,3 +34,35 @@ Fired `/eng-harness-flow --event pre-implement` through the installed router (`~
 **Placement note (deviation from dossier path):** the dossier suggested adding to `coord-write-precondition.test.ts`, but that file's documented contract is "No filesystem or compile() coupling." A compile()-coupled characterisation belongs in a dedicated file → created the `.e2e.test.ts` instead. Recorded in Discoveries.
 
 **Conclusion:** the #25 repro is dead on the **live default path** — the boot gate fires loudly (E205, 5 signals, exit 126); no silent missing `report.json`.
+
+---
+
+## T002 — Verify / tighten the E205 doc (AC-2, doc half)
+
+**Verdict: no edit needed — the doc was already correct.** `companion-mode.md:23` states the precondition "enforces this **at boot** via the FX008 precondition; agents whose resolved policy denies write are refused with E205," and delegates message-format / remediation detail to `permissions.md § Coordinated agents`.
+
+Repo sweep (`grep -i 'e205|permission-error|inbox' docs/how/companion-mode.md`): **exactly one** E205 mention, accurate. `permissions.md` carries the full detail consistently — `:134` "enforces this at boot," `:83-90` lists the inbox `permission-error` message as **one of five** signals fired *after* the boot-time refusal, `:123` the E205 table row ("FX008 boot precondition"). **No doc anywhere describes E205 as *arriving as* an inbox message** — the research dossier's DE-05 premise (carried only in plan 027's own spec/research) was wrong; the product docs were always right.
+
+The boot-gate-vs-inbox distinction T002 reserved a ≤1 clause for is already cleanly handled (boot refusal stated in both docs; the inbox message correctly framed as signal-among-five in permissions.md). Adding a clause would over-explain a doc that correctly delegates → recorded "no edit," per the dossier's instruction not to invent a change. The dropped-Phase-0 "(contract-phrase check from 0.4)" criterion never lived in the doc (it was a plan task criterion) — nothing to strike here.
+
+---
+
+## T003 — #25 disposition (close-comment summary, AC-2)
+
+**Disposition: VERIFIED — close as fixed.** The FX008 boot gate (shipped in plan 018) kills the coordinated write-deny repro on the **live** default path. Quotable close comment:
+
+> **#25 verified fixed — closing.**
+>
+> A coordination-enabled agent whose resolved write policy is `deny` no longer fails silently (running for the full timeout, then exiting without ever writing `output/report.json`). It is now **refused at boot** with `E205 COORDINATION_WRITE_DENIED` — a sub-second, actionable error carrying the slug, resolved preset, resolution-chain source, and three remediations — via the FX008 precondition (`assertCoordWriteAllowed`, `src/runner/permissions/coord-write-precondition.ts`), wired at `runner.ts` right after the policy compile.
+>
+> This is the **live** default path, not a hypothetical: since plan 018 R6 the shipped release default is `restricted` (write-deny) — `presets.ts` `minihReleaseDefault` — so a *new* coordination-enabled agent with no explicit `permissions:` (and no sidecar `lockedDefault`) resolves to write-deny and trips the gate. Grandfathered installs with a sticky `yolo` sidecar `lockedDefault` keep write-allow and are unaffected.
+>
+> **Proof (deterministic, green):**
+> - `test/runner/permissions/coord-write-release-default.e2e.test.ts` (5 tests) — drives a *real* `compile()` release-default resolution → `restricted` / `presetSource: 'release-default'` / `write: deny`, then through `assertCoordWriteAllowed` → throws E205; plus the bare-fallback path, the grandfathered-yolo write-allow asymmetry, and a premise guard that reddens if the default is ever re-flipped.
+> - `test/cli/run-coord-write-deny.test.ts` case `(a-release-default)` — a zero-permissions coord agent run through the full CLI → E205 envelope, `Resolved from: release-default`, `run.json` `permissions.presetSource: 'release-default'`, exit 126. The pre-existing case `(a)` covers the full 5-signal denial (events.ndjson, run.json, inside-state, inside-inbox `permission-error`, exit 126) via the frontmatter path.
+>
+> **Docs:** `companion-mode.md` and `permissions.md` already describe E205 accurately as a **boot-time refusal** (with the inbox `permission-error` message correctly framed as one of five signals fired *after* the refusal). No product-doc change was required — the "described as an inbox message" concern originated only in this plan's own spec/research, not on disk.
+
+A stale R1-era comment in `runner.ts` (it still claimed agents default to `yolo`) was corrected to the R6 reality — comment-only, no behaviour change.
+
+**Phase 1 complete:** AC-1 (boot gate proven, deterministic test) ✅ · AC-2 (doc verified correct + disposition recorded) ✅. One new test file, one CLI case, one comment fix — the verify-and-close shape held.

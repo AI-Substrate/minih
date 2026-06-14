@@ -68,3 +68,22 @@ The boot-gate-vs-inbox distinction T002 reserved a ≤1 clause for is already cl
 A stale R1-era comment in `runner.ts` (it still claimed agents default to `yolo`) was corrected to the R6 reality — comment-only, no behaviour change.
 
 **Phase 1 complete:** AC-1 (boot gate proven, deterministic test) ✅ · AC-2 (doc corrected — 1 companion-caught lane fix — + disposition recorded) ✅. One new test file, one CLI case, one comment fix, one doc lane fix — the verify-and-close shape held.
+
+---
+
+## Companion debrief (code-review-companion, runId `…07-39-33…-5100`)
+
+**Final verdict: APPROVE — 0 HIGH/CRITICAL, 1 MEDIUM (resolved).** Farewell envelope `result: completed`, `validated: true`, no validation errors (run #30; reviewed all 3 review-requests + the final range sweep). The companion ran in its own SDK session (read-only preset) and reviewed every commit live.
+
+**Findings reconciliation:**
+
+| ID | Sev | Finding | Disposition |
+|----|-----|---------|-------------|
+| (T001) | — | APPROVE, no findings — confirmed the seam test drives the real `compile()` release-default path and the CLI no-permissions repro; runner.ts comment-only; no scope creep. | — |
+| **F001** | MEDIUM | `permissions.md:89` named the wrong physical inbox lane (`outside`) for the `permission-error` signal; runner writes the `inside` lane. | **ADDRESSED INLINE** — fixed at `a7bcac5`; verified against `error-signal.ts:167` + the green CLI regression. |
+
+**magicWand (surfaced, not auto-filed):** *"Add a `coordination_status/finalize` MCP tool that derives task counts, findings, questions, unresolved requests, and a schema-valid draft farewell from the durable inbox/state ledger so companions don't reconstruct session accounting from prompt memory."* (target: coordination.) **This is plan 027 Phase 4** (`deriveCompanionLedger` + `coordination_status` MCP tool, #36/#32) — the companion independently re-derived that design. No new dossier needed; it strengthens the Phase 4 rationale.
+
+**Difficulty MH-001 (coordination, "annoying"):** the briefing promised `control:stop` after the final reply, but the stop was delayed (I was applying F001 inline), so the companion idled out and self-stopped via idle-budget, writing the farewell itself. Captured for the retro. Lesson: send `control:stop` promptly once the last commit is pinged, or don't promise an imminent stop while still iterating.
+
+**Deviation note:** because the companion self-stopped before my F001-verify ping (`a7bcac5`) landed, that ping went unprocessed — the fix was self-verified against source + the passing CLI test instead. The companion's review otherwise covered every Phase-1 commit, so a separate post-hoc review pass is redundant.

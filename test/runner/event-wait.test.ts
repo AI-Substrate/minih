@@ -10,6 +10,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { waitForAny } from '../../src/runner/event-wait.js';
+import { pollInboxLane } from '../../src/runner/inbox-poll.js';
 import type {
   NativeWatcher,
   WatchEventType,
@@ -613,5 +614,75 @@ describe('waitForAny — #40 inbox delivery parity (Phase 2)', () => {
 
     // Threw during the immediate pass, before any watcher/timeout was armed.
     expect(totalWatchers(index)).toBe(0);
+  });
+});
+
+describe('waitForAny ↔ inbox_list unacked parity (#40 AC-4)', () => {
+  it('no filter — wait_for_any and pollInboxLane surface the identical unacked set', async () => {
+    // m1 acked by an inside ack record; m2/m3 unacked. Seed BELOW the default
+    // limit (50) so neither surface truncates — we compare full sets, not
+    // coincidentally-equal truncations (V-3 cap contract).
+    writeInbox('outside', [
+      makeMessage('m1'),
+      makeMessage('m2'),
+      makeMessage('m3'),
+    ]);
+    writeInbox('inside', [
+      makeMessage('a1', 'ack', { sender: 'inside', ackOf: 'm1' }),
+    ]);
+
+    const index: WatcherIndex = new Map();
+    const waitResult = await waitForAny({
+      location: location(),
+      side: 'inside',
+      events: [{ kind: 'inbox.message' }],
+      waitMs: 200,
+      watchFactory: makeWatchFactory(index),
+    });
+    const waitIds = waitResult.events
+      .map((e) => (e.kind === 'inbox.message' ? e.data.message.id : ''))
+      .sort();
+
+    const pollResult = await pollInboxLane(location(), 'outside', {
+      unread: true,
+      waitMs: 0,
+      maxWaitMs: 30_000,
+    });
+    const pollIds = pollResult.messages.map((m) => m.id).sort();
+
+    expect(waitIds).toEqual(['m2', 'm3']);
+    expect(waitIds).toEqual(pollIds);
+  });
+
+  it('type filter — identical unacked set across both surfaces', async () => {
+    writeInbox('outside', [
+      makeMessage('q1', 'question'),
+      makeMessage('n1', 'note'),
+      makeMessage('q2', 'question'),
+    ]);
+    writeInbox('inside', []);
+
+    const index: WatcherIndex = new Map();
+    const waitResult = await waitForAny({
+      location: location(),
+      side: 'inside',
+      events: [{ kind: 'inbox.message', filter: { types: ['question'] } }],
+      waitMs: 200,
+      watchFactory: makeWatchFactory(index),
+    });
+    const waitIds = waitResult.events
+      .map((e) => (e.kind === 'inbox.message' ? e.data.message.id : ''))
+      .sort();
+
+    const pollResult = await pollInboxLane(location(), 'outside', {
+      unread: true,
+      waitForAny: ['question'],
+      waitMs: 0,
+      maxWaitMs: 30_000,
+    });
+    const pollIds = pollResult.messages.map((m) => m.id).sort();
+
+    expect(waitIds).toEqual(['q1', 'q2']);
+    expect(waitIds).toEqual(pollIds);
   });
 });

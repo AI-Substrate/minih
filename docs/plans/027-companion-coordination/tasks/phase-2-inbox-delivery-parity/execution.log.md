@@ -73,3 +73,11 @@ Added a `describe('waitForAny — #40 inbox delivery parity (Phase 2)')` block t
 | 2026-06-15 | T003 | insight | inbox-poll's lane parser is *stricter* than event-wait's old `readLaneSafe` (it also checks `sender===lane`, ts validity, ackOf/meta). Routing event-wait's read through `listUnackedVisible` adopts that strictness — safe because real peer-lane messages carry the matching `sender`, and the existing suite seeds them correctly. | Verified all existing inbox tests stay green; the one bad-sender artifact (AC-14, inside lane) is never read on the peer-lane path. | event-wait.ts, inbox-poll.ts |
 | 2026-06-15 | T003 | decision | Single-settle makes the old per-window "seen id" dedup set unnecessary — the first non-empty watcher read settles and tears down, so duplicate mtime ticks can't double-deliver. | Dropped the dedup set with the snapshot; relies on the `settled` guard. | event-wait.ts |
 
+### T004 — parity pin (AC-4) ✅
+
+Added `describe('waitForAny ↔ inbox_list unacked parity (#40 AC-4)')` to `event-wait.test.ts`:
+- **no filter** — seed 3 outside messages, ack one via an inside `ack`/`ackOf` record; assert `waitForAny`'s inbox set == `pollInboxLane('outside', {unread:true})`'s set == `{m2,m3}`.
+- **type filter** — `{types:['question']}` ⇒ `waitForAny` set == `pollInboxLane('outside', {unread:true, waitForAny:['question']})` == `{q1,q2}`.
+- **Cap pinned (V-3)** — seeds are below the default `limit` (50) so both surfaces return the full set; the assertion compares full sets, not truncations, so a future `limit` change can't silently drift parity.
+- Parity is structural (both call the shared `listUnackedVisible`); this test pins it so an edit to one surface can't diverge from the other. **Green** (5 matched / pass).
+

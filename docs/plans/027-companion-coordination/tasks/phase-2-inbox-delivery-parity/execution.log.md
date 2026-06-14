@@ -49,3 +49,27 @@ Deviation logged per Phase 1 pattern E (placement honesty): T002's code lands be
 |------|------|------|-----------|------------|------------|
 | 2026-06-15 | T002 | decision | Commit order: land T002 (refactor) first, then T001+T003 (the #40 fix) — keeps every commit green while preserving TDD RED-before-GREEN (event-wait untouched by T002, so T001 still fails for the documented reason). | Logged per Phase 1 pattern E (placement honesty). | tasks.md § Commit strategy |
 
+### T001 — RED regression (AC-3) ✅
+
+Added a `describe('waitForAny — #40 inbox delivery parity (Phase 2)')` block to `test/runner/event-wait.test.ts`:
+- **positive** — a peer message queued BEFORE the wait (no later fire) is returned by the immediate pass; asserts id + **body** + type (not just a count). Also asserts `totalWatchers===0` / `closeCalls===0` (the immediate settle armed nothing — V-2).
+- **negative guard (V-4)** — a pre-queued *non-matching* type with a `{types:['question']}` filter is NOT returned; falls through to a clean timeout.
+- **corrupt-lane (V-1)** — a torn outside lane at entry rejects with `EventWaitInboxCorruptError`, and `totalWatchers===0` (threw before registration).
+- **RED evidence** (against unfixed `event-wait.ts`): positive test failed at `result.wait.matched` (`expected true, got false`) — no immediate pass + snapshot suppression. Red for the right reason. (The corrupt-lane test was also red — current `snapshotInboxIds` swallows corruption and resolves instead of rejecting.)
+
+### T003 — rewrite the inbox.message branch onto the unread/ack model ✅
+
+`src/runner/event-wait.ts`:
+- **(a) immediate pass** — `collectImmediateInbox(opts)` runs at entry, returns already-queued unacked matches (mirrors `pollInboxLane`'s immediate read); settles `matched:true` if any.
+- **(b) watcher re-reads UNACKED** — the inbox.message watcher now calls `readUnackedPeer` (→ `listUnackedVisible(peer, {unread:true, waitForAny})`) instead of an entry id-snapshot. Delivery is now identical to `inbox_list`; a pre-acked message never re-wakes.
+- **(c) entry-snapshot deleted for inbox** — `snapshotInboxIds` removed; the dead `readLaneSafe`/`isInboxMessage` parsers removed (the inbox-poll parser is now the single source of truth via `listUnackedVisible`). `state.*` snapshots untouched.
+- **(d) short-circuit before registration (V-2)** — the immediate pass `return`s before any watcher/timeout is armed; proven by `totalWatchers===0` on the immediate-settle path.
+- **(e) corrupt-lane → typed error (V-1)** — `readUnackedPeer` maps `InboxPollError('INBOX_POLL_CORRUPT')` → `EventWaitInboxCorruptError`; no swallow-to-empty.
+- **state.* untouched** — the `state.self.changed` self-write-filter test (AC-13, the named regression anchor) + AC-16 pre-existing-state stay green.
+- **Evidence**: `npx tsc --noEmit` clean; `vitest` over event-wait + inbox-poll + wait-for-any-fs + tools-wait → **49/49 pass** (event-wait 20 incl. the 3 new #40 tests; inbox-poll 12; fs 2; tools-wait 15). No `wait.ts` change needed — `parseInboxFilter` already yields the wildcard (`filterTypes=null`).
+
+| Date | Task | Type | Discovery | Resolution | References |
+|------|------|------|-----------|------------|------------|
+| 2026-06-15 | T003 | insight | inbox-poll's lane parser is *stricter* than event-wait's old `readLaneSafe` (it also checks `sender===lane`, ts validity, ackOf/meta). Routing event-wait's read through `listUnackedVisible` adopts that strictness — safe because real peer-lane messages carry the matching `sender`, and the existing suite seeds them correctly. | Verified all existing inbox tests stay green; the one bad-sender artifact (AC-14, inside lane) is never read on the peer-lane path. | event-wait.ts, inbox-poll.ts |
+| 2026-06-15 | T003 | decision | Single-settle makes the old per-window "seen id" dedup set unnecessary — the first non-empty watcher read settles and tears down, so duplicate mtime ticks can't double-deliver. | Dropped the dedup set with the snapshot; relies on the `settled` guard. | event-wait.ts |
+

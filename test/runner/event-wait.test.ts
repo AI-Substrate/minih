@@ -538,3 +538,80 @@ describe('waitForAny — settlement race + filter (plan 014 T004)', () => {
     expect(totalWatchers(index)).toBe(0);
   });
 });
+
+describe('waitForAny — #40 inbox delivery parity (Phase 2)', () => {
+  it('AC-3 (#40) — a peer message queued BEFORE the wait is returned by the immediate pass', async () => {
+    // The #40 bug: the inbox.message branch snapshots ids at entry and only
+    // ever emits on a watcher fire, so a message already queued before the call
+    // (with no later write) is never delivered. Seed the peer lane, then wait
+    // with NO subsequent fire — the immediate pass must return it.
+    writeInbox('outside', [makeMessage('pre1', 'task')]);
+    const index: WatcherIndex = new Map();
+    const result = await waitForAny({
+      location: location(),
+      side: 'inside',
+      events: [{ kind: 'inbox.message' }],
+      waitMs: 200,
+      watchFactory: makeWatchFactory(index),
+    });
+
+    expect(result.wait.matched).toBe(true);
+    expect(result.wait.timedOut).toBe(false);
+    expect(result.events).toHaveLength(1);
+    expect(result.events[0].kind).toBe('inbox.message');
+    if (result.events[0].kind === 'inbox.message') {
+      // Assert the body, not just a count — RED-for-the-right-reason.
+      expect(result.events[0].data.message.id).toBe('pre1');
+      expect(result.events[0].data.message.body).toBe('body-pre1');
+      expect(result.events[0].data.message.type).toBe('task');
+    }
+    // Settle-before-registration (V-2 / T003(d)): the immediate pass short-circuits
+    // before any watcher or timeout is armed, so nothing was registered to leak.
+    expect(totalWatchers(index)).toBe(0);
+    expect(totalCloseCalls(index)).toBe(0);
+  });
+
+  it('AC-3 (#40) — immediate pass honours the type filter: a pre-queued non-matching type is NOT returned', async () => {
+    // Negative guard: a message is already queued but its type is filtered out,
+    // so the immediate pass must NOT settle — it falls through to a clean timeout.
+    writeInbox('outside', [makeMessage('pre1', 'note')]);
+    const index: WatcherIndex = new Map();
+    const result = await waitForAny({
+      location: location(),
+      side: 'inside',
+      events: [{ kind: 'inbox.message', filter: { types: ['question'] } }],
+      waitMs: 100,
+      watchFactory: makeWatchFactory(index),
+    });
+
+    expect(result.events).toHaveLength(0);
+    expect(result.wait.matched).toBe(false);
+    expect(result.wait.timedOut).toBe(true);
+    // It fell through to the watcher path, which is torn down on timeout.
+    expect(totalCloseCalls(index)).toBe(totalWatchers(index));
+  });
+
+  it('AC-3 (#40) — a torn peer lane at the immediate pass rejects with EventWaitInboxCorruptError', async () => {
+    // V-1: the immediate pass adds a synchronous lane read at entry. The old
+    // snapshotInboxIds SWALLOWED corruption (catch -> empty Set); the new read
+    // must surface a torn lane as a typed error, not resolve-as-empty.
+    const target = inboxLanePath(location(), 'outside');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    // A truncated final line with no trailing newline = torn lane.
+    fs.writeFileSync(target, '{"id":"torn","sender":"outside","type":"task"');
+    const index: WatcherIndex = new Map();
+
+    await expect(
+      waitForAny({
+        location: location(),
+        side: 'inside',
+        events: [{ kind: 'inbox.message' }],
+        waitMs: 200,
+        watchFactory: makeWatchFactory(index),
+      }),
+    ).rejects.toMatchObject({ name: 'EventWaitInboxCorruptError' });
+
+    // Threw during the immediate pass, before any watcher/timeout was armed.
+    expect(totalWatchers(index)).toBe(0);
+  });
+});

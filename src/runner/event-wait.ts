@@ -20,6 +20,7 @@ import {
   inboxLanePath,
   stateFilePath,
 } from './folder.js';
+import { InboxPollError, listUnackedVisible } from './inbox-poll.js';
 import type {
   EventEnvelope,
   EventKind,
@@ -73,9 +74,10 @@ export function waitForAny(opts: WaitForAnyOptions): Promise<WaitForAnyResult> {
   const startedAt = (opts.now ?? Date.now)();
   const collected: EventEnvelope[] = [];
 
-  // Snapshot each source at wait-entry so we only emit events for changes
-  // observed during the wait window.
-  const inboxIdSnapshot = snapshotInboxIds(opts);
+  // State sources snapshot-at-entry so we only emit on a change observed during
+  // the wait window. The inbox source does NOT snapshot — it uses the durable
+  // unread/ack model (the immediate pass + watcher below), so a message queued
+  // before the call is still delivered (#40).
   const peerStateSnapshot = snapshotState(opts, peerSide(opts.side));
   const selfStateSnapshot = snapshotState(opts, opts.side);
 
@@ -127,15 +129,31 @@ export function waitForAny(opts: WaitForAnyOptions): Promise<WaitForAnyResult> {
       settle(() => reject(error));
     };
 
-    // Register one watch per event entry. Duplicate kinds rejected at the MCP
-    // boundary; runner trusts caller to give us a clean list.
+    // Immediate pass (inbox.message only): deliver matches already queued at
+    // entry, mirroring pollInboxLane. Runs BEFORE any watcher/timeout is armed,
+    // so an immediate settle leaves nothing to leak (V-2). A torn peer lane here
+    // surfaces as EventWaitInboxCorruptError rather than the swallow-to-empty the
+    // old snapshot did (V-1).
+    try {
+      const immediate = collectImmediateInbox(opts);
+      if (immediate.length > 0) {
+        collected.push(...immediate);
+        completeWith(true);
+        return;
+      }
+    } catch (error) {
+      onError(error);
+      return;
+    }
+
+    // No immediate match — register one watch per event entry. Duplicate kinds
+    // rejected at the MCP boundary; runner trusts caller to give us a clean list.
     for (const entry of opts.events) {
       try {
         registerWatch(
           entry,
           opts,
           {
-            inboxIdSnapshot,
             peerStateSnapshot,
             selfStateSnapshot,
           },
@@ -159,7 +177,6 @@ export function waitForAny(opts: WaitForAnyOptions): Promise<WaitForAnyResult> {
 }
 
 interface Snapshots {
-  inboxIdSnapshot: Set<string>;
   peerStateSnapshot: SideState | null;
   selfStateSnapshot: SideState | null;
 }
@@ -175,33 +192,30 @@ function registerWatch(
   switch (entry.kind) {
     case 'inbox.message': {
       const peerLanePath = inboxLanePath(opts.location, peerSide(opts.side));
-      const filterTypes = entry.filter?.types
-        ? new Set(entry.filter.types)
-        : null;
+      const filterTypes = entry.filter?.types ?? null;
       const watcher = watchFileChanges(
         peerLanePath,
         () => {
+          // Re-read the peer lane's UNACKED matches (not an entry snapshot), so
+          // delivery is identical to inbox_list and a pre-acked message never
+          // re-wakes. Single-settle teardown means the first non-empty read wins.
           let messages: InboxMessage[];
           try {
-            messages = readLaneSafe(peerLanePath, peerSide(opts.side));
+            messages = readUnackedPeer(opts, filterTypes);
           } catch (error) {
             onError(error);
             return;
           }
-          const newOnes: EventEnvelope[] = [];
-          for (const m of messages) {
-            if (snapshots.inboxIdSnapshot.has(m.id)) continue;
-            if (filterTypes && !filterTypes.has(m.type)) continue;
-            // Mark as seen so subsequent fires within the same window don't
-            // re-emit (defensive against duplicate mtime ticks).
-            snapshots.inboxIdSnapshot.add(m.id);
-            newOnes.push({
-              kind: 'inbox.message',
-              ts: nowIso(opts),
-              data: { message: m },
-            });
-          }
-          if (newOnes.length > 0) emit(newOnes);
+          if (messages.length === 0) return;
+          emit(
+            messages.map(
+              (m): EventEnvelope => ({
+                kind: 'inbox.message',
+                ts: nowIso(opts),
+                data: { message: m },
+              }),
+            ),
+          );
         },
         {
           watchFactory: opts.watchFactory,
@@ -298,16 +312,42 @@ function nowIso(opts: WaitForAnyOptions): string {
   return new Date((opts.now ?? Date.now)()).toISOString();
 }
 
-function snapshotInboxIds(opts: WaitForAnyOptions): Set<string> {
-  // We snapshot the PEER lane (the lane this side reads). Self-writes never
-  // wake an inbox.message watch because the watcher is on the peer lane file.
-  const peerLanePath = inboxLanePath(opts.location, peerSide(opts.side));
+function collectImmediateInbox(opts: WaitForAnyOptions): EventEnvelope[] {
+  const envelopes: EventEnvelope[] = [];
+  for (const entry of opts.events) {
+    if (entry.kind !== 'inbox.message') continue;
+    const filterTypes = entry.filter?.types ?? null;
+    for (const m of readUnackedPeer(opts, filterTypes)) {
+      envelopes.push({
+        kind: 'inbox.message',
+        ts: nowIso(opts),
+        data: { message: m },
+      });
+    }
+  }
+  return envelopes;
+}
+
+/**
+ * Read the peer lane's UNACKED messages under the given type filter, via the
+ * shared inbox-poll helper so wait_for_any and inbox_list never drift. A torn /
+ * corrupt lane maps to EventWaitInboxCorruptError — the old snapshotInboxIds
+ * swallowed it; the immediate-pass read must surface it (V-1).
+ */
+function readUnackedPeer(
+  opts: WaitForAnyOptions,
+  filterTypes: readonly string[] | null,
+): InboxMessage[] {
   try {
-    const messages = readLaneSafe(peerLanePath, peerSide(opts.side));
-    return new Set(messages.map((m) => m.id));
-  } catch {
-    // Corrupt at entry → empty set; the watcher fire will surface the error.
-    return new Set();
+    return listUnackedVisible(opts.location, peerSide(opts.side), {
+      unread: true,
+      waitForAny: filterTypes ?? undefined,
+    }).messages;
+  } catch (error) {
+    if (error instanceof InboxPollError && error.code === 'INBOX_POLL_CORRUPT') {
+      throw new EventWaitInboxCorruptError(error.message);
+    }
+    throw error;
   }
 }
 
@@ -322,42 +362,6 @@ function snapshotState(
     // Corrupt at entry — surface only when the watcher fires (real change).
     return null;
   }
-}
-
-function readLaneSafe(filePath: string, lane: Side): InboxMessage[] {
-  if (!fs.existsSync(filePath)) return [];
-  const raw = fs.readFileSync(filePath, 'utf8');
-  if (raw === '') return [];
-  if (!raw.endsWith('\n')) {
-    throw new EventWaitInboxCorruptError(
-      `inbox lane ${lane} has a torn final line`,
-    );
-  }
-  const messages: InboxMessage[] = [];
-  const lines = raw.split('\n');
-  for (let i = 0; i < lines.length - 1; i++) {
-    const line = lines[i];
-    if (line.trim() === '') {
-      throw new EventWaitInboxCorruptError(
-        `inbox lane ${lane} contains an empty line at ${i + 1}`,
-      );
-    }
-    let value: unknown;
-    try {
-      value = JSON.parse(line);
-    } catch {
-      throw new EventWaitInboxCorruptError(
-        `inbox lane ${lane} contains malformed JSON at line ${i + 1}`,
-      );
-    }
-    if (!isInboxMessage(value)) {
-      throw new EventWaitInboxCorruptError(
-        `inbox lane ${lane} has malformed message at line ${i + 1}`,
-      );
-    }
-    messages.push(value);
-  }
-  return messages;
 }
 
 function readStateSafe(filePath: string, side: Side): SideState | null {
@@ -391,19 +395,6 @@ function statesEqual(a: SideState | null, b: SideState | null): boolean {
   // refactor that constructs state objects with dynamic / non-deterministic
   // key ordering would need a structural diff here instead.
   return JSON.stringify(a) === JSON.stringify(b);
-}
-
-function isInboxMessage(value: unknown): value is InboxMessage {
-  if (typeof value !== 'object' || value === null) return false;
-  const v = value as Record<string, unknown>;
-  return (
-    typeof v.id === 'string' &&
-    (v.sender === 'inside' || v.sender === 'outside') &&
-    typeof v.type === 'string' &&
-    typeof v.subject === 'string' &&
-    typeof v.body === 'string' &&
-    typeof v.ts === 'string'
-  );
 }
 
 function isSideState(value: unknown, side: Side): value is SideState {

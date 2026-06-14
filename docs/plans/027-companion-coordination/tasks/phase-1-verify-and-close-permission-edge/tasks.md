@@ -93,7 +93,7 @@ flowchart TD
         F1["src/runner/permissions/coord-write-precondition.ts (read) + runner.ts:644-651 comment fix"]:::completed
         F2["coord-write-release-default.e2e.test.ts (NEW — compile()→gate seam, 5 tests)"]:::completed
         F3["test/cli/run-coord-write-deny.test.ts (+1 release-default case)"]:::completed
-        F4["docs/how/companion-mode.md (verified — already correct, no edit)"]:::completed
+        F4["companion-mode.md (verified correct) + permissions.md:89 lane fix (companion F001)"]:::completed
         F5["execution.log.md (disposition note)"]:::completed
     end
 
@@ -184,6 +184,8 @@ _Seeded with tasks-stage grounding (2026-06-15); extended during implementation 
 
 | 2026-06-15 | T001 | decision | `runner.ts:644-651` R1 comment still claimed agents default to `yolo`, contradicting line 671 (`releaseDefault: { preset: minihReleaseDefault }` = `restricted`). The exact GF-5 artifact that misled the plan. | Rewrote the comment to R6 reality (comment-only, zero behaviour change). Placed the new seam test in a dedicated `.e2e.test.ts` — NOT the pure-unit file (its docstring forbids `compile()` coupling). | `runner.ts:671`; `isNonDefaultPolicy:1926` |
 | 2026-06-15 | T001 | insight | No test crossed the `compile()`→boot-gate seam: compile tests never feed the gate, gate tests synthesise the policy, CLI drove via frontmatter. | New `.e2e` file drives the real release-default resolution through the gate (8 tests green incl. a premise guard that reddens if the default re-flips). | GF-5; `compile.test.ts`; `coord-write-precondition.test.ts:16` |
+
+| 2026-06-15 | T002 | gotcha | Companion F001 (MEDIUM): `permissions.md:89` listed the 5-signal `permission-error` message under `inbox/outside/` but the runner writes it to the **inside** lane (`error-signal.ts:167`, `inboxLanePath(location,'inside')`; the writer is misleadingly named `fireOutsideInboxSignal`). My T002 sweep checked boot-timing wording, not the lane path. | Fixed `permissions.md:89` → `inbox/inside/`; revised the "no edit needed" disposition. Caught by the live code-review-companion. | F001; `error-signal.ts:167`; CLI test `:192` |
 
 **Types**: `gotcha` | `research-needed` | `unexpected-behavior` | `workaround` | `decision` | `debt` | `insight`
 

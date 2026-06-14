@@ -45,6 +45,8 @@ Repo sweep (`grep -i 'e205|permission-error|inbox' docs/how/companion-mode.md`):
 
 The boot-gate-vs-inbox distinction T002 reserved a ≤1 clause for is already cleanly handled (boot refusal stated in both docs; the inbox message correctly framed as signal-among-five in permissions.md). Adding a clause would over-explain a doc that correctly delegates → recorded "no edit," per the dossier's instruction not to invent a change. The dropped-Phase-0 "(contract-phrase check from 0.4)" criterion never lived in the doc (it was a plan task criterion) — nothing to strike here.
 
+**Correction (companion F001, MEDIUM — applied):** the "no edit needed" verdict held for `companion-mode.md` and for the *boot-timing* wording — but the code-review-companion's final sweep caught a stale **lane path** in `permissions.md:89`. Signal #4 of the 5-signal protocol listed the `permission-error` message at `inbox/outside/messages.ndjson`, whereas the runner writes it to the **inside** lane (`error-signal.ts:167` → `inboxLanePath(location, 'inside')`; the function is *named* `fireOutsideInboxSignal` for the operator view, but the physical file is `inbox/inside/`), which the CLI regression already asserts. Fixed `permissions.md:89` → `inbox/inside/messages.ndjson` (+ a note that operators read it via `minih outside inbox list`). So T002 is **one small doc fix**, not "no edit" — a real catch that keeps the #25 close-comment honest.
+
 ---
 
 ## T003 — #25 disposition (close-comment summary, AC-2)
@@ -61,8 +63,8 @@ The boot-gate-vs-inbox distinction T002 reserved a ≤1 clause for is already cl
 > - `test/runner/permissions/coord-write-release-default.e2e.test.ts` (5 tests) — drives a *real* `compile()` release-default resolution → `restricted` / `presetSource: 'release-default'` / `write: deny`, then through `assertCoordWriteAllowed` → throws E205; plus the bare-fallback path, the grandfathered-yolo write-allow asymmetry, and a premise guard that reddens if the default is ever re-flipped.
 > - `test/cli/run-coord-write-deny.test.ts` case `(a-release-default)` — a zero-permissions coord agent run through the full CLI → E205 envelope, `Resolved from: release-default`, `run.json` `permissions.presetSource: 'release-default'`, exit 126. The pre-existing case `(a)` covers the full 5-signal denial (events.ndjson, run.json, inside-state, inside-inbox `permission-error`, exit 126) via the frontmatter path.
 >
-> **Docs:** `companion-mode.md` and `permissions.md` already describe E205 accurately as a **boot-time refusal** (with the inbox `permission-error` message correctly framed as one of five signals fired *after* the refusal). No product-doc change was required — the "described as an inbox message" concern originated only in this plan's own spec/research, not on disk.
+> **Docs:** `companion-mode.md` describes E205 accurately as a **boot-time refusal** — no change needed. `permissions.md` needed one small correction (the code-review-companion caught that the 5-signal protocol listed the `permission-error` message under `inbox/outside/` when the runner writes it to the **inside** lane — `permissions.md:89` fixed). The boot-timing wording was always correct; the "described as an inbox message" concern from this plan's spec/research did not match disk.
 
 A stale R1-era comment in `runner.ts` (it still claimed agents default to `yolo`) was corrected to the R6 reality — comment-only, no behaviour change.
 
-**Phase 1 complete:** AC-1 (boot gate proven, deterministic test) ✅ · AC-2 (doc verified correct + disposition recorded) ✅. One new test file, one CLI case, one comment fix — the verify-and-close shape held.
+**Phase 1 complete:** AC-1 (boot gate proven, deterministic test) ✅ · AC-2 (doc corrected — 1 companion-caught lane fix — + disposition recorded) ✅. One new test file, one CLI case, one comment fix, one doc lane fix — the verify-and-close shape held.

@@ -86,8 +86,9 @@ When the SDK requests permission and the policy says `deny`:
      `permissionError` payload
    - `state/inside.json` (best-effort, coordinated only) — set to
      `status: 'error'` with payload
-   - `inbox/outside/messages.ndjson` (best-effort, coordinated only) —
-     `permission-error` typed message
+   - `inbox/inside/messages.ndjson` (best-effort, coordinated only) —
+     `permission-error` typed message (written to the inside lane by
+     `fireOutsideInboxSignal`; operators read it via `minih outside inbox list`)
    - Exit code `126` (POSIX "permission denied")
 
 The denial is **terminal** — the run stops immediately. There is no

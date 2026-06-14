@@ -4,10 +4,10 @@
   "slug": "companion-coordination",
   "plan_dir": "docs/plans/027-companion-coordination",
   "mode": "Full",
-  "cursor": "p2",
-  "recommended_next": "p2",
-  "now": "Phase 1 (#25) COMPLETE — verify-and-close shipped with the companion. Live release-default→E205 characterisation test (8/8 green: new compile()→gate .e2e file + CLI no-permissions repro case), stale runner.ts 'yolo default' comment fixed, permissions.md inbox-lane fix (companion F001, MEDIUM), #25 disposition recorded. Companion verdict APPROVE, 0 HIGH/CRITICAL. Pre-implement boot was degraded/SLOW (proceeded); SUGG-001+COORD-001 buffered for the retro.",
-  "next": "Phase 2 (#40) — inbox delivery parity (CS-3): export listUnackedVisible from inbox-poll, unify wait_for_any inbox.message on the unread/ack model, wildcard wake, cleanup re-entry guard. Generate the Phase 2 tasks dossier (stage 5).",
+  "cursor": "p3",
+  "recommended_next": "p3",
+  "now": "Phase 2 (#40) DONE — implemented WITH the live companion (5 commits f86a0b9..812e468). Exported listUnackedVisible from inbox-poll; unified event-wait's inbox.message branch on the unread/ack model (immediate pass + unacked watcher), with the corrupt-lane throw (V-1 → EventWaitInboxCorruptError, no swallow) and settle-before-registration short-circuit (V-2) both pinned RED→GREEN; inbox_list parity (AC-4); wildcard wake runner+MCP (AC-5); cleanup splice-and-close re-entry guard + real-fs.watch close-count race (T006). just fft green; coordination suite 68/68; one unrelated agent-pack flake cleared on re-run. Companion: 0 findings (clean APPROVE-equivalent), magicWand independently re-derived Phase 4.",
+  "next": "Phase 3 (#27/#31) tasks (stage 5): table the State-vocabulary coherence dossier — verify/relocate the per-pack inside-state schema (root → preferred state/), correct its stale 'not enforced' description, pin doctor = no drift. Verify-and-close shape (KF01: the pack already ships the schema); depends on None. A /compact seam is natural first.",
   "_comment": "Adopted into guided bookkeeping 2026-06-14 (stages 1a/1b/2c + post-spec backpressure were direct jumps). Architect ran 2026-06-14: plan READY, 7 phases (0 optional backpressure + 1-6 issue clusters) locked; the assumed 'build' placeholder is now 7 known phase nodes. validate-v2 ran (3 agents: coherence READY, thesis/forward-compat tightenings applied inline). Tasks stage ran 2026-06-14 for Phase 0: 8-task dossier (fake-adapter seam + contract-phrase doctor check), discovered the real adapter construction site is sdk-runtime.ts:105 (not index.ts) and the contract-phrase check must be warn-only until Phase 6 reconciles the still-drifted docs. Router IS installed → backpressure on spine + plan-complete seam shown.",
   "nodes": [
     {
@@ -135,8 +135,15 @@
       "type": "phase",
       "phase": 2,
       "label": "Phase 2 · Inbox delivery parity (#40)",
-      "status": "known",
-      "note": "CS-3. Export listUnackedVisible from inbox-poll; unify event-wait inbox.message branch on unread/ack; wildcard wake; cleanup re-entry guard.",
+      "status": "done",
+      "command": "/the-flow 6 implement --plan \"docs/plans/027-companion-coordination/companion-coordination-plan.md\" --phase \"Phase 2: Inbox delivery parity (#40)\" --companion",
+      "ran_at": "2026-06-15T10:00Z",
+      "user_input": "implement with companion",
+      "note": "CS-3, implemented WITH the companion. 5 commits f86a0b9..812e468: T002 export listUnackedVisible from inbox-poll (new ListFilterOptions; pollInboxLane re-pointed, filter-chain byte-unchanged); T001+T003 the #40 fix — event-wait inbox.message branch unified on inbox-poll's unread/ack model (immediate pass returns pre-queued unacked + short-circuits before registration = V-2; watcher re-reads unacked via listUnackedVisible; torn lane → EventWaitInboxCorruptError = V-1, no swallow; dead snapshotInboxIds/readLaneSafe/isInboxMessage removed); T004 wait_for_any↔inbox_list parity pin (cap contract = V-3); T005 wildcard wake runner+MCP + durable-unread ack-loop; T006 cleanup splice-and-close re-entry guard + real-fs.watch close-count==N race. state.* watches untouched. AC-3/4/5/17 met (unit-level; live e2e stays dogfood — Phase 0's fake-adapter sensor was dropped). Pre-implement boot degraded (known doctor+npm-audit baseline; lint/typecheck/build clean) → proceeded. just fft green; coordination suite 68/68; one unrelated agent-pack/extractor flake cleared on re-run (45/45 in isolation). Companion (run …918Z-e4d5): briefed once, pinged at all 5 commits + drain → 0 findings, clean APPROVE-equivalent summary (explicitly checked lane direction + corrupt-lane path); magicWand independently re-derived Phase 4 (coordination_status ledger tool) — same as Phase 1. Observe buffer holds DL-001 (extractor flake) + SUGG-002 (fft lint-before-format) for plan-complete drain.",
+      "artifacts": [
+        "tasks/phase-2-inbox-delivery-parity/tasks.md",
+        "tasks/phase-2-inbox-delivery-parity/execution.log.md"
+      ],
       "next": ["p3"]
     },
 

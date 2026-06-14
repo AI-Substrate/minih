@@ -2,7 +2,7 @@
 # Flight plan — companion-coordination
 
 **Plan**: companion-coordination · **Mode**: Full · **Phases**: 6 (1–6; Phase 0 dropped after validate-v2)
-**Rail**: `[the-flow] ◆─◆─◆─[◆─◇─◇─◇─◇─◇]─◇`   ·   **now**: Phase 1 (#25) complete · **next**: Phase 2 (#40) tasks
+**Rail**: `[the-flow] ◆─◆─◆─[◆─◆─◇─◇─◇─◇]─◇`   ·   **now**: Phase 2 (#40) DONE — companion clean, fft green · **next**: Phase 3 (#27/#31) tasks
 
 ```mermaid
 flowchart TD
@@ -19,7 +19,7 @@ flowchart TD
     S --> BP["Backpressure Check · /eng-harness-flow --event post-spec"]:::harness --> PL[Plan]:::done
     PL --> P1[Phase 1 · Verify-and-close #25 · DONE — gate proven, docs fixed, companion APPROVE]:::done
     PL -.->|dropped| P0["🚫 Phase 0 · Establish Backpressure · DROPPED — Sensor B → P6"]:::assumed
-    P1 --> P2[Phase 2 · Inbox delivery parity #40 · next]:::known
+    P1 --> P2[Phase 2 · Inbox delivery parity #40 · DONE — 5 commits, fft green, suite 68/68, companion APPROVE]:::done
     P2 --> P3[Phase 3 · State-vocabulary #27/#31]:::known
     P3 --> P4[Phase 4 · Ledger primitive #36/#32]:::known
     P4 --> P5[Phase 5 · Idle policy + drain #35]:::known
@@ -51,8 +51,12 @@ flowchart TD
     UP1a -.- P1
     UP1b>"🗣 implement please with companion"]:::said
     UP1b -.- P1
+    UP2a>"🗣 prepare the phase and run the validator"]:::said
+    UP2a -.- P2
+    UP2b>"🗣 implement with companion"]:::said
+    UP2b -.- P2
 ```
 
 **Legend**: 🟩 done · 🟧 in progress · 🟦 known future (designed) · ⬜╴assumed future (dashed) · 🟨 🗣 verbatim user input · 🟪 harness seams (violet — routed via `/eng-harness-flow`)
 
-_Generated from `the-flow.json`. **Phase 1 (#25) is COMPLETE — verify-and-close shipped with the live `code-review-companion`.** AC-1: a new `.e2e` characterisation test drives a real `compile()` release-default resolution (`restricted`/write-deny) through the FX008 boot gate to **E205**, plus a CLI no-permissions repro case — **8/8 targeted tests green**; the stale `runner.ts` "yolo default" comment was corrected to the R6 reality. AC-2: `companion-mode.md` already said "at boot" (no edit); the companion caught a real **MEDIUM (F001)** — `permissions.md` named the wrong physical inbox lane for the `permission-error` signal (`outside`→`inside`) — fixed; the #25 close-comment disposition is recorded. **Companion verdict APPROVE, 0 HIGH/CRITICAL**; its magicWand independently re-derived **Phase 4** (`coordination_status`/`deriveCompanionLedger`). The pre-implement boot came up `degraded`/SLOW (a biome format diff in this very flight-plan JSON — formatted, then proceeded) and the phase-end seam buffered SUGG-001 + COORD-001/MH-001 for the retro. Commits: `5ab51e1` · `57644c7` · `a7bcac5` · `181fc19`. Next: **Phase 2 (#40)** — inbox delivery parity — generate its tasks dossier (stage 5)._
+_Generated from `the-flow.json`. **Phase 1 (#25) COMPLETE** (verify-and-close with the live companion; AC-1 gate proven by a release-default→E205 `.e2e` test 8/8 green, stale `runner.ts` comment fixed, companion-caught `permissions.md` lane fix F001, APPROVE 0 HIGH/CRITICAL; commits `5ab51e1`·`57644c7`·`a7bcac5`·`181fc19`). **Phase 2 (#40) COMPLETE** — implemented with the live companion (5 commits `f86a0b9`·`ff0a1f2`·`95be231`·`eff457e`·`812e468`): exported `listUnackedVisible` from inbox-poll and unified `event-wait`'s `inbox.message` branch on the unread/ack model (immediate pass + unacked watcher) so a message queued **before** the call is now delivered (#40); the two validate-v2 seams shipped as explicit RED criteria — V-1 torn-lane → `EventWaitInboxCorruptError` (no swallow), V-2 immediate-pass short-circuits before registration; `inbox_list` parity (AC-4), wildcard wake runner+MCP (AC-5), `cleanup()` splice-and-close re-entry guard + real-fs.watch close-count race (T006). `just fft` green; coordination suite **68/68**; one unrelated `agent-pack/extractor` flake cleared on re-run. Companion: **0 findings** (clean APPROVE-equivalent — it explicitly checked the lane direction + corrupt-lane path); its **magicWand independently re-derived Phase 4** (the `coordination_status` ledger tool), same as Phase 1's companion. The original tasks dossier (`tasks/phase-2-inbox-delivery-parity/tasks.md`) was a 6-task TDD dossier — export `listUnackedVisible` from `inbox-poll`; unify `event-wait`'s `inbox.message` branch onto the unread/ack model (immediate pass + unacked watcher); `inbox_list` parity; wildcard wake; `cleanup()` re-entry guard. `validate-v2` (4 agents) returned **Source-Truth SOUND · Cross-Reference ALIGNED · Forward-Compat COMPATIBLE · Completeness 5 gaps** — all folded into the table. The standout catch: the new synchronous immediate-pass opens a **corrupt-lane throw path** (V-1, HIGH — today's `snapshotInboxIds` swallows corruption) and a **settle-before-registration leak** (V-2), now explicit RED criteria; and a misleading "Phase 4/5 reuse this export" note was corrected (those derive over raw `folder.ts` lanes). Source claims confirmed line-by-line (snapshot bug `:78`/`:193`; `listVisible` private `:135-171`). Next: **Phase 3 tasks** (stage 5) — table the State-vocabulary coherence (#27/#31) dossier: verify/relocate the per-pack inside-state schema (root → preferred `state/`), correct its stale "not enforced" description, pin `doctor` = no drift. Verify-and-close shape (KF01: the pack already ships the schema); depends on None. A `/compact` seam is natural first._

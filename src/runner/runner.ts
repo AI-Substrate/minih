@@ -644,11 +644,14 @@ export async function runAgent(
     // Plan 018 R1 — compile permissions policy. Resolution chain per AC24:
     // frontmatter → sidecar lockedDefault → env → release default constant.
     //
-    // R1 keeps backward-compat: agents without explicit `permissions:` get
-    // `releaseDefault.preset = 'yolo'` and behave exactly as before. The
-    // runtime permission handler is only constructed when the resolved
-    // policy is *non-yolo*; un-migrated agents fall through to the
-    // adapter's built-in `approveAll`.
+    // Since Plan 018 R6 the release default is `restricted` (write-deny),
+    // not `yolo` (see presets.ts `minihReleaseDefault`). Grandfathered
+    // installs keep `yolo` via a sticky sidecar `lockedDefault`; a *new*
+    // agent without explicit `permissions:` resolves to `restricted` here.
+    // A runtime permission handler is built for any non-yolo policy
+    // (`isNonDefaultPolicy`); only pure-yolo agents fall through to the
+    // adapter's built-in `approveAll`. For coordination-enabled agents a
+    // write-deny resolution trips the FX008 boot gate (E205) just below.
     const sidecarPolicy = readSidecarPermissions(definition.dir);
     const envPolicy = readEnvPermissions();
     // Plan 018 R2 + companion F005 — CLI `--permissions <preset>` overrides

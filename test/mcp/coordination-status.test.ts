@@ -170,3 +170,70 @@ describe('coordination_status idle budget (AC-12)', () => {
     expect(sc?.idleBudgetSec).toBe(1800);
   });
 });
+
+/**
+ * Plan 027 Phase 6 — AC-14 / T001. The self-discovery trio. `coordination_status`
+ * returns `allowedStates` (the per-pack inside-state enum, resolved from the agent
+ * ROOT path per PIC-1 — NOT `state/`, which is install-denied) alongside the
+ * already-present `coordinationMode` + `idleBudgetSec`, so a coordinated agent
+ * learns all three in ONE call.
+ */
+describe('coordination_status self-discovery trio (AC-14)', () => {
+  const COMPANION_ENUM = [
+    'idle',
+    'reading',
+    'reviewing',
+    'reporting',
+    'blocked',
+    'stopping',
+  ];
+
+  function seedRootSchema(content: string): void {
+    // PIC-1: the per-pack schema lives at the agent ROOT, not under state/.
+    fs.writeFileSync(
+      path.join(context.agentDir, 'inside-state.schema.json'),
+      content,
+    );
+  }
+
+  function writeBudget(idleBudgetMs: number): void {
+    fs.writeFileSync(
+      path.join(context.runDir, 'run.json'),
+      `${JSON.stringify(
+        {
+          schemaVersion: 1,
+          slug: context.agentSlug,
+          runId: context.runId,
+          budgets: { idleBudgetMs },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+  }
+
+  it('returns allowedStates resolved from the per-pack schema at the agent ROOT (PIC-1) — the trio in one call', () => {
+    seedRootSchema(
+      `${JSON.stringify({
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        type: 'object',
+        properties: { status: { type: 'string', enum: COMPANION_ENUM } },
+      })}\n`,
+    );
+    writeBudget(120_000);
+
+    const sc = coordinationStatus(context).structuredContent;
+
+    // The self-discovery trio, all in ONE call:
+    expect(sc?.allowedStates).toEqual(COMPANION_ENUM);
+    expect(sc?.coordinationMode).toBe('disabled');
+    expect(sc?.idleBudgetSec).toBe(120);
+  });
+
+  it('falls back to empty allowedStates when the resolved schema cannot be parsed', () => {
+    // Resolver finds the root file, but it is unparseable → default [] (T003).
+    seedRootSchema('{ not valid json');
+    const sc = coordinationStatus(context).structuredContent;
+    expect(sc?.allowedStates).toEqual([]);
+  });
+});

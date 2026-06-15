@@ -1,6 +1,4 @@
 import * as fs from 'node:fs';
-import * as path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 import { coordinationRunLocation } from '../../runner/folder.js';
@@ -14,10 +12,7 @@ import {
 import type { InsideState, Side, SideState } from '../../runner/types.js';
 import type { McpServerContext } from '../context.js';
 import { jsonResult, McpToolError, type McpToolResult } from '../types.js';
-
-const DEFAULT_INSIDE_STATE_SCHEMA = fileURLToPath(
-  new URL('../../schemas/inside-state.json', import.meta.url),
-);
+import { insideStateSchemaPath } from './inside-state-schema.js';
 
 export interface StateGetOutput {
   state?: SideState;
@@ -167,28 +162,6 @@ function validateInsideState(
     'MCP_INVALID_ARGUMENT',
     'state does not match inside state schema',
   );
-}
-
-/**
- * Resolves the inside-state JSON schema path with 3-level fallback:
- *   1. `<agentDir>/state/inside-state.schema.json` — preferred convention
- *      (groups state-related files under `state/`, matches Phase 2 view layout).
- *   2. `<agentDir>/inside-state.schema.json` — legacy fallback
- *      (preserves `coordination-loop-validator` and any other coordinated agent
- *      that pre-dates the `state/` convention).
- *   3. `DEFAULT_INSIDE_STATE_SCHEMA` — built-in default
- *      (preserves agents that ship no inside-state schema at all).
- */
-function insideStateSchemaPath(context: McpServerContext): string {
-  const preferred = path.join(
-    context.agentDir,
-    'state',
-    'inside-state.schema.json',
-  );
-  if (fs.existsSync(preferred)) return preferred;
-  const legacy = path.join(context.agentDir, 'inside-state.schema.json');
-  if (fs.existsSync(legacy)) return legacy;
-  return DEFAULT_INSIDE_STATE_SCHEMA;
 }
 
 function requireNonEmptyString(value: unknown, field: string): string {

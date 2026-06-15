@@ -11,6 +11,7 @@
  * `minih companion status` CLI verb uses, so the two surfaces never diverge.
  */
 
+import * as fs from 'node:fs';
 import {
   buildDraftFarewell,
   type CompanionDraftFarewell,
@@ -22,6 +23,7 @@ import {
 } from '../../runner/index.js';
 import type { McpServerContext } from '../context.js';
 import { McpToolError, type McpToolResult } from '../types.js';
+import { insideStateSchemaPath } from './inside-state-schema.js';
 
 export interface CoordinationStatusResult {
   /** Slug of the agent this MCP server is serving. */
@@ -39,6 +41,36 @@ export interface CoordinationStatusResult {
    * `idleBudgetSec` (not `*Ms`) is the Phase-6 self-discovery trio name.
    */
   idleBudgetSec: number;
+  /**
+   * Plan 027 Phase 6 (#29) — AC-14. The per-pack inside-state status enum,
+   * resolved via the shared mcp resolver from the agent ROOT (PIC-1). With
+   * `coordinationMode` + `idleBudgetSec` this completes the self-discovery trio
+   * in ONE call: the coordinated agent learns which states it may transition
+   * into without firing a request. `[]` when no schema resolves or it carries no
+   * `status` enum.
+   */
+  allowedStates: string[];
+}
+
+/**
+ * Reads the per-pack inside-state status enum via the shared mcp resolver
+ * (T002), defaulting to `[]` when the schema can't be resolved/parsed or has no
+ * `status` enum. Robust-by-design: never throws — `allowedStates` is advisory
+ * self-discovery, not a validation gate (validation stays in `state.ts`).
+ */
+function resolveAllowedStates(context: McpServerContext): string[] {
+  try {
+    const schema = JSON.parse(
+      fs.readFileSync(insideStateSchemaPath(context), 'utf8'),
+    ) as { properties?: { status?: { enum?: unknown } } };
+    const values = schema.properties?.status?.enum;
+    if (Array.isArray(values) && values.every((v) => typeof v === 'string')) {
+      return values;
+    }
+    return [];
+  } catch {
+    return [];
+  }
 }
 
 export function coordinationStatus(
@@ -66,6 +98,7 @@ export function coordinationStatus(
     ledger,
     draftFarewell: buildDraftFarewell(ledger),
     idleBudgetSec: Math.round(readIdleBudgetMs(context.runDir) / 1000),
+    allowedStates: resolveAllowedStates(context),
   };
 
   return {

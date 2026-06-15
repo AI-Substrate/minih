@@ -69,4 +69,12 @@ Decision: derive over **raw `folder.ts` lanes** (PIC-A), reusing only the unread
 - **Gotcha (T005)**: `server.test.ts` spawns the **built** stdio server (`buildInsideMcpServerConfig` → `dist/`), so it returned 8 tools until `npm run build` rebuilt dist (PIC-F applies to the integration server test too, not just the CLI). Rebuilt → 9.
 - **Evidence**: 43/43 across `companion-ledger` + `types` + `coordination-status` + `coordination-contract` + `server-dispatch` + `server` (real JSON-RPC manifest now lists 9). `tsc --noEmit` exit 0; biome clean.
 
+### T006 — `minih companion status [--json]` CLI verb (4.5)
+
+- New `src/cli/commands/companion.ts` — `registerCompanionCommand(program)` (parent `companion` + child `status <slug>`, mirrors `commands/runs.ts`). Over the **same** `deriveCompanionLedger` (cli→runner, legal).
+- `--run <id>` explicit, else defaults to the **newest run dir** under `agents/<slug>/runs` (lexical sort = chronological — a status snapshot wants the most recent run; `resolveRun`'s active/ambiguous semantics are for attach/view, not a read-only ledger). `--json` suppresses the human stderr table.
+- Envelope: `formatSuccess('companion.status', { slug, runId, ledger, draftFarewell })` → stdout. Unknown run → `formatError(… RUN_NOT_FOUND/E171)`; torn lane → `INBOX_CORRUPT/E148`.
+- Registered in `src/cli/index.ts`.
+- **Evidence**: 3/3 CLI integration tests against **dist/** (PIC-F) — conforming envelope, default-latest picks the newer run, E171 on unknown. `tsc` exit 0; biome clean; `npm run build` exit 0.
+
 _(Detailed per-task entries appended below as work lands.)_

@@ -15,7 +15,7 @@
         "blocked",
         "stopping"
       ],
-      "description": "Lifecycle status. Documentation/intent — minih runtime currently validates output-schema.json and the shared outside-state.schema.json, but inside-state validation is not yet enforced. The agent prompt teaches the agent to use these statuses; runtime drift is detectable but not auto-rejected."
+      "description": "Lifecycle status. The minih MCP runtime validates every state_transition and state_set against this enum: an out-of-enum status is rejected with MCP_INVALID_ARGUMENT (see validateInsideState in src/mcp/tools/state.ts). The agent prompt teaches these statuses; prompt-vs-enum drift is additionally flagged at authoring time by `minih doctor` (prompt-state-vocabulary-drift)."
     },
     "data": {
       "type": "object",

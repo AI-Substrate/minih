@@ -28,3 +28,16 @@ RED→GREEN, committed as one unit (the RED test → resolver extraction → GRE
 - **Domain**: intra-mcp only (mcp→mcp); doctor keeps its own cli-domain resolver (untouched). PIC-1 root path honored; no `coordinationMode` widening.
 
 ---
+
+## T004–T005 — Sensor B: `contract-phrase-drift` doctor check (AC-15 sensor)
+
+RED→GREEN, committed as one unit.
+
+- **T004 (RED)**: new `test/cli/doctor-contract-phrase.test.ts` (mirrors `doctor-state-vocabulary.test.ts` — spawns the built CLI, reads the JSON envelope). A companion-shaped fixture + **3 stale sub-cases** — (1) `output-schema.json` enum drops `no_engagement` while the prompt keeps it; (2) prompt drops the findings-home wording; (3) inside-state description reverts to "not yet enforced" — each → `'fail'`; clean fixture **and the real `code-review-companion` pack** → `'pass'`. Confirmed RED (5 failed — check absent).
+- **T005 (GREEN)**: `checkContractPhraseDrift(promptContent, agentDir)` in `doctor.ts`, mirroring `checkPromptStateVocabularyDrift`; pushed into `checks[]` inside `if (coordination.enabled)`. Returns `'fail'` on drift (promoted from `'warning'`), `'pass'` clean, `'skip'` when no contract surface present.
+- **Design decision (Discoveries)**: assertion 1 = `no_engagement` **parity** (present in BOTH prompt + enum, or NEITHER) — NOT a blanket "must include", so `demo-companion` (exitReason enum without `no_engagement`, no findings) passes. Assertions 2/3 scoped to the companion's contract shape (findings array / per-pack schema desc). All real coordinated agents pass or skip.
+- **Pack reconciliation**: fixed the companion prompt's farewell-envelope **example** (line 282) to include `no_engagement` — internal consistency with its own output-schema enum + prose (the exit-reason contract phrase Sensor B guards).
+- **Evidence**: `tsc --noEmit` clean; build OK; `vitest` doctor-contract-phrase (5) + doctor-state-vocabulary (14) = **19 passed**; **`minih doctor` exits 0** on the real tree (T005 done-when ✓). biome clean.
+- **Domain**: cli-internal; doctor keeps its own cli resolver (no mcp import — `mcp ↔ cli` illegal). **Tool-count drift is NOT scanned here** (recon row 5) — that is T006/T007 + the doctor pass.
+
+---

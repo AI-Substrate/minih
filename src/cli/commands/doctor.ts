@@ -180,6 +180,7 @@ export function registerDoctorCommand(program: Command): void {
 
         if (coordination.enabled) {
           checks.push(checkPromptStateVocabularyDrift(content, dir));
+          checks.push(checkContractPhraseDrift(content, dir));
         }
 
         agentResults.push({ slug: entry.name, checks });
@@ -684,6 +685,125 @@ function checkPromptStateVocabularyDrift(
     status: 'warning',
     message: `prompt.md mentions state value(s) ${drifted.map((v) => `'${v}'`).join(', ')} not in ${schemaRel} enum (${enumValues.map((v) => `'${v}'`).join(', ')}). state_transition calls to these values will be silently rejected.`,
   };
+}
+
+/**
+ * Plan 027 Phase 6 — Sensor B. Contract-phrase drift for coordinated companions.
+ *
+ * Mirrors checkPromptStateVocabularyDrift's per-agent shape (prompt content +
+ * agent dir → CheckResult). Guards three PACK-INTERNAL contract phrases the docs
+ * reconciled this phase, returning 'fail' on drift (promoted from 'warning'
+ * because the docs it guards are reconciled in this same phase):
+ *
+ *   1. exit-reason vocabulary — `no_engagement` (the run-timeout backstop reason
+ *      the runner emits) must appear in BOTH the prompt and output-schema.json's
+ *      `session.exitReason` enum, or NEITHER. Present-in-one-only = drift.
+ *   2. findings-home wording — for review companions (output-schema declares a
+ *      `findings` array), the prompt must state findings are sent live via
+ *      `inbox_send type:'finding'` AND that the envelope `findings[]` mirrors them.
+ *   3. state-vocab description — the per-pack inside-state schema's
+ *      status.description must NOT carry the stale "not yet enforced" phrasing
+ *      (Phase 3 corrected it; validation IS enforced).
+ *
+ * Tool-count / cross-doc prose (AGENTS_README, registry) are NOT scanned here:
+ * they are reconciled by deterministic file edits verified by this doctor pass.
+ * Re-implemented (not imported from mcp) to avoid a cli → mcp dependency.
+ */
+function checkContractPhraseDrift(
+  promptContent: string,
+  agentDir: string,
+): CheckResult {
+  const issues: string[] = [];
+  let anchored = false;
+
+  // Parse output-schema.json once (assertions 1 + 2).
+  const outputSchemaPath = path.join(agentDir, 'output-schema.json');
+  let outputSchema: {
+    properties?: {
+      session?: { properties?: { exitReason?: { enum?: unknown } } };
+      findings?: { type?: unknown };
+    };
+  } | null = null;
+  if (fs.existsSync(outputSchemaPath)) {
+    try {
+      outputSchema = JSON.parse(fs.readFileSync(outputSchemaPath, 'utf-8'));
+    } catch {
+      // Unparseable — the output-schema check owns that diagnostic.
+    }
+  }
+
+  // Assertion 1 — exit-reason `no_engagement` parity (prompt <-> enum).
+  const exitEnum =
+    outputSchema?.properties?.session?.properties?.exitReason?.enum;
+  if (Array.isArray(exitEnum)) {
+    anchored = true;
+    const enumHas = exitEnum.includes('no_engagement');
+    const promptHas = /\bno_engagement\b/.test(promptContent);
+    if (enumHas && !promptHas) {
+      issues.push(
+        "output-schema.json declares the 'no_engagement' exit reason but prompt.md does not document it",
+      );
+    } else if (promptHas && !enumHas) {
+      issues.push(
+        "prompt.md documents the 'no_engagement' exit reason but it is missing from output-schema.json's exitReason enum",
+      );
+    }
+  }
+
+  // Assertion 2 — findings-home wording (review companions: findings array).
+  if (outputSchema?.properties?.findings?.type === 'array') {
+    anchored = true;
+    const sendsLive = /inbox_send[^\n]*type\s*[:=]\s*['"`]?finding/i.test(
+      promptContent,
+    );
+    const mirrors =
+      /findings\s*\[\s*\]/.test(promptContent) ||
+      /report\.findings/.test(promptContent);
+    if (!sendsLive || !mirrors) {
+      issues.push(
+        "prompt.md is missing the findings-home contract (live `inbox_send type:'finding'` + the envelope `findings[]` mirror)",
+      );
+    }
+  }
+
+  // Assertion 3 — per-pack inside-state schema description not reverted.
+  const perPackSchema = [
+    path.join(agentDir, 'state', 'inside-state.schema.json'),
+    path.join(agentDir, 'inside-state.schema.json'),
+  ].find((p) => fs.existsSync(p));
+  if (perPackSchema) {
+    try {
+      const schema = JSON.parse(fs.readFileSync(perPackSchema, 'utf-8'));
+      const desc = schema?.properties?.status?.description;
+      if (typeof desc === 'string') {
+        anchored = true;
+        if (/not yet enforced/i.test(desc)) {
+          issues.push(
+            'inside-state schema status.description reverted to the stale "not yet enforced" phrasing — validation IS enforced (validateInsideState in src/mcp/tools/state.ts)',
+          );
+        }
+      }
+    } catch {
+      // Unreadable — prompt-state-vocabulary-drift owns that diagnostic.
+    }
+  }
+
+  if (issues.length > 0) {
+    return {
+      check: 'contract-phrase-drift',
+      status: 'fail',
+      message: issues.join('; '),
+    };
+  }
+  if (!anchored) {
+    return {
+      check: 'contract-phrase-drift',
+      status: 'skip',
+      message:
+        'no exit-reason / findings / inside-state contract surfaces to check',
+    };
+  }
+  return { check: 'contract-phrase-drift', status: 'pass' };
 }
 
 // ─── plan 012 peer activity audit ─────────────────────────────────────

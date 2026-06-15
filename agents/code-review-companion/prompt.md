@@ -279,7 +279,7 @@ When you exit (any reason), write a JSON document to `$MINIH_OUTPUT_PATH` matchi
   "session": {
     "startedAt": "<ISO-8601>",
     "endedAt": "<ISO-8601>",
-    "exitReason": "stop_requested | idle_budget | timeout | error",
+    "exitReason": "stop_requested | idle_budget | no_engagement | timeout | error",
     "messageCounts": {
       "tasksReceived": 0,
       "findingsSent": 0,

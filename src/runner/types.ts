@@ -365,6 +365,39 @@ export interface CoordinationFrontmatter {
   inside?: Record<string, unknown>;
 }
 
+/**
+ * Plan 027 Phase 4 (#36) — the companion lifecycle ledger.
+ *
+ * Derived (never reconstructed from prompt memory) from a run's durable
+ * inbox/state lanes by the pure `deriveCompanionLedger(location)` runner
+ * function. One deriver feeds both the inside `coordination_status` MCP tool
+ * and the outside `minih companion status` CLI verb, so the two surfaces can
+ * never diverge. Field names are the downstream contract Phase 5 (AC-11)
+ * destructures by name (`idleElapsedMs`, `unresolvedPeerRequests`).
+ */
+export interface CompanionLedger {
+  /** Pinned from the run's frozen `prompt.md` frontmatter (binary source). */
+  coordinationMode: 'enabled' | 'disabled';
+  /** Current inside-agent state status (`state/inside.json`); null if unpublished. */
+  state: string | null;
+  /** Whether inside state has been published (state file written or history non-empty). */
+  statePublished: boolean;
+  /** Inbound `task` ids the inside agent has acknowledged (reviews completed). */
+  reviewedIds: string[];
+  /** All ids acknowledged via inside `ack` records (the acknowledged set). */
+  ackedIds: string[];
+  /** Count of inside-lane `finding` messages emitted. */
+  findingsCount: number;
+  /** Count of inside-lane `summary` messages emitted. */
+  summariesCount: number;
+  /** Inbound requests (non-`ack`, non-`briefing`) not yet acknowledged. */
+  unresolvedPeerRequests: number;
+  /** Milliseconds since the most recent inbound message `ts`; null if none yet. */
+  idleElapsedMs: number | null;
+  /** Id of the most recent inbound `task` message, or null. */
+  lastTaskId: string | null;
+}
+
 // ===========================================================================
 // Human View — Phase 1 (plan 009-human-agent-view)
 //

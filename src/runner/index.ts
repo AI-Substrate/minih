@@ -47,6 +47,13 @@ export {
   writeFileAtomic,
   writeFileAtomicAsync,
 } from './atomic-write.js';
+// Plan 027 Phase 4 — companion lifecycle ledger (#36). The runtime deriver
+// needs its OWN export line; the `export type {…} from './types.js'` block
+// below carries only the `CompanionLedger` type (PIC-I).
+export {
+  CompanionLedgerError,
+  deriveCompanionLedger,
+} from './companion-ledger.js';
 export type { CoordinationEnv } from './context.js';
 export {
   detectContext,
@@ -296,6 +303,7 @@ export type {
   AgentDefinition,
   AgentRunConfig,
   AgentRunResult,
+  CompanionLedger,
   CompletedMetadata,
   ControlTimelineEntry,
   CoordinationFrontmatter,

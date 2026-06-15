@@ -60,4 +60,13 @@ Decision: derive over **raw `folder.ts` lanes** (PIC-A), reusing only the unread
 - `CompanionDraftFarewell` type added to `types.ts`; barrel exports the 3 fns + type.
 - **Evidence**: 8/8 vitest; `tsc --noEmit` exit 0; biome clean.
 
+### T004 + T005 — `coordination_status` MCP tool (8→9) + count test (4.4)
+
+- New `src/mcp/tools/coordination-status.ts` mirrors `permission-status.ts`: handler takes only `context`, builds `coordinationRunLocation(agentSlug, agentsDir, runId)`, calls the **same** `deriveCompanionLedger` + `buildDraftFarewell`, returns `{ agentSlug, coordinationMode, ledger, draftFarewell }` as `{content, structuredContent}`. A `CompanionLedgerError` is re-thrown as `McpToolError('MCP_INBOX_CORRUPT', …)`.
+- Registered: `MCP_TOOL_NAMES` + `TOOL_CONTRACTS` (`coordination_status`, empty input schema), `server.ts` dispatch case (the switch is exhaustive over `McpToolName`, no `default` — PIC-D: this was a compile gate), `mcp/index.ts` barrel (PIC-E deviation, for test importability).
+- **T005**: `test/mcp/types.test.ts` hard array 8→9 + title "eight"→"nine"; `server.test.ts` real-stdio manifest test title 8→9.
+- **`coordinationMode` pinned** `'enabled' | 'disabled'` on the result type (PIC-B).
+- **Gotcha (T005)**: `server.test.ts` spawns the **built** stdio server (`buildInsideMcpServerConfig` → `dist/`), so it returned 8 tools until `npm run build` rebuilt dist (PIC-F applies to the integration server test too, not just the CLI). Rebuilt → 9.
+- **Evidence**: 43/43 across `companion-ledger` + `types` + `coordination-status` + `coordination-contract` + `server-dispatch` + `server` (real JSON-RPC manifest now lists 9). `tsc --noEmit` exit 0; biome clean.
+
 _(Detailed per-task entries appended below as work lands.)_

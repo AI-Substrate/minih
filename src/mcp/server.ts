@@ -9,6 +9,7 @@ import {
   type Tool,
 } from '@modelcontextprotocol/sdk/types.js';
 import { loadMcpContext, type McpServerContext } from './context.js';
+import { coordinationStatus } from './tools/coordination-status.js';
 import { inboxAck, inboxList, inboxSend } from './tools/inbox.js';
 import { permissionStatus } from './tools/permission-status.js';
 import { stateGet, stateSet, stateTransition } from './tools/state.js';
@@ -107,6 +108,8 @@ async function dispatchNormalizedToolCall(
       return toCallToolResult(await waitForAnyTool(context, args));
     case 'permission_status':
       return toCallToolResult(permissionStatus(context));
+    case 'coordination_status':
+      return toCallToolResult(coordinationStatus(context));
   }
 }
 

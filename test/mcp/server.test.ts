@@ -35,7 +35,7 @@ afterEach(async () => {
 });
 
 describe('real MCP stdio server', () => {
-  it('lists the eight-tool manifest and executes every tool over JSON-RPC', async () => {
+  it('lists the nine-tool manifest and executes every tool over JSON-RPC', async () => {
     seedOutsideInbox('m1', 'Please review');
     seedOutsideState();
     client = await createClient();

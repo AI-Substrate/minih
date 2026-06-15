@@ -94,6 +94,40 @@ Added to `docs/domains/runner/domain.md`: § Composition rows for `idle-policy.t
 
 **Why it's acceptable for Phase 5**: AC-11 asks for a ledger-driven, unit-testable idle policy — delivered (the pure fn + the prompt mirror). The live agent-behaviour proof was always dogfood (Phase 0 fake-adapter dropped). **Phase-6 / follow-up candidate**: wire `evaluateIdlePolicy` into the runner's terminal/watchdog path (the runner *has* `runElapsedMs` + can derive the ledger) so a never-spoke companion is gracefully stood down with `no_engagement` instead of a hard `timeout`. Flagged in the final report for Jordan's call.
 
-**Companion-mode observation**: the live `code-review-companion` (run `…f932`) booted and ran (123 tool calls) but **never entered its inbox poll loop** (`lastPollAt: null`, zero inside-lane writes) for the whole phase — the ~30% "never engages" pathological case the prompt itself documents. It produced no live review; Phase 5 stands on TDD + the validated dossier. (Ironic + on-theme: this is exactly the never-engaged scenario Phase 5's idle policy is designed to terminate.) Drain ping + `control:stop` sent; companion not polling so unlikely to honour them — handled at debrief.
+---
+
+## Companion debrief (`code-review-companion`, run `2026-06-15T16-16-17-919Z-f932`)
+
+**Correction**: an earlier mid-phase read concluded the companion "never engaged" — that was WRONG (the `minih status` `lastPollAt` field mis-derived as null even while it polled). The companion was **fully engaged**: it oriented, acked every message, sent `APPROVE: T001`, `APPROVE_WITH_NOTES: T002/T003/T004`, processed the drain ping, **honoured `control:stop`** (farewell `exitReason: stop_requested`), and exited `completed`. `coordination` retro: `peerUpdatesSent: 10`, `unresolvedPeerRequests: 0`. A real second pair of eyes.
+
+**3 MEDIUM findings — all reconciled in the fix-pass:**
+
+| ID | Finding | Disposition |
+|----|---------|-------------|
+| F001 | `DEFAULT_IDLE_BUDGET_MS` mirrors the input-schema default with no test pinning them → silent drift risk. | **FIXED** — new test in `code-review-companion-checkin.test.ts` asserts `DEFAULT_IDLE_BUDGET_MS === schema.idleBudgetMs.default`. |
+| F002 | Shutdown-drain skip/torn-lane paths tolerated but **silent** (dossier said "log + skip"). | **FIXED** — `reconcileReportFindings` returns `{wrote, reason}` (unit-tested); runner emits a non-fatal `stderr.log` diagnostic for the torn-lane + `draft-invalid` cases (expected `report-absent`/`report-unparseable` stay quiet to avoid noise). Snapshot test extended: torn lane → still `completed` AND observable. |
+| F003 | prompt repurposed `firstContact`/`postTaskPollThreshold` as boolean flags while input-schema still called them numeric poll counts → contract drift. | **FIXED** — input-schema descriptions updated to the deliberate ledger-driven semantics (enable-flags); `replyWaitPolls` marked DEPRECATED. |
+
+**Companion magicWand** (`magicWandTarget: coordination`): *"Add a companion finalize command/tool that takes the coordination_status draft, lets the agent provide only summary and retrospective text, writes the validated report, and runs minih check automatically."* → captured as a follow-up candidate (would simplify the farewell-write path; relates to the unwired-`evaluateIdlePolicy` gap below).
+
+**On-theme footnote**: while booting, the companion itself looked (to a buggy status read) like the "never-engaged" case — exactly what Phase 5's idle policy is built to terminate gracefully. The `evaluateIdlePolicy`-unwired gap below is the same theme from the runner side.
 
 ---
+
+## ✅ Phase 5 complete
+
+All 6 tasks done (T000 seam · T001 evaluateIdlePolicy · T002 idleBudgetSec · T003 drain · T004 prompt · T005 domain doc) + companion fix-pass (F001/F002/F003).
+
+**Acceptance criteria:**
+- **AC-11** ✅ idle/stand-down is ledger-driven + unit-testable (`evaluateIdlePolicy`, 8 discriminating tests; prompt mirrors it).
+- **AC-12** ✅ configured idle budget discoverable at runtime (`coordination_status.idleBudgetSec`, non-default discriminator test).
+- **AC-13** ✅ late shutdown-window message captured (`drainAndReadInbox` + overwrite-only-findings, ordering discriminator test).
+- **AC-17** ✅ `just fft` exits 0 — 1376 passed / 16 skipped / 0 failed; tsc clean; doctor drift `pass`.
+
+**New tests this phase:** idle-policy 8, coordination-drain 4, coordination-status +3, checkin-suite ledger-driven rewrite + F001 drift test, run-folder-snapshot torn-lane observability. Companion (real `code-review-companion`) reviewed every commit; 3 MEDIUMs all reconciled.
+
+**Carried forward (Phase-6 / follow-up candidates):**
+1. **Wire `evaluateIdlePolicy` into the runner loop** — it's tested but unwired; a never-spoke peer currently exits via the run-timeout backstop (`timeout`) rather than a graceful `no_engagement`. The runner has `runElapsedMs` + can derive the ledger, so it could call the policy and stand the companion down gracefully.
+2. Companion magicWand: a `companion finalize` tool/command for the farewell-write path.
+
+**Commits:** a1e49af (T001) · de9cd16 (T002) · 65ae2d5 (T003) · 538c65e (T004) · 2c7bdb3 (T005+test) · fix-pass (F001/F002/F003).

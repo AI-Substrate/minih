@@ -1436,9 +1436,29 @@ export async function runAgent(
         const drained = drainAndReadInbox(
           coordinationRunLocation(definition.slug, agentsDir, runId),
         );
-        if (drained) reconcileReportFindings(outputPath, drained);
-      } catch {
-        // best-effort — shutdown-drain hiccups must not fail the run
+        if (drained === null) {
+          // log + skip (PIC-P5-G) — torn lane is tolerated but NOT silent (F002).
+          stderrLines.push(
+            '[coordination-drain] inbox re-derive skipped — corrupt/torn lane in the shutdown window; report findings left as authored (run not failed).',
+          );
+        } else {
+          const outcome = reconcileReportFindings(outputPath, drained);
+          // Only surface the ABNORMAL skip (a valid ledger whose draft failed
+          // validation). `report-absent` / `report-unparseable` are the EXPECTED
+          // no-structured-report paths (non-JSON agents / raw SDK fallback) and
+          // stay quiet so they don't manufacture a stderr artifact (F002).
+          if (!outcome.wrote && outcome.reason === 'draft-invalid') {
+            stderrLines.push(
+              '[coordination-drain] report.findings[] not reconciled (draft-invalid); preserved as authored.',
+            );
+          }
+        }
+      } catch (error) {
+        // best-effort — shutdown-drain hiccups must not fail the run, but say why.
+        const message = error instanceof Error ? error.message : String(error);
+        stderrLines.push(
+          `[coordination-drain] non-fatal drain error: ${message}`,
+        );
       }
 
       try {

@@ -22,6 +22,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import Ajv2020 from 'ajv/dist/2020.js';
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_IDLE_BUDGET_MS } from '../../src/runner/index.js';
 
 const COMPANION_DIR = path.resolve('agents/code-review-companion');
 const INPUT_SCHEMA = path.join(COMPANION_DIR, 'input-schema.json');
@@ -41,6 +42,14 @@ describe('plan 019 — input-schema idle check-in fields', () => {
     expect(schema.properties.initialTask).toBeDefined();
     expect(schema.properties.planPath).toBeDefined();
     expect(schema.properties.idleBudgetMs).toBeDefined();
+  });
+
+  it('027 P5 (F001) — runner DEFAULT_IDLE_BUDGET_MS matches the input-schema idleBudgetMs default (no silent drift)', () => {
+    // The runner mirrors the pack default so coordination_status.idleBudgetSec
+    // matches what the companion would use when no param is supplied. Pin them
+    // together so a future edit to either side fails this test instead of
+    // silently diverging.
+    expect(DEFAULT_IDLE_BUDGET_MS).toBe(schema.properties.idleBudgetMs.default);
   });
 
   it('declares firstContactPollThreshold (default 20, minimum 0)', () => {

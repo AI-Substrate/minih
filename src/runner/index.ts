@@ -66,6 +66,10 @@ export {
 } from './context.js';
 // Plan 027 Phase 5 — shutdown / report-write drain (#35). Re-derive the ledger
 // over raw lanes at the pre-report-write point + overwrite-only-findings.
+export type {
+  ReconcileOutcome,
+  ReconcileReason,
+} from './coordination-drain.js';
 export {
   drainAndReadInbox,
   reconcileReportFindings,

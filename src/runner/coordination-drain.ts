@@ -41,6 +41,23 @@ export function drainAndReadInbox(
 }
 
 /**
+/**
+ * Why a `reconcileReportFindings` call did or didn't write. Surfaced so the
+ * runner can emit an observable (non-fatal) diagnostic instead of skipping
+ * silently — "log + skip" is the planned contract (PIC-P5-F), not "skip".
+ */
+export type ReconcileReason =
+  | 'written'
+  | 'report-absent'
+  | 'report-unparseable'
+  | 'draft-invalid';
+
+export interface ReconcileOutcome {
+  wrote: boolean;
+  reason: ReconcileReason;
+}
+
+/**
  * Reconcile `report.findings[]` from a drained ledger.
  *
  * Overwrites ONLY `report.findings[]` on the **agent-authored** report.json with
@@ -49,35 +66,35 @@ export function drainAndReadInbox(
  * `buildDraftFarewell` (validate-before-write) so a malformed draft never lands.
  *
  * Never fabricates: if report.json is absent or unparseable (e.g. the raw-string
- * SDK fallback), it is left untouched and the function returns `false`. Returns
- * `true` only when it wrote reconciled findings.
+ * SDK fallback), it is left untouched. Returns `{ wrote, reason }` so the caller
+ * can surface WHY a skip happened (the silent-skip fix, finding F002).
  */
 export function reconcileReportFindings(
   reportPath: string,
   ledger: CompanionLedger,
-): boolean {
+): ReconcileOutcome {
   let raw: string;
   try {
     raw = readFileSync(reportPath, 'utf8');
   } catch {
-    return false; // absent → skip (never fabricate)
+    return { wrote: false, reason: 'report-absent' }; // skip (never fabricate)
   }
 
   let report: Record<string, unknown>;
   try {
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      return false; // not a JSON object (raw SDK fallback) → skip
+      return { wrote: false, reason: 'report-unparseable' }; // raw SDK fallback
     }
     report = parsed as Record<string, unknown>;
   } catch {
-    return false; // unparseable → skip
+    return { wrote: false, reason: 'report-unparseable' };
   }
 
   const draft = buildDraftFarewell(ledger);
-  if (!draft) return false; // validate-before-write: never write a bad draft
+  if (!draft) return { wrote: false, reason: 'draft-invalid' }; // validate-before-write
 
   report.findings = draft.findings; // overwrite ONLY findings
   writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
-  return true;
+  return { wrote: true, reason: 'written' };
 }

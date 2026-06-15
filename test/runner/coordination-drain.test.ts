@@ -143,7 +143,8 @@ describe('drainAndReadInbox + reconcileReportFindings (AC-13)', () => {
     const drained = drainAndReadInbox(location);
     expect(drained).not.toBeNull();
     const wrote = reconcileReportFindings(reportPath, drained!);
-    expect(wrote).toBe(true);
+    expect(wrote.wrote).toBe(true);
+    expect(wrote.reason).toBe('written');
 
     const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
     expect(report.findings).toEqual([FINDING_META]);
@@ -193,7 +194,9 @@ describe('drainAndReadInbox + reconcileReportFindings (AC-13)', () => {
       'output',
       'report.json',
     );
-    expect(reconcileReportFindings(missing, drained!)).toBe(false);
+    const outcome = reconcileReportFindings(missing, drained!);
+    expect(outcome.wrote).toBe(false);
+    expect(outcome.reason).toBe('report-absent');
     expect(fs.existsSync(missing)).toBe(false);
   });
 
@@ -212,7 +215,9 @@ describe('drainAndReadInbox + reconcileReportFindings (AC-13)', () => {
       }),
     );
     const drained = drainAndReadInbox(location);
-    expect(reconcileReportFindings(reportPath, drained!)).toBe(false);
+    const outcome = reconcileReportFindings(reportPath, drained!);
+    expect(outcome.wrote).toBe(false);
+    expect(outcome.reason).toBe('report-unparseable');
     expect(fs.readFileSync(reportPath, 'utf8')).toBe(
       'Agent execution failed: boom\n',
     );

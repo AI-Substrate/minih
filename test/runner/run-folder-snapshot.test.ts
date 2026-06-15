@@ -171,7 +171,15 @@ describe('run-folder coordination snapshots', () => {
       'state/inside.json',
       'state/outside.json',
       'state-snapshot.json',
+      'stderr.log',
     ]);
+    // 027 P5 (F002) — the shutdown drain re-derives over the (here deliberately
+    // malformed) outside lane. A torn lane is TOLERATED — the run still
+    // completed (asserted above) — AND observable: it leaves a non-fatal
+    // diagnostic in stderr.log rather than silently swallowing the skip.
+    expect(
+      fs.readFileSync(path.join(result.runDir, 'stderr.log'), 'utf8'),
+    ).toContain('[coordination-drain]');
   });
 
   it('fails finalization actionably for corrupt present state files', async () => {

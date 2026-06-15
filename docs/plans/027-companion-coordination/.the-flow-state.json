@@ -3,12 +3,12 @@
   "slug": "companion-coordination",
   "plan_dir": "docs/plans/027-companion-coordination",
   "mode": "Full",
-  "current_stage": "phase-2-complete",
-  "pending_command": "/the-flow 5 tasks --phase \"Phase 3: State-vocabulary coherence (#27/#31)\" --plan \"docs/plans/027-companion-coordination/companion-coordination-plan.md\"",
+  "current_stage": "awaiting-6",
+  "pending_command": "/the-flow 5 tasks --phase \"Phase 4: Ledger-derived lifecycle primitive (#36 + #32)\" --plan \"docs/plans/027-companion-coordination/companion-coordination-plan.md\"",
   "intent": "Fix the 8 companion + coordination reliability GH issues in one plan as dependency-ordered phases",
   "milestones_total": 10,
-  "milestones_done": 5,
-  "last_checkpoint_at": "2026-06-15T10:00:00Z",
+  "milestones_done": 6,
+  "last_checkpoint_at": "2026-06-15T12:30:00Z",
   "compacted_seams": [
     "post-spec",
     "pre-tasks",
@@ -16,7 +16,9 @@
     "phase-end-p1",
     "pre-tasks-p2",
     "pre-implement-p2",
-    "phase-end-p2"
+    "phase-end-p2",
+    "pre-tasks-p3",
+    "pre-implement-p3"
   ],
   "status": "active"
 }

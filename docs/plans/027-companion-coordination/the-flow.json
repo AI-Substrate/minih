@@ -4,10 +4,10 @@
   "slug": "companion-coordination",
   "plan_dir": "docs/plans/027-companion-coordination",
   "mode": "Full",
-  "cursor": "p3",
-  "recommended_next": "p3",
-  "now": "Phase 2 (#40) DONE — implemented WITH the live companion (5 commits f86a0b9..812e468). Exported listUnackedVisible from inbox-poll; unified event-wait's inbox.message branch on the unread/ack model (immediate pass + unacked watcher), with the corrupt-lane throw (V-1 → EventWaitInboxCorruptError, no swallow) and settle-before-registration short-circuit (V-2) both pinned RED→GREEN; inbox_list parity (AC-4); wildcard wake runner+MCP (AC-5); cleanup splice-and-close re-entry guard + real-fs.watch close-count race (T006). just fft green; coordination suite 68/68; one unrelated agent-pack flake cleared on re-run. Companion: 0 findings (clean APPROVE-equivalent), magicWand independently re-derived Phase 4.",
-  "next": "Phase 3 (#27/#31) tasks (stage 5): table the State-vocabulary coherence dossier — verify/relocate the per-pack inside-state schema (root → preferred state/), correct its stale 'not enforced' description, pin doctor = no drift. Verify-and-close shape (KF01: the pack already ships the schema); depends on None. A /compact seam is natural first.",
+  "cursor": "p4",
+  "recommended_next": "p4",
+  "now": "Phase 3 (#27/#31) IMPLEMENTED with companion ✅. Verify-and-pin landed: T001 AC-6 transition-acceptance test (all 6 published statuses accepted against the REAL shipped schema resolved at root + a discriminating dropped-enum negative → MCP_INVALID_ARGUMENT, 5/5), T002 keep-root VERIFIED (schema at root, no state/ copy, in agent.json install payload — PIC-1 honored, no relocation), T003 stale 'not yet enforced' description corrected (validateInsideState IS enforced @ state.ts:100/:81, throws MCP_INVALID_ARGUMENT; enum unchanged), T004 AC-7 doctor prompt-state-vocabulary-drift=pass pinned against the REAL code-review-companion pack (14/14). just fft → exit 0 (no format drift); AC-17 met. Commits 984b504 (T001), 3190952 (T003), 8c6ae4b (T004); T002 no diff. Companion (run …317Z-ef6a): briefed once, pinged at all 3 commits + drain → 0 findings, clean APPROVE on every commit + final sweep (final review independently re-confirmed 'only root schema, no state/' = PIC-1 keep-root). Its magicWand AGAIN re-derived Phase 4 (coordination_status ledger) — 3rd independent companion re-derivation (P1+P2+P3). Phase-end seam: observe buffer non-empty → routes drain, DEFERRED to plan-complete per cadence; SUGG-003 captured (stale 'minih validate --file' in the progress skill's farewell path). #27/#31 pinned closed.",
+  "next": "Phase 4 tasks (stage 5) — table the crown-jewel ledger-derived lifecycle primitive (deriveCompanionLedger + coordination_status MCP tool 8→9 + minih companion status CLI, #36+#32, CS-4). Depends on Phase 2 + Phase 3 (both done). A /compact seam is natural first.",
   "_comment": "Adopted into guided bookkeeping 2026-06-14 (stages 1a/1b/2c + post-spec backpressure were direct jumps). Architect ran 2026-06-14: plan READY, 7 phases (0 optional backpressure + 1-6 issue clusters) locked; the assumed 'build' placeholder is now 7 known phase nodes. validate-v2 ran (3 agents: coherence READY, thesis/forward-compat tightenings applied inline). Tasks stage ran 2026-06-14 for Phase 0: 8-task dossier (fake-adapter seam + contract-phrase doctor check), discovered the real adapter construction site is sdk-runtime.ts:105 (not index.ts) and the contract-phrase check must be warn-only until Phase 6 reconciles the still-drifted docs. Router IS installed → backpressure on spine + plan-complete seam shown.",
   "nodes": [
     {
@@ -151,9 +151,16 @@
       "id": "p3",
       "type": "phase",
       "phase": 3,
-      "label": "Phase 3 · State-vocabulary coherence (#27/#31)",
-      "status": "known",
-      "note": "CS-2. Verify/relocate the per-pack schema (root → state/), fix stale description, pin doctor = no drift. Verify-and-close shape (KF01).",
+      "label": "Phase 3 · State-vocabulary coherence (#27/#31) · DONE — verify-and-pin, companion APPROVE",
+      "status": "done",
+      "command": "/the-flow 6 implement --plan \"docs/plans/027-companion-coordination/companion-coordination-plan.md\" --phase \"Phase 3: State-vocabulary coherence (#27/#31)\" --companion",
+      "ran_at": "2026-06-15T12:30Z",
+      "user_input": "impleemt with companion",
+      "note": "CS-2 verify-and-pin, implemented WITH the companion. Pre-implement boot: degraded (hard sensors lint/typecheck/build+test CLEAN; warn = pre-existing minih-doctor + npm-audit 1crit/6high, not this phase) → proceeded with note. T001 (AC-6): contract test (d) every published companion status (idle/reading/reviewing/reporting/blocked/stopping) accepted by the REAL shipped schema written at agent ROOT (level-2 resolver, no state/ dir created) + (e) discriminating negative — truncated enum → MCP_INVALID_ARGUMENT via error.code; 5/5. T002 (PIC-1): verify-and-record keep-root — schema present at root, NO state/ copy, listed in agent.json install payload (path inside-state.schema.json); no relocation, no removal. T003: corrected stale 'not yet enforced' description — validateInsideState is enforced at state.ts:100 (stateTransition) and :81 (stateSet), throws MCP_INVALID_ARGUMENT; enum byte-unchanged; JSON re-validated. T004 (AC-7): doctor prompt-state-vocabulary-drift=pass pinned against the REAL code-review-companion pack via path.resolve('agents'); 14/14. just fft → exit 0 (no format drift on committed files); AC-17 met. Commits 984b504 (T001), 3190952 (T003), 8c6ae4b (T004); T002 no diff (verify-and-record). Companion (run 2026-06-15T12-21-24-317Z-ef6a, read-only): briefed once (PIC-1 + enforcement + one-directional doctor hazards), pinged at all 3 commits + drain → findingsSent 0, clean APPROVE on T001/T003/T004 + final sweep; final review independently re-confirmed 'only inside-state.schema.json at root, no state/ schema' = PIC-1 keep-root. magicWand (target coordination) AGAIN re-derived Phase 4 (coordination_status / report-draft ledger primitive) — 3rd independent companion re-derivation (P1+P2+P3). Companion difficulty CRC-001 (its own glob tool) noted, not actioned. Phase-end seam: observe buffer non-empty (SUGG-002 + others) → router routes drain, DEFERRED to plan-complete per this plan's cadence; SUGG-003 captured (progress skill's farewell-read 'minih validate --file' is stale for 0.2.0). Non-goals honoured: global default schema byte-unchanged, per-pack enum unchanged, no ledger/CLI work, no relocation. #27/#31 pinned closed.",
+      "artifacts": [
+        "tasks/phase-3-state-vocabulary-coherence/tasks.md",
+        "tasks/phase-3-state-vocabulary-coherence/execution.log.md"
+      ],
       "next": ["p4"]
     },
 

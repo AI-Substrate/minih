@@ -41,3 +41,14 @@ RED→GREEN, committed as one unit.
 - **Domain**: cli-internal; doctor keeps its own cli resolver (no mcp import — `mcp ↔ cli` illegal). **Tool-count drift is NOT scanned here** (recon row 5) — that is T006/T007 + the doctor pass.
 
 ---
+
+## T006–T008 — Docs reconciliation to the singular contract (AC-15 / AC-16)
+
+Surgical + narrowed per the recon (Phases 4/5 already reconciled most docs).
+
+- **T006 (AC-15)** `AGENTS_README.md`: `:529` "six MCP tools" → **nine** (full list incl. `wait_for_any`, `permission_status`, `coordination_status`); added `no_engagement` to the two exitReason enum examples (the pipe-string `~:764` + the JSON enum `~:887`). `companion-mode.md` verified already-correct (no edit).
+- **T007 (AC-16)** `docs/domains/registry.md:7`: "six backend-safe inbox/state tools" → **nine** (full list) + added the `companion status` outside verb / `coordination_status` cross-ref on the cli row. `mcp/domain.md` verified already "Nine" (no count edit needed).
+- **T008** domain deltas: `mcp/domain.md` — `allowedStates` trio on the `coordination_status` concept + contract entry, new `inside-state-schema.ts` source row, P6 history; `cli/domain.md` — `contract-phrase-drift` on the doctor source row + a new Sensor-B concept + P6 history. `runner/domain.md` **verify-only** (no runner change — T009 not taken).
+- **Evidence**: deterministic file edits, verified by `minih doctor` exit 0 + the contract-phrase real-pack test. The whole-plan `just fft` gate runs at phase close (AC-17).
+
+---

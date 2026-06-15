@@ -526,7 +526,7 @@ minih state get coordination-smoke-test --run "$RUN_ID"
 minih retros --agent coordination-smoke-test --run "$RUN_ID"
 ```
 
-The inside agent can use six MCP tools during the run: `inbox_list`, `inbox_send`, `inbox_ack`, `state_get`, `state_set`, and `state_transition`. Outside CLI commands do not call those tools directly; they read and write runner-managed inbox/state files under the selected run folder. Pass `--run <runId>` when multiple runs exist; minih only defaults when the target run is unambiguous.
+The inside agent can use nine MCP tools during the run: `inbox_list`, `inbox_send`, `inbox_ack`, `state_get`, `state_set`, `state_transition`, `wait_for_any`, `permission_status`, and `coordination_status`. Outside CLI commands do not call those tools directly; they read and write runner-managed inbox/state files under the selected run folder. Pass `--run <runId>` when multiple runs exist; minih only defaults when the target run is unambiguous.
 
 ### Minimal vs rich coordination examples
 
@@ -761,7 +761,7 @@ Companion-mode agents SHOULD emit a farewell envelope structurally similar to:
   "session": {
     "startedAt": "ISO-8601",
     "endedAt": "ISO-8601",
-    "exitReason": "stop_requested | idle_budget | timeout | error",
+    "exitReason": "stop_requested | idle_budget | no_engagement | timeout | error",
     "messageCounts": {
       "tasksReceived": 0,
       "findingsSent": 0,
@@ -884,7 +884,7 @@ Replace (or extend) the agent's output schema with the canonical farewell envelo
         "endedAt": { "type": "string" },
         "exitReason": {
           "type": "string",
-          "enum": ["stop_requested", "idle_budget", "timeout", "error"]
+          "enum": ["stop_requested", "idle_budget", "no_engagement", "timeout", "error"]
         },
         "messageCounts": {
           "type": "object",

@@ -134,9 +134,9 @@ flowchart TD
         T003["T003 GREEN: allowedStates on coordination_status (AC-14)"]:::completed
         T004["T004 RED: contract-phrase drift test"]:::completed
         T005["T005 GREEN: checkContractPhraseDrift (Sensor B)"]:::completed
-        T006["T006: AGENTS_README reconcile (AC-15)"]:::pending
-        T007["T007: registry tool count + verbs (AC-16)"]:::pending
-        T008["T008: domain docs P6 deltas"]:::pending
+        T006["T006: AGENTS_README reconcile (AC-15)"]:::completed
+        T007["T007: registry tool count + verbs (AC-16)"]:::completed
+        T008["T008: domain docs P6 deltas"]:::completed
         T009["T009 OPTIONAL: wire evaluateIdlePolicy"]:::optional
         T001 --> T002 --> T003
         T004 --> T005
@@ -148,9 +148,9 @@ flowchart TD
         F1["coordination-status.ts"]:::completed
         F2["state.ts (resolver)"]:::completed
         F3["doctor.ts"]:::completed
-        F4["AGENTS_README.md"]:::pending
-        F5["registry.md"]:::pending
-        F6["domain.md ×3"]:::pending
+        F4["AGENTS_README.md"]:::completed
+        F5["registry.md"]:::completed
+        F6["domain.md ×3"]:::completed
         F7["inside-state.schema.json (root, read)"]:::completed
     end
 
@@ -175,9 +175,9 @@ flowchart TD
 | [x] | T003 | **GREEN**: add `allowedStates: string[]` to `CoordinationStatusResult` + tool body — resolve schema via T002 helper, read `.properties.status.enum` (default `[]` if unresolved); confirm `coordinationMode`/`idleBudgetSec` already present → trio returned together | mcp | `/Users/jordanknight/substrate/minih/src/mcp/tools/coordination-status.ts`, `/Users/jordanknight/substrate/minih/src/mcp/index.ts` | T001 green; trio in one call; **`coordinationMode` stays `'enabled'\|'disabled'`** (not widened) | AC-14; do not invent a richer mode enum (Phase 4 PIC) |
 | [x] | T004 | **RED**: new doctor test for `checkContractPhraseDrift` — seed a stale companion pack and assert `'fail'`; assert `'pass'` for the real `agents/code-review-companion/` pack | cli | `/Users/jordanknight/substrate/minih/test/cli/doctor-contract-phrase.test.ts` (new) | Test red (no such check yet). **Three stale sub-cases, each → `'fail'`**: (1) `output-schema.json` exitReason enum missing `no_engagement`; (2) `prompt.md` findings-home wording absent (no `inbox_send type:'finding'` + ledger-derived `report.findings`); (3) `inside-state.schema.json` description reverted to "not yet enforced". Real pack → `'pass'` | Mirror `test/cli/doctor-state-vocabulary.test.ts` incl. the real-pack case; fixture mutates the pack's `prompt.md` + `output-schema.json` |
 | [x] | T005 | **GREEN — Sensor B**: build `checkContractPhraseDrift(promptContent, agentDir)` mirroring `checkPromptStateVocabularyDrift` (`:640-687`); push into `checks[]` after `:182` inside `if (coordination.enabled)` | cli | `/Users/jordanknight/substrate/minih/src/cli/commands/doctor.ts` | T004 green; the **three pack-internal assertions** implemented (exit-reason incl. `no_engagement` ↔ output-schema enum · findings-home wording · state-vocab description); returns **`'fail'`** on drift (promoted from `'warning'`), `'pass'` clean, `'skip'` if artifacts absent; real pack passes; `minih doctor` still exits 0 on the current tree | Per finding 08; warn→fail because docs reconciled this phase. **Tool-count drift is NOT this sensor** — T006/T007 + doctor pass (recon row 5) |
-| [ ] | T006 | Reconcile `AGENTS_README.md` to the singular contract: `:529` "six MCP tools" → **nine** (list all nine); add `no_engagement` to the exitReason enums at `~:764` and `~:887` | docs | `/Users/jordanknight/substrate/minih/AGENTS_README.md` | Contract-phrase check + `minih doctor` pass; phrases current | AC-15; companion-mode.md verified already-correct (verify-only) |
-| [ ] | T007 | Housekeeping: `docs/domains/registry.md:7` "six backend-safe inbox/state tools" → **nine** (list tools); add the `minih companion status` verb + `coordination_status` cross-reference. Verify `mcp/domain.md` already says nine | docs | `/Users/jordanknight/substrate/minih/docs/domains/registry.md`, `/Users/jordanknight/substrate/minih/docs/domains/mcp/domain.md` | AC-16: registry reflects the real count + new tools/verbs | Per finding 07 |
-| [ ] | T008 | Domain-doc P6 deltas: add `allowedStates` to `mcp/domain.md` `coordination_status` entry; add `checkContractPhraseDrift` to `cli/domain.md` doctor-checks concept; P6 History rows in mcp/cli (+ runner if T009 lands). runner/cli already carry the ledger/verb (verify) | docs | `/Users/jordanknight/substrate/minih/docs/domains/mcp/domain.md`, `/Users/jordanknight/substrate/minih/docs/domains/cli/domain.md`, `/Users/jordanknight/substrate/minih/docs/domains/runner/domain.md` | Domain docs reflect the new contracts; History updated | plan-6 domain step |
+| [x] | T006 | Reconcile `AGENTS_README.md` to the singular contract: `:529` "six MCP tools" → **nine** (list all nine); add `no_engagement` to the exitReason enums at `~:764` and `~:887` | docs | `/Users/jordanknight/substrate/minih/AGENTS_README.md` | Contract-phrase check + `minih doctor` pass; phrases current | AC-15; companion-mode.md verified already-correct (verify-only) |
+| [x] | T007 | Housekeeping: `docs/domains/registry.md:7` "six backend-safe inbox/state tools" → **nine** (list tools); add the `minih companion status` verb + `coordination_status` cross-reference. Verify `mcp/domain.md` already says nine | docs | `/Users/jordanknight/substrate/minih/docs/domains/registry.md`, `/Users/jordanknight/substrate/minih/docs/domains/mcp/domain.md` | AC-16: registry reflects the real count + new tools/verbs | Per finding 07 |
+| [x] | T008 | Domain-doc P6 deltas: add `allowedStates` to `mcp/domain.md` `coordination_status` entry; add `checkContractPhraseDrift` to `cli/domain.md` doctor-checks concept; P6 History rows in mcp/cli (+ runner if T009 lands). runner/cli already carry the ledger/verb (verify) | docs | `/Users/jordanknight/substrate/minih/docs/domains/mcp/domain.md`, `/Users/jordanknight/substrate/minih/docs/domains/cli/domain.md`, `/Users/jordanknight/substrate/minih/docs/domains/runner/domain.md` | Domain docs reflect the new contracts; History updated | plan-6 domain step |
 | [ ] | T6.z | **Harness phase-end** — `/eng-harness-flow --event phase-end --plan-dir docs/plans/027-companion-coordination` | — | — | Router envelope handled at phase end (router owns drain-vs-harvest) | _Harness seam_ |
 
 **Whole-plan exit criterion** — **AC-17**: `just fft` exits 0 with the new tests included (`test/mcp/coordination-status.test.ts`, `test/mcp/inside-state-schema.test.ts`, `test/cli/doctor-contract-phrase.test.ts`); no regression in the coordination suite. (Run by the implement verb at phase close; not a separate task row.)

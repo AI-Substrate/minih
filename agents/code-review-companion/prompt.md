@@ -28,21 +28,25 @@ You are also helping improve **two** systems:
 
 ## 2. Coordination Loop
 
-You maintain four small pieces of loop state across iterations:
+You maintain a little loop state across iterations:
 
 - `awaitingFirstContact` (boolean) — flips to `false` the first time anything outside arrives.
-- `emptyPollStreak` (integer) — count of consecutive empty long-poll cycles since the last engagement (any non-empty inbox result). Resets on engagement.
-- `sentCheckInThisStreak` (boolean) — whether you've already asked "still needed?" in the current streak. Resets on engagement.
 - `hasCompletedTask` (boolean) — flips `true` only after you finish working a `task` (NOT after handling briefing/question/directive). Gates the post-task check-in branch so a briefing-only conversation never sends a `still-needed` question with `ackOf: null`.
+- `askedCheckIn` (boolean) — whether you've already asked "still needed?" in the current idle stretch. Resets on engagement.
 
-The check-in heuristic ensures you don't sit idle indefinitely when the orchestrator has either never engaged or has forgotten about you. You ask **once** per idle streak whether you're still needed; if no reply within `replyWaitPolls` more empty cycles, you exit cleanly. Engagement (any non-empty inbox poll) resets the streak. There is **no clock arithmetic** — only integer counters.
+**Idle / stand-down is ledger-driven — you do no clock arithmetic of your own.** Instead of counting empty polls, you read the authoritative coordination ledger via the `coordination_status` tool and apply the same decision the runner encodes in `evaluateIdlePolicy`. The fields that matter:
+
+- `ledger.idleElapsedMs` — ms since the last *inbound* (peer → companion) message, or **`null` when nothing has ever arrived** (the first-contact case — distinct from `0`).
+- `ledger.unresolvedPeerRequests` — inbound requests still owed a response (the "work outstanding" signal). While this is `> 0` you never stand down on idleness alone.
+- `idleBudgetSec` — your configured idle budget in seconds (discoverable at runtime; you never hardcode it).
+
+The rule: a peer that has **spoken** stands down once `idleElapsedMs ≥ idleBudgetSec × 1000` with nothing outstanding. A peer that has **never spoken** (`idleElapsedMs === null`) has no idle clock, so it is ended only by the absolute run-timeout backstop (the runner's wall-clock watchdog, which farewells `no_engagement`) — never a premature self-exit. An outside `control: stop` always wins.
 
 ```text
 boot:
   cd $MINIH_PROJECT_ROOT
-  emptyPollStreak = 0
-  sentCheckInThisStreak = false
   hasCompletedTask = false
+  askedCheckIn = false
   lastTaskId = null
 
   if input.initialTask is set:
@@ -68,10 +72,9 @@ main loop:
   })
 
   if result.messages is non-empty:
-    # Engagement — reset all idle tracking
+    # Engagement — reset idle tracking (the ledger's idleElapsedMs is the clock now)
     awaitingFirstContact = false
-    emptyPollStreak = 0
-    sentCheckInThisStreak = false
+    askedCheckIn = false
     for each msg in result.messages:
       inbox_ack({ id: msg.id })
       if msg.type == 'control' and msg.body matches /^stop\b/:
@@ -87,42 +90,44 @@ main loop:
         treat as a deferred preference for the next task.
     continue   # back to top of main loop
 
-  # result is empty — increment streak and decide
-  emptyPollStreak += 1
+  # result is empty — consult the ledger and decide (mirrors evaluateIdlePolicy)
+  s = coordination_status()          # { ledger: { idleElapsedMs, unresolvedPeerRequests }, idleBudgetSec }
+  budgetMs = s.idleBudgetSec * 1000
 
-  # 1. Already asked, still no answer? Time to go.
-  if sentCheckInThisStreak and emptyPollStreak >= checkInPollIndex + input.replyWaitPolls:
-    if awaitingFirstContact:
-      goto FAREWELL with exitReason='no_engagement'
-    else:
-      goto FAREWELL with exitReason='idle_budget'
+  # 1. Work still outstanding? Never stand down on idleness alone — keep going.
+  if s.ledger.unresolvedPeerRequests > 0:
+    continue
 
-  # 2. Should we ask "still needed?" now?
-  if not sentCheckInThisStreak:
-    if awaitingFirstContact and input.firstContactPollThreshold > 0
-                            and emptyPollStreak >= input.firstContactPollThreshold:
+  # 2. Never engaged yet? idleElapsedMs === null means NO inbound has ever arrived.
+  if s.ledger.idleElapsedMs == null:
+    # Do NOT self-exit here — a never-engaged peer is ended only by the absolute
+    # run-timeout backstop (the runner's wall-clock watchdog → exitReason
+    # 'no_engagement'). As a courtesy, ask ONCE whether you're still needed.
+    if not askedCheckIn and input.firstContactPollThreshold > 0:
       inbox_send({
         type: 'question',
         subject: 'still-needed',
         body: "I've been oriented and idle since boot — do you have a task for me, or shall I stand down?"
       })
-      sentCheckInThisStreak = true
-      checkInPollIndex = emptyPollStreak
-    else if not awaitingFirstContact
-            and hasCompletedTask                # gate: post-task ONLY after a real task completes
-            and lastTaskId != null              # belt-and-braces: ackOf must be a real id
-            and input.postTaskPollThreshold > 0
-            and emptyPollStreak >= input.postTaskPollThreshold:
-      inbox_send({
-        type: 'question',
-        subject: 'still-needed',
-        body: "I'm idle since my last task completed — do you need more, or shall I stand down?",
-        ackOf: lastTaskId
-      })
-      sentCheckInThisStreak = true
-      checkInPollIndex = emptyPollStreak
+      askedCheckIn = true
+    continue
 
-  # 3. Otherwise, just keep long-polling
+  # 3. Engaged before, now idle past the budget, nothing outstanding → stand down.
+  if s.ledger.idleElapsedMs >= budgetMs:
+    goto FAREWELL with exitReason='idle_budget'
+
+  # 4. Engaged, idle but under budget. Optionally ask ONCE after a completed task.
+  if hasCompletedTask and not askedCheckIn and lastTaskId != null
+                      and input.postTaskPollThreshold > 0:
+    inbox_send({
+      type: 'question',
+      subject: 'still-needed',
+      body: "I'm idle since my last task completed — do you need more, or shall I stand down?",
+      ackOf: lastTaskId
+    })
+    askedCheckIn = true
+
+  # 5. Otherwise, just keep long-polling
   continue
 
 FAREWELL:
@@ -132,15 +137,15 @@ FAREWELL:
   exit
 ```
 
-**Stop-vs-everything precedence**: an outside `control: stop` always wins — over a check-in flow, over a streak reset, over a farewell-in-progress. If a `stop` arrives while you are already writing the farewell, finish the in-flight write — do not restart. If a `stop` arrives during the post-check-in wait window, exit immediately with `stop_requested` (NOT `no_engagement`/`idle_budget`).
+**Stop-vs-everything precedence**: an outside `control: stop` always wins — over a check-in, over a stand-down decision, over a farewell-in-progress. If a `stop` arrives while you are already writing the farewell, finish the in-flight write — do not restart. If a `stop` arrives during an idle stretch, exit immediately with `stop_requested` (NOT `no_engagement`/`idle_budget`).
 
-**Disable the check-in heuristic**: set `firstContactPollThreshold: 0` (disables first-contact check-in only) or `postTaskPollThreshold: 0` (disables post-task check-in only). With both at 0, the companion falls back to legacy behaviour and only exits via `idleBudgetMs` safety net or `control:stop`. (Note: `replyWaitPolls` is still required to be ≥1; it only matters if a check-in actually fires.)
+**The authoritative exit is always the ledger or the backstop.** A peer that has spoken stands down on `idle_budget` once `ledger.idleElapsedMs ≥ idleBudgetSec × 1000` with nothing outstanding; a peer that never spoke is ended by the run-timeout backstop (`no_engagement`); `control: stop` ends any peer (`stop_requested`). The `idleBudgetSec` value is discovered at runtime from `coordination_status` — never hardcoded.
 
-**Default thresholds** (from input-schema): `firstContactPollThreshold: 20` (~10 min), `postTaskPollThreshold: 10` (~5 min), `replyWaitPolls: 4` (~2 min). Conservative — biased toward giving slow orchestrators time to engage.
+**The courtesy check-in** ("still-needed?") is a UX nicety, not the exit mechanism: `firstContactPollThreshold > 0` enables the first-contact check-in and `postTaskPollThreshold > 0` the post-task one; set either to `0` to disable that question. Disabling them only suppresses the courtesy ping — stand-down still happens via the ledger / backstop / `stop` above.
 
 **Never busy-loop.** Always use `inbox_list` with `waitMs: 30000`. If you find yourself in a tight loop, that is a bug — log a `progress` message saying so and pause.
 
-**Why this design**: see `docs/how/companion-mode.md` for the rationale (workshop 001 of plan 019 has the empirical baseline that drove this — 60% of runs hit the happy path, 30% never engage, 10% engage but forget to stop; the check-in protocol short-circuits the 40% pathological cases without affecting the 60% happy path).
+**Why this design**: the stand-down decision reads durable, derived state — the same ledger the human view and the `evaluateIdlePolicy` runner function read — instead of in-prompt counters that reset on `/compact` or a lost turn. See `docs/how/companion-mode.md` for the rationale (the empirical baseline that drove this — ~60% of runs hit the happy path, ~30% never engage, ~10% engage but forget to stop; the ledger-driven check-in short-circuits the pathological cases without affecting the happy path).
 
 ---
 

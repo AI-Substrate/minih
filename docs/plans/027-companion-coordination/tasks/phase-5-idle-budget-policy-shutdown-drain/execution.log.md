@@ -61,3 +61,19 @@
 **Files**: `src/runner/coordination-drain.ts` (NEW), `src/runner/runner.ts`, `src/runner/index.ts` (barrel), `test/runner/coordination-drain.test.ts` (NEW).
 
 ---
+
+## T004 — Rewrite `prompt.md` idle wording → ledger-driven ✅
+
+**§2 Coordination Loop rewritten** from integer poll-streak (`emptyPollStreak`/`sentCheckInThisStreak`/`checkInPollIndex`/`replyWaitPolls`, *"no clock arithmetic — only integer counters"*) to **ledger-driven**: each empty poll consults `coordination_status` for `{ ledger.idleElapsedMs, ledger.unresolvedPeerRequests, idleBudgetSec }` and applies the same decision as `evaluateIdlePolicy` (T001):
+1. `unresolvedPeerRequests > 0` → continue (work outstanding).
+2. **`idleElapsedMs === null`** (never spoke) → **do NOT self-exit**; courtesy "still-needed?" once; the runner's absolute run-timeout backstop ends it (`no_engagement`). **This is the A6 first-contact pin** — null is distinct from 0; the prompt has no run-elapsed clock so it must not stand down a never-spoke peer except via the backstop.
+3. `idleElapsedMs >= idleBudgetSec*1000` → FAREWELL `idle_budget`.
+4. post-task courtesy check-in once (under budget).
+
+Loop state reduced to `awaitingFirstContact` / `hasCompletedTask` / `askedCheckIn` / `lastTaskId`. Stop precedence + exit vocab (`stop_requested`/`no_engagement`/`idle_budget`) preserved. The courtesy check-in (`firstContact`/`postTaskPollThreshold`) is now explicitly a UX nicety, not the exit mechanism.
+
+**Evidence (Done-When)**: no orphaned `emptyPollStreak`/`sentCheckInThisStreak`/`checkInPollIndex`/`replyWaitPolls` refs; state words stay within `[idle…stopping]`; **`minih doctor` `prompt-state-vocabulary-drift: pass`** for `code-review-companion`; 0 doctor errors (degraded = pre-existing warnings only). The `coordination_status` result shape consumed (`s.ledger.idleElapsedMs`, `s.ledger.unresolvedPeerRequests`, `s.idleBudgetSec`) matches T002's tool exactly.
+
+**Files**: `agents/code-review-companion/prompt.md`.
+
+---

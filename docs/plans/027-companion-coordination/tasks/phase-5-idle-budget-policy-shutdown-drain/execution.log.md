@@ -131,3 +131,7 @@ All 6 tasks done (T000 seam · T001 evaluateIdlePolicy · T002 idleBudgetSec · 
 2. Companion magicWand: a `companion finalize` tool/command for the farewell-write path.
 
 **Commits:** a1e49af (T001) · de9cd16 (T002) · 65ae2d5 (T003) · 538c65e (T004) · 2c7bdb3 (T005+test) · fix-pass (F001/F002/F003).
+
+## T0z — phase-end harness seam
+
+Fired `/eng-harness-flow --event phase-end --plan-dir docs/plans/027-companion-coordination`. Adoption holds → engineering zone. Buffer non-empty (4 pending observations incl. DL-002 boot-format-drift, DL-003 `lastPollAt` mis-read) → router routes `eng-harness-4-retro --drain`. Per this plan's cadence the observe-buffer drain is **deferred to plan-complete** (merge stage); observations are durable on disk (`.harness/temp/`), so nothing is lost. Best-effort, non-blocking.

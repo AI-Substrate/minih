@@ -64,6 +64,12 @@ export {
   MINIH_ENV_KEYS_ALL,
   MINIH_ENV_KEYS_COORDINATION,
 } from './context.js';
+// Plan 027 Phase 5 — shutdown / report-write drain (#35). Re-derive the ledger
+// over raw lanes at the pre-report-write point + overwrite-only-findings.
+export {
+  drainAndReadInbox,
+  reconcileReportFindings,
+} from './coordination-drain.js';
 export {
   displayEvent,
   displayHeader,

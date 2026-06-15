@@ -21,6 +21,10 @@ import type {
 } from '../adapter/events.js';
 import type { IAgentAdapter } from '../adapter/interface.js';
 import {
+  drainAndReadInbox,
+  reconcileReportFindings,
+} from './coordination-drain.js';
+import {
   coordinationRunLocation,
   createRunFolder,
   inboxLanePath,
@@ -1420,6 +1424,23 @@ export async function runAgent(
     }
 
     if (agentSucceeded && coordinationEnabled && agentsDir) {
+      // Plan 027 Phase 5 (#35) — shutdown drain (AC-13). Re-derive the ledger
+      // over the RAW live lanes AFTER the final inbox forward-commit (above,
+      // inside the resolved run promise) and BEFORE report.json is snapshotted,
+      // so a peer message that landed in the shutdown / report-write window is
+      // captured in report.findings[] rather than stranded (plan Findings 05/06).
+      // Disk-only — MCP teardown is implicit/SDK-owned (PIC-P5-C). Best-effort:
+      // a torn lane is tolerated inside drainAndReadInbox, and this whole block
+      // never fails an otherwise-successful run (PIC-P5-G).
+      try {
+        const drained = drainAndReadInbox(
+          coordinationRunLocation(definition.slug, agentsDir, runId),
+        );
+        if (drained) reconcileReportFindings(outputPath, drained);
+      } catch {
+        // best-effort — shutdown-drain hiccups must not fail the run
+      }
+
       try {
         snapshotCoordinationFiles(definition.slug, agentsDir, runId, runDir);
       } catch (error) {

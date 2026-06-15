@@ -47,3 +47,17 @@
 **Files**: `src/runner/types.ts`, `src/runner/runner.ts`, `src/runner/run-manifest.ts`, `src/runner/index.ts` (barrel), `src/mcp/tools/coordination-status.ts`, `test/mcp/coordination-status.test.ts`.
 
 ---
+
+## T003 — `drainAndReadInbox` + report reconcile · AC-13 ✅
+
+**Two functions in a NEW pure-ish `src/runner/coordination-drain.ts`** (imports only companion-ledger + folder type + node:fs — no SDK/MCP/CLI):
+- `drainAndReadInbox(location, { now? }): CompanionLedger | null` — re-derives via `deriveCompanionLedger` over the RAW lanes (NOT `listUnackedVisible`, foreclosed — PIC-P5-B). Torn lane (`CompanionLedgerError`) → returns **null** (tolerate, PIC-P5-G), never throws.
+- `reconcileReportFindings(reportPath, ledger): boolean` — overwrites **ONLY** `report.findings[]` via `buildDraftFarewell(ledger).findings` (validate-before-write, PIC-P5-D/F), preserving the agent's `summary`/`retrospective`. Absent/unparseable/non-object report → return false + skip (never fabricate into the raw-string fallback).
+
+**Runner wiring** (`runner.ts`): inserted into the existing `if (agentSucceeded && coordinationEnabled && agentsDir)` block, **AFTER** the final `inboxForwarder.commit()` (line 1296, inside the resolved run promise) and **BEFORE** `snapshotCoordinationFiles` — and before `validateSystemOutput` re-checks the report. Symbol-anchored (not digits — the file shifts; validators flagged this). Whole block best-effort: a drain hiccup never fails an otherwise-successful run.
+
+**Evidence (AC-13 ordering discriminator — A5)**: a finding appended to the inside lane **after** the report is authored (empty findings) is captured by the re-derive → lands in `report.findings[]`; summary/retrospective preserved verbatim. A drain that read at author-time (or after report-write) would miss it. Plus torn-lane→null (no throw, report untouched), absent-report→skip, unparseable-report→skip (raw fallback left intact). 4 tests; `tsc` clean; companion-ledger 16/16 + coordination-status 5/5 unaffected.
+
+**Files**: `src/runner/coordination-drain.ts` (NEW), `src/runner/runner.ts`, `src/runner/index.ts` (barrel), `test/runner/coordination-drain.test.ts` (NEW).
+
+---

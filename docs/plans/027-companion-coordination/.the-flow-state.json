@@ -4,11 +4,11 @@
   "plan_dir": "docs/plans/027-companion-coordination",
   "mode": "Full",
   "current_stage": "awaiting-6",
-  "pending_command": "/the-flow 5 tasks --phase \"Phase 4: Ledger-derived lifecycle primitive (#36 + #32)\" --plan \"docs/plans/027-companion-coordination/companion-coordination-plan.md\"",
+  "pending_command": "/the-flow 5 tasks --phase \"Phase 6: Runtime self-discovery + docs reconciliation (#29 + #32 docs)\" --plan \"docs/plans/027-companion-coordination/companion-coordination-plan.md\"",
   "intent": "Fix the 8 companion + coordination reliability GH issues in one plan as dependency-ordered phases",
   "milestones_total": 10,
-  "milestones_done": 6,
-  "last_checkpoint_at": "2026-06-15T12:30:00Z",
+  "milestones_done": 8,
+  "last_checkpoint_at": "2026-06-15T07:12:00Z",
   "compacted_seams": [
     "post-spec",
     "pre-tasks",
@@ -18,7 +18,11 @@
     "pre-implement-p2",
     "phase-end-p2",
     "pre-tasks-p3",
-    "pre-implement-p3"
+    "pre-implement-p3",
+    "pre-tasks-p4",
+    "pre-tasks-p5",
+    "pre-implement-p5",
+    "phase-end-p5"
   ],
   "status": "active"
 }

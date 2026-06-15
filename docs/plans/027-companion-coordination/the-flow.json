@@ -4,10 +4,10 @@
   "slug": "companion-coordination",
   "plan_dir": "docs/plans/027-companion-coordination",
   "mode": "Full",
-  "cursor": "p4",
-  "recommended_next": "p4",
-  "now": "Phase 3 (#27/#31) IMPLEMENTED with companion ✅. Verify-and-pin landed: T001 AC-6 transition-acceptance test (all 6 published statuses accepted against the REAL shipped schema resolved at root + a discriminating dropped-enum negative → MCP_INVALID_ARGUMENT, 5/5), T002 keep-root VERIFIED (schema at root, no state/ copy, in agent.json install payload — PIC-1 honored, no relocation), T003 stale 'not yet enforced' description corrected (validateInsideState IS enforced @ state.ts:100/:81, throws MCP_INVALID_ARGUMENT; enum unchanged), T004 AC-7 doctor prompt-state-vocabulary-drift=pass pinned against the REAL code-review-companion pack (14/14). just fft → exit 0 (no format drift); AC-17 met. Commits 984b504 (T001), 3190952 (T003), 8c6ae4b (T004); T002 no diff. Companion (run …317Z-ef6a): briefed once, pinged at all 3 commits + drain → 0 findings, clean APPROVE on every commit + final sweep (final review independently re-confirmed 'only root schema, no state/' = PIC-1 keep-root). Its magicWand AGAIN re-derived Phase 4 (coordination_status ledger) — 3rd independent companion re-derivation (P1+P2+P3). Phase-end seam: observe buffer non-empty → routes drain, DEFERRED to plan-complete per cadence; SUGG-003 captured (stale 'minih validate --file' in the progress skill's farewell path). #27/#31 pinned closed.",
-  "next": "Phase 4 tasks (stage 5) — table the crown-jewel ledger-derived lifecycle primitive (deriveCompanionLedger + coordination_status MCP tool 8→9 + minih companion status CLI, #36+#32, CS-4). Depends on Phase 2 + Phase 3 (both done). A /compact seam is natural first.",
+  "cursor": "p6",
+  "recommended_next": "p6",
+  "now": "Phase 5 IMPLEMENTED & DONE (#35) WITH the companion — idle policy + shutdown drain landed. evaluateIdlePolicy (AC-11, pure, 8 discriminating tests), idleBudgetSec discoverable on coordination_status (AC-12, non-default discriminator), drainAndReadInbox + overwrite-only-findings reconcile wired into the runner terminal block (AC-13, ordering discriminator), prompt.md rewritten ledger-driven (doctor drift pass), runner domain docs. Companion (run …f932) reviewed every commit → APPROVE T001 + APPROVE_WITH_NOTES T002/T003/T004; its 3 MEDIUM findings ALL reconciled in a fix-pass (F001 default-drift test pinning DEFAULT_IDLE_BUDGET_MS↔input-schema, F002 observable stderr.log drain diagnostic + {wrote,reason}, F003 input-schema enable-flag contract doc). just fft exit 0 (1376 passed / 16 skipped / 0 failed); tsc clean. CARRIED FORWARD (Phase-6/follow-up): evaluateIdlePolicy is tested-but-UNWIRED into the runner loop → a never-spoke peer exits via the timeout backstop, not a graceful no_engagement. Commits a1e49af·de9cd16·65ae2d5·538c65e·2c7bdb3·ff8d8d3·9d063e0.",
+  "next": "Phase 6 tasks (stage 5) — the FINAL phase: runtime self-discovery trio (allowedStates + coordinationMode + idleBudgetSec on coordination_status, AC-14), registry tool-count fix (AC-16), docs reconciliation (#29 + #32 docs: AGENTS_README + companion-mode.md), contract-phrase doctor sensor (folded from the dropped Phase 0, incl. warn→fail promotion). A /compact seam is natural first; consider wiring evaluateIdlePolicy into the runner here (the carried-forward gap).",
   "_comment": "Adopted into guided bookkeeping 2026-06-14 (stages 1a/1b/2c + post-spec backpressure were direct jumps). Architect ran 2026-06-14: plan READY, 7 phases (0 optional backpressure + 1-6 issue clusters) locked; the assumed 'build' placeholder is now 7 known phase nodes. validate-v2 ran (3 agents: coherence READY, thesis/forward-compat tightenings applied inline). Tasks stage ran 2026-06-14 for Phase 0: 8-task dossier (fake-adapter seam + contract-phrase doctor check), discovered the real adapter construction site is sdk-runtime.ts:105 (not index.ts) and the contract-phrase check must be warn-only until Phase 6 reconciles the still-drifted docs. Router IS installed → backpressure on spine + plan-complete seam shown.",
   "nodes": [
     {
@@ -168,9 +168,15 @@
       "id": "p4",
       "type": "phase",
       "phase": 4,
-      "label": "Phase 4 · Ledger-derived lifecycle primitive (#36 + #32)",
-      "status": "known",
-      "note": "CS-4 (crown jewel). deriveCompanionLedger + CompanionLedger type; minih companion status CLI; coordination_status MCP tool (8->9); draft farewell validated before write. Depends on Phase 2, Phase 3.",
+      "label": "Phase 4 · Ledger primitive (#36 + #32) · DONE — implemented + companion REQUEST_CHANGES reconciled (f0bd6a0)",
+      "status": "done",
+      "command": "/the-flow 6 implement --plan \"docs/plans/027-companion-coordination/companion-coordination-plan.md\" --phase \"Phase 4: Ledger-derived lifecycle primitive (#36 + #32 findings home)\" --companion",
+      "ran_at": "2026-06-15T13:30Z",
+      "user_input": "enxt phase plan and validate please",
+      "note": "CS-4 crown jewel — ✅ DONE: implemented WITH the companion (commits 37bdbc8·4ce612c·e779363·c3ed91d), companion issued REQUEST_CHANGES (f87fc4d, 4 findings F001-F004, 3 HIGH/1 MED) reconciled in f0bd6a0 (F004 body-only finding parsing + safe-null toFinding; F002 reviewedIds=completion-summary semantics; F001 CompanionAckChain/ackChains from both lanes; F003 progressCount→peerUpdatesSent — a self-proving fold: the companion's own findings were all meta=NONE body-only); tsc 0, suite 1359 passed/16 skipped, just fft green. Tasks were TABLED (stage 5) + validate-v2'd first. 10-task dossier (T000-T0z): T001 enumerate ledger fields; T002 CompanionLedger type + deriveCompanionLedger over RAW lanes (AC-8); T003 draft farewell strict-validate-before-write (AC-9); T004 coordination_status MCP tool 8->9 + pin coordinationMode enum; T005 tool-count test; T006 minih companion status CLI; T007 #32 findings home (AC-10 structural); T008 domain docs. Built on 3 prior-phase reviews + a codebase recon. 8 PIC reconciliations vs the shipped tree — headline PIC-A: deriveCompanionLedger derives over RAW folder.ts lanes, NOT the Phase-2 listUnackedVisible export (its own doc-comment forbids ledger consumers + it isn't barrel-exported) — corrects the plan's 'reuse the export' wording. validate-v2 (4 read-only agents): Source-Truth SOUND, Cross-Reference ALIGNED, Completeness GAPS (2 HIGH), Forward-Compat 2 FAIL — ALL folded in: (1) T007 now ADDS report.findings[] to system-output.json (no schema home exists today); (2) ledger fields renamed to the consumer contract idleElapsedMs + unresolvedPeerRequests (was loose 'idle streak' = wrong shape); (3) PIC-I deriveCompanionLedger needs its own runtime barrel-export line or T004/T006 can't import it. Depends on Phase 2 + Phase 3 (both done).",
+      "artifacts": [
+        "tasks/phase-4-ledger-derived-lifecycle-primitive/tasks.md"
+      ],
       "next": ["p5"]
     },
 
@@ -178,9 +184,16 @@
       "id": "p5",
       "type": "phase",
       "phase": 5,
-      "label": "Phase 5 · Idle-budget policy + shutdown drain (#35)",
-      "status": "known",
-      "note": "CS-3. Idle decisions read the ledger; drainAndReadInbox before report write (pinned sequencing contract). Depends on Phase 4.",
+      "label": "Phase 5 · Idle policy + shutdown drain (#35) · DONE — implemented + companion 3 MEDIUMs reconciled",
+      "status": "done",
+      "command": "/the-flow 6 implement --plan \"docs/plans/027-companion-coordination/companion-coordination-plan.md\" --phase \"Phase 5: Idle-budget policy + shutdown drain (#35)\" --companion",
+      "ran_at": "2026-06-15T07:12Z",
+      "user_input": "run with companion mode",
+      "note": "CS-3 — ✅ DONE: implemented WITH the companion. T001 NEW pure src/runner/idle-policy.ts evaluateIdlePolicy (AC-11; effectiveIdle=idleElapsedMs??runElapsedMs, absolute backstop, exit vocab no_engagement/idle_budget; 8 discriminating tests incl. the never-spoke A1 case). T002 idleBudgetSec discoverable on coordination_status (AC-12) — A2 plumbing: record budgets.idleBudgetMs into run.json for coordination runs + sync readIdleBudgetMs; MINIH_PARAMS proven NOT to reach the inside-MCP subprocess. T003 NEW src/runner/coordination-drain.ts drainAndReadInbox (re-derive over RAW lanes) + reconcileReportFindings (overwrite-only-findings, validate-before-write) wired into the runner terminal block after the final inbox commit, before snapshot (AC-13, ordering discriminator; torn lane tolerated → null, never fails the run). T004 prompt.md rewritten integer-poll-streak → ledger-driven (doctor prompt-state-vocabulary-drift pass; A6 first-contact null pin). T005 runner domain.md. Companion (run 2026-06-15T16-16-17-919Z-f932): briefed once, reviewed every commit → APPROVE T001 + APPROVE_WITH_NOTES T002/T003/T004, honoured control:stop (exitReason stop_requested), 3 MEDIUM findings ALL reconciled in fix-pass ff8d8d3 (F001 DEFAULT_IDLE_BUDGET_MS↔input-schema drift test; F002 reconcile returns {wrote,reason} + runner emits observable stderr.log diagnostic for torn-lane/draft-invalid; F003 input-schema enable-flag contract doc + replyWaitPolls deprecated). just fft exit 0 (1376 passed/16 skipped/0 failed); tsc clean. CARRIED FORWARD (Phase-6/follow-up): evaluateIdlePolicy is tested but UNWIRED into the runner loop — a never-spoke peer currently exits via the run-timeout backstop (timeout) not a graceful no_engagement; the runner has runElapsedMs + can derive the ledger, so it could call the policy. Plus the companion magicWand: a 'companion finalize' tool for the farewell-write path. Commits a1e49af·de9cd16·65ae2d5·538c65e·2c7bdb3·ff8d8d3·9d063e0. Observe buffer gained DL-002 (boot flags the-flow.json format drift) + DL-003 (minih status lastPollAt mis-read me into thinking the companion was dead) — deferred to plan-complete drain.",
+      "artifacts": [
+        "tasks/phase-5-idle-budget-policy-shutdown-drain/tasks.md",
+        "tasks/phase-5-idle-budget-policy-shutdown-drain/execution.log.md"
+      ],
       "next": ["p6"]
     },
 

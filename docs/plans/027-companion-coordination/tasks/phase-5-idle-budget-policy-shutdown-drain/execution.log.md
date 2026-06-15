@@ -76,4 +76,24 @@ Loop state reduced to `awaitingFirstContact` / `hasCompletedTask` / `askedCheckI
 
 **Files**: `agents/code-review-companion/prompt.md`.
 
+**Blast radius (caught by `just fft`)**: the plan-019 `test/agents/code-review-companion-checkin.test.ts` characterization suite asserted the old poll-streak wording (7 assertions). Updated to the ledger-driven design (assert `coordination_status`/`idleElapsedMs`/`unresolvedPeerRequests`/`idleBudgetSec`, the `askedCheckIn` latch, the `idleElapsedMs == null` first-contact pin, and the new boot vars; drop `emptyPollStreak`/`sentCheckInThisStreak`/`replyWaitPolls`). 29/29 green.
+
+---
+
+## T005 — Runner domain.md touch-up ✅
+
+Added to `docs/domains/runner/domain.md`: § Composition rows for `idle-policy.ts` + `coordination-drain.ts`; two § Concepts entries (Ledger-driven idle policy, Shutdown/report-write drain); one § History row (027 P5 #35). Light touch — full registry-wide reconciliation is Phase 6 (AC-16).
+
+**Files**: `docs/domains/runner/domain.md`.
+
+---
+
+## ⚠️ Discovery (design gap → Phase 6 / follow-up candidate)
+
+**`evaluateIdlePolicy` is implemented + unit-tested but NOT wired into the runner's run loop.** The companion's *actual* stand-down is **prompt-driven** (it consults `coordination_status` and mirrors the policy). Consequence of the A6 pin: a peer that **never spoke** (`idleElapsedMs === null`) no longer self-exits `no_engagement` in the prompt — the prompt has no run-elapsed clock, so it relies on the runner's absolute run-timeout backstop, whose actual exit reason is `timeout`, not the graceful `no_engagement` that plan-019 introduced. `evaluateIdlePolicy` (which *does* take `runElapsedMs` and returns `no_engagement` at budget) is therefore a tested-but-unwired oracle.
+
+**Why it's acceptable for Phase 5**: AC-11 asks for a ledger-driven, unit-testable idle policy — delivered (the pure fn + the prompt mirror). The live agent-behaviour proof was always dogfood (Phase 0 fake-adapter dropped). **Phase-6 / follow-up candidate**: wire `evaluateIdlePolicy` into the runner's terminal/watchdog path (the runner *has* `runElapsedMs` + can derive the ledger) so a never-spoke companion is gracefully stood down with `no_engagement` instead of a hard `timeout`. Flagged in the final report for Jordan's call.
+
+**Companion-mode observation**: the live `code-review-companion` (run `…f932`) booted and ran (123 tool calls) but **never entered its inbox poll loop** (`lastPollAt: null`, zero inside-lane writes) for the whole phase — the ~30% "never engages" pathological case the prompt itself documents. It produced no live review; Phase 5 stands on TDD + the validated dossier. (Ironic + on-theme: this is exactly the never-engaged scenario Phase 5's idle policy is designed to terminate.) Drain ping + `control:stop` sent; companion not polling so unlikely to honour them — handled at debrief.
+
 ---

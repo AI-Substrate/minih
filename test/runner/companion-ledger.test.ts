@@ -105,10 +105,12 @@ describe('deriveCompanionLedger — empty run', () => {
       ackedIds: [],
       findingsCount: 0,
       summariesCount: 0,
+      progressCount: 0,
       unresolvedPeerRequests: 0,
       idleElapsedMs: null,
       lastTaskId: null,
       findings: [],
+      ackChains: [],
     });
   });
 });
@@ -126,10 +128,22 @@ describe('deriveCompanionLedger — full coordination scenario', () => {
     appendMsg('outside', msg('m2', 'outside', 'task', t1));
     appendMsg('outside', msg('d1', 'outside', 'directive', t2));
     appendMsg('outside', msg('b1', 'outside', 'briefing', t3));
-    // Outbound (companion -> peer): ack of m1, one finding, one summary.
+    // Outbound (companion -> peer): receipt-ack of m1, one finding, and a
+    // completion summary acking m1 (the review of m1 is finished).
     appendMsg('inside', msg('a1', 'inside', 'ack', t1, { ackOf: 'm1' }));
-    appendMsg('inside', msg('f1', 'inside', 'finding', t2));
-    appendMsg('inside', msg('s1', 'inside', 'summary', t3));
+    appendMsg(
+      'inside',
+      msg('f1', 'inside', 'finding', t2, {
+        meta: {
+          severity: 'HIGH',
+          file: 'src/x.ts',
+          category: 'Bug',
+          issue: 'boom',
+          recommendation: 'fix',
+        },
+      }),
+    );
+    appendMsg('inside', msg('s1', 'inside', 'summary', t3, { ackOf: 'm1' }));
     writeInsideState('reviewing');
   });
 
@@ -140,11 +154,12 @@ describe('deriveCompanionLedger — full coordination scenario', () => {
     expect(ledger.coordinationMode).toBe('enabled');
     expect(ledger.state).toBe('reviewing');
     expect(ledger.statePublished).toBe(true);
-    // m1 is an inbound task that the inside agent acked.
+    // m1 was acked on receipt AND has a completion summary -> reviewed.
     expect(ledger.reviewedIds).toEqual(['m1']);
     expect(ledger.ackedIds).toEqual(['m1']);
     expect(ledger.findingsCount).toBe(1);
     expect(ledger.summariesCount).toBe(1);
+    expect(ledger.progressCount).toBe(0);
     // m2 (task) + d1 (directive) are inbound, unacked, not briefing -> 2.
     expect(ledger.unresolvedPeerRequests).toBe(2);
     // idle measured from the most recent inbound ts (t3).
@@ -170,6 +185,110 @@ describe('deriveCompanionLedger — corruption convention', () => {
     expect(() => deriveCompanionLedger(location, { now: 1 })).toThrow(
       CompanionLedgerError,
     );
+  });
+});
+
+const ta = '2026-06-15T10:00:00.000Z';
+const tb = '2026-06-15T10:01:00.000Z';
+const tc = '2026-06-15T10:02:00.000Z';
+
+describe('reviewedIds — completion evidence, not receipt (F002)', () => {
+  it('counts a task reviewed only when a summary acks it, not on receipt ack', () => {
+    writePrompt('enabled');
+    appendMsg('outside', msg('t1', 'outside', 'task', ta));
+    appendMsg('outside', msg('t2', 'outside', 'task', tb));
+    // Both tasks acked on RECEIPT (before review).
+    appendMsg('inside', msg('a1', 'inside', 'ack', tb, { ackOf: 't1' }));
+    appendMsg('inside', msg('a2', 'inside', 'ack', tb, { ackOf: 't2' }));
+    // Only t1 gets a COMPLETION summary.
+    appendMsg('inside', msg('s1', 'inside', 'summary', tc, { ackOf: 't1' }));
+
+    const ledger = deriveCompanionLedger(location, { now: 1 });
+    expect(ledger.ackedIds).toEqual(['t1', 't2']); // both received
+    expect(ledger.reviewedIds).toEqual(['t1']); // only t1 completed
+  });
+});
+
+describe('findings — body-only parsing + safe-null (F004)', () => {
+  it('parses a labelled body-only finding (meta=NONE) instead of empty shells', () => {
+    const body = [
+      'severity: HIGH',
+      'file: src/runner/companion-ledger.ts:180',
+      'category: Implementation Quality',
+      'issue: toFinding read only meta; body-only findings lost detail.',
+      'recommendation: Parse the labelled body as a fallback.',
+    ].join('\n');
+    appendMsg('inside', msg('f1', 'inside', 'finding', ta, { body }));
+
+    const ledger = deriveCompanionLedger(location, { now: 1 });
+    expect(ledger.findings).toEqual([
+      {
+        severity: 'HIGH',
+        file: 'src/runner/companion-ledger.ts:180',
+        category: 'Implementation Quality',
+        issue: 'toFinding read only meta; body-only findings lost detail.',
+        recommendation: 'Parse the labelled body as a fallback.',
+      },
+    ]);
+  });
+
+  it('safe-nulls a finding with no structured content; still counts the message', () => {
+    appendMsg(
+      'inside',
+      msg('f1', 'inside', 'finding', ta, { body: 'see diff' }),
+    );
+    const ledger = deriveCompanionLedger(location, { now: 1 });
+    expect(ledger.findings).toEqual([]); // no shell persisted
+    expect(ledger.findingsCount).toBe(1); // message still counted
+  });
+});
+
+describe('progressCount → peerUpdatesSent (F003)', () => {
+  it('counts inside progress messages and folds them into peerUpdatesSent', () => {
+    appendMsg('inside', msg('p1', 'inside', 'progress', ta));
+    appendMsg('inside', msg('p2', 'inside', 'progress', tb));
+    appendMsg(
+      'inside',
+      msg('f1', 'inside', 'finding', tc, {
+        meta: {
+          severity: 'LOW',
+          file: 'a',
+          category: 'b',
+          issue: 'c',
+          recommendation: 'd',
+        },
+      }),
+    );
+    appendMsg('inside', msg('s1', 'inside', 'summary', tc));
+
+    const ledger = deriveCompanionLedger(location, { now: 1 });
+    expect(ledger.progressCount).toBe(2);
+    const draft = assembleDraftFarewell(ledger);
+    // 2 progress + 1 finding + 1 summary
+    expect(draft.retrospective.coordination.peerUpdatesSent).toBe(4);
+  });
+});
+
+describe('ackChains — resolved request chains from both lanes (F001)', () => {
+  it('links each acked inbound id to its inside responses, in order', () => {
+    writePrompt('enabled');
+    appendMsg('outside', msg('t1', 'outside', 'task', ta));
+    appendMsg('inside', msg('a1', 'inside', 'ack', tb, { ackOf: 't1' }));
+    appendMsg('inside', msg('s1', 'inside', 'summary', tc, { ackOf: 't1' }));
+    // An ackOf pointing at a non-existent inbound id is ignored.
+    appendMsg('inside', msg('x1', 'inside', 'ack', tc, { ackOf: 'ghost' }));
+
+    const ledger = deriveCompanionLedger(location, { now: 1 });
+    expect(ledger.ackChains).toEqual([
+      {
+        inboundId: 't1',
+        inboundType: 'task',
+        responses: [
+          { id: 'a1', type: 'ack' },
+          { id: 's1', type: 'summary' },
+        ],
+      },
+    ]);
   });
 });
 

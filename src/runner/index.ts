@@ -306,6 +306,7 @@ export type {
   AgentDefinition,
   AgentRunConfig,
   AgentRunResult,
+  CompanionAckChain,
   CompanionDraftFarewell,
   CompanionFinding,
   CompanionLedger,

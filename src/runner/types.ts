@@ -379,6 +379,23 @@ export interface CompanionFinding {
 }
 
 /**
+ * Plan 027 Phase 4 (#36 / finding F001) — one resolved request chain.
+ *
+ * Links an inbound (peer → companion) message to the inside-lane responses that
+ * reference it via `ackOf`, in append order. This is the explicit "ackOf chain"
+ * the AC-8/T002 dossier promised: derived from BOTH lanes, not inferred from the
+ * flat `reviewedIds`/`ackedIds` sets.
+ */
+export interface CompanionAckChain {
+  /** The inbound message id this chain resolves. */
+  inboundId: string;
+  /** The inbound message type (`task` / `directive` / ...). */
+  inboundType: string;
+  /** Inside-lane responses referencing `inboundId` via `ackOf`, in order. */
+  responses: Array<{ id: string; type: string }>;
+}
+
+/**
  * Plan 027 Phase 4 (#36) — the companion lifecycle ledger.
  *
  * Derived (never reconstructed from prompt memory) from a run's durable
@@ -395,14 +412,22 @@ export interface CompanionLedger {
   state: string | null;
   /** Whether inside state has been published (state file written or history non-empty). */
   statePublished: boolean;
-  /** Inbound `task` ids the inside agent has acknowledged (reviews completed). */
+  /**
+   * Inbound `task` ids with COMPLETION evidence — an inside `summary` whose
+   * `ackOf` targets the task (F002). NOT the receipt-ack set: the companion acks
+   * a task on arrival, before review, so `ackedIds` ⊇ `reviewedIds`.
+   */
   reviewedIds: string[];
-  /** All ids acknowledged via inside `ack` records (the acknowledged set). */
+  /** All ids acknowledged via inside `ack` records (the receipt set). */
   ackedIds: string[];
-  /** Count of inside-lane `finding` messages emitted. */
+  /** Count of inside-lane `finding` messages emitted (a coordination metric;
+   * may exceed `findings.length` when a message carries no structured content). */
   findingsCount: number;
   /** Count of inside-lane `summary` messages emitted. */
   summariesCount: number;
+  /** Count of inside-lane `progress` messages emitted (F003 — folded into
+   * the draft farewell's `peerUpdatesSent`). */
+  progressCount: number;
   /** Inbound requests (non-`ack`, non-`briefing`) not yet acknowledged. */
   unresolvedPeerRequests: number;
   /** Milliseconds since the most recent inbound message `ts`; null if none yet. */
@@ -411,6 +436,9 @@ export interface CompanionLedger {
   lastTaskId: string | null;
   /** Review findings (#32) derived from inside-lane `finding` messages. */
   findings: CompanionFinding[];
+  /** Resolved request chains (F001) linking each acked inbound id to its
+   * inside-lane responses, derived from both lanes. */
+  ackChains: CompanionAckChain[];
 }
 
 /**

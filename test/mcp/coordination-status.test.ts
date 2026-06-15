@@ -92,6 +92,13 @@ describe('coordination_status MCP tool', () => {
       'inside',
       msg('f1', 'inside', 'finding', '2026-06-15T10:02:00.000Z'),
     );
+    // Completion summary acking m1 — this is what marks the review done (F002).
+    appendMsg(
+      'inside',
+      msg('s1', 'inside', 'summary', '2026-06-15T10:03:00.000Z', {
+        ackOf: 'm1',
+      }),
+    );
 
     const result = coordinationStatus(context);
     const sc = result.structuredContent;

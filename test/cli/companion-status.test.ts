@@ -85,6 +85,16 @@ function seedRun(slug: string, runId: string): void {
     body: 'b',
     ts: '2026-06-15T10:02:00.000Z',
   });
+  // Completion summary acking m1 — marks the review done (F002).
+  append(inside, {
+    id: 's1',
+    sender: 'inside',
+    type: 'summary',
+    subject: 's',
+    body: 'b',
+    ts: '2026-06-15T10:03:00.000Z',
+    ackOf: 'm1',
+  });
 }
 
 describe('minih companion status', () => {

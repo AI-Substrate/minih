@@ -34,6 +34,7 @@ import {
   stateFilePath,
 } from './folder.js';
 import type {
+  CompanionAckChain,
   CompanionDraftFarewell,
   CompanionFinding,
   CompanionLedger,
@@ -172,22 +173,103 @@ function unique(values: string[]): string[] {
   return [...new Set(values)];
 }
 
+/** The five structured fields a {@link CompanionFinding} carries. */
+const FINDING_FIELDS = [
+  'severity',
+  'file',
+  'category',
+  'issue',
+  'recommendation',
+] as const;
+type FindingField = (typeof FINDING_FIELDS)[number];
+
 /**
- * Parse an inside-lane `finding` message into a {@link CompanionFinding}. The
- * structured fields ride in `meta` (mirroring the companion's `inbox_send`
- * shape, prompt.md:227/284); `issue` falls back to the message body.
+ * Parse a labelled-body finding (`severity: …\nfile: …\n…`) into its fields.
+ *
+ * The companion prompt's concrete `inbox_send` example carries the finding in
+ * the message BODY, not `meta` (F004) — every real companion finding is
+ * body-structured. A line `label: value` opens a field; subsequent unlabelled
+ * non-empty lines append to it (multi-line values). Unrecognised text ⇒ `{}`.
  */
-function toFinding(m: InboxMessage): CompanionFinding {
+function parseLabelledFindingBody(
+  body: string,
+): Partial<Record<FindingField, string>> {
+  const out: Partial<Record<FindingField, string>> = {};
+  let current: FindingField | null = null;
+  for (const line of body.split('\n')) {
+    const match = line.match(
+      /^(severity|file|category|issue|recommendation)\s*:\s*(.*)$/i,
+    );
+    if (match) {
+      current = match[1].toLowerCase() as FindingField;
+      out[current] = match[2].trim();
+    } else if (current && line.trim() !== '') {
+      out[current] = `${out[current]}\n${line.trim()}`.trim();
+    }
+  }
+  return out;
+}
+
+/**
+ * Parse an inside-lane `finding` message into a {@link CompanionFinding}.
+ *
+ * Structured fields are read from `meta` when present (the prompt.md:227/284
+ * shape), falling back to the labelled message BODY (F004 — real findings are
+ * body-only). A message that yields NO structured content from either source is
+ * safe-nulled rather than emitted as an empty-string shell.
+ */
+function toFinding(m: InboxMessage): CompanionFinding | null {
   const meta = (m.meta ?? {}) as Record<string, unknown>;
-  const str = (v: unknown, fallback = ''): string =>
-    typeof v === 'string' ? v : fallback;
+  const fromMeta = (k: FindingField): string | undefined =>
+    typeof meta[k] === 'string' && (meta[k] as string).trim() !== ''
+      ? (meta[k] as string)
+      : undefined;
+  const body = parseLabelledFindingBody(m.body);
+  const pick = (k: FindingField): string | undefined => fromMeta(k) ?? body[k];
+
+  const severity = pick('severity');
+  const file = pick('file');
+  const category = pick('category');
+  const recommendation = pick('recommendation');
+  const issue = pick('issue');
+
+  // A "finding" with no severity/file/category/recommendation from either source
+  // carries no reviewable content — drop it rather than persist empty strings.
+  if (!severity && !file && !category && !recommendation) {
+    return null;
+  }
   return {
-    severity: str(meta.severity, 'UNKNOWN'),
-    file: str(meta.file),
-    category: str(meta.category),
-    issue: str(meta.issue, m.body),
-    recommendation: str(meta.recommendation),
+    severity: severity ?? 'UNKNOWN',
+    file: file ?? '',
+    category: category ?? '',
+    issue: issue ?? m.body,
+    recommendation: recommendation ?? '',
   };
+}
+
+/**
+ * Derive the resolved request chains (F001): for each inbound id referenced by
+ * an inside-lane `ackOf`, the ordered list of inside responses that resolve it.
+ */
+function deriveAckChains(
+  inbound: InboxMessage[],
+  outbound: InboxMessage[],
+): CompanionAckChain[] {
+  const inboundById = new Map(inbound.map((m) => [m.id, m]));
+  const byInbound = new Map<string, Array<{ id: string; type: string }>>();
+  for (const m of outbound) {
+    if (typeof m.ackOf !== 'string') continue;
+    const responses = byInbound.get(m.ackOf) ?? [];
+    responses.push({ id: m.id, type: m.type });
+    byInbound.set(m.ackOf, responses);
+  }
+  const chains: CompanionAckChain[] = [];
+  for (const [inboundId, responses] of byInbound) {
+    const src = inboundById.get(inboundId);
+    if (!src) continue; // only chains that resolve a real inbound message
+    chains.push({ inboundId, inboundType: src.type, responses });
+  }
+  return chains.sort((a, b) => a.inboundId.localeCompare(b.inboundId));
 }
 
 /**
@@ -214,14 +296,29 @@ export function deriveCompanionLedger(
   const acknowledged = new Set(ackedIds);
 
   const inboundTasks = inbound.filter((m) => m.type === 'task');
-  const reviewedIds = inboundTasks
-    .filter((m) => acknowledged.has(m.id))
-    .map((m) => m.id)
-    .sort();
+  const inboundTaskIds = new Set(inboundTasks.map((m) => m.id));
 
-  const findings = outbound.filter((m) => m.type === 'finding').map(toFinding);
-  const findingsCount = findings.length;
+  // F002: a task is REVIEWED only with completion evidence — an inside `summary`
+  // whose `ackOf` targets it. (`acknowledged`/receipt acks fire on arrival,
+  // before review, so they over-count.) `ackedIds` keeps the receipt set.
+  const reviewedIds = unique(
+    outbound
+      .filter((m) => m.type === 'summary' && typeof m.ackOf === 'string')
+      .map((m) => m.ackOf as string)
+      .filter((id) => inboundTaskIds.has(id)),
+  ).sort();
+
+  const findingMessages = outbound.filter((m) => m.type === 'finding');
+  const findings = findingMessages
+    .map(toFinding)
+    .filter((f): f is CompanionFinding => f !== null);
+  // Coordination metric: messages emitted (matches report.findingsSent), which
+  // may exceed findings.length when a message carries no structured content.
+  const findingsCount = findingMessages.length;
   const summariesCount = outbound.filter((m) => m.type === 'summary').length;
+  const progressCount = outbound.filter((m) => m.type === 'progress').length;
+
+  const ackChains = deriveAckChains(inbound, outbound);
 
   const unresolvedPeerRequests = inbound.filter(
     (m) => !NON_REQUEST_TYPES.has(m.type) && !acknowledged.has(m.id),
@@ -251,10 +348,12 @@ export function deriveCompanionLedger(
     ackedIds,
     findingsCount,
     summariesCount,
+    progressCount,
     unresolvedPeerRequests,
     idleElapsedMs,
     lastTaskId,
     findings,
+    ackChains,
   };
 }
 
@@ -340,7 +439,9 @@ export function assembleDraftFarewell(
       magicWand:
         'Auto-derive more of the farewell retrospective directly from the coordination ledger.',
       coordination: {
-        peerUpdatesSent: ledger.findingsCount + ledger.summariesCount,
+        // F003: progress heartbeats are peer updates too (Workshop 003).
+        peerUpdatesSent:
+          ledger.findingsCount + ledger.summariesCount + ledger.progressCount,
         unresolvedPeerRequests: ledger.unresolvedPeerRequests,
         statePublished: ledger.statePublished,
       },

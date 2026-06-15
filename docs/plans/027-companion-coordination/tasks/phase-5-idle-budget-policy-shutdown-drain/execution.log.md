@@ -31,3 +31,19 @@
 **Files**: `src/runner/idle-policy.ts` (NEW), `src/runner/index.ts` (barrel), `test/runner/idle-policy.test.ts` (NEW).
 
 ---
+
+## T002 — Idle budget discoverable (A2 plumbing) · AC-12 ✅
+
+**The A2 trap (confirmed in code)**: `MINIH_PARAMS` is set on the *runner's* env (`runner.ts:627`) but `spawn.ts` forwards only `MINIH_CONTEXT/INBOX_DIR/STATE_DIR` + `MINIH_MCP_*` to the inside-MCP subprocess — so the tool can't read params from env. Also confirmed: `validateInput` is a pure validator (no default-fill), so `config.params` does not carry the schema default. So this was **real plumbing**, exactly as the dossier rescoped.
+
+**Approach (A2-preferred — disk, not env; mcp→runner delegation)**:
+- `DEFAULT_IDLE_BUDGET_MS = 1_800_000` in `types.ts` (documented mirror of input-schema `idleBudgetMs.default`).
+- `budgets.idleBudgetMs?` added to `LiveRunManifest`; recorded at run start **only for coordination runs** (`runner.ts:432`, `coordinationEnabled && { idleBudgetMs: params.idleBudgetMs ?? DEFAULT }`).
+- `readIdleBudgetMs(runDir)` — **sync** reader in `run-manifest.ts` (named `readFileSync` import; the async `readManifest` would force the sync tool async). Absent/torn/pre-#35 run.json → schema default.
+- `coordination_status` surfaces `idleBudgetSec = round(readIdleBudgetMs(runDir)/1000)` — the Phase-6 trio name, ms→sec at the surface (no later rename). Tool stays synchronous; delegates the disk read to the runner (clean mcp→runner direction).
+
+**Evidence (AC-12 non-default discriminator)**: run.json with `idleBudgetMs: 120000` → tool returns `idleBudgetSec === 120` (a stub returning the 1800 default fails this); absent/no-budget → `1800`. 3 new tests; existing 2 unaffected (torn-lane still throws before the budget read). `tsc` clean; run-manifest 12/12 unaffected.
+
+**Files**: `src/runner/types.ts`, `src/runner/runner.ts`, `src/runner/run-manifest.ts`, `src/runner/index.ts` (barrel), `src/mcp/tools/coordination-status.ts`, `test/mcp/coordination-status.test.ts`.
+
+---

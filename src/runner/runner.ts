@@ -64,6 +64,7 @@ import {
   type AgentRunConfig,
   type AgentRunResult,
   type CompletedMetadata,
+  DEFAULT_IDLE_BUDGET_MS,
   DEFAULT_STALL_TIMEOUT_SEC,
   DEFAULT_TIMEOUT_SEC,
   type LiveRunManifest,
@@ -433,6 +434,16 @@ export async function runAgent(
       timeoutSec: config.timeout ?? DEFAULT_TIMEOUT_SEC,
       stallTimeoutSec: config.stallTimeout ?? DEFAULT_STALL_TIMEOUT_SEC,
       maxTurns: config.maxTurns ?? 0,
+      // Plan 027 Phase 5 (#35) — record the effective idle budget for coordination
+      // runs so `coordination_status` can surface `idleBudgetSec` (AC-12). The
+      // companion reads its budget off disk via the tool, NOT from MINIH_PARAMS
+      // (which never reaches the inside-MCP subprocess — PIC-P5-E / A2).
+      ...(coordinationEnabled && {
+        idleBudgetMs:
+          typeof config.params?.idleBudgetMs === 'number'
+            ? config.params.idleBudgetMs
+            : DEFAULT_IDLE_BUDGET_MS,
+      }),
     };
 
     // Initial run.json manifest — workshop 002 §1, plan 009.

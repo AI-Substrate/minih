@@ -280,6 +280,7 @@ export {
 export { RUN_LOCK_HELD, RunLockHeldError } from './run-lock.js';
 export {
   flushThrottled as flushManifestThrottled,
+  readIdleBudgetMs,
   readManifest,
   updateManifest,
   writeManifest,
@@ -361,7 +362,11 @@ export type {
 } from './types.js';
 // Plan 026 — shared budget defaults (CD-05: one default source for the
 // runner and the CLI run/resume commands).
-export { DEFAULT_STALL_TIMEOUT_SEC, DEFAULT_TIMEOUT_SEC } from './types.js';
+export {
+  DEFAULT_IDLE_BUDGET_MS,
+  DEFAULT_STALL_TIMEOUT_SEC,
+  DEFAULT_TIMEOUT_SEC,
+} from './types.js';
 export { ulid } from './ulid.js';
 export {
   validateInput,

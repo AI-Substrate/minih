@@ -127,3 +127,46 @@ describe('coordination_status MCP tool', () => {
     }
   });
 });
+
+/**
+ * Plan 027 Phase 5 — AC-12 / T002. The configured idle budget is discoverable at
+ * runtime: `coordination_status` surfaces `idleBudgetSec`, read off the run's
+ * recorded `run.json` `budgets.idleBudgetMs` (NOT MINIH_PARAMS — that env never
+ * reaches the inside-MCP subprocess, PIC-P5-E / validate-v2 A2).
+ */
+describe('coordination_status idle budget (AC-12)', () => {
+  function writeRunManifest(budgets: Record<string, unknown> | null): void {
+    const manifest = {
+      schemaVersion: 1,
+      slug: context.agentSlug,
+      runId: context.runId,
+      ...(budgets ? { budgets } : {}),
+    };
+    fs.writeFileSync(
+      path.join(context.runDir, 'run.json'),
+      `${JSON.stringify(manifest, null, 2)}\n`,
+    );
+  }
+
+  it('surfaces a NON-DEFAULT idleBudgetMs as idleBudgetSec (a stub returning the default would fail here)', () => {
+    writeRunManifest({
+      timeoutSec: 7200,
+      stallTimeoutSec: 300,
+      maxTurns: 0,
+      idleBudgetMs: 120_000,
+    });
+    const sc = coordinationStatus(context).structuredContent;
+    expect(sc?.idleBudgetSec).toBe(120);
+  });
+
+  it('falls back to the schema default (1800s) when run.json records no idle budget', () => {
+    writeRunManifest({ timeoutSec: 7200, stallTimeoutSec: 300, maxTurns: 0 });
+    const sc = coordinationStatus(context).structuredContent;
+    expect(sc?.idleBudgetSec).toBe(1800);
+  });
+
+  it('falls back to the schema default when run.json is absent entirely', () => {
+    const sc = coordinationStatus(context).structuredContent;
+    expect(sc?.idleBudgetSec).toBe(1800);
+  });
+});

@@ -18,6 +18,7 @@ import {
   CompanionLedgerError,
   coordinationRunLocation,
   deriveCompanionLedger,
+  readIdleBudgetMs,
 } from '../../runner/index.js';
 import type { McpServerContext } from '../context.js';
 import { McpToolError, type McpToolResult } from '../types.js';
@@ -31,6 +32,13 @@ export interface CoordinationStatusResult {
   ledger: CompanionLedger;
   /** Strict-validated draft farewell, or null when the draft failed validation. */
   draftFarewell: CompanionDraftFarewell | null;
+  /**
+   * Plan 027 Phase 5 (#35) — the configured idle budget in SECONDS (AC-12), read
+   * off the run's recorded `run.json` `budgets.idleBudgetMs`. Lets the companion
+   * discover its effective stand-down budget at runtime instead of inferring it.
+   * `idleBudgetSec` (not `*Ms`) is the Phase-6 self-discovery trio name.
+   */
+  idleBudgetSec: number;
 }
 
 export function coordinationStatus(
@@ -57,6 +65,7 @@ export function coordinationStatus(
     coordinationMode: ledger.coordinationMode,
     ledger,
     draftFarewell: buildDraftFarewell(ledger),
+    idleBudgetSec: Math.round(readIdleBudgetMs(context.runDir) / 1000),
   };
 
   return {

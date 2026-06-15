@@ -60,6 +60,15 @@ export const DEFAULT_TIMEOUT_SEC = 900;
  */
 export const DEFAULT_STALL_TIMEOUT_SEC = 300;
 
+/**
+ * Plan 027 Phase 5 (#35) — default companion idle budget in ms (30 min).
+ * MIRRORS `agents/code-review-companion/input-schema.json` `idleBudgetMs.default`
+ * (1_800_000): the runner records the effective idle budget into run.json so the
+ * `coordination_status` tool can surface it as `idleBudgetSec` (AC-12), and this
+ * is the fallback when a run carries no explicit `idleBudgetMs` param.
+ */
+export const DEFAULT_IDLE_BUDGET_MS = 1_800_000;
+
 /** Configuration for a single agent run. */
 export interface AgentRunConfig {
   slug: string;
@@ -579,6 +588,12 @@ export interface LiveRunManifest {
     timeoutSec: number;
     stallTimeoutSec: number;
     maxTurns: number;
+    /**
+     * Plan 027 Phase 5 (#35) — effective companion idle budget in ms, recorded
+     * for coordination runs so `coordination_status` can surface `idleBudgetSec`
+     * (AC-12). Absent on non-coordination runs and on runs written before #35.
+     */
+    idleBudgetMs?: number;
   };
   /**
    * Plan 018 R1 — populated alongside `terminalReason: 'permission-denied'`.

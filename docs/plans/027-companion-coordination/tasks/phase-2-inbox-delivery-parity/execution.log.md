@@ -132,3 +132,41 @@ Added `describe('waitForAny ↔ inbox_list unacked parity (#40 AC-4)')` to `even
   - **magicWand**: *"Add the planned inside `coordination_status`/`report_draft` MCP tool that derives tasksReceived/findingsSent/summaries/unresolved/report.findings from the durable inbox/state ledger, then pre-fills the farewell envelope so the companion doesn't hand-count or risk touching run-dir files during shutdown."*
 - **Reconciliation**: 0 findings to address/defer/dispute — clean. The magicWand is **already the plan's Phase 4** (`deriveCompanionLedger` → `coordination_status` MCP tool + draft farewell) — same independent re-derivation Phase 1's companion produced. No new follow-up dossier needed; it strengthens the case for Phase 4. Surfaced as a follow-up candidate only.
 
+
+---
+
+## Validation Record — code change (validate-v2, 2026-06-15)
+
+`/validate-v2 --artifact src/runner/event-wait.ts --scope broad` — a second-pair-of-eyes pass on the **implementation** (the earlier `## Validation Findings` block validated the *dossier*; the companion reviewed *commits*; this validates the *code*). 4 parallel Explore agents on the session model.
+
+### Validation Thesis
+- **Raison d'être**: Fix #40/CF-01 — `wait_for_any` snapshotted inbox IDs at entry and only emitted post-snapshot messages, so queued-while-busy work was invisible to the next wait. Unify the `inbox.message` branch onto the durable unread/ack model `inbox_list`/`pollInboxLane` uses.
+- **Value claim**: a companion receives queued-before-call work; `inbox_list` parity for the same filter; no-filter wildcard so a new `type` can't make it deaf.
+- **Proof target**: Implementation / Validated Evidence **at the unit level** (live e2e is an explicit non-goal — `MINIH_FAKE_ADAPTER` dropped with Phase 0).
+- **Thesis source**: `companion-coordination-spec.md:15,25,29`; plan `:149-153`; this dossier (Executive Briefing / Goals / Non-Goals).
+- **Thesis verdict**: **Advanced** at target proof level.
+- **Main thesis risk**: None detected — the snapshot bug is gone (not bypassed), the AC-3 test is discriminating (asserts message body, fails the old impl), lane direction matches production (seed `outside` lane + `side:'inside'`), and no claim overreaches into live-proven.
+
+| Agent | Lenses Covered | Issues | Verdict |
+|-------|----------------|--------|---------|
+| Correctness | System Behavior, Edge Cases, Hidden Assumptions, Technical Constraints | 0 | ✅ |
+| Regression + Ops | Integration & Ripple, Deployment & Ops, Performance & Scale | 0 | ✅ |
+| Domain + Forward-Compat | Domain Boundaries, Concept Docs, Forward-Compatibility, Contract Integrity | 0 | ✅ |
+| Thesis + Evidence | Thesis Alignment, Evidence Sufficiency, Proof-Level Fit | 0 | ✅ |
+
+Lens coverage: 13/15 (≥9 floor met). Not STANDALONE — Phase 4 + `mcp/tools/wait.ts` are named downstreams.
+
+### Forward-Compatibility Matrix
+| Consumer | Requirement | Failure Mode | Verdict | Evidence |
+|----------|-------------|--------------|---------|----------|
+| Phase 4 `deriveCompanionLedger` | derive over raw `folder.ts` lanes, NOT consume `listUnackedVisible` | shape mismatch | ✅ | `inbox-poll.ts:153-155` doc-comment forecloses ledger/drain reuse; no Phase 4 call sites |
+| `src/mcp/tools/wait.ts` | no-filter form wakes on unknown `type` | contract drift | ✅ | `parseInboxFilter(undefined)→undefined`→`filterTypes=null`→`listUnackedVisible({waitForAny:undefined})`; MCP wildcard test green |
+| `pollInboxLane` (same module) | signature + filter order byte-identical | contract drift | ✅ | `inbox-poll.ts:112-116` signature unchanged; filter order unread→type→waitForAny→after unchanged; `inbox-poll.test.ts` 12/12 |
+
+**Thesis alignment**: Value claim advanced at the Implementation/Validated-Evidence (unit) proof level; main thesis risk: none detected (discriminating tests, correct lane direction, no live-proof overreach).
+
+**Outcome alignment**: The artifact advances the VPO Outcome "Make the companion-coordination contract reliable and self-describing: queued messages reach the companion when they're queued (#40)" by making `wait_for_any` share the durable unread/ack filter model with `inbox_list`, guaranteeing already-queued unacked messages are delivered with wildcard wake, while preserving additive-only + single-settle invariants and scoping the new export to prevent downstream shape mismatches.
+
+**Standalone?**: No — Phase 4 (behavioral parity dependency) and `mcp/tools/wait.ts` (wildcard) are named consumers.
+
+Overall: ✅ **VALIDATED** — 0 issues across all 4 agents; no fixes required.

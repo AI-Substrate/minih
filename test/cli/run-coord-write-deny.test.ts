@@ -218,6 +218,54 @@ describe('FX008 — coord write-deny precondition (CLI regression)', () => {
     );
   }, 15_000);
 
+  it('case (a-release-default): coord-enabled + NO permissions block → E205 via release-default (#25 repro)', () => {
+    // The literal #25 real-world repro: an operator stands up a coordinated
+    // agent and never configures `permissions:`. The release-default layer
+    // (runner.ts → `releaseDefault: { preset: minihReleaseDefault }`) resolves
+    // to `restricted` (write-deny), so the boot gate refuses the run with E205
+    // — provenance `release-default`, NOT `frontmatter` (that's case (a)).
+    writeAgent(
+      'coord-default',
+      [
+        'description: "027 P1 — release-default fall-through fires E205"',
+        'coordination: enabled',
+        '# NO permissions: block — falls through to the shipped release default',
+      ].join('\n'),
+    );
+
+    // Precondition fires BEFORE SDK boot, so no real GH_TOKEN is needed.
+    const result = run(['run', 'coord-default'], {
+      cwd: tmpDir,
+      env: { GH_TOKEN: 'fake-token-not-needed' },
+    });
+
+    // === CLI envelope: same E205, but resolved from the release default ===
+    expect(result.exitCode).toBe(1);
+    const env = JSON.parse(result.stdout);
+    expect(env.status).toBe('error');
+    expect(env.error.code).toBe('E205');
+    expect(env.error.message).toContain('E205 COORDINATION_WRITE_DENIED');
+    expect(env.error.message).toContain("Coordinated agent 'coord-default'");
+    expect(env.error.message).toContain("'restricted'");
+    // The provenance that case (a) cannot reach — proves the LIVE default path.
+    expect(env.error.message).toContain('Resolved from: release-default');
+
+    // === run.json provenance snapshot ===
+    const runDir = env.error.details.runDir;
+    expect(fs.existsSync(runDir)).toBe(true);
+    const runJson = JSON.parse(
+      fs.readFileSync(path.join(runDir, 'run.json'), 'utf-8'),
+    );
+    expect(runJson.terminalReason).toBe('permission-denied');
+    expect(runJson.permissionError.kind).toBe('coord-write-deny');
+    expect(runJson.permissions.preset).toBe('restricted');
+    expect(runJson.permissions.presetSource).toBe('release-default');
+    expect(runJson.permissions.decisions.write).toBe('deny');
+
+    // Signal 5 — exit code 126 (POSIX permission-denied).
+    expect(env.error.details.metadata.exitCode).toBe(126);
+  }, 15_000);
+
   it('AC-FX8.6 — coord-disabled + read-only + no flag → precondition does NOT fire', () => {
     // Coordination omitted from frontmatter = disabled. The precondition
     // is coord-only, so the run should NOT be refused with E205.

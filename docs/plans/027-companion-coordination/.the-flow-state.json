@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "slug": "companion-coordination",
+  "plan_dir": "docs/plans/027-companion-coordination",
+  "mode": "Full",
+  "current_stage": "awaiting-6",
+  "pending_command": "/the-flow 8 merge --plan \"docs/plans/027-companion-coordination\"",
+  "intent": "Fix the 8 companion + coordination reliability GH issues in one plan as dependency-ordered phases",
+  "milestones_total": 10,
+  "milestones_done": 9,
+  "last_checkpoint_at": "2026-06-15T08:50:00Z",
+  "compacted_seams": [
+    "post-spec",
+    "pre-tasks",
+    "pre-implement-p1",
+    "phase-end-p1",
+    "pre-tasks-p2",
+    "pre-implement-p2",
+    "phase-end-p2",
+    "pre-tasks-p3",
+    "pre-implement-p3",
+    "pre-tasks-p4",
+    "pre-tasks-p5",
+    "pre-implement-p5",
+    "phase-end-p5",
+    "pre-tasks-p6",
+    "pre-implement-p6",
+    "phase-end-p6"
+  ],
+  "status": "active"
+}

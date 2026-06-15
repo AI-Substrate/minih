@@ -28,6 +28,13 @@ export {
   type MinihMcpServerEntry,
   resolveInsideMcpServerEntry,
 } from './spawn.js';
+// Plan 027 Phase 4 — `coordination_status` tool exported for unit-test
+// importability (a deliberate deviation from the permission-status precedent,
+// PIC-E).
+export {
+  type CoordinationStatusResult,
+  coordinationStatus,
+} from './tools/coordination-status.js';
 export {
   errorResult,
   isMcpToolName,

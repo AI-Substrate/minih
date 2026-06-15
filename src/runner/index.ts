@@ -47,6 +47,16 @@ export {
   writeFileAtomic,
   writeFileAtomicAsync,
 } from './atomic-write.js';
+// Plan 027 Phase 4 — companion lifecycle ledger (#36). The runtime deriver
+// needs its OWN export line; the `export type {…} from './types.js'` block
+// below carries only the `CompanionLedger` type (PIC-I).
+export {
+  assembleDraftFarewell,
+  buildDraftFarewell,
+  CompanionLedgerError,
+  deriveCompanionLedger,
+  validateDraftFarewell,
+} from './companion-ledger.js';
 export type { CoordinationEnv } from './context.js';
 export {
   detectContext,
@@ -54,6 +64,16 @@ export {
   MINIH_ENV_KEYS_ALL,
   MINIH_ENV_KEYS_COORDINATION,
 } from './context.js';
+// Plan 027 Phase 5 — shutdown / report-write drain (#35). Re-derive the ledger
+// over raw lanes at the pre-report-write point + overwrite-only-findings.
+export type {
+  ReconcileOutcome,
+  ReconcileReason,
+} from './coordination-drain.js';
+export {
+  drainAndReadInbox,
+  reconcileReportFindings,
+} from './coordination-drain.js';
 export {
   displayEvent,
   displayHeader,
@@ -95,6 +115,14 @@ export {
 } from './human-view-errors.js';
 export type { HumanViewSources } from './human-view-model.js';
 export { buildHumanViewModel } from './human-view-model.js';
+export type {
+  CompanionIdleLedger,
+  IdlePolicyDecision,
+  IdlePolicyInput,
+} from './idle-policy.js';
+// Plan 027 Phase 5 — ledger-driven idle policy (#35). Pure stand-down decision
+// over the companion ledger; consumed by the prompt via `coordination_status`.
+export { evaluateIdlePolicy } from './idle-policy.js';
 export type {
   InboxPollErrorCode,
   PollInboxOptions,
@@ -262,6 +290,7 @@ export {
 export { RUN_LOCK_HELD, RunLockHeldError } from './run-lock.js';
 export {
   flushThrottled as flushManifestThrottled,
+  readIdleBudgetMs,
   readManifest,
   updateManifest,
   writeManifest,
@@ -296,6 +325,10 @@ export type {
   AgentDefinition,
   AgentRunConfig,
   AgentRunResult,
+  CompanionAckChain,
+  CompanionDraftFarewell,
+  CompanionFinding,
+  CompanionLedger,
   CompletedMetadata,
   ControlTimelineEntry,
   CoordinationFrontmatter,
@@ -339,7 +372,11 @@ export type {
 } from './types.js';
 // Plan 026 — shared budget defaults (CD-05: one default source for the
 // runner and the CLI run/resume commands).
-export { DEFAULT_STALL_TIMEOUT_SEC, DEFAULT_TIMEOUT_SEC } from './types.js';
+export {
+  DEFAULT_IDLE_BUDGET_MS,
+  DEFAULT_STALL_TIMEOUT_SEC,
+  DEFAULT_TIMEOUT_SEC,
+} from './types.js';
 export { ulid } from './ulid.js';
 export {
   validateInput,

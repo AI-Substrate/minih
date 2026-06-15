@@ -60,6 +60,15 @@ export const DEFAULT_TIMEOUT_SEC = 900;
  */
 export const DEFAULT_STALL_TIMEOUT_SEC = 300;
 
+/**
+ * Plan 027 Phase 5 (#35) — default companion idle budget in ms (30 min).
+ * MIRRORS `agents/code-review-companion/input-schema.json` `idleBudgetMs.default`
+ * (1_800_000): the runner records the effective idle budget into run.json so the
+ * `coordination_status` tool can surface it as `idleBudgetSec` (AC-12), and this
+ * is the fallback when a run carries no explicit `idleBudgetMs` param.
+ */
+export const DEFAULT_IDLE_BUDGET_MS = 1_800_000;
+
 /** Configuration for a single agent run. */
 export interface AgentRunConfig {
   slug: string;
@@ -365,6 +374,106 @@ export interface CoordinationFrontmatter {
   inside?: Record<string, unknown>;
 }
 
+/**
+ * Plan 027 Phase 4 (#32) — one review finding. The singular declared shape for
+ * the `findings[]` contract: it mirrors a live `inbox_send type:'finding'`
+ * message and is the item type the runner derives into `report.findings[]`.
+ */
+export interface CompanionFinding {
+  severity: string;
+  file: string;
+  category: string;
+  issue: string;
+  recommendation: string;
+}
+
+/**
+ * Plan 027 Phase 4 (#36 / finding F001) — one resolved request chain.
+ *
+ * Links an inbound (peer → companion) message to the inside-lane responses that
+ * reference it via `ackOf`, in append order. This is the explicit "ackOf chain"
+ * the AC-8/T002 dossier promised: derived from BOTH lanes, not inferred from the
+ * flat `reviewedIds`/`ackedIds` sets.
+ */
+export interface CompanionAckChain {
+  /** The inbound message id this chain resolves. */
+  inboundId: string;
+  /** The inbound message type (`task` / `directive` / ...). */
+  inboundType: string;
+  /** Inside-lane responses referencing `inboundId` via `ackOf`, in order. */
+  responses: Array<{ id: string; type: string }>;
+}
+
+/**
+ * Plan 027 Phase 4 (#36) — the companion lifecycle ledger.
+ *
+ * Derived (never reconstructed from prompt memory) from a run's durable
+ * inbox/state lanes by the pure `deriveCompanionLedger(location)` runner
+ * function. One deriver feeds both the inside `coordination_status` MCP tool
+ * and the outside `minih companion status` CLI verb, so the two surfaces can
+ * never diverge. Field names are the downstream contract Phase 5 (AC-11)
+ * destructures by name (`idleElapsedMs`, `unresolvedPeerRequests`).
+ */
+export interface CompanionLedger {
+  /** Pinned from the run's frozen `prompt.md` frontmatter (binary source). */
+  coordinationMode: 'enabled' | 'disabled';
+  /** Current inside-agent state status (`state/inside.json`); null if unpublished. */
+  state: string | null;
+  /** Whether inside state has been published (state file written or history non-empty). */
+  statePublished: boolean;
+  /**
+   * Inbound `task` ids with COMPLETION evidence — an inside `summary` whose
+   * `ackOf` targets the task (F002). NOT the receipt-ack set: the companion acks
+   * a task on arrival, before review, so `ackedIds` ⊇ `reviewedIds`.
+   */
+  reviewedIds: string[];
+  /** All ids acknowledged via inside `ack` records (the receipt set). */
+  ackedIds: string[];
+  /** Count of inside-lane `finding` messages emitted (a coordination metric;
+   * may exceed `findings.length` when a message carries no structured content). */
+  findingsCount: number;
+  /** Count of inside-lane `summary` messages emitted. */
+  summariesCount: number;
+  /** Count of inside-lane `progress` messages emitted (F003 — folded into
+   * the draft farewell's `peerUpdatesSent`). */
+  progressCount: number;
+  /** Inbound requests (non-`ack`, non-`briefing`) not yet acknowledged. */
+  unresolvedPeerRequests: number;
+  /** Milliseconds since the most recent inbound message `ts`; null if none yet. */
+  idleElapsedMs: number | null;
+  /** Id of the most recent inbound `task` message, or null. */
+  lastTaskId: string | null;
+  /** Review findings (#32) derived from inside-lane `finding` messages. */
+  findings: CompanionFinding[];
+  /** Resolved request chains (F001) linking each acked inbound id to its
+   * inside-lane responses, derived from both lanes. */
+  ackChains: CompanionAckChain[];
+}
+
+/**
+ * Plan 027 Phase 4 (#36 / finding 04) — the draft farewell envelope assembled
+ * from a {@link CompanionLedger}. Shaped like a minih system output so it can be
+ * offered as a pre-filled `report.json`. It is **strictly validated before it is
+ * offered or written** (closing the `system-output.json` `additionalProperties:
+ * true` write-before-validate gap): a malformed draft is safe-nulled and never
+ * reaches `report.json`.
+ */
+export interface CompanionDraftFarewell {
+  summary: string;
+  retrospective: {
+    workedWell: string;
+    confusing: string;
+    magicWand: string;
+    coordination: {
+      peerUpdatesSent: number;
+      unresolvedPeerRequests: number;
+      statePublished: boolean;
+    };
+  };
+  /** Derived review findings (#32) — copied from the ledger, not re-authored. */
+  findings: CompanionFinding[];
+}
+
 // ===========================================================================
 // Human View — Phase 1 (plan 009-human-agent-view)
 //
@@ -479,6 +588,12 @@ export interface LiveRunManifest {
     timeoutSec: number;
     stallTimeoutSec: number;
     maxTurns: number;
+    /**
+     * Plan 027 Phase 5 (#35) — effective companion idle budget in ms, recorded
+     * for coordination runs so `coordination_status` can surface `idleBudgetSec`
+     * (AC-12). Absent on non-coordination runs and on runs written before #35.
+     */
+    idleBudgetMs?: number;
   };
   /**
    * Plan 018 R1 — populated alongside `terminalReason: 'permission-denied'`.

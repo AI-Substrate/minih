@@ -12,11 +12,13 @@
 
 | File | Classification | Purpose |
 |------|----------------|---------|
-| `src/mcp/types.ts` | contract | Six tool names, input schemas including bounded `inbox_list.waitMs` and multi-type `waitForAny`, result/error envelope helpers, MCP error codes |
+| `src/mcp/types.ts` | contract | Nine tool names, input schemas including bounded `inbox_list.waitMs` and multi-type `waitForAny`, result/error envelope helpers, MCP error codes |
 | `src/mcp/context.ts` | contract | Hidden context loader/validator for baked run env; canonical path containment and redacted errors |
 | `src/mcp/tools/inbox.ts` | internal | `inbox_list`, `inbox_send`, `inbox_ack` over append-only NDJSON lanes, including bounded long-poll reads and multi-type filters for peer messages |
 | `src/mcp/tools/state.ts` | internal | `state_get`, `state_set`, `state_transition` over runner state helpers and schema validation |
-| `src/mcp/server.ts` | internal | Stdio MCP server, six-tool manifest, async-safe dispatcher, signal cleanup, process marker |
+| `src/mcp/tools/coordination-status.ts` | internal | `coordination_status` — returns the derived coordination lifecycle ledger + strict-validated draft farewell + the self-discovery trio `{allowedStates, coordinationMode, idleBudgetSec}` over runner `deriveCompanionLedger` (027 P4 #36; trio completed P6 #29 / AC-14) |
+| `src/mcp/tools/inside-state-schema.ts` | internal | Shared mcp-internal inside-state schema resolver `insideStateSchemaPath` (+ `DEFAULT_INSIDE_STATE_SCHEMA`), extracted from `state.ts` so both validation and `coordination_status.allowedStates` resolve one 3-level path: preferred `state/` → legacy ROOT (PIC-1) → built-in default (027 P6 / T002) |
+| `src/mcp/server.ts` | internal | Stdio MCP server, nine-tool manifest, async-safe dispatcher, signal cleanup, process marker |
 | `src/mcp/spawn.ts` | contract | `buildInsideMcpServerConfig(...)` and private server-entry resolution |
 | `src/mcp/index.ts` | contract | Barrel exports for CLI composition and tests |
 | `test/mcp/*.test.ts` | test | Contract, tool, dispatcher, spawn, coexistence, real stdio, and leak-regression coverage |
@@ -34,14 +36,16 @@
 | `McpToolError` / `McpErrorCode` | Error/Type | mcp tools/server |
 | `createMinihMcpServer(context)` / `runStdioMcpServer(env?)` | Function | private server entrypoint, real stdio tests |
 | `dispatchToolCall(context, name, args)` | Async Function | mcp server, dispatcher tests |
-| Six coordination tools | MCP tools | `inbox_list`, `inbox_send`, `inbox_ack`, `state_get`, `state_set`, and `state_transition` |
+| Nine coordination tools | MCP tools | `inbox_list`, `inbox_send`, `inbox_ack`, `state_get`, `state_set`, `state_transition`, `wait_for_any`, `permission_status`, `coordination_status` |
 
 ## Concepts
 
-The inside MCP server exposes exactly six coordination tools to the active inside agent:
+The inside MCP server exposes exactly nine coordination tools to the active inside agent:
 
 - Inbox: `inbox_list`, `inbox_send`, `inbox_ack`
 - State: `state_get`, `state_set`, `state_transition`
+- Events: `wait_for_any`
+- Introspection: `permission_status`, `coordination_status`
 
 All tool handlers are backed by hidden baked context, not by client-supplied path arguments. The context bakes `runId`, `runDir`, `agentSlug`, `agentsDir`, inbox/state directories, side, and the process marker into the private server environment after the runner has allocated the run, keeping the MCP client scoped to the current run's coordination files and artifacts.
 
@@ -55,6 +59,7 @@ All tool handlers are backed by hidden baked context, not by client-supplied pat
 | Blocking inbox read | `inbox_list({ unread: true, type, waitForAny, waitMs })` can wait up to `MAX_INBOX_WAIT_MS` for a filter-matching outside-lane message. `waitForAny` accepts 1-16 unique exact message types and is mutually exclusive with `type`; omitted or zero waits preserve the immediate response shape. |
 | Private server artifact | Spawn config resolves `dist/mcp/server.js` as an implementation detail in dev/package modes; the artifact path is not a user-facing contract. |
 | Leak marker | Spawned server sets `process.title` to `minih-mcp-<runId>` so opt-in tests can assert cleanup without broad process killing. |
+| Coordination lifecycle introspection | `coordination_status` mirrors `permission_status` (handler takes only the baked context) and returns the companion's derived lifecycle ledger + a strict-validated draft farewell + the pinned `coordinationMode` (`enabled`/`disabled`), reading the SAME runner `deriveCompanionLedger` the outside `minih companion status` CLI verb uses. Read-only, always allowed; self-introspection ("where am I in my lifecycle?") without firing a request. A torn lane maps `CompanionLedgerError → MCP_INBOX_CORRUPT`. (027 P4 #36) **027 P6 (#29 / AC-14)** completed the self-discovery trio: `coordination_status` also returns `allowedStates` (the per-pack inside-state enum, resolved from the agent ROOT via the shared `insideStateSchemaPath` — PIC-1; `[]` if unresolvable) and `idleBudgetSec`, so `{allowedStates, coordinationMode, idleBudgetSec}` are learnable in one call. `coordinationMode` stays pinned `enabled`/`disabled` (not widened). |
 
 The current supported validation surface is the MCP server/spawn/leak test suite (`test/mcp/*.test.ts`, including `MINIH_PGREP=1 npx vitest run test/mcp/leak-regression.test.ts`). The cleanup requirement traces to MCP workshop Finding 02 and validates success, failure, timeout, and interrupt paths. Workshop 009 documents a future standalone probe-harness idea; it is not an existing `scripts/mcp-harness.mjs` command.
 
@@ -64,7 +69,7 @@ The current supported validation surface is the MCP server/spawn/leak test suite
 
 | Domain | Contract Used |
 |--------|---------------|
-| runner | `CoordinationRunLocation`, `inboxLanePath`, `stateFilePath`, `historyPath`, `watchFileChanges`, `readStateLazy`, `writeState`, `appendHistory`, `ulid`, coordination types/schemas |
+| runner | `CoordinationRunLocation`, `inboxLanePath`, `stateFilePath`, `historyPath`, `watchFileChanges`, `readStateLazy`, `writeState`, `appendHistory`, `ulid`, `deriveCompanionLedger`/`buildDraftFarewell`/`CompanionLedger` (027 P4), coordination types/schemas |
 
 ### Domains That Depend On This
 
@@ -86,3 +91,6 @@ The current supported validation surface is the MCP server/spawn/leak test suite
 | 010 HF-001 | Refactored `inbox_list` to delegate to the new shared `runner.pollInboxLane` primitive (filter chain, settlement contract, file-watch debouncing, error mapping). MCP-side behavior preserved bit-for-bit; existing 23 inbox tests + 3 coordination-contract tests still pass. `MAX_INBOX_WAIT_MS = 30000` cap is now passed as `maxWaitMs` parameter to the shared helper rather than enforced inline. `InboxPollError` codes mapped back to MCP error codes (`MCP_INVALID_ARGUMENT`, `MCP_INBOX_CORRUPT`, `MCP_INTERNAL_ERROR`). |
 | 013-message-reply-chains | Rewrote the `inbox_send` tool's `ackOf` description in `mcp/types.ts:238` from ack-only correlation language to general "reply to" framing, mentioning the `In reply to:` rendering and pointing at `inbox_ack` as the dedicated tool for explicit acknowledgements. **No schema change** — only the human-readable description string was updated. The handler at `mcp/tools/inbox.ts:91-107` already accepted `ackOf` for any `type` (intentional same-lane chaining allowance from earlier work); plan 013 makes that capability discoverable to agents reading the tool list. 1 new round-trip test (`inbox_send` with non-ack `ackOf` writes a message with the field populated and readable from JSONL). |
 | 014-wait-for-any-events | Added the seventh inside-coordination tool: `wait_for_any`. Long-poll primitive that wakes on any combination of inbox messages and state changes in one call, replacing the spin-loop-on-`state_get` pattern. Schema enforces 1–8 watch entries + bounded `waitMs` (≤30 000 ms — same cap as `inbox_list`). Returns a discriminated-union `EventEnvelope { kind, ts, data }` array — forward-compat for future v2 kinds (`fs.changed`, `tool.completed`). Schema uses string `description` + runtime kind validation (no nested JSON Schema `enum`) per the FX001 lesson — gpt-5.4+ rejects nested `enum`/`oneOf`/`not`/`anyOf` with CAPIError 400. New `mcp/tools/wait.ts` handler validates input (caps, required fields, unknown/duplicate kind, bounds) and maps `StateFileCorruptError → MCP_STATE_CORRUPT`, `EventWaitInboxCorruptError → MCP_INBOX_CORRUPT`. 16 new tests (15 schema validation + 1 stdio round-trip). |
+| 027 Phase 3 (#27/#31) | Pinned inside-state vocabulary coherence (AC-6): a coordination-contract test asserts every published `code-review-companion` `state_transition` target is accepted by the resolved schema (read from the real shipped **root** schema, level-2 resolution), plus a discriminating dropped-enum negative that hard-rejects with `MCP_INVALID_ARGUMENT`. **No tool-surface change** — `validateInsideState`/`insideStateSchemaPath` unchanged; verify-and-pin only. |
+| 027 Phase 4 (#36/#32) | Added the **ninth** inside tool: `coordination_status` (`tools/coordination-status.ts`). Mirrors `permission-status.ts` (handler takes only the baked context) and reads the runner's pure `deriveCompanionLedger`, returning `{agentSlug, coordinationMode, ledger, draftFarewell}` in `structuredContent`; a `CompanionLedgerError` maps to `MCP_INBOX_CORRUPT`. Registered in `MCP_TOOL_NAMES` + `TOOL_CONTRACTS` + the exhaustive `server.ts` dispatch (no `default` — PIC-D) + barrel (PIC-E). `coordinationMode` pinned `enabled`/`disabled` (no richer source). Tool-count contract test `types.test.ts` + real-stdio manifest `server.test.ts` updated 8→9. This doc's local counts refreshed to nine; registry-wide tool-count reconciliation across other docs lands in Phase 6.3. |
+| 027 Phase 6 (#29 / AC-14) | Completed the **self-discovery trio** on `coordination_status`: added `allowedStates: string[]` (the per-pack inside-state status enum) alongside the already-present `coordinationMode` + `idleBudgetSec`. Extracted the 3-level resolver from `state.ts` into a shared mcp-internal `tools/inside-state-schema.ts` (`insideStateSchemaPath` + `DEFAULT_INSIDE_STATE_SCHEMA`) so validation and `allowedStates` resolve one path — preferred `state/` → legacy ROOT (PIC-1) → default; `allowedStates` reads `.properties.status.enum`, `[]` on any failure (never throws). `coordinationMode` left pinned `enabled`/`disabled`. New `test/mcp/inside-state-schema.test.ts` (fallback order) + extended `coordination-status.test.ts` (trio shape). Intra-mcp only; doctor keeps its own cli resolver. |

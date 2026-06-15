@@ -4,7 +4,7 @@
 flowchart TD
     cli["cli<br/>commands, JSON envelopes, stdout/stderr UX,<br/>outside peer commands, tail snapshots,<br/>composition-root wiring"]
     runner["runner<br/>agent discovery, prompt/preamble assembly,<br/>output validation fallback, run orchestration,<br/>coordination file helpers, artifacts"]
-    mcp["mcp<br/>private inside server, hidden baked context,<br/>six backend-safe inbox/state tools,<br/>bounded multi-type inbox long-poll, spawn config"]
+    mcp["mcp<br/>private inside server, hidden baked context,<br/>nine backend-safe inbox/state/introspection tools,<br/>bounded multi-type inbox long-poll, spawn config"]
     adapter["adapter<br/>copilot-sdk wrapper, normalized events,<br/>SessionSender, fake adapter tests"]
     measurement["measurement<br/>conceptual contracts, metric vocabulary,<br/>proof levels, traceability, authority/redaction,<br/>benchmark and pulse semantics"]
     eng_harness["eng-harness<br/>.harness/ substrate: governance contract,<br/>composite boot envelope, friction capture,<br/>committed retro records"]
@@ -36,7 +36,7 @@ Import direction: `cli → {mcp, runner, adapter}`, `mcp → runner`, `runner �
 |--------|---------|------------|-----------------|
 | cli | User commands, coordinated scaffold, outside peer commands, `tail --snapshot`, SDK/MCP composition wiring, measurement UX | runner, mcp, adapter, measurement contracts | Healthy: top-level composition root only |
 | runner | Agent definitions, orchestration, prompt builder, output-path validation fallback, coordination files, forwarders, snapshots, artifacts, measurement facts | adapter, measurement contracts | Healthy: no CLI/MCP imports |
-| mcp | Private inside server config, six backend-safe inbox/state tools, bounded `inbox_list.waitMs`/`waitForAny` long-poll | runner | Healthy: inside-only, no public server command |
+| mcp | Private inside server config, nine backend-safe inbox/state/introspection tools (incl. `permission_status`, `coordination_status`), bounded `inbox_list.waitMs`/`waitForAny` long-poll | runner | Healthy: inside-only, no public server command |
 | adapter | SDK session/event abstraction and `SessionSender` | External SDK only | Healthy: no runner/CLI/MCP imports |
 | measurement | Vocabulary, traceability, proof levels, scorecard categories, authority/redaction rules, benchmark semantics, pulse semantics | none at runtime | Healthy: conceptual contract domain only |
 | eng-harness | Boot envelope (`harness boot --json`), committed records (`.harness/records/`), governance contract | cli envelopes at the process boundary (never imports) | Healthy: zero inbound edges by rule |

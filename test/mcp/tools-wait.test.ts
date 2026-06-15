@@ -200,6 +200,42 @@ describe('waitForAnyTool input validation (plan 014 T008)', () => {
     expect(result.structuredContent?.wait.timedOut).toBe(true);
   });
 
+  it('AC-5 wildcard: a no-filter wait wakes on a brand-new/unknown type (#40)', async () => {
+    // The no-filter form (filterTypes=null) must wake on ANY type — including
+    // one the schema never enumerated — so a fresh message kind can't make a
+    // companion deaf. Pre-queue the message so the immediate pass delivers it
+    // deterministically (no real-watch timing).
+    const lanePath = inboxLanePath(
+      coordinationRunLocation(slug, agentsDir, runId),
+      'outside',
+    );
+    fs.mkdirSync(path.dirname(lanePath), { recursive: true });
+    fs.writeFileSync(
+      lanePath,
+      `${JSON.stringify({
+        id: 'w1',
+        sender: 'outside',
+        type: 'brand-new-type',
+        subject: 's',
+        body: 'b',
+        ts: '2026-04-30T00:00:00.000Z',
+      })}\n`,
+    );
+
+    const result = await waitForAnyTool(ctx(), {
+      events: [{ kind: 'inbox.message' }], // no filter → wildcard
+      waitMs: 200,
+    });
+
+    expect(result.structuredContent?.wait.matched).toBe(true);
+    expect(result.structuredContent?.events).toHaveLength(1);
+    const e = result.structuredContent?.events[0];
+    expect(e?.kind).toBe('inbox.message');
+    if (e?.kind === 'inbox.message') {
+      expect(e.data.message.type).toBe('brand-new-type');
+    }
+  });
+
   it('rejects filter.types empty array', async () => {
     await expectInvalidArg(
       () =>

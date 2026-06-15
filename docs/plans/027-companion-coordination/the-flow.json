@@ -1,0 +1,237 @@
+{
+  "schema_version": 1,
+  "kind": "flight-plan",
+  "slug": "companion-coordination",
+  "plan_dir": "docs/plans/027-companion-coordination",
+  "mode": "Full",
+  "cursor": "merge",
+  "recommended_next": "merge",
+  "now": "Phase 6 IMPLEMENTED + COMPLETE (--companion, the FINAL build) — all 8 tasks + both harness seams done; AC-14/15/16/17 met. T001-T003: allowedStates added to coordination_status (the self-discovery trio {allowedStates, coordinationMode, idleBudgetSec} in one call); the 3-level inside-state resolver extracted to a shared mcp module insideStateSchemaPath (PIC-1 root path). T004-T005: Sensor B checkContractPhraseDrift in doctor — no_engagement parity + findings-home + state-desc, warn→fail; minih doctor still exits 0. T006-T008: docs reconciliation (AGENTS_README + registry six→nine + no_engagement; mcp/cli domain deltas). Pre-implement boot was UNHEALTHY (lint = a biome format diff in this flight-plan's own the-flow.json) → fixed (Jordan: 'fix lint, then build') → degraded → proceeded. Live companion (run …18-22-48…) reviewed every commit + drain, exited stop_requested clean, sent 2 findings — MEDIUM domain-map.md still 'six' (I'd missed it) + LOW stale doctor resolver comment — BOTH reconciled. Commits 741be73, dcae0f8, 9014777, d79785d. just fft exit 0 (1386 passed). Contingent T009 NOT taken (no GO).",
+  "next": "All 6 phases DONE → the plan is code-complete (awaiting-6). Review (stage 7, the inferential/eyeball tier) is SKIPPABLE — the companion reviewed every commit live across P1/P4/P5/P6 — so the recommended next is MERGE (stage 8). Merge produces the merge analysis and executes ONLY on a typed PROCEED, then fires the plan-complete harness seam. The observe buffer (DL-001/002/003, SUGG-001/002/003, COORD-001, CRC-001 + this session's notes) drains at plan-complete. Optional: run a review pass first if you want the eyeball tier; or revisit contingent T009 (unwired evaluateIdlePolicy) as a follow-up.",
+  "_comment": "Adopted into guided bookkeeping 2026-06-14 (stages 1a/1b/2c + post-spec backpressure were direct jumps). Architect ran 2026-06-14: plan READY, 7 phases (0 optional backpressure + 1-6 issue clusters) locked; the assumed 'build' placeholder is now 7 known phase nodes. validate-v2 ran (3 agents: coherence READY, thesis/forward-compat tightenings applied inline). Tasks stage ran 2026-06-14 for Phase 0: 8-task dossier (fake-adapter seam + contract-phrase doctor check), discovered the real adapter construction site is sdk-runtime.ts:105 (not index.ts) and the contract-phrase check must be warn-only until Phase 6 reconciles the still-drifted docs. Router IS installed → backpressure on spine + plan-complete seam shown.",
+  "nodes": [
+    {
+      "id": "research",
+      "type": "research",
+      "label": "Research",
+      "status": "done",
+      "command": "/the-flow 1a explore",
+      "ran_at": "2026-06-13T11:20Z",
+      "user_input": "explore please",
+      "note": "8-scout dossier: CF-01..CF-07 contract forks, drift catalogue, idle-budget discoverability ask corroborated across >=8 retros.",
+      "artifacts": ["research-dossier.md"],
+      "next": ["spec"]
+    },
+
+    {
+      "id": "spec",
+      "type": "spec",
+      "label": "Spec",
+      "status": "done",
+      "command": "/the-flow 1b specify",
+      "ran_at": "2026-06-14T10:41Z",
+      "user_input": "run specify please",
+      "note": "Mode Full, Full TDD. Bundles 8 companion/coordination GH issues as dependency-ordered phases; 17 ACs; 3 workshop opportunities flagged.",
+      "artifacts": ["companion-coordination-spec.md"],
+      "next": ["ws1"]
+    },
+
+    {
+      "id": "ws1",
+      "type": "workshop",
+      "label": "Workshop 1 · wait_for_any delivery semantics (#40)",
+      "status": "done",
+      "branch_of": "spec",
+      "ran_at": "2026-06-14T10:54Z",
+      "user_input": "runt he workshops, ten we will do the back pressure check",
+      "note": "Selected Option A — unify wait_for_any inbox.message branch on the unread/ack model; state.* unchanged; no-filter = wildcard.",
+      "artifacts": ["workshops/001-wait-for-any-delivery-semantics.md"],
+      "next": ["ws2"]
+    },
+
+    {
+      "id": "ws2",
+      "type": "workshop",
+      "label": "Workshop 2 · state-vocabulary single-sourcing (#27/#31)",
+      "status": "done",
+      "branch_of": "spec",
+      "ran_at": "2026-06-14T10:54Z",
+      "note": "Selected Option A — per-pack schema + doctor lockstep. NB architect discovered the pack ALREADY ships this schema (legacy path) → Phase 3 is verify/relocate/pin, not build (premise refined, decision intact).",
+      "artifacts": ["workshops/002-state-vocabulary-single-sourcing.md"],
+      "next": ["ws3"]
+    },
+
+    {
+      "id": "ws3",
+      "type": "workshop",
+      "label": "Workshop 3 · companion lifecycle primitive (#36/#32/#29/#35)",
+      "status": "done",
+      "branch_of": "spec",
+      "ran_at": "2026-06-14T10:54Z",
+      "note": "Selected Option C — one runner deriveCompanionLedger() feeding two surfaces: outside `minih companion status` CLI + inside coordination_status MCP tool (ledger + draft farewell + #29 trio). #32: live-inbox canonical, report.findings[] derived.",
+      "artifacts": ["workshops/003-companion-lifecycle-primitive.md"],
+      "next": ["bp"]
+    },
+
+    {
+      "id": "bp",
+      "type": "backpressure",
+      "label": "Backpressure Check (post-spec seam)",
+      "status": "done",
+      "command": "/eng-harness-flow --event post-spec --spec docs/plans/027-companion-coordination/companion-coordination-spec.md",
+      "ran_at": "2026-06-14T11:45Z",
+      "user_input": "run it",
+      "note": "Certainty: Partial. Recommended Phase 0 = (1) MINIH_FAKE_ADAPTER env seam (high-leverage; makes live #40/#35 provable), (2) contract-phrase drift check for #32 docs. Folded into the plan as optional Phase 0.",
+      "artifacts": ["backpressure-coverage.md"],
+      "next": ["plan"]
+    },
+
+    {
+      "id": "plan",
+      "type": "plan",
+      "label": "Plan",
+      "status": "done",
+      "command": "/the-flow 3 architect --plan \"docs/plans/027-companion-coordination\"",
+      "ran_at": "2026-06-14T04:53Z",
+      "user_input": "do it",
+      "note": "Status READY; gates G1 PASS, G2/G3/G4 N/A, G5/G6/G7 PASS. 7 phases (0 optional + 1-6). validate-v2 ran (coherence READY; thesis/forward-compat tightenings applied: Phase-0 honesty, AC-9 validate-before-write, Phase-5 drain sequencing contract, coordinationMode/listUnacked naming, proof-tier note). 8 Key Findings — incl. KF01: companion already ships its state schema.",
+      "artifacts": ["companion-coordination-plan.md"],
+      "next": ["p1"]
+    },
+
+    {
+      "id": "p0",
+      "type": "phase",
+      "phase": 0,
+      "label": "🚫 Phase 0 · Establish Backpressure · DROPPED (Sensor B → P6)",
+      "status": "known",
+      "branch_of": "plan",
+      "ran_at": "2026-06-14T09:37Z",
+      "user_input": "generate teh tasks → Skip Phase 0 → Phase 1",
+      "note": "DROPPED 2026-06-14 (Jordan chose Skip Phase 0 → Phase 1). Tasks were tabled (stage 5) then validate-v2 found a HIGH design issue: a same-process FakeAgentAdapter CANNOT invoke wait_for_any/event-wait (those tools run in a spawned inside-MCP subprocess only the real SDK adapter connects to), so Sensor A's live-#40/#35 claim is unachievable as a fake AGENT adapter. Phase 0 is optional + AC-3/4/5/11/13 are unit-provable without it → dropped. Sensor B (contract-phrase doctor check) is sound and folded into Phase 6 incl. warn→fail promotion. Dossier kept at tasks/phase-0-establish-backpressure/tasks.md (§ Validation Findings). Memory written so the fake-adapter limit doesn't recur.",
+      "artifacts": ["tasks/phase-0-establish-backpressure/tasks.md"],
+      "next": []
+    },
+
+    {
+      "id": "p1",
+      "type": "phase",
+      "phase": 1,
+      "label": "Phase 1 · Verify-and-close permission edge (#25)",
+      "status": "done",
+      "command": "/the-flow 6 implement --plan \"docs/plans/027-companion-coordination/companion-coordination-plan.md\" --phase \"Phase 1: Verify-and-close permission edge (#25)\" --companion",
+      "ran_at": "2026-06-15T08:00Z",
+      "user_input": "implement please with companion",
+      "note": "CS-1 verify-and-close, implemented WITH the companion. Pre-implement boot: error (lint = a biome format diff in this flight-plan's own the-flow.json) → formatted → degraded/SLOW → proceeded. T001 (AC-1): new coord-write-release-default.e2e.test.ts (5 tests) drives the REAL compile() release-default → restricted/write-deny → E205, + a CLI no-permissions repro case; stale runner.ts:647-651 'yolo default' comment fixed to R6 reality. 8/8 targeted tests green. T002/T003 (AC-2): companion-mode.md already correct ('at boot'); permissions.md:89 inbox-lane fix from companion F001 (MEDIUM — inside not outside lane); #25 close-comment disposition recorded. Companion verdict APPROVE (0 HIGH/CRITICAL); magicWand independently re-derived Phase 4 (coordination_status). Commits 5ab51e1, 57644c7, a7bcac5, 181fc19. SUGG-001+COORD-001/MH-001 buffered for retro.",
+      "artifacts": [
+        "tasks/phase-1-verify-and-close-permission-edge/tasks.md",
+        "tasks/phase-1-verify-and-close-permission-edge/execution.log.md"
+      ],
+      "next": ["p2"]
+    },
+
+    {
+      "id": "p2",
+      "type": "phase",
+      "phase": 2,
+      "label": "Phase 2 · Inbox delivery parity (#40)",
+      "status": "done",
+      "command": "/the-flow 6 implement --plan \"docs/plans/027-companion-coordination/companion-coordination-plan.md\" --phase \"Phase 2: Inbox delivery parity (#40)\" --companion",
+      "ran_at": "2026-06-15T10:00Z",
+      "user_input": "implement with companion",
+      "note": "CS-3, implemented WITH the companion. 5 commits f86a0b9..812e468: T002 export listUnackedVisible from inbox-poll (new ListFilterOptions; pollInboxLane re-pointed, filter-chain byte-unchanged); T001+T003 the #40 fix — event-wait inbox.message branch unified on inbox-poll's unread/ack model (immediate pass returns pre-queued unacked + short-circuits before registration = V-2; watcher re-reads unacked via listUnackedVisible; torn lane → EventWaitInboxCorruptError = V-1, no swallow; dead snapshotInboxIds/readLaneSafe/isInboxMessage removed); T004 wait_for_any↔inbox_list parity pin (cap contract = V-3); T005 wildcard wake runner+MCP + durable-unread ack-loop; T006 cleanup splice-and-close re-entry guard + real-fs.watch close-count==N race. state.* watches untouched. AC-3/4/5/17 met (unit-level; live e2e stays dogfood — Phase 0's fake-adapter sensor was dropped). Pre-implement boot degraded (known doctor+npm-audit baseline; lint/typecheck/build clean) → proceeded. just fft green; coordination suite 68/68; one unrelated agent-pack/extractor flake cleared on re-run (45/45 in isolation). Companion (run …918Z-e4d5): briefed once, pinged at all 5 commits + drain → 0 findings, clean APPROVE-equivalent summary (explicitly checked lane direction + corrupt-lane path); magicWand independently re-derived Phase 4 (coordination_status ledger tool) — same as Phase 1. Observe buffer holds DL-001 (extractor flake) + SUGG-002 (fft lint-before-format) for plan-complete drain.",
+      "artifacts": [
+        "tasks/phase-2-inbox-delivery-parity/tasks.md",
+        "tasks/phase-2-inbox-delivery-parity/execution.log.md"
+      ],
+      "next": ["p3"]
+    },
+
+    {
+      "id": "p3",
+      "type": "phase",
+      "phase": 3,
+      "label": "Phase 3 · State-vocabulary coherence (#27/#31) · DONE — verify-and-pin, companion APPROVE",
+      "status": "done",
+      "command": "/the-flow 6 implement --plan \"docs/plans/027-companion-coordination/companion-coordination-plan.md\" --phase \"Phase 3: State-vocabulary coherence (#27/#31)\" --companion",
+      "ran_at": "2026-06-15T12:30Z",
+      "user_input": "impleemt with companion",
+      "note": "CS-2 verify-and-pin, implemented WITH the companion. Pre-implement boot: degraded (hard sensors lint/typecheck/build+test CLEAN; warn = pre-existing minih-doctor + npm-audit 1crit/6high, not this phase) → proceeded with note. T001 (AC-6): contract test (d) every published companion status (idle/reading/reviewing/reporting/blocked/stopping) accepted by the REAL shipped schema written at agent ROOT (level-2 resolver, no state/ dir created) + (e) discriminating negative — truncated enum → MCP_INVALID_ARGUMENT via error.code; 5/5. T002 (PIC-1): verify-and-record keep-root — schema present at root, NO state/ copy, listed in agent.json install payload (path inside-state.schema.json); no relocation, no removal. T003: corrected stale 'not yet enforced' description — validateInsideState is enforced at state.ts:100 (stateTransition) and :81 (stateSet), throws MCP_INVALID_ARGUMENT; enum byte-unchanged; JSON re-validated. T004 (AC-7): doctor prompt-state-vocabulary-drift=pass pinned against the REAL code-review-companion pack via path.resolve('agents'); 14/14. just fft → exit 0 (no format drift on committed files); AC-17 met. Commits 984b504 (T001), 3190952 (T003), 8c6ae4b (T004); T002 no diff (verify-and-record). Companion (run 2026-06-15T12-21-24-317Z-ef6a, read-only): briefed once (PIC-1 + enforcement + one-directional doctor hazards), pinged at all 3 commits + drain → findingsSent 0, clean APPROVE on T001/T003/T004 + final sweep; final review independently re-confirmed 'only inside-state.schema.json at root, no state/ schema' = PIC-1 keep-root. magicWand (target coordination) AGAIN re-derived Phase 4 (coordination_status / report-draft ledger primitive) — 3rd independent companion re-derivation (P1+P2+P3). Companion difficulty CRC-001 (its own glob tool) noted, not actioned. Phase-end seam: observe buffer non-empty (SUGG-002 + others) → router routes drain, DEFERRED to plan-complete per this plan's cadence; SUGG-003 captured (progress skill's farewell-read 'minih validate --file' is stale for 0.2.0). Non-goals honoured: global default schema byte-unchanged, per-pack enum unchanged, no ledger/CLI work, no relocation. #27/#31 pinned closed.",
+      "artifacts": [
+        "tasks/phase-3-state-vocabulary-coherence/tasks.md",
+        "tasks/phase-3-state-vocabulary-coherence/execution.log.md"
+      ],
+      "next": ["p4"]
+    },
+
+    {
+      "id": "p4",
+      "type": "phase",
+      "phase": 4,
+      "label": "Phase 4 · Ledger primitive (#36 + #32) · DONE — implemented + companion REQUEST_CHANGES reconciled (f0bd6a0)",
+      "status": "done",
+      "command": "/the-flow 6 implement --plan \"docs/plans/027-companion-coordination/companion-coordination-plan.md\" --phase \"Phase 4: Ledger-derived lifecycle primitive (#36 + #32 findings home)\" --companion",
+      "ran_at": "2026-06-15T13:30Z",
+      "user_input": "enxt phase plan and validate please",
+      "note": "CS-4 crown jewel — ✅ DONE: implemented WITH the companion (commits 37bdbc8·4ce612c·e779363·c3ed91d), companion issued REQUEST_CHANGES (f87fc4d, 4 findings F001-F004, 3 HIGH/1 MED) reconciled in f0bd6a0 (F004 body-only finding parsing + safe-null toFinding; F002 reviewedIds=completion-summary semantics; F001 CompanionAckChain/ackChains from both lanes; F003 progressCount→peerUpdatesSent — a self-proving fold: the companion's own findings were all meta=NONE body-only); tsc 0, suite 1359 passed/16 skipped, just fft green. Tasks were TABLED (stage 5) + validate-v2'd first. 10-task dossier (T000-T0z): T001 enumerate ledger fields; T002 CompanionLedger type + deriveCompanionLedger over RAW lanes (AC-8); T003 draft farewell strict-validate-before-write (AC-9); T004 coordination_status MCP tool 8->9 + pin coordinationMode enum; T005 tool-count test; T006 minih companion status CLI; T007 #32 findings home (AC-10 structural); T008 domain docs. Built on 3 prior-phase reviews + a codebase recon. 8 PIC reconciliations vs the shipped tree — headline PIC-A: deriveCompanionLedger derives over RAW folder.ts lanes, NOT the Phase-2 listUnackedVisible export (its own doc-comment forbids ledger consumers + it isn't barrel-exported) — corrects the plan's 'reuse the export' wording. validate-v2 (4 read-only agents): Source-Truth SOUND, Cross-Reference ALIGNED, Completeness GAPS (2 HIGH), Forward-Compat 2 FAIL — ALL folded in: (1) T007 now ADDS report.findings[] to system-output.json (no schema home exists today); (2) ledger fields renamed to the consumer contract idleElapsedMs + unresolvedPeerRequests (was loose 'idle streak' = wrong shape); (3) PIC-I deriveCompanionLedger needs its own runtime barrel-export line or T004/T006 can't import it. Depends on Phase 2 + Phase 3 (both done).",
+      "artifacts": [
+        "tasks/phase-4-ledger-derived-lifecycle-primitive/tasks.md"
+      ],
+      "next": ["p5"]
+    },
+
+    {
+      "id": "p5",
+      "type": "phase",
+      "phase": 5,
+      "label": "Phase 5 · Idle policy + shutdown drain (#35) · DONE — implemented + companion 3 MEDIUMs reconciled",
+      "status": "done",
+      "command": "/the-flow 6 implement --plan \"docs/plans/027-companion-coordination/companion-coordination-plan.md\" --phase \"Phase 5: Idle-budget policy + shutdown drain (#35)\" --companion",
+      "ran_at": "2026-06-15T07:12Z",
+      "user_input": "run with companion mode",
+      "note": "CS-3 — ✅ DONE: implemented WITH the companion. T001 NEW pure src/runner/idle-policy.ts evaluateIdlePolicy (AC-11; effectiveIdle=idleElapsedMs??runElapsedMs, absolute backstop, exit vocab no_engagement/idle_budget; 8 discriminating tests incl. the never-spoke A1 case). T002 idleBudgetSec discoverable on coordination_status (AC-12) — A2 plumbing: record budgets.idleBudgetMs into run.json for coordination runs + sync readIdleBudgetMs; MINIH_PARAMS proven NOT to reach the inside-MCP subprocess. T003 NEW src/runner/coordination-drain.ts drainAndReadInbox (re-derive over RAW lanes) + reconcileReportFindings (overwrite-only-findings, validate-before-write) wired into the runner terminal block after the final inbox commit, before snapshot (AC-13, ordering discriminator; torn lane tolerated → null, never fails the run). T004 prompt.md rewritten integer-poll-streak → ledger-driven (doctor prompt-state-vocabulary-drift pass; A6 first-contact null pin). T005 runner domain.md. Companion (run 2026-06-15T16-16-17-919Z-f932): briefed once, reviewed every commit → APPROVE T001 + APPROVE_WITH_NOTES T002/T003/T004, honoured control:stop (exitReason stop_requested), 3 MEDIUM findings ALL reconciled in fix-pass ff8d8d3 (F001 DEFAULT_IDLE_BUDGET_MS↔input-schema drift test; F002 reconcile returns {wrote,reason} + runner emits observable stderr.log diagnostic for torn-lane/draft-invalid; F003 input-schema enable-flag contract doc + replyWaitPolls deprecated). just fft exit 0 (1376 passed/16 skipped/0 failed); tsc clean. CARRIED FORWARD (Phase-6/follow-up): evaluateIdlePolicy is tested but UNWIRED into the runner loop — a never-spoke peer currently exits via the run-timeout backstop (timeout) not a graceful no_engagement; the runner has runElapsedMs + can derive the ledger, so it could call the policy. Plus the companion magicWand: a 'companion finalize' tool for the farewell-write path. Commits a1e49af·de9cd16·65ae2d5·538c65e·2c7bdb3·ff8d8d3·9d063e0. Observe buffer gained DL-002 (boot flags the-flow.json format drift) + DL-003 (minih status lastPollAt mis-read me into thinking the companion was dead) — deferred to plan-complete drain.",
+      "artifacts": [
+        "tasks/phase-5-idle-budget-policy-shutdown-drain/tasks.md",
+        "tasks/phase-5-idle-budget-policy-shutdown-drain/execution.log.md"
+      ],
+      "next": ["p6"]
+    },
+
+    {
+      "id": "p6",
+      "type": "phase",
+      "phase": 6,
+      "label": "Phase 6 · Self-discovery + docs reconciliation (#29 + #32 docs) · DONE — implemented (--companion), companion clean + 2 findings reconciled",
+      "status": "done",
+      "command": "/the-flow 6 implement --plan \"docs/plans/027-companion-coordination/companion-coordination-plan.md\" --phase \"Phase 6: Runtime self-discovery + docs reconciliation (#29 + #32 docs)\" --companion",
+      "ran_at": "2026-06-15T08:45Z",
+      "user_input": "implement with companion",
+      "note": "CS-3, FINAL phase — ✅ DONE: implemented WITH the companion. T001-T003 (AC-14): added allowedStates:string[] to coordination_status so the self-discovery trio {allowedStates, coordinationMode, idleBudgetSec} returns in ONE call; extracted the 3-level resolver insideStateSchemaPath + DEFAULT_INSIDE_STATE_SCHEMA from state.ts into a shared mcp module src/mcp/tools/inside-state-schema.ts (intra-mcp; PIC-1 ROOT path preserved); resolveAllowedStates reads .properties.status.enum, []-on-failure (never throws); coordinationMode NOT widened. T004-T005 (Sensor B, AC-15): checkContractPhraseDrift in doctor mirroring checkPromptStateVocabularyDrift, warn→fail, 3 pack-internal assertions — no_engagement PARITY (prompt↔output-schema enum; keeps demo-companion + other coordinated agents passing), findings-home wording, state-desc not-reverted; minih doctor still exits 0. Also reconciled the companion prompt's exitReason example to include no_engagement. T006-T008 (AC-15/16): AGENTS_README six→nine + no_engagement in both enums; registry.md six→nine + companion verb; mcp/cli domain deltas (+P6 history); runner verify-only. Pre-implement boot UNHEALTHY (lint = biome format diff in this flight-plan's own the-flow.json) → Jordan 'fix lint, then build' → biome format → degraded → proceeded. Live companion (run 2026-06-15T18-22-48-527Z-a02d): briefed once, pinged at all 3 task commits + drain, control:stop → exit stop_requested clean (bg proc exit 0); findingsSent 2 — MEDIUM domain-map.md still 'six' (missed in the T007 sweep) + LOW stale doctor resolver comment (T002 moved the fn) — BOTH reconciled in d79785d. magicWand (coordination): coordination_status should expose stable finding ids + ackOf in draftFarewell.findings. AC-17: just fft exit 0 (1386 passed/16 skipped). Commits 741be73 (trio), dcae0f8 (Sensor B + prompt), 9014777 (docs), d79785d (finding fix). Contingent T009 (wire evaluateIdlePolicy) NOT taken — no GO. Phase-end seam: observe buffer non-empty → drain DEFERRED to plan-complete per cadence.",
+      "artifacts": [
+        "tasks/phase-6-runtime-self-discovery-docs-reconciliation/tasks.md",
+        "tasks/phase-6-runtime-self-discovery-docs-reconciliation/execution.log.md"
+      ],
+      "next": ["merge"]
+    },
+
+    {
+      "id": "merge",
+      "type": "merge",
+      "label": "Merge",
+      "status": "known",
+      "command": "/the-flow 8 merge --plan \"docs/plans/027-companion-coordination\"",
+      "next": ["hh"]
+    },
+
+    {
+      "id": "hh",
+      "type": "harness-retro",
+      "label": "Harness plan-complete (seam)",
+      "status": "known",
+      "command": "/eng-harness-flow --event plan-complete",
+      "branch_of": "merge",
+      "note": "Plan-complete harness seam — fired inside the merge verb after execution; the router owns the long-horizon reflection.",
+      "next": []
+    }
+  ]
+}

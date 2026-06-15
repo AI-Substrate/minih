@@ -19,6 +19,7 @@ import {
   inboxLanePath,
   stateFilePath,
 } from '../../src/runner/folder.js';
+import { pollInboxLane } from '../../src/runner/inbox-poll.js';
 
 let tmpDir: string;
 let agentsDir: string;
@@ -536,5 +537,228 @@ describe('waitForAny — settlement race + filter (plan 014 T004)', () => {
     expect(result.wait.timedOut).toBe(true);
     // No watchers registered → no close calls
     expect(totalWatchers(index)).toBe(0);
+  });
+});
+
+describe('waitForAny — #40 inbox delivery parity (Phase 2)', () => {
+  it('AC-3 (#40) — a peer message queued BEFORE the wait is returned by the immediate pass', async () => {
+    // The #40 bug: the inbox.message branch snapshots ids at entry and only
+    // ever emits on a watcher fire, so a message already queued before the call
+    // (with no later write) is never delivered. Seed the peer lane, then wait
+    // with NO subsequent fire — the immediate pass must return it.
+    writeInbox('outside', [makeMessage('pre1', 'task')]);
+    const index: WatcherIndex = new Map();
+    const result = await waitForAny({
+      location: location(),
+      side: 'inside',
+      events: [{ kind: 'inbox.message' }],
+      waitMs: 200,
+      watchFactory: makeWatchFactory(index),
+    });
+
+    expect(result.wait.matched).toBe(true);
+    expect(result.wait.timedOut).toBe(false);
+    expect(result.events).toHaveLength(1);
+    expect(result.events[0].kind).toBe('inbox.message');
+    if (result.events[0].kind === 'inbox.message') {
+      // Assert the body, not just a count — RED-for-the-right-reason.
+      expect(result.events[0].data.message.id).toBe('pre1');
+      expect(result.events[0].data.message.body).toBe('body-pre1');
+      expect(result.events[0].data.message.type).toBe('task');
+    }
+    // Settle-before-registration (V-2 / T003(d)): the immediate pass short-circuits
+    // before any watcher or timeout is armed, so nothing was registered to leak.
+    expect(totalWatchers(index)).toBe(0);
+    expect(totalCloseCalls(index)).toBe(0);
+  });
+
+  it('AC-3 (#40) — immediate pass honours the type filter: a pre-queued non-matching type is NOT returned', async () => {
+    // Negative guard: a message is already queued but its type is filtered out,
+    // so the immediate pass must NOT settle — it falls through to a clean timeout.
+    writeInbox('outside', [makeMessage('pre1', 'note')]);
+    const index: WatcherIndex = new Map();
+    const result = await waitForAny({
+      location: location(),
+      side: 'inside',
+      events: [{ kind: 'inbox.message', filter: { types: ['question'] } }],
+      waitMs: 100,
+      watchFactory: makeWatchFactory(index),
+    });
+
+    expect(result.events).toHaveLength(0);
+    expect(result.wait.matched).toBe(false);
+    expect(result.wait.timedOut).toBe(true);
+    // It fell through to the watcher path, which is torn down on timeout.
+    expect(totalCloseCalls(index)).toBe(totalWatchers(index));
+  });
+
+  it('AC-3 (#40) — a torn peer lane at the immediate pass rejects with EventWaitInboxCorruptError', async () => {
+    // V-1: the immediate pass adds a synchronous lane read at entry. The old
+    // snapshotInboxIds SWALLOWED corruption (catch -> empty Set); the new read
+    // must surface a torn lane as a typed error, not resolve-as-empty.
+    const target = inboxLanePath(location(), 'outside');
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    // A truncated final line with no trailing newline = torn lane.
+    fs.writeFileSync(target, '{"id":"torn","sender":"outside","type":"task"');
+    const index: WatcherIndex = new Map();
+
+    await expect(
+      waitForAny({
+        location: location(),
+        side: 'inside',
+        events: [{ kind: 'inbox.message' }],
+        waitMs: 200,
+        watchFactory: makeWatchFactory(index),
+      }),
+    ).rejects.toMatchObject({ name: 'EventWaitInboxCorruptError' });
+
+    // Threw during the immediate pass, before any watcher/timeout was armed.
+    expect(totalWatchers(index)).toBe(0);
+  });
+});
+
+describe('waitForAny ↔ inbox_list unacked parity (#40 AC-4)', () => {
+  it('no filter — wait_for_any and pollInboxLane surface the identical unacked set', async () => {
+    // m1 acked by an inside ack record; m2/m3 unacked. Seed BELOW the default
+    // limit (50) so neither surface truncates — we compare full sets, not
+    // coincidentally-equal truncations (V-3 cap contract).
+    writeInbox('outside', [
+      makeMessage('m1'),
+      makeMessage('m2'),
+      makeMessage('m3'),
+    ]);
+    writeInbox('inside', [
+      makeMessage('a1', 'ack', { sender: 'inside', ackOf: 'm1' }),
+    ]);
+
+    const index: WatcherIndex = new Map();
+    const waitResult = await waitForAny({
+      location: location(),
+      side: 'inside',
+      events: [{ kind: 'inbox.message' }],
+      waitMs: 200,
+      watchFactory: makeWatchFactory(index),
+    });
+    const waitIds = waitResult.events
+      .map((e) => (e.kind === 'inbox.message' ? e.data.message.id : ''))
+      .sort();
+
+    const pollResult = await pollInboxLane(location(), 'outside', {
+      unread: true,
+      waitMs: 0,
+      maxWaitMs: 30_000,
+    });
+    const pollIds = pollResult.messages.map((m) => m.id).sort();
+
+    expect(waitIds).toEqual(['m2', 'm3']);
+    expect(waitIds).toEqual(pollIds);
+  });
+
+  it('type filter — identical unacked set across both surfaces', async () => {
+    writeInbox('outside', [
+      makeMessage('q1', 'question'),
+      makeMessage('n1', 'note'),
+      makeMessage('q2', 'question'),
+    ]);
+    writeInbox('inside', []);
+
+    const index: WatcherIndex = new Map();
+    const waitResult = await waitForAny({
+      location: location(),
+      side: 'inside',
+      events: [{ kind: 'inbox.message', filter: { types: ['question'] } }],
+      waitMs: 200,
+      watchFactory: makeWatchFactory(index),
+    });
+    const waitIds = waitResult.events
+      .map((e) => (e.kind === 'inbox.message' ? e.data.message.id : ''))
+      .sort();
+
+    const pollResult = await pollInboxLane(location(), 'outside', {
+      unread: true,
+      waitForAny: ['question'],
+      waitMs: 0,
+      maxWaitMs: 30_000,
+    });
+    const pollIds = pollResult.messages.map((m) => m.id).sort();
+
+    expect(waitIds).toEqual(['q1', 'q2']);
+    expect(waitIds).toEqual(pollIds);
+  });
+});
+
+describe('waitForAny — #40 loop + wildcard (Phase 2 AC-5)', () => {
+  it('AC-5 loop — unacked re-delivers across waits; an ack between waits suppresses it', async () => {
+    writeInbox('outside', [makeMessage('m1')]);
+    writeInbox('inside', []);
+
+    // Wait 1: m1 queued + unacked → delivered by the immediate pass.
+    const first = await waitForAny({
+      location: location(),
+      side: 'inside',
+      events: [{ kind: 'inbox.message' }],
+      waitMs: 200,
+      watchFactory: makeWatchFactory(new Map()),
+    });
+    expect(
+      first.events.map((e) =>
+        e.kind === 'inbox.message' ? e.data.message.id : '',
+      ),
+    ).toEqual(['m1']);
+
+    // Wait 2: still no ack → m1 re-delivers (durable unread, not consumed by read).
+    const second = await waitForAny({
+      location: location(),
+      side: 'inside',
+      events: [{ kind: 'inbox.message' }],
+      waitMs: 200,
+      watchFactory: makeWatchFactory(new Map()),
+    });
+    expect(
+      second.events.map((e) =>
+        e.kind === 'inbox.message' ? e.data.message.id : '',
+      ),
+    ).toEqual(['m1']);
+
+    // Ack m1 via an inside ack record → Wait 3 does NOT re-deliver → clean timeout.
+    fs.appendFileSync(
+      inboxLanePath(location(), 'inside'),
+      makeMessage('a1', 'ack', { sender: 'inside', ackOf: 'm1' }),
+    );
+    const third = await waitForAny({
+      location: location(),
+      side: 'inside',
+      events: [{ kind: 'inbox.message' }],
+      waitMs: 100,
+      watchFactory: makeWatchFactory(new Map()),
+    });
+    expect(third.events).toHaveLength(0);
+    expect(third.wait.timedOut).toBe(true);
+  });
+
+  it('AC-5 wildcard — a no-filter wait wakes on a brand-new/unknown type', async () => {
+    writeInbox('outside', []);
+    const index: WatcherIndex = new Map();
+    const wait = waitForAny({
+      location: location(),
+      side: 'inside',
+      events: [{ kind: 'inbox.message' }], // no filter → wildcard
+      waitMs: 30000,
+      watchFactory: makeWatchFactory(index),
+    });
+
+    fs.appendFileSync(
+      inboxLanePath(location(), 'outside'),
+      makeMessage('w1', 'a-type-never-seen-before'),
+    );
+    fireForFile(index, inboxLanePath(location(), 'outside'));
+
+    const result = await wait;
+    expect(result.events).toHaveLength(1);
+    if (result.events[0].kind === 'inbox.message') {
+      expect(result.events[0].data.message.type).toBe(
+        'a-type-never-seen-before',
+      );
+    }
   });
 });

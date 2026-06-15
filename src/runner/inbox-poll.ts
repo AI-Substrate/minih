@@ -36,7 +36,12 @@ import type { InboxMessage, Side } from './types.js';
  * enforced at the primitive — caller doesn't have to validate.
  */
 
-export interface PollInboxOptions {
+/**
+ * Filter inputs shared by `pollInboxLane` and the exported `listUnackedVisible`
+ * helper (consumed by `event-wait`). These are the fields the unread/ack filter
+ * chain reads — deliberately no wait/cap fields, which only `pollInboxLane` needs.
+ */
+export interface ListFilterOptions {
   /** Filter to messages with this exact `type`. */
   readonly type?: string;
   /** Filter to messages whose `type` is in this set. */
@@ -47,6 +52,9 @@ export interface PollInboxOptions {
   readonly after?: string;
   /** Maximum messages to return; defaults to 50, max 200. */
   readonly limit?: number;
+}
+
+export interface PollInboxOptions extends ListFilterOptions {
   /** Long-poll wait in ms. 0 or undefined = synchronous read. */
   readonly waitMs?: number;
   /**
@@ -111,7 +119,13 @@ export async function pollInboxLane(
   const waitMs = normalizeWaitMs(options.waitMs, options.maxWaitMs);
   const peerLane: Side = readLane === 'outside' ? 'inside' : 'outside';
 
-  const immediate = listVisible(location, readLane, peerLane, options, limit);
+  const immediate = listUnackedVisible(
+    location,
+    readLane,
+    options,
+    peerLane,
+    limit,
+  );
 
   if (waitMs === undefined || waitMs === 0) {
     return immediate;
@@ -132,12 +146,24 @@ export async function pollInboxLane(
   );
 }
 
-function listVisible(
+/**
+ * The shared unread/ack visibility filter — the single source of truth for which
+ * inbox messages are "unacked + visible" under a given filter. Consumed by
+ * `pollInboxLane` (this module) and `event-wait` (the `wait_for_any` primitive)
+ * so the two surfaces can never drift. NOT for ledger/drain consumers, which
+ * derive over raw `folder.ts` lanes — a visible-message list is the wrong shape
+ * for ack-chain/count work.
+ *
+ * `readLane` is the lane to read; `peerLane` (the OTHER lane, derived if omitted)
+ * holds the `ack` records that drive the `unread` filter. Filter chain order is
+ * LOAD-BEARING (see module doc): unread -> type -> waitForAny -> after.
+ */
+export function listUnackedVisible(
   location: CoordinationRunLocation,
   readLane: Side,
-  peerLane: Side,
-  options: PollInboxOptions,
-  limit: number,
+  options: ListFilterOptions,
+  peerLane: Side = readLane === 'outside' ? 'inside' : 'outside',
+  limit: number = normalizeLimit(options.limit),
 ): PollInboxResult {
   const readMessages = readLaneFile(location, readLane);
   const peerMessages = readLaneFile(location, peerLane);
@@ -201,7 +227,13 @@ function waitForMatching(
     const completeIfMatched = (): void => {
       let output: PollInboxResult;
       try {
-        output = listVisible(location, readLane, peerLane, options, limit);
+        output = listUnackedVisible(
+          location,
+          readLane,
+          options,
+          peerLane,
+          limit,
+        );
       } catch (error) {
         settle(() => reject(toPollError(error)));
         return;
@@ -213,7 +245,13 @@ function waitForMatching(
     const completeWithTimeout = (): void => {
       let output: PollInboxResult;
       try {
-        output = listVisible(location, readLane, peerLane, options, limit);
+        output = listUnackedVisible(
+          location,
+          readLane,
+          options,
+          peerLane,
+          limit,
+        );
       } catch (error) {
         settle(() => reject(toPollError(error)));
         return;

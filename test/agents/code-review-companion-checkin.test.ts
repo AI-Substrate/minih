@@ -22,6 +22,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import Ajv2020 from 'ajv/dist/2020.js';
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_IDLE_BUDGET_MS } from '../../src/runner/index.js';
 
 const COMPANION_DIR = path.resolve('agents/code-review-companion');
 const INPUT_SCHEMA = path.join(COMPANION_DIR, 'input-schema.json');
@@ -41,6 +42,14 @@ describe('plan 019 — input-schema idle check-in fields', () => {
     expect(schema.properties.initialTask).toBeDefined();
     expect(schema.properties.planPath).toBeDefined();
     expect(schema.properties.idleBudgetMs).toBeDefined();
+  });
+
+  it('027 P5 (F001) — runner DEFAULT_IDLE_BUDGET_MS matches the input-schema idleBudgetMs default (no silent drift)', () => {
+    // The runner mirrors the pack default so coordination_status.idleBudgetSec
+    // matches what the companion would use when no param is supplied. Pin them
+    // together so a future edit to either side fails this test instead of
+    // silently diverging.
+    expect(DEFAULT_IDLE_BUDGET_MS).toBe(schema.properties.idleBudgetMs.default);
   });
 
   it('declares firstContactPollThreshold (default 20, minimum 0)', () => {
@@ -185,17 +194,31 @@ describe('plan 019 — prompt.md check-in heuristic content', () => {
     expect(promptText).not.toContain('elapsed_since_last_outside_message');
   });
 
-  it('AC11 — declares the three loop-state counters', () => {
+  it('AC11 / 027 P5 — declares the ledger-driven loop state (poll-streak counters removed)', () => {
     expect(promptText).toContain('awaitingFirstContact');
-    expect(promptText).toContain('emptyPollStreak');
-    expect(promptText).toContain('sentCheckInThisStreak');
     expect(promptText).toContain('hasCompletedTask');
+    expect(promptText).toContain('askedCheckIn');
+    // 027 P5 — the integer poll-streak counters are gone; stand-down is ledger-driven.
+    expect(promptText).not.toContain('emptyPollStreak');
+    expect(promptText).not.toContain('sentCheckInThisStreak');
   });
 
-  it('AC11 — references all three input-schema threshold fields', () => {
+  it('027 P5 — consults the ledger via coordination_status (idleElapsedMs / unresolvedPeerRequests / idleBudgetSec)', () => {
+    expect(promptText).toContain('coordination_status');
+    expect(promptText).toContain('idleElapsedMs');
+    expect(promptText).toContain('unresolvedPeerRequests');
+    expect(promptText).toContain('idleBudgetSec');
+    // The courtesy check-in still gates on the two poll thresholds; the exit no
+    // longer depends on replyWaitPolls (ledger-driven now).
     expect(promptText).toContain('firstContactPollThreshold');
     expect(promptText).toContain('postTaskPollThreshold');
-    expect(promptText).toContain('replyWaitPolls');
+  });
+
+  it('027 P5 — pins the first-contact case: idleElapsedMs === null is distinct from 0 (A6)', () => {
+    expect(promptText).toContain('idleElapsedMs == null');
+    // A never-spoke peer is ended by the absolute run-timeout backstop, never a
+    // premature self-exit.
+    expect(promptText).toMatch(/backstop/i);
   });
 
   it('AC11 — both check-in body texts are present', () => {
@@ -203,9 +226,13 @@ describe('plan 019 — prompt.md check-in heuristic content', () => {
     expect(promptText).toContain("I'm idle since my last task completed");
   });
 
-  it('AC11 — both exit reasons are present (no_engagement + idle_budget)', () => {
-    expect(promptText).toContain("exitReason='no_engagement'");
+  it('AC11 / 027 P5 — idle_budget is a prompt self-exit; no_engagement is the backstop reason', () => {
+    // A peer that has spoken self-exits idle_budget once idle ≥ budget. A peer
+    // that NEVER spoke (idleElapsedMs === null) no longer self-exits in the
+    // prompt (A6) — it is ended by the runner's absolute run-timeout backstop,
+    // whose conceptual exit reason is no_engagement (documented, not a goto).
     expect(promptText).toContain("exitReason='idle_budget'");
+    expect(promptText).toContain('no_engagement');
   });
 
   it('AC11 — preserves existing dispatch branches (control:stop, task, question, directive)', () => {
@@ -215,11 +242,11 @@ describe('plan 019 — prompt.md check-in heuristic content', () => {
     expect(promptText).toMatch(/msg\.type == 'directive'/);
   });
 
-  it('AC9 — disable escape hatch documented (threshold > 0 guard, prose mention)', () => {
+  it('AC9 — courtesy check-in disable hatch documented (threshold > 0 guards + prose)', () => {
     expect(promptText).toContain('input.firstContactPollThreshold > 0');
     expect(promptText).toContain('input.postTaskPollThreshold > 0');
-    expect(promptText).toMatch(/firstContactPollThreshold:\s*0/);
-    expect(promptText).toMatch(/postTaskPollThreshold:\s*0/);
+    // Prose explains that setting either threshold to 0 disables that check-in.
+    expect(promptText).toMatch(/set either to `0`/);
   });
 
   it('AC6 — stop-precedence is explicitly noted in prose', () => {
@@ -227,12 +254,11 @@ describe('plan 019 — prompt.md check-in heuristic content', () => {
     expect(promptText).toMatch(/control:\s*stop.*always wins/i);
   });
 
-  it('AC7 — single-shot semantics: sentCheckInThisStreak resets only on engagement', () => {
-    // Verify the engagement reset block contains all three counter resets in
-    // a contiguous span (anti-regression: a future edit that splits or
-    // accidentally drops a reset breaks the protocol).
+  it('AC7 — single-shot semantics: askedCheckIn resets on engagement', () => {
+    // The engagement branch must reset the check-in latch so a fresh idle
+    // stretch can ask again (anti-regression for a dropped reset).
     const engagementResetBlock =
-      /awaitingFirstContact = false[\s\S]{0,200}emptyPollStreak = 0[\s\S]{0,200}sentCheckInThisStreak = false/;
+      /awaitingFirstContact = false[\s\S]{0,200}askedCheckIn = false/;
     expect(promptText).toMatch(engagementResetBlock);
   });
 
@@ -276,9 +302,8 @@ describe('plan 019 — prompt.md check-in heuristic content', () => {
     const match = promptText.match(bootBlock);
     expect(match).not.toBeNull();
     const boot = match?.[0] ?? '';
-    expect(boot).toContain('emptyPollStreak = 0');
-    expect(boot).toContain('sentCheckInThisStreak = false');
     expect(boot).toContain('hasCompletedTask = false');
+    expect(boot).toContain('askedCheckIn = false');
     expect(boot).toContain('lastTaskId = null');
   });
 

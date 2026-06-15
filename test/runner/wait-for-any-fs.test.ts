@@ -14,6 +14,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { waitForAny } from '../../src/runner/event-wait.js';
+import type { WatchFactory } from '../../src/runner/file-watcher.js';
 import {
   coordinationRunLocation,
   inboxLanePath,
@@ -120,5 +121,87 @@ describe('waitForAny — real fs.watch integration (plan 014 T010)', () => {
     expect(result.wait.matched).toBe(false);
     // elapsedMs should be at least the requested duration (allow some slack)
     expect(result.wait.elapsedMs).toBeGreaterThanOrEqual(150);
+  });
+});
+
+// Wraps the REAL fs.watch but counts how many native watchers get close()d, so
+// we can assert teardown is exactly-once under a genuine timeout-vs-fire race
+// (Phase 2 T006 — the cleanup() re-entry guard / single-settle contract).
+function countingRealFactory(counter: { closes: number }): WatchFactory {
+  return (filename, listener) => {
+    const native = fs.watch(filename, listener);
+    return {
+      on(event, l) {
+        native.on(event, l);
+        return this;
+      },
+      close() {
+        counter.closes += 1;
+        native.close();
+      },
+    };
+  };
+}
+
+describe('waitForAny — real fs.watch teardown race (Phase 2 T006)', () => {
+  function seedEmptyLanes(): void {
+    const outsideState = stateFilePath(loc(), 'outside');
+    fs.mkdirSync(path.dirname(outsideState), { recursive: true });
+    fs.writeFileSync(
+      outsideState,
+      JSON.stringify({
+        status: 'idle',
+        data: {},
+        updatedAt: '2026-04-30T00:00:00.000Z',
+        updatedBy: 'outside',
+      }),
+    );
+    const inboxOutside = inboxLanePath(loc(), 'outside');
+    fs.mkdirSync(path.dirname(inboxOutside), { recursive: true });
+    // Empty inbox lane → the immediate pass finds nothing → both watchers register.
+    fs.writeFileSync(inboxOutside, '');
+  }
+
+  it('fire path: both watchers are closed exactly once (close-count == N)', async () => {
+    seedEmptyLanes();
+    const counter = { closes: 0 };
+    const waitPromise = waitForAny({
+      location: loc(),
+      side: 'inside',
+      events: [{ kind: 'inbox.message' }, { kind: 'state.peer.changed' }],
+      waitMs: 5000,
+      watchFactory: countingRealFactory(counter),
+    });
+
+    // Let the real watchers wire up, then write outside.json to fire mid-wait.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    fs.writeFileSync(
+      stateFilePath(loc(), 'outside'),
+      JSON.stringify({
+        status: 'in-progress',
+        data: { go: true },
+        updatedAt: '2026-04-30T00:00:01.000Z',
+        updatedBy: 'outside',
+      }),
+    );
+
+    const result = await waitPromise;
+    expect(result.wait.matched).toBe(true);
+    // 2 watchers (inbox + state.peer) registered; both closed exactly once.
+    expect(counter.closes).toBe(2);
+  });
+
+  it('timeout path: both watchers are closed exactly once (close-count == N)', async () => {
+    seedEmptyLanes();
+    const counter = { closes: 0 };
+    const result = await waitForAny({
+      location: loc(),
+      side: 'inside',
+      events: [{ kind: 'inbox.message' }, { kind: 'state.peer.changed' }],
+      waitMs: 200,
+      watchFactory: countingRealFactory(counter),
+    });
+    expect(result.wait.timedOut).toBe(true);
+    expect(counter.closes).toBe(2);
   });
 });

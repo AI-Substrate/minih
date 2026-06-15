@@ -105,6 +105,37 @@
           "description": "Structured friction reports. Each difficulty feeds the difficulty ledger."
         }
       }
+    },
+    "findings": {
+      "type": "array",
+      "description": "Review findings (#32). The single declared home for the findings[] contract — mirrors live inbox_send type:'finding' messages; the runner derives report.findings[] from the coordination ledger rather than re-authoring it.",
+      "items": {
+        "type": "object",
+        "required": ["severity", "file", "category", "issue", "recommendation"],
+        "additionalProperties": true,
+        "properties": {
+          "severity": {
+            "type": "string",
+            "description": "Finding severity (e.g. CRITICAL / HIGH / MEDIUM / LOW)."
+          },
+          "file": {
+            "type": "string",
+            "description": "File the finding concerns."
+          },
+          "category": {
+            "type": "string",
+            "description": "Finding category (e.g. Implementation Quality, Contract Drift)."
+          },
+          "issue": {
+            "type": "string",
+            "description": "What is wrong."
+          },
+          "recommendation": {
+            "type": "string",
+            "description": "How to fix it."
+          }
+        }
+      }
     }
   }
 }

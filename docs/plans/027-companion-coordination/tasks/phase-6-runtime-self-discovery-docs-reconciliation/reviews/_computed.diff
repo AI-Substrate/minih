@@ -1,0 +1,1464 @@
+## committed phase range: 9bb8199..HEAD
+ AGENTS_README.md                                   |   6 +-
+ agents/code-review-companion/prompt.md             |   2 +-
+ docs/domains/cli/domain.md                         |   4 +-
+ docs/domains/domain-map.md                         |   4 +-
+ docs/domains/mcp/domain.md                         |   6 +-
+ docs/domains/registry.md                           |   4 +-
+ .../.the-flow-state.json                           |  11 +-
+ .../execution.log.md                               |  73 +++++
+ .../tasks.md                                       | 327 +++++++++++++++++++++
+ .../plans/027-companion-coordination/the-flow.json |  21 +-
+ docs/plans/027-companion-coordination/the-flow.md  |  10 +-
+ src/cli/commands/doctor.ts                         | 122 +++++++-
+ src/mcp/tools/coordination-status.ts               |  33 +++
+ src/mcp/tools/inside-state-schema.ts               |  49 +++
+ src/mcp/tools/state.ts                             |  29 +-
+ test/cli/doctor-contract-phrase.test.ts            | 187 ++++++++++++
+ test/mcp/coordination-status.test.ts               |  67 +++++
+ test/mcp/inside-state-schema.test.ts               |  68 +++++
+ 18 files changed, 969 insertions(+), 54 deletions(-)
+
+## working tree diff stat
+ .../phase-2-inbox-delivery-parity/execution.log.md | 38 +++++++++++++++
+ docs/retros/code-review-companion.md               | 57 ++++++++++++++++++++++
+ 2 files changed, 95 insertions(+)
+
+## untracked files
+docs/plans/027-companion-coordination/backpressure-coverage.md
+docs/plans/027-companion-coordination/companion-coordination-plan.md
+docs/plans/027-companion-coordination/companion-coordination-spec.md
+docs/plans/027-companion-coordination/research-dossier.md
+docs/plans/027-companion-coordination/tasks/phase-0-establish-backpressure/tasks.md
+docs/plans/027-companion-coordination/tasks/phase-6-runtime-self-discovery-docs-reconciliation/reviews/_computed.diff
+docs/plans/027-companion-coordination/workshops/001-wait-for-any-delivery-semantics.md
+docs/plans/027-companion-coordination/workshops/002-state-vocabulary-single-sourcing.md
+docs/plans/027-companion-coordination/workshops/003-companion-lifecycle-primitive.md
+
+## committed phase diff: 9bb8199..HEAD
+diff --git a/AGENTS_README.md b/AGENTS_README.md
+index 696b902..b1bb7e1 100644
+--- a/AGENTS_README.md
++++ b/AGENTS_README.md
+@@ -526,7 +526,7 @@ minih state get coordination-smoke-test --run "$RUN_ID"
+ minih retros --agent coordination-smoke-test --run "$RUN_ID"
+ ```
+ 
+-The inside agent can use six MCP tools during the run: `inbox_list`, `inbox_send`, `inbox_ack`, `state_get`, `state_set`, and `state_transition`. Outside CLI commands do not call those tools directly; they read and write runner-managed inbox/state files under the selected run folder. Pass `--run <runId>` when multiple runs exist; minih only defaults when the target run is unambiguous.
++The inside agent can use nine MCP tools during the run: `inbox_list`, `inbox_send`, `inbox_ack`, `state_get`, `state_set`, `state_transition`, `wait_for_any`, `permission_status`, and `coordination_status`. Outside CLI commands do not call those tools directly; they read and write runner-managed inbox/state files under the selected run folder. Pass `--run <runId>` when multiple runs exist; minih only defaults when the target run is unambiguous.
+ 
+ ### Minimal vs rich coordination examples
+ 
+@@ -761,7 +761,7 @@ Companion-mode agents SHOULD emit a farewell envelope structurally similar to:
+   "session": {
+     "startedAt": "ISO-8601",
+     "endedAt": "ISO-8601",
+-    "exitReason": "stop_requested | idle_budget | timeout | error",
++    "exitReason": "stop_requested | idle_budget | no_engagement | timeout | error",
+     "messageCounts": {
+       "tasksReceived": 0,
+       "findingsSent": 0,
+@@ -884,7 +884,7 @@ Replace (or extend) the agent's output schema with the canonical farewell envelo
+         "endedAt": { "type": "string" },
+         "exitReason": {
+           "type": "string",
+-          "enum": ["stop_requested", "idle_budget", "timeout", "error"]
++          "enum": ["stop_requested", "idle_budget", "no_engagement", "timeout", "error"]
+         },
+         "messageCounts": {
+           "type": "object",
+diff --git a/agents/code-review-companion/prompt.md b/agents/code-review-companion/prompt.md
+index e50a152..6182f71 100644
+--- a/agents/code-review-companion/prompt.md
++++ b/agents/code-review-companion/prompt.md
+@@ -279,7 +279,7 @@ When you exit (any reason), write a JSON document to `$MINIH_OUTPUT_PATH` matchi
+   "session": {
+     "startedAt": "<ISO-8601>",
+     "endedAt": "<ISO-8601>",
+-    "exitReason": "stop_requested | idle_budget | timeout | error",
++    "exitReason": "stop_requested | idle_budget | no_engagement | timeout | error",
+     "messageCounts": {
+       "tasksReceived": 0,
+       "findingsSent": 0,
+diff --git a/docs/domains/cli/domain.md b/docs/domains/cli/domain.md
+index 34c5c43..b824155 100644
+--- a/docs/domains/cli/domain.md
++++ b/docs/domains/cli/domain.md
+@@ -20,7 +20,7 @@
+ | `src/cli/commands/quickstart.ts` | internal | Scaffold + run hello-world in one command (FX001-quickstart) |
+ | `src/cli/commands/sdk-runtime.ts` | internal | Shared SDK bootstrap: auth, import, client, SIGINT (003-resume-prompt) |
+ | `src/cli/commands/list.ts` | internal | List agents with descriptions (Phase 4) |
+-| `src/cli/commands/doctor.ts` | internal | Structural validation plus coordinated `outside.md` drift/size checks (Phase 5 + 007 P6) |
++| `src/cli/commands/doctor.ts` | internal | Structural validation plus coordinated `outside.md` drift/size checks (Phase 5 + 007 P6), `prompt-state-vocabulary-drift` (027 P3), and `contract-phrase-drift` (Sensor B — 027 P6) |
+ | `src/cli/commands/check.ts` | internal | Explicit file validation against schema, with a friendly `check --run` correction toward `validate --run` (Phase 5 + 008 FX003) |
+ | `src/cli/commands/init.ts` | internal | Agent scaffolding, including canonical shared-preamble creation and `--coordinated` outside/state-schema scaffold (Phase 5 + 007 P6) |
+ | `src/cli/commands/history.ts` | internal | Past runs display (Phase 4) |
+@@ -72,6 +72,7 @@
+ | Coordinated scaffold | `init --coordinated` writes `coordination: enabled`, `outside.md`, `inside-state.schema.json`, and `outside-state.schema.json` without changing default init output. |
+ | Outside context preview | `outside context` with no slug returns system-only guidance. With a slug, `contractStatus` is `absent`, `empty`, or `present`, and `hasOutsideContract` distinguishes no file from an empty file. |
+ | Outside contract health | `doctor` warns when coordinated `outside.md` is older than `prompt.md` or over 4KB, fails over 8KB, ignores absent/non-coordinated outside contracts, and preserves realpath containment checks. |
++| Contract-phrase drift (Sensor B) | `doctor`'s `contract-phrase-drift` check (per coordinated agent) **fails** on three pack-internal phrase drifts: `no_engagement` parity between `prompt.md` and `output-schema.json`'s exitReason enum; the findings-home wording (live `inbox_send type:'finding'` + `findings[]` mirror) for review companions; and the inside-state `status.description` reverting to "not yet enforced". `pass` clean, `skip` when no contract surface. Tool-count / cross-doc prose are reconciled by file edits + this pass, never scanned here. (027 P6) |
+ | Dry-run prompt parity | `run --dry-run` uses `buildInsidePreamble()` and returns the assembled prompt in the JSON envelope, so coordinated previews include the same identity/tool/peer/checklist sections as real runs. |
+ | File vs run validation | `check` validates explicit files (`--file` or best-effort `MINIH_OUTPUT_PATH`), while `validate --run` revalidates completed run outputs. A mistaken `check --run` returns a JSON envelope with the correct alternatives. |
+ | Tail snapshot | `tail --lines <n> --snapshot` prints a bounded recent event window plus completion summary if present, then exits without polling forever; no flags preserve live follow behavior. |
+@@ -124,3 +125,4 @@
+ | 026-stall-watchdog | Budget flags + reason surfacing. NEW `src/cli/budget-flags.ts`: `parseBudgetFlag(command, flag, raw, kind)` — strict integer validation (kinds: positive-seconds / non-negative-seconds / non-negative-count), E108 on NaN/negative/fractional/trailing-garbage (the legacy `parseInt` silently accepted `300abc` and NaN — finding 04; `--timeout 0` is now E108 instead of silently defaulting on run / instant-firing on resume). `run` + `resume` gain `--stall-timeout` (0 disables, default 300) and `--max-turns` (0 unlimited, default 0); both commands share the frontmatter-aware default timeout via `DEFAULT_TIMEOUT_SEC`/`DEFAULT_STALL_TIMEOUT_SEC` from the runner barrel (resume's hardcoded `'300'` commander default removed). `run --dry-run` envelope + stderr stats echo the effective `budgets` (the threading proof used by the built-CLI tests). `status` TTY arm prints a `Reason: <terminalReason>` line; E170 multiple-active-runs message + remedies now include `minih status <slug> --latest`. Docs: README § Run budgets, run-liveness § Run budgets, CHANGELOG plan-026 block, AGENTS_README polling note; vocabulary guard gains a `run-budget vocabulary` describe (README/run-liveness/CHANGELOG/AGENTS_README coverage). NEW tests: `run-budget-flags.test.ts` (14), `status-terminal-reason.test.ts` (4, incl. forced-TTY Reason line). |
+ | 026 fix pass (review F004) | NEW `resolveEffectiveBudgets(command, flags, definitionTimeout)` in `budget-flags.ts` — the single flag → frontmatter → shared-default resolution path `run` and `resume` both call (was duplicated inline); resume's positive path unit-pinned in `test/cli/budget-flags.test.ts` (4). `runs list` rows pass `terminalReason` through (`runs.test.ts` built-CLI proof seeded with `stalled-stream`). |
+ | 027-companion-coordination P4 (#36) | NEW `minih companion status <slug> [--run <id>] [--json]` (`commands/companion.ts`, parent+child mirror of `runs.ts`) over the runner's pure `deriveCompanionLedger` — emits a `MinihEnvelope` (`companion.status`) carrying the derived ledger + strict-validated draft farewell; defaults to the newest run dir, `E171` on unknown run, `E148` on a torn lane. `cli→runner` direction; 3 built-CLI integration tests. |
++| 027-companion-coordination P6 (#29/#32) | **Sensor B**: NEW `checkContractPhraseDrift(promptContent, agentDir)` in `doctor.ts` (pushed in the `coordination.enabled` block, mirrors `checkPromptStateVocabularyDrift`) — guards three pack-internal contract phrases, returns `fail` on drift (promoted from `warning`). `no_engagement` *parity* (present in both prompt + enum, or neither) keeps `demo-companion` + the other coordinated agents passing, so `minih doctor` still exits 0. cli keeps its own `resolveInsideStateSchemaPath` (no mcp import). NEW `test/cli/doctor-contract-phrase.test.ts` (5). Tool-count reconciled: `registry.md` (six→nine + `companion status` verb) + `AGENTS_README.md` (six→nine MCP tools; `no_engagement` added to both exitReason enum examples). |
+diff --git a/docs/domains/domain-map.md b/docs/domains/domain-map.md
+index 4864f96..b01a9fc 100644
+--- a/docs/domains/domain-map.md
++++ b/docs/domains/domain-map.md
+@@ -4,7 +4,7 @@
+ flowchart TD
+     cli["cli<br/>commands, JSON envelopes, stdout/stderr UX,<br/>outside peer commands, tail snapshots,<br/>composition-root wiring"]
+     runner["runner<br/>agent discovery, prompt/preamble assembly,<br/>output validation fallback, run orchestration,<br/>coordination file helpers, artifacts"]
+-    mcp["mcp<br/>private inside server, hidden baked context,<br/>six backend-safe inbox/state tools,<br/>bounded multi-type inbox long-poll, spawn config"]
++    mcp["mcp<br/>private inside server, hidden baked context,<br/>nine backend-safe inbox/state/introspection tools,<br/>bounded multi-type inbox long-poll, spawn config"]
+     adapter["adapter<br/>copilot-sdk wrapper, normalized events,<br/>SessionSender, fake adapter tests"]
+     measurement["measurement<br/>conceptual contracts, metric vocabulary,<br/>proof levels, traceability, authority/redaction,<br/>benchmark and pulse semantics"]
+     eng_harness["eng-harness<br/>.harness/ substrate: governance contract,<br/>composite boot envelope, friction capture,<br/>committed retro records"]
+@@ -36,7 +36,7 @@ Import direction: `cli → {mcp, runner, adapter}`, `mcp → runner`, `runner 
+ |--------|---------|------------|-----------------|
+ | cli | User commands, coordinated scaffold, outside peer commands, `tail --snapshot`, SDK/MCP composition wiring, measurement UX | runner, mcp, adapter, measurement contracts | Healthy: top-level composition root only |
+ | runner | Agent definitions, orchestration, prompt builder, output-path validation fallback, coordination files, forwarders, snapshots, artifacts, measurement facts | adapter, measurement contracts | Healthy: no CLI/MCP imports |
+-| mcp | Private inside server config, six backend-safe inbox/state tools, bounded `inbox_list.waitMs`/`waitForAny` long-poll | runner | Healthy: inside-only, no public server command |
++| mcp | Private inside server config, nine backend-safe inbox/state/introspection tools (incl. `permission_status`, `coordination_status`), bounded `inbox_list.waitMs`/`waitForAny` long-poll | runner | Healthy: inside-only, no public server command |
+ | adapter | SDK session/event abstraction and `SessionSender` | External SDK only | Healthy: no runner/CLI/MCP imports |
+ | measurement | Vocabulary, traceability, proof levels, scorecard categories, authority/redaction rules, benchmark semantics, pulse semantics | none at runtime | Healthy: conceptual contract domain only |
+ | eng-harness | Boot envelope (`harness boot --json`), committed records (`.harness/records/`), governance contract | cli envelopes at the process boundary (never imports) | Healthy: zero inbound edges by rule |
+diff --git a/docs/domains/mcp/domain.md b/docs/domains/mcp/domain.md
+index 25dd238..d7a07b0 100644
+--- a/docs/domains/mcp/domain.md
++++ b/docs/domains/mcp/domain.md
+@@ -16,7 +16,8 @@
+ | `src/mcp/context.ts` | contract | Hidden context loader/validator for baked run env; canonical path containment and redacted errors |
+ | `src/mcp/tools/inbox.ts` | internal | `inbox_list`, `inbox_send`, `inbox_ack` over append-only NDJSON lanes, including bounded long-poll reads and multi-type filters for peer messages |
+ | `src/mcp/tools/state.ts` | internal | `state_get`, `state_set`, `state_transition` over runner state helpers and schema validation |
+-| `src/mcp/tools/coordination-status.ts` | internal | `coordination_status` — returns the derived coordination lifecycle ledger + strict-validated draft farewell + pinned `coordinationMode` over runner `deriveCompanionLedger` (027 P4 #36) |
++| `src/mcp/tools/coordination-status.ts` | internal | `coordination_status` — returns the derived coordination lifecycle ledger + strict-validated draft farewell + the self-discovery trio `{allowedStates, coordinationMode, idleBudgetSec}` over runner `deriveCompanionLedger` (027 P4 #36; trio completed P6 #29 / AC-14) |
++| `src/mcp/tools/inside-state-schema.ts` | internal | Shared mcp-internal inside-state schema resolver `insideStateSchemaPath` (+ `DEFAULT_INSIDE_STATE_SCHEMA`), extracted from `state.ts` so both validation and `coordination_status.allowedStates` resolve one 3-level path: preferred `state/` → legacy ROOT (PIC-1) → built-in default (027 P6 / T002) |
+ | `src/mcp/server.ts` | internal | Stdio MCP server, nine-tool manifest, async-safe dispatcher, signal cleanup, process marker |
+ | `src/mcp/spawn.ts` | contract | `buildInsideMcpServerConfig(...)` and private server-entry resolution |
+ | `src/mcp/index.ts` | contract | Barrel exports for CLI composition and tests |
+@@ -58,7 +59,7 @@ All tool handlers are backed by hidden baked context, not by client-supplied pat
+ | Blocking inbox read | `inbox_list({ unread: true, type, waitForAny, waitMs })` can wait up to `MAX_INBOX_WAIT_MS` for a filter-matching outside-lane message. `waitForAny` accepts 1-16 unique exact message types and is mutually exclusive with `type`; omitted or zero waits preserve the immediate response shape. |
+ | Private server artifact | Spawn config resolves `dist/mcp/server.js` as an implementation detail in dev/package modes; the artifact path is not a user-facing contract. |
+ | Leak marker | Spawned server sets `process.title` to `minih-mcp-<runId>` so opt-in tests can assert cleanup without broad process killing. |
+-| Coordination lifecycle introspection | `coordination_status` mirrors `permission_status` (handler takes only the baked context) and returns the companion's derived lifecycle ledger + a strict-validated draft farewell + the pinned `coordinationMode` (`enabled`/`disabled`), reading the SAME runner `deriveCompanionLedger` the outside `minih companion status` CLI verb uses. Read-only, always allowed; self-introspection ("where am I in my lifecycle?") without firing a request. A torn lane maps `CompanionLedgerError → MCP_INBOX_CORRUPT`. (027 P4 #36) |
++| Coordination lifecycle introspection | `coordination_status` mirrors `permission_status` (handler takes only the baked context) and returns the companion's derived lifecycle ledger + a strict-validated draft farewell + the pinned `coordinationMode` (`enabled`/`disabled`), reading the SAME runner `deriveCompanionLedger` the outside `minih companion status` CLI verb uses. Read-only, always allowed; self-introspection ("where am I in my lifecycle?") without firing a request. A torn lane maps `CompanionLedgerError → MCP_INBOX_CORRUPT`. (027 P4 #36) **027 P6 (#29 / AC-14)** completed the self-discovery trio: `coordination_status` also returns `allowedStates` (the per-pack inside-state enum, resolved from the agent ROOT via the shared `insideStateSchemaPath` — PIC-1; `[]` if unresolvable) and `idleBudgetSec`, so `{allowedStates, coordinationMode, idleBudgetSec}` are learnable in one call. `coordinationMode` stays pinned `enabled`/`disabled` (not widened). |
+ 
+ The current supported validation surface is the MCP server/spawn/leak test suite (`test/mcp/*.test.ts`, including `MINIH_PGREP=1 npx vitest run test/mcp/leak-regression.test.ts`). The cleanup requirement traces to MCP workshop Finding 02 and validates success, failure, timeout, and interrupt paths. Workshop 009 documents a future standalone probe-harness idea; it is not an existing `scripts/mcp-harness.mjs` command.
+ 
+@@ -92,3 +93,4 @@ The current supported validation surface is the MCP server/spawn/leak test suite
+ | 014-wait-for-any-events | Added the seventh inside-coordination tool: `wait_for_any`. Long-poll primitive that wakes on any combination of inbox messages and state changes in one call, replacing the spin-loop-on-`state_get` pattern. Schema enforces 1–8 watch entries + bounded `waitMs` (≤30 000 ms — same cap as `inbox_list`). Returns a discriminated-union `EventEnvelope { kind, ts, data }` array — forward-compat for future v2 kinds (`fs.changed`, `tool.completed`). Schema uses string `description` + runtime kind validation (no nested JSON Schema `enum`) per the FX001 lesson — gpt-5.4+ rejects nested `enum`/`oneOf`/`not`/`anyOf` with CAPIError 400. New `mcp/tools/wait.ts` handler validates input (caps, required fields, unknown/duplicate kind, bounds) and maps `StateFileCorruptError → MCP_STATE_CORRUPT`, `EventWaitInboxCorruptError → MCP_INBOX_CORRUPT`. 16 new tests (15 schema validation + 1 stdio round-trip). |
+ | 027 Phase 3 (#27/#31) | Pinned inside-state vocabulary coherence (AC-6): a coordination-contract test asserts every published `code-review-companion` `state_transition` target is accepted by the resolved schema (read from the real shipped **root** schema, level-2 resolution), plus a discriminating dropped-enum negative that hard-rejects with `MCP_INVALID_ARGUMENT`. **No tool-surface change** — `validateInsideState`/`insideStateSchemaPath` unchanged; verify-and-pin only. |
+ | 027 Phase 4 (#36/#32) | Added the **ninth** inside tool: `coordination_status` (`tools/coordination-status.ts`). Mirrors `permission-status.ts` (handler takes only the baked context) and reads the runner's pure `deriveCompanionLedger`, returning `{agentSlug, coordinationMode, ledger, draftFarewell}` in `structuredContent`; a `CompanionLedgerError` maps to `MCP_INBOX_CORRUPT`. Registered in `MCP_TOOL_NAMES` + `TOOL_CONTRACTS` + the exhaustive `server.ts` dispatch (no `default` — PIC-D) + barrel (PIC-E). `coordinationMode` pinned `enabled`/`disabled` (no richer source). Tool-count contract test `types.test.ts` + real-stdio manifest `server.test.ts` updated 8→9. This doc's local counts refreshed to nine; registry-wide tool-count reconciliation across other docs lands in Phase 6.3. |
++| 027 Phase 6 (#29 / AC-14) | Completed the **self-discovery trio** on `coordination_status`: added `allowedStates: string[]` (the per-pack inside-state status enum) alongside the already-present `coordinationMode` + `idleBudgetSec`. Extracted the 3-level resolver from `state.ts` into a shared mcp-internal `tools/inside-state-schema.ts` (`insideStateSchemaPath` + `DEFAULT_INSIDE_STATE_SCHEMA`) so validation and `allowedStates` resolve one path — preferred `state/` → legacy ROOT (PIC-1) → default; `allowedStates` reads `.properties.status.enum`, `[]` on any failure (never throws). `coordinationMode` left pinned `enabled`/`disabled`. New `test/mcp/inside-state-schema.test.ts` (fallback order) + extended `coordination-status.test.ts` (trio shape). Intra-mcp only; doctor keeps its own cli resolver. |
+diff --git a/docs/domains/registry.md b/docs/domains/registry.md
+index 7b836e7..651e2a0 100644
+--- a/docs/domains/registry.md
++++ b/docs/domains/registry.md
+@@ -4,7 +4,7 @@
+ |--------|-------|--------|---------|
+ | adapter | minih | Active | SDK boundary: wraps copilot-sdk sessions, emits normalized events, exposes `SessionSender`, and keeps SDK lifecycle details out of runner |
+ | runner | minih | Active | Core orchestration: agent discovery, prompt/preamble assembly, execution, event handling, coordination file helpers, daemon-light forwarders, snapshots, artifact writing |
+-| mcp | minih | Active | Inside-only coordination MCP server: six backend-safe inbox/state tools, hidden baked context, private spawn config, cleanup/leak regression |
+-| cli | minih | Active | User-facing composition root: run/resume/connect/list/doctor/check/history/tail/status/inspect/difficulties plus coordinated scaffolding, outside peer commands, and MCP server wiring |
++| mcp | minih | Active | Inside-only coordination MCP server: nine backend-safe inbox/state/introspection tools (`inbox_list`, `inbox_send`, `inbox_ack`, `state_get`, `state_set`, `state_transition`, `wait_for_any`, `permission_status`, `coordination_status`), hidden baked context, private spawn config, cleanup/leak regression |
++| cli | minih | Active | User-facing composition root: run/resume/connect/list/doctor/check/history/tail/status/inspect/difficulties plus coordinated scaffolding, outside peer commands (incl. `companion status`, the outside twin of the `coordination_status` MCP tool), and MCP server wiring |
+ | measurement | minih | Active | Conceptual measurement contract: metric vocabulary, traceability, proof levels, scorecard categories, authority/redaction rules, benchmark semantics, pulse semantics, and reporting guardrails |
+ | eng-harness | minih | Active | Session-level dev-loop harness on harness-core: `.harness/` substrate (governance, composite boot, friction capture, committed retro records), AGENTS.md routing, zero inbound edges — observes minih only via CLI envelopes at the process boundary |
+diff --git a/docs/plans/027-companion-coordination/.the-flow-state.json b/docs/plans/027-companion-coordination/.the-flow-state.json
+index b62be68..17a762f 100644
+--- a/docs/plans/027-companion-coordination/.the-flow-state.json
++++ b/docs/plans/027-companion-coordination/.the-flow-state.json
+@@ -4,11 +4,11 @@
+   "plan_dir": "docs/plans/027-companion-coordination",
+   "mode": "Full",
+   "current_stage": "awaiting-6",
+-  "pending_command": "/the-flow 5 tasks --phase \"Phase 6: Runtime self-discovery + docs reconciliation (#29 + #32 docs)\" --plan \"docs/plans/027-companion-coordination/companion-coordination-plan.md\"",
++  "pending_command": "/the-flow 8 merge --plan \"docs/plans/027-companion-coordination\"",
+   "intent": "Fix the 8 companion + coordination reliability GH issues in one plan as dependency-ordered phases",
+   "milestones_total": 10,
+-  "milestones_done": 8,
+-  "last_checkpoint_at": "2026-06-15T07:12:00Z",
++  "milestones_done": 9,
++  "last_checkpoint_at": "2026-06-15T08:50:00Z",
+   "compacted_seams": [
+     "post-spec",
+     "pre-tasks",
+@@ -22,7 +22,10 @@
+     "pre-tasks-p4",
+     "pre-tasks-p5",
+     "pre-implement-p5",
+-    "phase-end-p5"
++    "phase-end-p5",
++    "pre-tasks-p6",
++    "pre-implement-p6",
++    "phase-end-p6"
+   ],
+   "status": "active"
+ }
+diff --git a/docs/plans/027-companion-coordination/tasks/phase-6-runtime-self-discovery-docs-reconciliation/execution.log.md b/docs/plans/027-companion-coordination/tasks/phase-6-runtime-self-discovery-docs-reconciliation/execution.log.md
+new file mode 100644
+index 0000000..60afad2
+--- /dev/null
++++ b/docs/plans/027-companion-coordination/tasks/phase-6-runtime-self-discovery-docs-reconciliation/execution.log.md
+@@ -0,0 +1,73 @@
++# Phase 6 — Execution Log
++
++**Plan**: companion-coordination-plan.md · **Phase**: 6 of 6 (final) · **Mode**: Full
++**Companion**: `code-review-companion` (`--companion`, Power-On-Mode)
++**Started**: 2026-06-15
++
++---
++
++## T6.0 — Pre-implement harness seam (`--event pre-implement`)
++
++- Router **INSTALLED**. Fired `/eng-harness-flow --event pre-implement --phase "Phase 6: …" --plan-dir docs/plans/027-companion-coordination --json`.
++- Adoption gate holds — S0 install ✓, S2 governance ✓ (`.harness/engineering-harness.md`), S4 boot ✓ → **engineering zone**. Boot command (governance-declared) = `harness boot --json`.
++- **First boot: UNHEALTHY** (`status: error`, `boot failed: lint`). Sole blocker = `biome check .` 1 error: a formatter diff in `docs/plans/027-companion-coordination/the-flow.json` (the flight-plan JSON written the prior turn — an `"artifacts"` array biome wanted multi-line). typecheck ✓, build+test (`just check`) ✓, minih-doctor warn (**errors: 0**), audit warn (1 critical / 6 high CVEs → Dependabot, task #13).
++- UNHEALTHY → surfaced to human per protocol. **Decision: "Fix lint, then build."**
++- Remediation: `npx biome format --write docs/plans/027-companion-coordination/the-flow.json` → fixed 1 file. `biome check .` now exits **0** (4 non-failing `noNonNullAssertion` *warnings* remain in `test/runner/coordination-drain.test.ts` — pre-existing Phase-5, non-blocking).
++- **Re-boot: degraded** — lint ✓ · typecheck ✓ · build+test ✓ · minih-doctor warn · audit warn (no errors). **Proceed.**
++
++---
++
++## T001–T003 — Self-discovery trio: `allowedStates` on `coordination_status` (AC-14)
++
++RED→GREEN, committed as one unit (the RED test → resolver extraction → GREEN are intertwined).
++
++- **T001 (RED)**: extended `test/mcp/coordination-status.test.ts` with a `self-discovery trio (AC-14)` describe — seeds a per-pack `inside-state.schema.json` at the agent **ROOT** (PIC-1) and asserts `allowedStates` = the 6-value enum *together with* `coordinationMode` + `idleBudgetSec`; plus a fallback case (unparseable schema → `[]`). Confirmed RED: 2 failed (`allowedStates` undefined), 5 existing passed.
++- **T002**: extracted the 3-level resolver `insideStateSchemaPath(context)` + `DEFAULT_INSIDE_STATE_SCHEMA` **verbatim** from `state.ts` into a new shared **mcp-internal** module `src/mcp/tools/inside-state-schema.ts`. `state.ts` re-imports `insideStateSchemaPath` (removed the now-dead `node:url` + `node:path` imports). New `test/mcp/inside-state-schema.test.ts` pins the preferred(`state/`)→legacy(root)→default order — the root level is load-bearing (PIC-1).
++- **T003 (GREEN)**: added `allowedStates: string[]` to `CoordinationStatusResult` + a robust `resolveAllowedStates(context)` helper (reads `.properties.status.enum` via the T002 resolver; **never throws** → `[]` on any failure). `coordinationMode` left pinned `'enabled' | 'disabled'` (**not** widened). Trio returned in one call.
++- **Evidence**: `tsc --noEmit` clean; `vitest run` coordination-status (7) + inside-state-schema (3) + state (11) = **21 passed**; biome clean on touched files.
++- **Domain**: intra-mcp only (mcp→mcp); doctor keeps its own cli-domain resolver (untouched). PIC-1 root path honored; no `coordinationMode` widening.
++
++---
++
++## T004–T005 — Sensor B: `contract-phrase-drift` doctor check (AC-15 sensor)
++
++RED→GREEN, committed as one unit.
++
++- **T004 (RED)**: new `test/cli/doctor-contract-phrase.test.ts` (mirrors `doctor-state-vocabulary.test.ts` — spawns the built CLI, reads the JSON envelope). A companion-shaped fixture + **3 stale sub-cases** — (1) `output-schema.json` enum drops `no_engagement` while the prompt keeps it; (2) prompt drops the findings-home wording; (3) inside-state description reverts to "not yet enforced" — each → `'fail'`; clean fixture **and the real `code-review-companion` pack** → `'pass'`. Confirmed RED (5 failed — check absent).
++- **T005 (GREEN)**: `checkContractPhraseDrift(promptContent, agentDir)` in `doctor.ts`, mirroring `checkPromptStateVocabularyDrift`; pushed into `checks[]` inside `if (coordination.enabled)`. Returns `'fail'` on drift (promoted from `'warning'`), `'pass'` clean, `'skip'` when no contract surface present.
++- **Design decision (Discoveries)**: assertion 1 = `no_engagement` **parity** (present in BOTH prompt + enum, or NEITHER) — NOT a blanket "must include", so `demo-companion` (exitReason enum without `no_engagement`, no findings) passes. Assertions 2/3 scoped to the companion's contract shape (findings array / per-pack schema desc). All real coordinated agents pass or skip.
++- **Pack reconciliation**: fixed the companion prompt's farewell-envelope **example** (line 282) to include `no_engagement` — internal consistency with its own output-schema enum + prose (the exit-reason contract phrase Sensor B guards).
++- **Evidence**: `tsc --noEmit` clean; build OK; `vitest` doctor-contract-phrase (5) + doctor-state-vocabulary (14) = **19 passed**; **`minih doctor` exits 0** on the real tree (T005 done-when ✓). biome clean.
++- **Domain**: cli-internal; doctor keeps its own cli resolver (no mcp import — `mcp ↔ cli` illegal). **Tool-count drift is NOT scanned here** (recon row 5) — that is T006/T007 + the doctor pass.
++
++---
++
++## T006–T008 — Docs reconciliation to the singular contract (AC-15 / AC-16)
++
++Surgical + narrowed per the recon (Phases 4/5 already reconciled most docs).
++
++- **T006 (AC-15)** `AGENTS_README.md`: `:529` "six MCP tools" → **nine** (full list incl. `wait_for_any`, `permission_status`, `coordination_status`); added `no_engagement` to the two exitReason enum examples (the pipe-string `~:764` + the JSON enum `~:887`). `companion-mode.md` verified already-correct (no edit).
++- **T007 (AC-16)** `docs/domains/registry.md:7`: "six backend-safe inbox/state tools" → **nine** (full list) + added the `companion status` outside verb / `coordination_status` cross-ref on the cli row. `mcp/domain.md` verified already "Nine" (no count edit needed).
++- **T008** domain deltas: `mcp/domain.md` — `allowedStates` trio on the `coordination_status` concept + contract entry, new `inside-state-schema.ts` source row, P6 history; `cli/domain.md` — `contract-phrase-drift` on the doctor source row + a new Sensor-B concept + P6 history. `runner/domain.md` **verify-only** (no runner change — T009 not taken).
++- **Evidence**: deterministic file edits, verified by `minih doctor` exit 0 + the contract-phrase real-pack test. The whole-plan `just fft` gate runs at phase close (AC-17).
++
++---
++
++## AC-17 — whole-plan gate
++
++`just fft` → **exit 0** on the complete tree: lint ✓ · format ✓ · build ✓ · typecheck ✓ · **test 1386 passed / 16 skipped (124 files)** · audit (non-failing CVEs → Dependabot #13) · sdk-check ✓. The three new suites (`coordination-status` trio, `inside-state-schema`, `doctor-contract-phrase`) are included.
++
++---
++
++## Companion debrief — `code-review-companion` (run `2026-06-15T18-22-48-527Z-a02d`)
++
++- Booted Power-On-Mode at phase start; briefed once (hazards: PIC-1 root schema, no `coordinationMode` widening, `mcp ↔ cli` boundary, Sensor B parity/scope, doctor exit-0). Pinged at all 3 task commits (741be73, dcae0f8, 9014777) + a final drain. **control:stop → exit `stop_requested`** (clean); background process exited 0. `tasksReceived: 4`, `findingsSent: 2`.
++- **2 findings — both reconciled** (this commit):
++  - **MEDIUM** — `docs/domains/domain-map.md` still said "six backend-safe inbox/state tools" (mermaid node + health-summary table). I had reconciled registry / AGENTS_README / mcp / cli docs but **missed domain-map** — a real AC-16 completeness gap. Fixed both spots → "nine … (incl. `permission_status`, `coordination_status`)".
++  - **LOW** — `doctor.ts:568` comment "Mirrors … `src/mcp/tools/state.ts:insideStateSchemaPath`" went **stale** when T002 moved the resolver to `inside-state-schema.ts`. Fixed the reference.
++- **magicWand** (target `coordination`): "Have `coordination_status` include stable finding ids + `ackOf` in `draftFarewell.findings` so the final report can be written directly from the draft without reconstructing IDs/reply links." → follow-up candidate, buffered for the plan-complete retro.
++- **Phase-end harness seam** (`--event phase-end`): observe buffer non-empty (4 entries) → router routes **drain**; **deferred to plan-complete** per this plan's cadence (consistent with P2/P3/P5). Plus this session's notes (boot lint = own flight-plan JSON format; the parity design call) buffered for the same drain.
++
++**Phase 6 COMPLETE** — all 8 tasks + 2 harness seams done; AC-14/15/16/17 met; 2 companion findings reconciled; contingent T009 NOT taken (no GO).
++
++---
+diff --git a/docs/plans/027-companion-coordination/tasks/phase-6-runtime-self-discovery-docs-reconciliation/tasks.md b/docs/plans/027-companion-coordination/tasks/phase-6-runtime-self-discovery-docs-reconciliation/tasks.md
+new file mode 100644
+index 0000000..9fb26c8
+--- /dev/null
++++ b/docs/plans/027-companion-coordination/tasks/phase-6-runtime-self-discovery-docs-reconciliation/tasks.md
+@@ -0,0 +1,327 @@
++# Phase 6 — Runtime self-discovery + docs reconciliation (#29 + #32 docs)
++
++**Plan**: [companion-coordination-plan.md](../../companion-coordination-plan.md)
++**Phase**: 6 of 6 (**final**) · **CS**: 3 · **Mode**: Full
++**Depends on**: Phase 3 (vocabulary chosen) · Phase 5 (idle budget exists) · Phase 4 (the `coordination_status` tool + `coordinationMode` enum this phase extends)
++**Created**: 2026-06-15
++**Status**: Tabled — awaiting GO (no code yet)
++
++---
++
++## Executive Briefing
++
++- **Purpose**: Make the inside agent able to read its own coordination metadata in one call (the self-discovery trio), reconcile the remaining docs to the singular contract, and stand up the contract-phrase drift sensor (Sensor B) that was folded out of the dropped Phase 0 — so the pack's published phrases can't silently drift from the docs. This is the **last** phase; after it the plan is review/merge-ready.
++- **What we're building**:
++  1. `allowedStates` added to the `coordination_status` MCP tool so the trio (`allowedStates` + `coordinationMode` + `idleBudgetSec`) returns in **one** call (AC-14).
++  2. `checkContractPhraseDrift` in `minih doctor` (**Sensor B**, mirrors `checkPromptStateVocabularyDrift`), returning `'fail'` on drift (promoted from `'warning'` because the docs it guards are reconciled in this same phase).
++  3. Surgical docs reconciliation: the two surviving stale "six tools" claims → nine; `no_engagement` added to the AGENTS_README exit-reason enums (AC-15/16); new Phase-6 contracts noted in the domain docs.
++- **Goals**:
++  - ✅ The trio is returned by `coordination_status` in one call, `allowedStates` resolved from the live per-pack schema (root path, per PIC-1).
++  - ✅ `minih doctor` hard-fails on a stale contract phrase; passes clean on the real companion pack.
++  - ✅ `registry.md` + `AGENTS_README.md` reflect the real tool count (9) and the full exit-reason vocabulary.
++  - ✅ `just fft` exits 0 with the new tests (AC-17).
++- **Non-goals**:
++  - ❌ Inventing a richer `coordinationMode` enum — it stays the pinned binary `'enabled' | 'disabled'` (Phase 4 PIC; do not widen).
++  - ❌ Relocating the per-pack state schema to `state/` — **superseded by PIC-1** (that dir is install-denied; schema stays at the agent root).
++  - ❌ Full prose reconciliation of every doc — the contract-phrase check guards the *known* phrases; broad prose review is `plan-7`/review territory (proof-tier honesty, per the plan).
++  - ❌ Live end-to-end / real-clock proof — the Phase-0 fake-adapter was dropped; live idle/drain rows stay dogfood/review.
++
++---
++
++## Architect / recon corrections (read before implementing)
++
++The stage-5 recon (4 parallel read-only passes over the current tree) found the plan's Phase 6 table **over-scoped the docs work** — Phases 4/5 already did much of it — and **mis-stated two assumptions**. Honest deltas:
++
++| Plan said | Reality on disk (2026-06-15) | Effect on Phase 6 |
++|---|---|---|
++| 6.1 adds the full trio | `idleBudgetSec` (Phase 5) **and** `coordinationMode` (Phase 4) already on `coordination_status` | 6.1 narrows to **adding `allowedStates`** + asserting the trio together |
++| schema relocated to `state/inside-state.schema.json` (manifest rows 51–52, tasks 3.2) | **PIC-1 kept it at the agent root** `agents/code-review-companion/inside-state.schema.json` (`state/` ∈ install-denied `RUNTIME_DIR_NAMES`) | `allowedStates` resolves via the **existing 3-level resolver**, never a hardcoded `state/` path |
++| 6.3 fixes "six"→count in `registry.md` **and** `mcp/domain.md` | `mcp/domain.md` already says **"nine"** + lists `coordination_status` (Phase 4/P7) | 6.3 narrows to `registry.md:7` only (+ verify mcp/domain.md) |
++| 6.2 reconciles AGENTS_README **and** companion-mode.md | `companion-mode.md` already carries the full exit-reason vocab + ledger-driven idle + findings home | 6.2 narrows to **AGENTS_README** (`six`→nine; add `no_engagement` to two enum examples); companion-mode.md = verify-only |
++| 6.4 updates runner/cli/mcp domain docs | runner/cli/mcp domain docs already carry CompanionLedger/deriveCompanionLedger, the `minih companion` verb, and `coordination_status` (Phase 4/5) | 6.4 narrows to the **new Phase-6 deltas**: `allowedStates` (mcp), `checkContractPhraseDrift` (cli), P6 History rows |
++| Sensor B guards 4 phrase classes incl. **MCP tool count** (plan lines 112/242/281) | A per-agent doctor check can't string-scan arbitrary docs (AGENTS_README/registry) for tool-count without false positives | Sensor B (T005) is scoped to the **3 pack-internal** classes (exit-reason, findings-home, state-vocab description); **tool-count drift stays a deterministic file edit (T006/T007) + `minih doctor` pass — NOT the contract-phrase sensor.** A recorded narrowing of the automated check, not an omission |
++
++**Carried-forward decision (not in the plan's Phase 6 scope):** Phase 5 left `evaluateIdlePolicy` **built + unit-tested but unwired** into the runner loop — a never-spoke peer exits via the run-timeout backstop (`timeout`) rather than a graceful `no_engagement`. The runner has `runElapsedMs` and can derive the ledger, so the wiring is small. It's **runner behaviour, not self-discovery/docs**, so it's the contingent task at the end of this dossier (`T009`) — surfaced for an explicit GO, not a default Phase-6 task.
++
++### Verify the recon facts before narrowing (trust-but-verify)
++
++The recon-corrections table reflects the tree at **2026-06-15**. A task that *narrows* (verify-only, "already correct") rests on a fact still holding — a rebase could move it. Before narrowing, confirm each; if one diverges, escalate rather than silently narrow:
++- `coordination-status.ts` `CoordinationStatusResult` already carries `coordinationMode` + `idleBudgetSec`; `allowedStates` is absent.
++- `agents/code-review-companion/inside-state.schema.json` resolves at the **root** (no `state/` dir).
++- `docs/domains/mcp/domain.md` already says "nine"; `docs/how/companion-mode.md` already carries the full exit-reason vocab incl. `no_engagement`.
++- The stale spots that **do** need editing are exactly: `AGENTS_README.md:529` ("six"), `:764`/`:887` (exitReason missing `no_engagement`), `registry.md:7` ("six").
++
++### AC → task mapping (Phase 6)
++
++| AC | Tasks | Verified by |
++|----|-------|-------------|
++| **AC-14** | T001 · T002 · T003 | `coordination_status` returns `{allowedStates, coordinationMode, idleBudgetSec}` in one call (T001 test green) |
++| **AC-15** | T004 · T005 · T006 | `checkContractPhraseDrift` = `pass` on the real pack **and** `minih doctor` exits 0; AGENTS_README carries the full exit-reason vocab incl. `no_engagement` |
++| **AC-16** | T007 | `registry.md` lists the real nine tools + the `minih companion status` verb |
++| **AC-17** | T001 · T004 (the new tests) | `just fft` exits 0 with the new `test/mcp/coordination-status.test.ts` + `test/cli/doctor-contract-phrase.test.ts` cases; coordination suite green |
++
++---
++
++## Prior Phase Context (Phases 1–5)
++
++Synthesized from the phase execution logs. Weighted toward Phases 3/4/5 (Phase 6's direct dependencies).
++
++### Phase 1 — Verify-and-close permission edge (#25) · CS-1
++- **Deliverables**: E205-boot-gate characterisation tests; `companion-mode.md` E205-at-boot doc fix; recorded #25 close disposition.
++- **Exported**: none structural (verify-and-close). **Pattern**: verify-first → "no edit needed — already correct" disposition; verify the premise against disk before building.
++- **Gotcha**: `fireOutsideInboxSignal` writes to the **inside** lane despite its name — trust `inboxLanePath(location,'inside')`, not the function name.
++- **Carried to P6**: Sensor B (contract-phrase check) was first deferred here.
++
++### Phase 2 — Inbox delivery parity (#40) · CS-3
++- **Deliverables**: `listUnackedVisible(...)` exported from `inbox-poll.ts`; `event-wait` `inbox.message` branch on the unread/ack model; `cleanup()` splice-and-close re-entry guard + real-`fs.watch` race test. Coordination suite green.
++- **Exported**: `listUnackedVisible` — **but explicitly NOT for ledger/drain reuse** (doc-comment + PIC forbid it; the ledger derives over raw `folder.ts` lanes).
++- **Gotcha**: inbox-poll parser is **strict** (throws on corrupt); a message is "consumed" only when the peer emits an `ack` record — a read never consumes (so the Phase-5 drain can re-read the same lanes).
++
++### Phase 3 — State-vocabulary coherence (#27/#31) · CS-2
++- **Deliverables**: 6 transition-acceptance tests; doctor-drift=`pass` test; schema description corrected to fact ("enforced", not "not yet enforced").
++- **Exported**: the validated **6-value enum** `[idle, reading, reviewing, reporting, blocked, stopping]`; **schema at agent ROOT** (PIC-1); `validateInsideState` is enforced at `state.ts:81`/`:100` (throws out-of-enum).
++- **Gotcha / PIC-1 (load-bearing)**: relocating the schema to `state/` would drop it from the install payload → installed companions fall back to the default enum → reopens #27/#31. **Keep it at root.** Doctor check is one-directional (prompt→enum), `warning` not `fail`.
++
++### Phase 4 — Ledger-derived lifecycle primitive (#36 + #32) · CS-4 (the contract Phase 6 extends)
++- **Deliverables**: `deriveCompanionLedger(location,{now?})` + `CompanionLedger`/`CompanionFinding`/`CompanionAckChain`/`CompanionDraftFarewell` types; the `coordination_status` MCP tool (9th, mirrors `permission-status.ts`); `minih companion status [--json]`; `report.findings[]` schema home; strict draft validation.
++- **Exported (load-bearing for P6)**: `coordinationMode: 'enabled'|'disabled'` pinned (do **not** widen); `coordination_status` returns `{agentSlug, coordinationMode, ledger, draftFarewell, idleBudgetSec}` today; `MCP_TOOL_NAMES`/`TOOL_CONTRACTS` hard-asserted at **9**; tool is barrel-exported for test importability (PIC-E deviation).
++- **Gotcha**: `idleElapsedMs === null` (no inbound yet) is real, distinct from `0`; reads throw `CompanionLedgerError` on torn lanes; draft only via `buildDraftFarewell`/`validateDraftFarewell`.
++
++### Phase 5 — Idle-budget policy + shutdown drain (#35) · CS-3
++- **Deliverables**: `evaluateIdlePolicy` (pure); `drainAndReadInbox` + `reconcileReportFindings`; `idleBudgetSec` on `coordination_status` (read from `run.json` budgets via `readIdleBudgetMs`); `DEFAULT_IDLE_BUDGET_MS = 1_800_000`; prompt idle wording → ledger-driven. 3 companion MEDIUMs reconciled (F001 drift test, F002 observable torn-lane, F003 schema-doc).
++- **Exported**: `evaluateIdlePolicy(ledger,{idleBudgetMs,runElapsedMs,timeoutSec,now?})→{standDown,exitReason:'idle_budget'|'no_engagement'|null,reason}`; `readIdleBudgetMs(runDir)`; `DEFAULT_IDLE_BUDGET_MS`.
++- **Gotcha**: `MINIH_PARAMS` doesn't reach the inside-MCP subprocess → budget is read from `run.json` on disk (A2). Use `unresolvedPeerRequests` for "work outstanding", `reviewedIds` for "completed" — never `ackedIds`.
++- **Carried to P6 (decision)**: **`evaluateIdlePolicy` is unwired** into the runner terminal path — see optional T009.
++
++---
++
++## Pre-Implementation Check
++
++| File | Exists? | Domain | Notes |
++|------|---------|--------|-------|
++| `src/mcp/tools/coordination-status.ts` | ✅ modify | mcp | Add `allowedStates: string[]` to `CoordinationStatusResult` (~`:26-42`) + body; trio assembled here. `coordinationMode`/`idleBudgetSec` already present. |
++| `src/mcp/tools/state.ts` | ✅ modify | mcp | Extract the private 3-level resolver `insideStateSchemaPath` (~`:182-192`) into a shared mcp-internal export so `coordination-status.ts` reuses one resolution path (intra-domain). |
++| `src/mcp/types.ts` | ✅ read-only | mcp | `MCP_TOOL_NAMES`/`TOOL_CONTRACTS` already = **9**; no count change (the contract test stays green). |
++| `src/mcp/index.ts` | ✅ read-only | mcp | Tool already exported; no change. |
++| `src/cli/commands/doctor.ts` | ✅ modify | cli | NEW `checkContractPhraseDrift` mirroring `checkPromptStateVocabularyDrift` (`:640-687`); push into `checks[]` after `:182` inside `if (coordination.enabled)`. Return-union `'pass'\|'warning'\|'fail'\|'skip'` (`:29`); a single `'fail'` → non-zero exit (`:343`). doctor's own `resolveInsideStateSchemaPath` (`:574-580`) stays — different (cli) domain. |
++| `agents/code-review-companion/inside-state.schema.json` | ✅ read-only | pack | **Root path (PIC-1)** — the `allowedStates` source: `.properties.status.enum` = the 6 values. |
++| `agents/code-review-companion/prompt.md` | ✅ read-only | pack | Sensor B reads it for the exit-reason / findings-home phrase assertions. (Phase 5 already made idle wording ledger-driven.) |
++| `agents/code-review-companion/output-schema.json` | ✅ read-only | pack | Exit-reason enum source of truth (must include `no_engagement`) for the contract-phrase check. |
++| `AGENTS_README.md` | ✅ modify | docs | `:529` "six MCP tools" → nine; add `no_engagement` to exitReason enums at `~:764` and `~:887` (AC-15). |
++| `docs/domains/registry.md` | ✅ modify | docs | `:7` "six backend-safe inbox/state tools" → nine; add `minih companion status` verb + `coordination_status` cross-ref (AC-16). |
++| `docs/domains/mcp/domain.md` | ✅ verify | docs | Already "nine" + lists `coordination_status` — add `allowedStates` to its contract entry; else verify-only. |
++| `docs/domains/cli/domain.md` | ✅ modify | docs | Add `checkContractPhraseDrift` to the doctor-checks concept + P6 History. |
++| `docs/domains/runner/domain.md` | ✅ verify | docs | CompanionLedger/idle-policy already documented (P4/P5) — verify; add P6 History only if a runner change lands (T009). |
++| `docs/how/companion-mode.md` | ✅ verify | docs | Already carries full exit-reason vocab + ledger-driven idle + findings home — verify-only; edit only if the contract-phrase check reveals residual drift. |
++| `test/mcp/coordination-status.test.ts` | ✅ modify | test | Add the AC-14 shape test (`allowedStates` resolved + trio together). |
++| `test/cli/doctor-contract-phrase.test.ts` | 🆕 create | test | NEW — RED→GREEN for Sensor B; mirror `test/cli/doctor-state-vocabulary.test.ts` structure (incl. the "real pack passes" case). |
++
++**Harness**: router installed (`/eng-harness-flow`) — the implement verb fires the pre-implement seam before any code and the phase-end seam after. Verdicts narrated verbatim (`healthy/SLOW/UNHEALTHY/UNAVAILABLE`).
++
++---
++
++## Architecture Map
++
++```mermaid
++flowchart TD
++    classDef pending fill:#9E9E9E,stroke:#757575,color:#fff
++    classDef completed fill:#4CAF50,stroke:#388E3C,color:#fff
++    classDef optional fill:#90A4AE,stroke:#546E7A,color:#fff,stroke-dasharray: 5 5
++
++    subgraph Phase["Phase 6: self-discovery + docs + Sensor B"]
++        T001["T001 RED: trio shape test"]:::completed
++        T002["T002: share schema resolver"]:::completed
++        T003["T003 GREEN: allowedStates on coordination_status (AC-14)"]:::completed
++        T004["T004 RED: contract-phrase drift test"]:::completed
++        T005["T005 GREEN: checkContractPhraseDrift (Sensor B)"]:::completed
++        T006["T006: AGENTS_README reconcile (AC-15)"]:::completed
++        T007["T007: registry tool count + verbs (AC-16)"]:::completed
++        T008["T008: domain docs P6 deltas"]:::completed
++        T009["T009 OPTIONAL: wire evaluateIdlePolicy"]:::optional
++        T001 --> T002 --> T003
++        T004 --> T005
++        T003 --> T008
++        T005 --> T006 --> T007 --> T008
++    end
++
++    subgraph Files["Touched"]
++        F1["coordination-status.ts"]:::completed
++        F2["state.ts (resolver)"]:::completed
++        F3["doctor.ts"]:::completed
++        F4["AGENTS_README.md"]:::completed
++        F5["registry.md"]:::completed
++        F6["domain.md ×3"]:::completed
++        F7["inside-state.schema.json (root, read)"]:::completed
++    end
++
++    T002 -.-> F2
++    T003 -.-> F1
++    T003 -.-> F7
++    T005 -.-> F3
++    T006 -.-> F4
++    T007 -.-> F5
++    T008 -.-> F6
++```
++
++---
++
++## Tasks
++
++| Status | ID | Task | Domain | Path(s) | Done When | Notes |
++|--------|-----|------|--------|---------|-----------|-------|
++| [x] | T6.0 | **Harness pre-flight** — `/eng-harness-flow --event pre-implement --phase "Phase 6: Runtime self-discovery + docs reconciliation (#29 + #32 docs)" --plan-dir docs/plans/027-companion-coordination` | — | — | Router envelope handled; boot verdict narrated verbatim before any code | _Harness seam_ |
++| [x] | T001 | **RED**: extend `coordination-status` test to assert the returned shape carries `allowedStates: string[]` (the resolved per-pack enum), alongside `coordinationMode` + `idleBudgetSec` — the trio in one call | mcp | `/Users/jordanknight/substrate/minih/test/mcp/coordination-status.test.ts` | Test red for the right reason (`allowedStates` absent today) | AC-14; Workshop 003 §trio |
++| [x] | T002 | Extract the 3-level resolver from `state.ts` into a shared **mcp-internal** module `src/mcp/tools/inside-state-schema.ts`, exporting `insideStateSchemaPath(context)` (keep the existing name + signature verbatim); `state.ts` re-imports it; `coordination-status.ts` imports it (1-line) for T003 | mcp | `/Users/jordanknight/substrate/minih/src/mcp/tools/state.ts`, `/Users/jordanknight/substrate/minih/src/mcp/tools/inside-state-schema.ts` (new), `/Users/jordanknight/substrate/minih/test/mcp/inside-state-schema.test.ts` (new) | Existing `state.ts`/`state_transition` tests stay green; resolver keeps the **preferred(`state/`)→legacy(root)→default** fallback so the companion's **root** schema is found (PIC-1); new test pins the fallback order | Intra-domain (mcp→mcp); doctor keeps its own cli resolver |
++| [x] | T003 | **GREEN**: add `allowedStates: string[]` to `CoordinationStatusResult` + tool body — resolve schema via T002 helper, read `.properties.status.enum` (default `[]` if unresolved); confirm `coordinationMode`/`idleBudgetSec` already present → trio returned together | mcp | `/Users/jordanknight/substrate/minih/src/mcp/tools/coordination-status.ts`, `/Users/jordanknight/substrate/minih/src/mcp/index.ts` | T001 green; trio in one call; **`coordinationMode` stays `'enabled'\|'disabled'`** (not widened) | AC-14; do not invent a richer mode enum (Phase 4 PIC) |
++| [x] | T004 | **RED**: new doctor test for `checkContractPhraseDrift` — seed a stale companion pack and assert `'fail'`; assert `'pass'` for the real `agents/code-review-companion/` pack | cli | `/Users/jordanknight/substrate/minih/test/cli/doctor-contract-phrase.test.ts` (new) | Test red (no such check yet). **Three stale sub-cases, each → `'fail'`**: (1) `output-schema.json` exitReason enum missing `no_engagement`; (2) `prompt.md` findings-home wording absent (no `inbox_send type:'finding'` + ledger-derived `report.findings`); (3) `inside-state.schema.json` description reverted to "not yet enforced". Real pack → `'pass'` | Mirror `test/cli/doctor-state-vocabulary.test.ts` incl. the real-pack case; fixture mutates the pack's `prompt.md` + `output-schema.json` |
++| [x] | T005 | **GREEN — Sensor B**: build `checkContractPhraseDrift(promptContent, agentDir)` mirroring `checkPromptStateVocabularyDrift` (`:640-687`); push into `checks[]` after `:182` inside `if (coordination.enabled)` | cli | `/Users/jordanknight/substrate/minih/src/cli/commands/doctor.ts` | T004 green; the **three pack-internal assertions** implemented (exit-reason incl. `no_engagement` ↔ output-schema enum · findings-home wording · state-vocab description); returns **`'fail'`** on drift (promoted from `'warning'`), `'pass'` clean, `'skip'` if artifacts absent; real pack passes; `minih doctor` still exits 0 on the current tree | Per finding 08; warn→fail because docs reconciled this phase. **Tool-count drift is NOT this sensor** — T006/T007 + doctor pass (recon row 5) |
++| [x] | T006 | Reconcile `AGENTS_README.md` to the singular contract: `:529` "six MCP tools" → **nine** (list all nine); add `no_engagement` to the exitReason enums at `~:764` and `~:887` | docs | `/Users/jordanknight/substrate/minih/AGENTS_README.md` | Contract-phrase check + `minih doctor` pass; phrases current | AC-15; companion-mode.md verified already-correct (verify-only) |
++| [x] | T007 | Housekeeping: `docs/domains/registry.md:7` "six backend-safe inbox/state tools" → **nine** (list tools); add the `minih companion status` verb + `coordination_status` cross-reference. Verify `mcp/domain.md` already says nine | docs | `/Users/jordanknight/substrate/minih/docs/domains/registry.md`, `/Users/jordanknight/substrate/minih/docs/domains/mcp/domain.md` | AC-16: registry reflects the real count + new tools/verbs | Per finding 07 |
++| [x] | T008 | Domain-doc P6 deltas: add `allowedStates` to `mcp/domain.md` `coordination_status` entry; add `checkContractPhraseDrift` to `cli/domain.md` doctor-checks concept; P6 History rows in mcp/cli (+ runner if T009 lands). runner/cli already carry the ledger/verb (verify) | docs | `/Users/jordanknight/substrate/minih/docs/domains/mcp/domain.md`, `/Users/jordanknight/substrate/minih/docs/domains/cli/domain.md`, `/Users/jordanknight/substrate/minih/docs/domains/runner/domain.md` | Domain docs reflect the new contracts; History updated | plan-6 domain step |
++| [ ] | T6.z | **Harness phase-end** — `/eng-harness-flow --event phase-end --plan-dir docs/plans/027-companion-coordination` | — | — | Router envelope handled at phase end (router owns drain-vs-harvest) | _Harness seam_ |
++
++**Whole-plan exit criterion** — **AC-17**: `just fft` exits 0 with the new tests included (`test/mcp/coordination-status.test.ts`, `test/mcp/inside-state-schema.test.ts`, `test/cli/doctor-contract-phrase.test.ts`); no regression in the coordination suite. (Run by the implement verb at phase close; not a separate task row.)
++
++### Contingent task — decide at GO (not part of the default Phase-6 build)
++
++T001–T008 + the two harness seams are the complete default phase. The row below is surfaced for an **explicit GO only**; it is **runner behaviour, out of the plan's Phase-6 scope** (self-discovery + docs), and changes nothing unless you ask for it.
++
++| Status | ID | Task | Domain | Path(s) | Done When | Notes |
++|--------|-----|------|--------|---------|-----------|-------|
++| [ ] | T009 | **OPTIONAL** — wire `evaluateIdlePolicy` into the runner terminal loop so a never-spoke peer exits gracefully `no_engagement` instead of hard `timeout`; RED→GREEN over the runner path (oracle + drain already exist) | runner | `src/runner/runner.ts`, `test/runner/*` | Never-spoke peer exit reason is `no_engagement`; existing idle-policy tests stay green | Carried-forward from Phase 5 |
++
++---
++
++## Context Brief
++
++### Key findings from plan (Phase-6-relevant)
++- **Finding 07** — MCP tool count drift: docs said "six"; real post-Phase-4 count is **9**. → T007 (now narrowed to `registry.md` + `AGENTS_README.md`; `mcp/domain.md` already fixed).
++- **Finding 08** — doctor drift check is one-directional and the contract-phrase class had no sensor. → T005 (Sensor B). Keep the per-pack enum exactly the published set so both checks stay green.
++
++### Sensor B scope (decided — three pack-internal assertions)
++The contract-phrase check guards exactly these **pack-internal** phrases (mirrors the per-agent shape of `checkPromptStateVocabularyDrift`, which takes `(promptContent, agentDir)`) — this is the settled scope, not an implement-time choice:
++1. **Exit-reason vocabulary** — the prompt's stated exit reasons include `no_engagement` and match `output-schema.json`'s enum (`stop_requested | idle_budget | no_engagement | timeout | error`). *(The core assertion.)*
++2. **Findings-home wording** — the prompt states findings are sent live via `inbox_send type:'finding'` and `report.findings[]` is derived from the ledger.
++3. **State-vocab description** — the schema description is the corrected "enforced" phrasing, not the stale "not yet enforced" (Phase 3 fixed it; the sensor pins it).
++
++**Tool-count and cross-doc prose** (AGENTS_README/registry) are reconciled by **T006/T007 + the `minih doctor` pass** — a deterministic file edit verified by review — **never string-scanned from a per-agent check** (recorded as recon row 5). This keeps Sensor B deterministic and false-positive-free; widening it to scan arbitrary docs would be a separate PIC, not this phase.
++
++### Domain dependencies (consumed)
++- `runner`: `deriveCompanionLedger`, `CompanionLedger`, `readIdleBudgetMs`, `DEFAULT_IDLE_BUDGET_MS`, `evaluateIdlePolicy` (T009) — all barrel-exported from `src/runner/index.ts`.
++- `mcp`: `coordination_status` tool + `CoordinationStatusResult`; the inside-state schema resolver (T002).
++- `pack`: the companion's root `inside-state.schema.json` (enum), `output-schema.json` (exit reasons), `prompt.md` (phrases).
++
++### Domain constraints
++- `cli → runner` and `mcp → runner` imports are legal; `mcp ↔ cli` are NOT — keep the schema-resolver extraction **intra-mcp** (T002); doctor.ts keeps its own cli-domain resolver.
++- Do not touch the global default `src/schemas/inside-state.json`; do not widen `coordinationMode`.
++
++### Harness context (router installed)
++- **Entry**: `/eng-harness-flow --event <seam> [--phase <id>] [--plan-dir <p>] --json` — single door; children never named.
++- **Pre-implement** (T6.0) and **phase-end** (T6.z) seams fired by the implement verb; router owns what happens.
++- **Backpressure**: `backpressure-coverage.md` rated **Partial**; Sensor B (T005) is the surviving deterministic sensor it recommended — standing it up here closes the recommended Phase-0 item on the docs it guards.
++
++### Reusable from prior phases
++- Test fixtures: `mkdtemp` + seeded lane fixtures + injected `now` clock (Phase 4/5); `test/cli/doctor-state-vocabulary.test.ts` structure incl. the real-pack pass case (Phase 3); `coordination_status` tool test harness (Phase 4).
++
++### System flow (AC-14 trio)
++
++```mermaid
++flowchart LR
++    A[inside agent calls coordination_status] --> B[resolve per-pack schema<br/>root path, 3-level]
++    B --> C[allowedStates = status.enum]
++    A --> D[coordinationMode<br/>frozen frontmatter]
++    A --> E[idleBudgetSec<br/>run.json budgets]
++    C --> F[trio returned in one call]
++    D --> F
++    E --> F
++```
++
++```mermaid
++sequenceDiagram
++    participant Agent as inside companion
++    participant Tool as coordination_status
++    participant Schema as inside-state.schema.json (root)
++    participant Run as run.json
++    Agent->>Tool: call (no args)
++    Tool->>Schema: resolveInsideStateSchemaPath(agentDir) → enum
++    Tool->>Run: readIdleBudgetMs(runDir)
++    Tool-->>Agent: { allowedStates, coordinationMode, idleBudgetSec, ledger, draftFarewell }
++```
++
++---
++
++## Discoveries & Learnings
++
++_Populated during implementation by the implement verb._
++
++| Date | Task | Type | Discovery | Resolution | References |
++|------|------|------|-----------|------------|------------|
++| 2026-06-15 | T6.0 | gotcha | First pre-implement boot was **UNHEALTHY** — `biome check .` failed on a **formatter diff in the flight-plan `the-flow.json`** written the prior turn (not a source file). `just fft` runs `lint` before `format`, so it never self-heals → blocks AC-17 regardless of phase work. | `biome format --write the-flow.json`; re-boot → degraded (lint ✓). Surfaced to human (UNHEALTHY protocol) → "fix lint, then build". | T6.0 |
++| 2026-06-15 | T005 | decision | Sensor B fires for **every** coordinated agent, but `demo-companion` has an `exitReason` enum **without** `no_engagement`. A blanket "must include no_engagement" would wrongly fail it and break `minih doctor` exit-0. | Assertion 1 = **parity** (`no_engagement` in BOTH prompt + enum, or NEITHER). Assertions 2/3 scoped to the companion contract shape (findings array / per-pack schema desc). All real agents pass/skip. | recon row 5 |
++| 2026-06-15 | T005 | gotcha | The companion `prompt.md` farewell-envelope **example** (line 282) listed `stop_requested \| idle_budget \| timeout \| error` — omitting `no_engagement` that its own `output-schema.json` enum + prose declare. | Reconciled the example to include `no_engagement` (the exact exit-reason contract phrase Sensor B guards). Sensor passes via substring parity either way; fix is internal-consistency hygiene. | T005 |
++| 2026-06-15 | debrief | gotcha | **Live companion caught 2 real misses.** MEDIUM: `docs/domains/domain-map.md` still said "six … tools" (mermaid node + health table) — I reconciled registry/AGENTS_README/mcp/cli but missed domain-map (AC-16 completeness gap). LOW: `doctor.ts:568` comment referenced `state.ts:insideStateSchemaPath` after T002 moved it to `inside-state-schema.ts`. | Fixed both (`six→nine` in domain-map ×2; comment → new resolver path). Reconciled in the post-debrief fix commit. Companion magicWand (stable finding ids + ackOf in `draftFarewell.findings`) buffered for plan-complete retro. | companion debrief |
++
++**Types**: `gotcha` · `research-needed` · `unexpected-behavior` · `workaround` · `decision` · `debt` · `insight`
++
++---
++
++## Directory layout
++
++```
++docs/plans/027-companion-coordination/
++  ├── companion-coordination-plan.md
++  └── tasks/phase-6-runtime-self-discovery-docs-reconciliation/
++      ├── tasks.md
++      └── execution.log.md   # created by the implement verb
++```
++
++STOP — no code edited. Awaiting human GO.
++
++---
++
++## Validation Record (2026-06-15)
++
++### Validation Thesis
++
++**Raison d'être**: Give the implement agent an actionable, source-grounded task list for the final phase of plan 027 — surfacing the self-discovery trio (AC-14), Sensor B (contract-phrase doctor check), and the narrowed docs reconciliation (AC-15/16) — while honestly correcting the plan's over-scoped/superseded assumptions so the implementer doesn't build the wrong thing.
++
++**Value claim**: Implementation is cheaper/safer because the agent knows the trio is 2/3 done, won't relocate the schema (PIC-1), won't widen `coordinationMode`, builds Sensor B mirroring the existing check, and won't re-fix already-correct docs.
++
++**Artifact promise**: The implement verb executes with minimal clarification — real paths/line-refs, correct dependency order, RED→GREEN tasks, ACs mapped to tasks.
++
++**Intended beneficiaries**: implement agent (primary), reviewer (AC mapping), future maintainers (recon-corrections table).
++
++**Proof target**: Implementation.
++
++**Evidence standard**: source-code match (verified), AC coverage, dependency correctness, test-file existence.
++
++**Thesis source**: `companion-coordination-plan.md` §Phase 6 + §Acceptance Criteria (AC-14/15/16/17) + user request.
++
++**Thesis verdict**: Advanced (after fixes) — proof-level tightening (T002 signature, Sensor B phrase set, AC mapping, recon-verify note) lifted it from orientation-to-implementation to clean Implementation.
++
++**Main thesis risk**: A recon fact going stale on a future rebase — mitigated by the trust-but-verify checklist now in the dossier.
++
++---
++
++| Agent | Lenses Covered | Thesis Axes | Issues | Verdict |
++|-------|---------------|-------------|--------|---------|
++| Source Truth | Concept Documentation, Technical Constraints, System Behavior, Hidden Assumptions | Evidence Sufficiency | recon table verified ~100% accurate; 0 open | ✅ |
++| Cross-Reference + Completeness | Integration & Ripple, Edge Cases, Domain Boundaries, Concept Documentation, Deployment & Ops | Downstream Usefulness, Review Compression | 1 (Sensor-B tool-count narrowing) fixed; AC coverage complete | ⚠️ → ✅ |
++| Thesis Alignment | Thesis Alignment, Evidence Sufficiency, Proof-Level Fit | Implementation Readiness, Proof-Level Fit | 2 HIGH (T002/Sensor-B vagueness) + non-goal creep fixed | ⚠️ → ✅ |
++| Forward-Compatibility | Forward-Compatibility, Deployment & Ops, Security | Safety to Change, Contract Integrity | 4 LOW (path/fixture specificity) fixed; PASS all consumers | ✅ |
++
++### Forward-Compatibility Matrix
++
++| Consumer | Requirement | Failure Mode | Verdict | Evidence |
++|----------|-------------|--------------|---------|----------|
++| Implement verb (stage 6) | Accurate paths/line-refs; RED→GREEN with testable Done-When; clear T009 stance | encapsulation lockout / shape mismatch | ✅ | All paths absolute & verified; T001/T004/T005 RED states explicit; T009 moved to contingent section |
++| Merge stage (stage 8) | AC→task mapping for AC-14/15/16/17; AC-17 `just fft` gate | test boundary | ✅ | §AC → task mapping added; AC-17 names the three new test files |
++| Plan's inherited promise (§Phase 6) | Honest deltas; no silent stale-plan follow | contract drift | ✅ | Recon-corrections table supersedes the relocate rows with PIC-1 evidence; Phase 3 log confirms |
++
++**Thesis alignment**: Value claim advanced at Implementation proof level after fixes; main residual risk is a recon fact going stale on a future rebase, mitigated by the trust-but-verify checklist.
++
++**Outcome alignment**: The dossier as written advances "make it reliable and self-describing" by surfacing the self-discovery trio (`allowedStates` + `coordinationMode` + `idleBudgetSec`) in one call and standing up Sensor B (contract-phrase drift check) to guard the docs it reconciles in this phase.
++
++**Standalone?**: No — the implement verb (stage 6) is a concrete downstream consumer of this dossier's shape.
++
++Overall: ⚠️ VALIDATED WITH FIXES
+diff --git a/docs/plans/027-companion-coordination/the-flow.json b/docs/plans/027-companion-coordination/the-flow.json
+index ec72663..4715c0b 100644
+--- a/docs/plans/027-companion-coordination/the-flow.json
++++ b/docs/plans/027-companion-coordination/the-flow.json
+@@ -4,10 +4,10 @@
+   "slug": "companion-coordination",
+   "plan_dir": "docs/plans/027-companion-coordination",
+   "mode": "Full",
+-  "cursor": "p6",
+-  "recommended_next": "p6",
+-  "now": "Phase 5 IMPLEMENTED & DONE (#35) WITH the companion — idle policy + shutdown drain landed. evaluateIdlePolicy (AC-11, pure, 8 discriminating tests), idleBudgetSec discoverable on coordination_status (AC-12, non-default discriminator), drainAndReadInbox + overwrite-only-findings reconcile wired into the runner terminal block (AC-13, ordering discriminator), prompt.md rewritten ledger-driven (doctor drift pass), runner domain docs. Companion (run …f932) reviewed every commit → APPROVE T001 + APPROVE_WITH_NOTES T002/T003/T004; its 3 MEDIUM findings ALL reconciled in a fix-pass (F001 default-drift test pinning DEFAULT_IDLE_BUDGET_MS↔input-schema, F002 observable stderr.log drain diagnostic + {wrote,reason}, F003 input-schema enable-flag contract doc). just fft exit 0 (1376 passed / 16 skipped / 0 failed); tsc clean. CARRIED FORWARD (Phase-6/follow-up): evaluateIdlePolicy is tested-but-UNWIRED into the runner loop → a never-spoke peer exits via the timeout backstop, not a graceful no_engagement. Commits a1e49af·de9cd16·65ae2d5·538c65e·2c7bdb3·ff8d8d3·9d063e0.",
+-  "next": "Phase 6 tasks (stage 5) — the FINAL phase: runtime self-discovery trio (allowedStates + coordinationMode + idleBudgetSec on coordination_status, AC-14), registry tool-count fix (AC-16), docs reconciliation (#29 + #32 docs: AGENTS_README + companion-mode.md), contract-phrase doctor sensor (folded from the dropped Phase 0, incl. warn→fail promotion). A /compact seam is natural first; consider wiring evaluateIdlePolicy into the runner here (the carried-forward gap).",
++  "cursor": "merge",
++  "recommended_next": "merge",
++  "now": "Phase 6 IMPLEMENTED + COMPLETE (--companion, the FINAL build) — all 8 tasks + both harness seams done; AC-14/15/16/17 met. T001-T003: allowedStates added to coordination_status (the self-discovery trio {allowedStates, coordinationMode, idleBudgetSec} in one call); the 3-level inside-state resolver extracted to a shared mcp module insideStateSchemaPath (PIC-1 root path). T004-T005: Sensor B checkContractPhraseDrift in doctor — no_engagement parity + findings-home + state-desc, warn→fail; minih doctor still exits 0. T006-T008: docs reconciliation (AGENTS_README + registry six→nine + no_engagement; mcp/cli domain deltas). Pre-implement boot was UNHEALTHY (lint = a biome format diff in this flight-plan's own the-flow.json) → fixed (Jordan: 'fix lint, then build') → degraded → proceeded. Live companion (run …18-22-48…) reviewed every commit + drain, exited stop_requested clean, sent 2 findings — MEDIUM domain-map.md still 'six' (I'd missed it) + LOW stale doctor resolver comment — BOTH reconciled. Commits 741be73, dcae0f8, 9014777, d79785d. just fft exit 0 (1386 passed). Contingent T009 NOT taken (no GO).",
++  "next": "All 6 phases DONE → the plan is code-complete (awaiting-6). Review (stage 7, the inferential/eyeball tier) is SKIPPABLE — the companion reviewed every commit live across P1/P4/P5/P6 — so the recommended next is MERGE (stage 8). Merge produces the merge analysis and executes ONLY on a typed PROCEED, then fires the plan-complete harness seam. The observe buffer (DL-001/002/003, SUGG-001/002/003, COORD-001, CRC-001 + this session's notes) drains at plan-complete. Optional: run a review pass first if you want the eyeball tier; or revisit contingent T009 (unwired evaluateIdlePolicy) as a follow-up.",
+   "_comment": "Adopted into guided bookkeeping 2026-06-14 (stages 1a/1b/2c + post-spec backpressure were direct jumps). Architect ran 2026-06-14: plan READY, 7 phases (0 optional backpressure + 1-6 issue clusters) locked; the assumed 'build' placeholder is now 7 known phase nodes. validate-v2 ran (3 agents: coherence READY, thesis/forward-compat tightenings applied inline). Tasks stage ran 2026-06-14 for Phase 0: 8-task dossier (fake-adapter seam + contract-phrase doctor check), discovered the real adapter construction site is sdk-runtime.ts:105 (not index.ts) and the contract-phrase check must be warn-only until Phase 6 reconciles the still-drifted docs. Router IS installed → backpressure on spine + plan-complete seam shown.",
+   "nodes": [
+     {
+@@ -201,9 +201,16 @@
+       "id": "p6",
+       "type": "phase",
+       "phase": 6,
+-      "label": "Phase 6 · Self-discovery + docs reconciliation (#29 + #32 docs)",
+-      "status": "known",
+-      "note": "CS-3. coordination_status returns the trio; reconcile AGENTS_README + companion-mode.md; fix registry tool count. Depends on Phase 3, Phase 5.",
++      "label": "Phase 6 · Self-discovery + docs reconciliation (#29 + #32 docs) · DONE — implemented (--companion), companion clean + 2 findings reconciled",
++      "status": "done",
++      "command": "/the-flow 6 implement --plan \"docs/plans/027-companion-coordination/companion-coordination-plan.md\" --phase \"Phase 6: Runtime self-discovery + docs reconciliation (#29 + #32 docs)\" --companion",
++      "ran_at": "2026-06-15T08:45Z",
++      "user_input": "implement with companion",
++      "note": "CS-3, FINAL phase — ✅ DONE: implemented WITH the companion. T001-T003 (AC-14): added allowedStates:string[] to coordination_status so the self-discovery trio {allowedStates, coordinationMode, idleBudgetSec} returns in ONE call; extracted the 3-level resolver insideStateSchemaPath + DEFAULT_INSIDE_STATE_SCHEMA from state.ts into a shared mcp module src/mcp/tools/inside-state-schema.ts (intra-mcp; PIC-1 ROOT path preserved); resolveAllowedStates reads .properties.status.enum, []-on-failure (never throws); coordinationMode NOT widened. T004-T005 (Sensor B, AC-15): checkContractPhraseDrift in doctor mirroring checkPromptStateVocabularyDrift, warn→fail, 3 pack-internal assertions — no_engagement PARITY (prompt↔output-schema enum; keeps demo-companion + other coordinated agents passing), findings-home wording, state-desc not-reverted; minih doctor still exits 0. Also reconciled the companion prompt's exitReason example to include no_engagement. T006-T008 (AC-15/16): AGENTS_README six→nine + no_engagement in both enums; registry.md six→nine + companion verb; mcp/cli domain deltas (+P6 history); runner verify-only. Pre-implement boot UNHEALTHY (lint = biome format diff in this flight-plan's own the-flow.json) → Jordan 'fix lint, then build' → biome format → degraded → proceeded. Live companion (run 2026-06-15T18-22-48-527Z-a02d): briefed once, pinged at all 3 task commits + drain, control:stop → exit stop_requested clean (bg proc exit 0); findingsSent 2 — MEDIUM domain-map.md still 'six' (missed in the T007 sweep) + LOW stale doctor resolver comment (T002 moved the fn) — BOTH reconciled in d79785d. magicWand (coordination): coordination_status should expose stable finding ids + ackOf in draftFarewell.findings. AC-17: just fft exit 0 (1386 passed/16 skipped). Commits 741be73 (trio), dcae0f8 (Sensor B + prompt), 9014777 (docs), d79785d (finding fix). Contingent T009 (wire evaluateIdlePolicy) NOT taken — no GO. Phase-end seam: observe buffer non-empty → drain DEFERRED to plan-complete per cadence.",
++      "artifacts": [
++        "tasks/phase-6-runtime-self-discovery-docs-reconciliation/tasks.md",
++        "tasks/phase-6-runtime-self-discovery-docs-reconciliation/execution.log.md"
++      ],
+       "next": ["merge"]
+     },
+ 
+diff --git a/docs/plans/027-companion-coordination/the-flow.md b/docs/plans/027-companion-coordination/the-flow.md
+index 3dd7f30..9241022 100644
+--- a/docs/plans/027-companion-coordination/the-flow.md
++++ b/docs/plans/027-companion-coordination/the-flow.md
+@@ -2,7 +2,7 @@
+ # Flight plan — companion-coordination
+ 
+ **Plan**: companion-coordination · **Mode**: Full · **Phases**: 6 (1–6; Phase 0 dropped after validate-v2)
+-**Rail**: `[the-flow] ◆─◆─◆─[◆─◆─◆─◆─◆─◇]─◇`  ·  research · spec · plan · [build 6/6] · merge   ·   **now**: Phase 5 IMPLEMENTED & DONE (#35) — idle policy + shutdown drain landed with the companion; 3 MEDIUM findings reconciled; `just fft` exit 0 · **next**: Phase 6 tasks (stage 5) — the final phase (self-discovery trio + docs reconciliation #29/#32 + registry tool-count)
++**Rail**: `[the-flow] ◆─◆─◆─[◆─◆─◆─◆─◆─◆]─◇`  ·  research · spec · plan · build 6/6 · [merge]   ·   **now**: Phase 6 IMPLEMENTED + COMPLETE (`--companion`, the final build) — trio/AC-14, Sensor B/AC-15, docs/AC-15/16; companion reviewed every commit, exited clean, 2 findings reconciled; `just fft` exit 0 (1386 passed) · **next**: all 6 phases done → plan **code-complete** → **merge** (stage 8; review SKIPPABLE — companion reviewed every commit); merge executes only on typed `PROCEED`
+ 
+ ```mermaid
+ flowchart TD
+@@ -23,7 +23,7 @@ flowchart TD
+     P2 --> P3[Phase 3 · State-vocabulary #27/#31 · DONE — verify-and-pin, companion APPROVE 0 findings, keep-root]:::done
+     P3 --> P4[Phase 4 · Ledger primitive #36/#32 · DONE — implemented + companion REQUEST_CHANGES reconciled f0bd6a0]:::done
+     P4 --> P5[Phase 5 · Idle policy + drain #35 · DONE — implemented + companion 3 MEDIUMs reconciled ff8d8d3]:::done
+-    P5 --> P6[Phase 6 · Self-discovery + docs #29/#32 · NEXT]:::known
++    P5 --> P6[Phase 6 · Self-discovery + docs #29/#32 · DONE — trio/Sensor B/docs, companion clean + 2 findings reconciled]:::done
+     P6 --> M[Merge]:::known
+ 
+     %% ── excursions: each workshop is its own node ──
+@@ -67,8 +67,12 @@ flowchart TD
+     UP5a -.- P5
+     UP5b>"🗣 run with companion mode"]:::said
+     UP5b -.- P5
++    UP6a>"🗣 continue with nex phase tasks then validate pleaee"]:::said
++    UP6a -.- P6
++    UP6b>"🗣 implement with companion"]:::said
++    UP6b -.- P6
+ ```
+ 
+ **Legend**: 🟩 done · 🟧 in progress · 🟦 known future (designed) · ⬜╴assumed future (dashed) · 🟨 🗣 verbatim user input · 🟪 harness seams (violet — routed via `/eng-harness-flow`)
+ 
+-_Generated from `the-flow.json`. **Phase 1 (#25) COMPLETE** (verify-and-close with the live companion; AC-1 gate proven by a release-default→E205 `.e2e` test 8/8 green, stale `runner.ts` comment fixed, companion-caught `permissions.md` lane fix F001, APPROVE 0 HIGH/CRITICAL; commits `5ab51e1`·`57644c7`·`a7bcac5`·`181fc19`). **Phase 2 (#40) COMPLETE** — implemented with the live companion (5 commits `f86a0b9`·`ff0a1f2`·`95be231`·`eff457e`·`812e468`): exported `listUnackedVisible` from inbox-poll and unified `event-wait`'s `inbox.message` branch on the unread/ack model (immediate pass + unacked watcher) so a message queued **before** the call is now delivered (#40); the two validate-v2 seams shipped as explicit RED criteria — V-1 torn-lane → `EventWaitInboxCorruptError` (no swallow), V-2 immediate-pass short-circuits before registration; `inbox_list` parity (AC-4), wildcard wake runner+MCP (AC-5), `cleanup()` splice-and-close re-entry guard + real-fs.watch close-count race (T006). `just fft` green; coordination suite **68/68**; one unrelated `agent-pack/extractor` flake cleared on re-run. Companion: **0 findings** (clean APPROVE-equivalent — it explicitly checked the lane direction + corrupt-lane path); its **magicWand independently re-derived Phase 4** (the `coordination_status` ledger tool), same as Phase 1's companion. The original tasks dossier (`tasks/phase-2-inbox-delivery-parity/tasks.md`) was a 6-task TDD dossier — export `listUnackedVisible` from `inbox-poll`; unify `event-wait`'s `inbox.message` branch onto the unread/ack model (immediate pass + unacked watcher); `inbox_list` parity; wildcard wake; `cleanup()` re-entry guard. `validate-v2` (4 agents) returned **Source-Truth SOUND · Cross-Reference ALIGNED · Forward-Compat COMPATIBLE · Completeness 5 gaps** — all folded into the table. The standout catch: the new synchronous immediate-pass opens a **corrupt-lane throw path** (V-1, HIGH — today's `snapshotInboxIds` swallows corruption) and a **settle-before-registration leak** (V-2), now explicit RED criteria; and a misleading "Phase 4/5 reuse this export" note was corrected (those derive over raw `folder.ts` lanes). Source claims confirmed line-by-line (snapshot bug `:78`/`:193`; `listVisible` private `:135-171`). **Phase 3 tasks TABLED + validate-v2'd** (2026-06-15, `generat the tasks then validate`): the State-vocabulary coherence (#27/#31) dossier (`tasks/phase-3-state-vocabulary-coherence/tasks.md`) — T001 AC-6 transition-acceptance test (all 6 statuses + a discriminating dropped-enum negative), T002 schema-location disposition, T003 stale-description fix, T004 AC-7 doctor no-drift pin; prior-phase review (P1+P2) + Pre-Implementation Check done. **validate-v2 (4 read-only agents) = ✅ VALIDATED** — source-truth 9/9 CONFIRMED, cross-reference clean (+1 HIGH plan gap), Outcome **ADVANCING**, Thesis **Strong / no non-goal creep**. **PIC-1 (CRITICAL, all-4-agent-confirmed)**: the plan's task 3.2 "relocate schema root → `state/`" is **install-unsafe** for this installable agent — `state` ∈ `RUNTIME_DIR_NAMES` (`manifest.ts:15-20`, install-denied); `code-review-companion` ships its schema at **root** via `agent.json` (v0.2.0) with a comment explaining exactly this; relocating would drop the schema from the install payload → installed companions fall back to the **default** enum → **reintroduces #27/#31** on installed copies. The plan never mentions `RUNTIME_DIR_NAMES` (genuine gap). **Recommended disposition**: keep schema at root, reshape T002 to verify-and-record (optional plan fix-loop on Phase 3 Delivers/Domain-Manifest). Also resolved: `validateInsideState` IS enforced (`state.ts:100`) → T003's description fix is definitive. **PIC-1 decided 2026-06-15 (Jordan): keep schema at root, no relocate** — T002 reshaped to verify-and-record; the "`.minih` footprint" idea noted as a separate future question. **Phase 3 IMPLEMENTED with the companion** (2026-06-15, `impleemt with companion`): verify-and-pin landed — T001 AC-6 transition-acceptance test (all 6 published statuses accepted against the **real shipped** schema at root + a discriminating dropped-enum negative → `MCP_INVALID_ARGUMENT`; 5/5), T002 keep-root **verified** (schema at root, no `state/` copy, in the `agent.json` install payload — no relocation), T003 stale "not yet enforced" description **corrected** (`validateInsideState` is enforced @ `state.ts:100`/`:81`, throws `MCP_INVALID_ARGUMENT`; enum unchanged), T004 AC-7 doctor `prompt-state-vocabulary-drift=pass` **pinned against the real `code-review-companion` pack** (14/14). `just fft` → exit 0 (no format drift); AC-17 met. Commits `984b504`·`3190952`·`8c6ae4b` (T002 no diff). Companion (run …317Z-ef6a): briefed once, pinged at all 3 commits + drain → **0 findings, clean APPROVE** on every commit + final sweep (its final review independently re-confirmed "only root schema, no `state/`" = PIC-1 keep-root); its **magicWand re-derived Phase 4 for the 3rd time** (coordination_status ledger). Phase-end seam routes drain (buffer non-empty) — **deferred to plan-complete** per cadence; `SUGG-003` captured. #27/#31 pinned closed. **Phase 4 tasks TABLED (stage 5) + validate-v2'd** (2026-06-15, `enxt phase plan and validate please`): the crown-jewel ledger-primitive dossier (`tasks/phase-4-ledger-derived-lifecycle-primitive/tasks.md`, 10 tasks T000–T0z) — `deriveCompanionLedger` over **raw** lanes (AC-8), draft farewell strict-validated-before-write (AC-9), `coordination_status` MCP tool 8→9 + pinned `coordinationMode` enum, `minih companion status` CLI, `report.findings[]` schema home (#32/AC-10), domain docs. Grounded by 3 prior-phase reviews + a codebase recon; **8 PIC reconciliations** vs the shipped tree (headline **PIC-A**: the ledger derives over **raw `folder.ts` lanes**, NOT the Phase-2 `listUnackedVisible` export — its own doc-comment forbids ledger consumers — correcting the plan's "reuse the export" wording). **validate-v2 (4 read-only agents)**: Source-Truth **SOUND** · Cross-Reference **ALIGNED** · Completeness **GAPS (2 HIGH)** · Forward-Compat **2 FAIL** — every finding folded in (added `report.findings[]` to `system-output.json`; renamed ledger fields to the consumer contract `idleElapsedMs`+`unresolvedPeerRequests`; added the `deriveCompanionLedger` runtime barrel-export note). Depends on Phase 2 + Phase 3 (both done). **Phase 4 (#36/#32) COMPLETE** — implemented with the companion (commits `37bdbc8`·`4ce612c`·`e779363`·`c3ed91d`); the companion issued **REQUEST_CHANGES** (4 findings F001–F004, 3 HIGH/1 MED; recorded `f87fc4d`) — **reconciled in `f0bd6a0`**: F004 body-only finding parsing + safe-null `toFinding`, F002 `reviewedIds`=completion-summary semantics, F001 `CompanionAckChain`/`ackChains` from both lanes, F003 `progressCount`→`peerUpdatesSent` (a self-proving fold — the companion's own 4 findings were all `meta=NONE` body-only, the exact shape F004 fixes); tsc 0, suite **1359 passed**/16 skipped, `just fft` green. **Phase 5 (#35) tasks TABLED + validate-v2'd** (2026-06-15, `prepare phase 5 and validate please`): the idle-budget-policy + shutdown-drain dossier (`tasks/phase-5-idle-budget-policy-shutdown-drain/tasks.md`, 6 tasks T000–T0z) — `evaluateIdlePolicy` pure fn (AC-11), idle budget discoverable on `coordination_status` (AC-12), `drainAndReadInbox` + overwrite-only-findings reconcile (AC-13), prompt ledger-driven rewrite, domain docs. Grounded by **4 prior-phase reviews + a live-code recon**; **6 PIC reconciliations** vs the shipped tree — headline: **no runner-side idle logic exists** (it's integer poll-streak prose in `prompt.md`), the drain **re-derives over RAW lanes** (`listUnackedVisible` foreclosed by two doc-comments), and **MCP teardown is implicit** so the drain is disk-only between `commit()` and report-write. **validate-v2 (4 agents)**: Source-Truth **SOUND** · Cross-Reference **ALIGNED** · Completeness **2 CRITICAL + 2 HIGH + 2 MED → ALL FOLDED** (A1 ceiling needs `runElapsedMs`+`timeoutSec` — the ledger has no wall-clock; A2 `MINIH_PARAMS` never reaches the MCP subprocess → real plumbing; A3 overwrite-only-findings; A4 torn-lane tolerate; A5 ordering discriminator; A6 first-contact null) · Forward-Compat validator **died mid-run** (its idleBudget-naming question covered by Cross-Ref + the A2 `idleBudgetSec` fold). Depends on Phase 4 (done). **Phase 5 (#35) COMPLETE** — implemented with the live companion (commits `a1e49af`·`de9cd16`·`65ae2d5`·`538c65e`·`2c7bdb3`, fix-pass `ff8d8d3`): `evaluateIdlePolicy` (AC-11, pure, 8 discriminating tests incl. the never-spoke A1 case), `idleBudgetSec` discoverable on `coordination_status` (AC-12 — A2 plumbing, `MINIH_PARAMS` proven NOT to reach the inside-MCP subprocess so the budget is recorded into `run.json`), `drainAndReadInbox` + overwrite-only-findings reconcile wired into the runner terminal block after the final inbox commit (AC-13, ordering discriminator; torn lane tolerated → never fails the run), `prompt.md` rewritten integer-poll-streak → ledger-driven (doctor `prompt-state-vocabulary-drift` pass), runner domain docs. The companion (run …`f932`) reviewed every commit → **APPROVE T001 + APPROVE_WITH_NOTES T002/T003/T004**, honoured `control:stop` (exit `stop_requested`), and raised **3 MEDIUM findings ALL reconciled** in `ff8d8d3` (F001 `DEFAULT_IDLE_BUDGET_MS`↔input-schema drift test; F002 reconcile returns `{wrote,reason}` + runner emits an observable `stderr.log` diagnostic for torn-lane/draft-invalid; F003 input-schema enable-flag contract doc + `replyWaitPolls` deprecated). `just fft` exit 0 (**1376 passed**/16 skipped/0 failed); `tsc` clean. **⚠️ Carried forward (Phase-6/follow-up): `evaluateIdlePolicy` is tested but UNWIRED into the runner loop** — a never-spoke peer exits via the run-timeout backstop (`timeout`) rather than a graceful `no_engagement`; the runner has `runElapsedMs` + can derive the ledger, so it could call the policy directly. Next: **Phase 6 tasks (stage 5)** — the FINAL phase (self-discovery trio AC-14 + registry tool-count AC-16 + docs reconciliation #29/#32 + the contract-phrase doctor sensor folded from the dropped Phase 0); a `/compact` seam is natural first._
++_Generated from `the-flow.json`. **Phase 1 (#25) COMPLETE** (verify-and-close with the live companion; AC-1 gate proven by a release-default→E205 `.e2e` test 8/8 green, stale `runner.ts` comment fixed, companion-caught `permissions.md` lane fix F001, APPROVE 0 HIGH/CRITICAL; commits `5ab51e1`·`57644c7`·`a7bcac5`·`181fc19`). **Phase 2 (#40) COMPLETE** — implemented with the live companion (5 commits `f86a0b9`·`ff0a1f2`·`95be231`·`eff457e`·`812e468`): exported `listUnackedVisible` from inbox-poll and unified `event-wait`'s `inbox.message` branch on the unread/ack model (immediate pass + unacked watcher) so a message queued **before** the call is now delivered (#40); the two validate-v2 seams shipped as explicit RED criteria — V-1 torn-lane → `EventWaitInboxCorruptError` (no swallow), V-2 immediate-pass short-circuits before registration; `inbox_list` parity (AC-4), wildcard wake runner+MCP (AC-5), `cleanup()` splice-and-close re-entry guard + real-fs.watch close-count race (T006). `just fft` green; coordination suite **68/68**; one unrelated `agent-pack/extractor` flake cleared on re-run. Companion: **0 findings** (clean APPROVE-equivalent — it explicitly checked the lane direction + corrupt-lane path); its **magicWand independently re-derived Phase 4** (the `coordination_status` ledger tool), same as Phase 1's companion. The original tasks dossier (`tasks/phase-2-inbox-delivery-parity/tasks.md`) was a 6-task TDD dossier — export `listUnackedVisible` from `inbox-poll`; unify `event-wait`'s `inbox.message` branch onto the unread/ack model (immediate pass + unacked watcher); `inbox_list` parity; wildcard wake; `cleanup()` re-entry guard. `validate-v2` (4 agents) returned **Source-Truth SOUND · Cross-Reference ALIGNED · Forward-Compat COMPATIBLE · Completeness 5 gaps** — all folded into the table. The standout catch: the new synchronous immediate-pass opens a **corrupt-lane throw path** (V-1, HIGH — today's `snapshotInboxIds` swallows corruption) and a **settle-before-registration leak** (V-2), now explicit RED criteria; and a misleading "Phase 4/5 reuse this export" note was corrected (those derive over raw `folder.ts` lanes). Source claims confirmed line-by-line (snapshot bug `:78`/`:193`; `listVisible` private `:135-171`). **Phase 3 tasks TABLED + validate-v2'd** (2026-06-15, `generat the tasks then validate`): the State-vocabulary coherence (#27/#31) dossier (`tasks/phase-3-state-vocabulary-coherence/tasks.md`) — T001 AC-6 transition-acceptance test (all 6 statuses + a discriminating dropped-enum negative), T002 schema-location disposition, T003 stale-description fix, T004 AC-7 doctor no-drift pin; prior-phase review (P1+P2) + Pre-Implementation Check done. **validate-v2 (4 read-only agents) = ✅ VALIDATED** — source-truth 9/9 CONFIRMED, cross-reference clean (+1 HIGH plan gap), Outcome **ADVANCING**, Thesis **Strong / no non-goal creep**. **PIC-1 (CRITICAL, all-4-agent-confirmed)**: the plan's task 3.2 "relocate schema root → `state/`" is **install-unsafe** for this installable agent — `state` ∈ `RUNTIME_DIR_NAMES` (`manifest.ts:15-20`, install-denied); `code-review-companion` ships its schema at **root** via `agent.json` (v0.2.0) with a comment explaining exactly this; relocating would drop the schema from the install payload → installed companions fall back to the **default** enum → **reintroduces #27/#31** on installed copies. The plan never mentions `RUNTIME_DIR_NAMES` (genuine gap). **Recommended disposition**: keep schema at root, reshape T002 to verify-and-record (optional plan fix-loop on Phase 3 Delivers/Domain-Manifest). Also resolved: `validateInsideState` IS enforced (`state.ts:100`) → T003's description fix is definitive. **PIC-1 decided 2026-06-15 (Jordan): keep schema at root, no relocate** — T002 reshaped to verify-and-record; the "`.minih` footprint" idea noted as a separate future question. **Phase 3 IMPLEMENTED with the companion** (2026-06-15, `impleemt with companion`): verify-and-pin landed — T001 AC-6 transition-acceptance test (all 6 published statuses accepted against the **real shipped** schema at root + a discriminating dropped-enum negative → `MCP_INVALID_ARGUMENT`; 5/5), T002 keep-root **verified** (schema at root, no `state/` copy, in the `agent.json` install payload — no relocation), T003 stale "not yet enforced" description **corrected** (`validateInsideState` is enforced @ `state.ts:100`/`:81`, throws `MCP_INVALID_ARGUMENT`; enum unchanged), T004 AC-7 doctor `prompt-state-vocabulary-drift=pass` **pinned against the real `code-review-companion` pack** (14/14). `just fft` → exit 0 (no format drift); AC-17 met. Commits `984b504`·`3190952`·`8c6ae4b` (T002 no diff). Companion (run …317Z-ef6a): briefed once, pinged at all 3 commits + drain → **0 findings, clean APPROVE** on every commit + final sweep (its final review independently re-confirmed "only root schema, no `state/`" = PIC-1 keep-root); its **magicWand re-derived Phase 4 for the 3rd time** (coordination_status ledger). Phase-end seam routes drain (buffer non-empty) — **deferred to plan-complete** per cadence; `SUGG-003` captured. #27/#31 pinned closed. **Phase 4 tasks TABLED (stage 5) + validate-v2'd** (2026-06-15, `enxt phase plan and validate please`): the crown-jewel ledger-primitive dossier (`tasks/phase-4-ledger-derived-lifecycle-primitive/tasks.md`, 10 tasks T000–T0z) — `deriveCompanionLedger` over **raw** lanes (AC-8), draft farewell strict-validated-before-write (AC-9), `coordination_status` MCP tool 8→9 + pinned `coordinationMode` enum, `minih companion status` CLI, `report.findings[]` schema home (#32/AC-10), domain docs. Grounded by 3 prior-phase reviews + a codebase recon; **8 PIC reconciliations** vs the shipped tree (headline **PIC-A**: the ledger derives over **raw `folder.ts` lanes**, NOT the Phase-2 `listUnackedVisible` export — its own doc-comment forbids ledger consumers — correcting the plan's "reuse the export" wording). **validate-v2 (4 read-only agents)**: Source-Truth **SOUND** · Cross-Reference **ALIGNED** · Completeness **GAPS (2 HIGH)** · Forward-Compat **2 FAIL** — every finding folded in (added `report.findings[]` to `system-output.json`; renamed ledger fields to the consumer contract `idleElapsedMs`+`unresolvedPeerRequests`; added the `deriveCompanionLedger` runtime barrel-export note). Depends on Phase 2 + Phase 3 (both done). **Phase 4 (#36/#32) COMPLETE** — implemented with the companion (commits `37bdbc8`·`4ce612c`·`e779363`·`c3ed91d`); the companion issued **REQUEST_CHANGES** (4 findings F001–F004, 3 HIGH/1 MED; recorded `f87fc4d`) — **reconciled in `f0bd6a0`**: F004 body-only finding parsing + safe-null `toFinding`, F002 `reviewedIds`=completion-summary semantics, F001 `CompanionAckChain`/`ackChains` from both lanes, F003 `progressCount`→`peerUpdatesSent` (a self-proving fold — the companion's own 4 findings were all `meta=NONE` body-only, the exact shape F004 fixes); tsc 0, suite **1359 passed**/16 skipped, `just fft` green. **Phase 5 (#35) tasks TABLED + validate-v2'd** (2026-06-15, `prepare phase 5 and validate please`): the idle-budget-policy + shutdown-drain dossier (`tasks/phase-5-idle-budget-policy-shutdown-drain/tasks.md`, 6 tasks T000–T0z) — `evaluateIdlePolicy` pure fn (AC-11), idle budget discoverable on `coordination_status` (AC-12), `drainAndReadInbox` + overwrite-only-findings reconcile (AC-13), prompt ledger-driven rewrite, domain docs. Grounded by **4 prior-phase reviews + a live-code recon**; **6 PIC reconciliations** vs the shipped tree — headline: **no runner-side idle logic exists** (it's integer poll-streak prose in `prompt.md`), the drain **re-derives over RAW lanes** (`listUnackedVisible` foreclosed by two doc-comments), and **MCP teardown is implicit** so the drain is disk-only between `commit()` and report-write. **validate-v2 (4 agents)**: Source-Truth **SOUND** · Cross-Reference **ALIGNED** · Completeness **2 CRITICAL + 2 HIGH + 2 MED → ALL FOLDED** (A1 ceiling needs `runElapsedMs`+`timeoutSec` — the ledger has no wall-clock; A2 `MINIH_PARAMS` never reaches the MCP subprocess → real plumbing; A3 overwrite-only-findings; A4 torn-lane tolerate; A5 ordering discriminator; A6 first-contact null) · Forward-Compat validator **died mid-run** (its idleBudget-naming question covered by Cross-Ref + the A2 `idleBudgetSec` fold). Depends on Phase 4 (done). **Phase 5 (#35) COMPLETE** — implemented with the live companion (commits `a1e49af`·`de9cd16`·`65ae2d5`·`538c65e`·`2c7bdb3`, fix-pass `ff8d8d3`): `evaluateIdlePolicy` (AC-11, pure, 8 discriminating tests incl. the never-spoke A1 case), `idleBudgetSec` discoverable on `coordination_status` (AC-12 — A2 plumbing, `MINIH_PARAMS` proven NOT to reach the inside-MCP subprocess so the budget is recorded into `run.json`), `drainAndReadInbox` + overwrite-only-findings reconcile wired into the runner terminal block after the final inbox commit (AC-13, ordering discriminator; torn lane tolerated → never fails the run), `prompt.md` rewritten integer-poll-streak → ledger-driven (doctor `prompt-state-vocabulary-drift` pass), runner domain docs. The companion (run …`f932`) reviewed every commit → **APPROVE T001 + APPROVE_WITH_NOTES T002/T003/T004**, honoured `control:stop` (exit `stop_requested`), and raised **3 MEDIUM findings ALL reconciled** in `ff8d8d3` (F001 `DEFAULT_IDLE_BUDGET_MS`↔input-schema drift test; F002 reconcile returns `{wrote,reason}` + runner emits an observable `stderr.log` diagnostic for torn-lane/draft-invalid; F003 input-schema enable-flag contract doc + `replyWaitPolls` deprecated). `just fft` exit 0 (**1376 passed**/16 skipped/0 failed); `tsc` clean. **⚠️ Carried forward (Phase-6/follow-up): `evaluateIdlePolicy` is tested but UNWIRED into the runner loop** — a never-spoke peer exits via the run-timeout backstop (`timeout`) rather than a graceful `no_engagement`; the runner has `runElapsedMs` + can derive the ledger, so it could call the policy directly. **Phase 6 (#29/#32 docs) tasks TABLED + validate-v2'd** (2026-06-15, `continue with nex phase tasks then validate pleaee`): the FINAL-phase dossier (`tasks/phase-6-runtime-self-discovery-docs-reconciliation/tasks.md`, T001–T008 + 2 harness seams + contingent T009) — add `allowedStates` to `coordination_status` so the self-discovery trio returns in one call (AC-14; `coordinationMode`+`idleBudgetSec` already there from P4/P5), build **Sensor B** `checkContractPhraseDrift` in doctor (folded from the dropped Phase 0; warn→fail; 3 pack-internal phrase classes), and the **narrowed** docs reconciliation (AGENTS_README `six`→nine + `no_engagement` in two exitReason enums = AC-15; registry tool count = AC-16). A stage-5 **4-pass recon** found the plan's Phase-6 table over-scoped — Phases 4/5 already reconciled `mcp/domain.md` + `companion-mode.md` + runner/cli domain docs — and **PIC-1** (schema stays at agent **root**, `state/` is install-denied) supersedes the plan's relocate rows. **validate-v2 (4 read-only agents) = ⚠️ VALIDATED WITH FIXES**: Source-Truth confirmed the recon table **~100% accurate** vs disk; Cross-Reference flagged the **Sensor-B tool-count narrowing** (now recorded as recon row 5 — tool-count stays a deterministic file edit, not the per-agent sensor); Thesis lifted **orientation→Implementation** via 5 tightenings (exact Sensor-B phrase set enumerated in T004/T005, T002 resolver path+signature mandated, T009 moved to a contingent section, AC→task mapping + trust-but-verify checklist added); Forward-Compat **PASS** all consumers (PIC-1 honored, install payload safe, inside-only). Next: **Phase 6 implement (stage 6)** — the final build; a `/compact` seam is natural first (heavy validate turn), optionally `--companion` for a live reviewer on the last phase; **decide contingent T009** (wire `evaluateIdlePolicy` into the runner loop — the Phase-5 carried-forward gap) at GO. **Phase 6 (#29/#32 docs) COMPLETE** — implemented with the live companion (`implement with companion`): **T001–T003** added `allowedStates` to `coordination_status` so the self-discovery trio `{allowedStates, coordinationMode, idleBudgetSec}` returns in **one call** (AC-14) + extracted the shared `insideStateSchemaPath` mcp resolver from `state.ts` (PIC-1 root path preserved); **T004–T005** built **Sensor B** `checkContractPhraseDrift` in doctor (`no_engagement` *parity* + findings-home + state-desc; warn→**fail**; `minih doctor` still exits 0 — parity keeps `demo-companion` + other coordinated agents passing); **T006–T008** reconciled the docs (`AGENTS_README` + `registry` `six`→nine + `no_engagement`; mcp/cli domain deltas; runner verify-only). Pre-implement boot was **UNHEALTHY** (lint = a biome format diff in this flight-plan's own `the-flow.json`) → Jordan chose *fix-then-build* → formatted → degraded → proceeded. The live companion (run …`18-22-48`…) reviewed every commit + the drain, exited `stop_requested` clean, and sent **2 findings — both reconciled**: MEDIUM `domain-map.md` still said "six" (missed in the T007 sweep), LOW a stale `doctor.ts` resolver comment (T002 moved the fn). `just fft` exit 0 (**1386 passed**/16 skipped); commits `741be73`·`dcae0f8`·`9014777`·`d79785d`. Contingent **T009 NOT taken** (no GO). **All 6 phases done → the plan is code-complete; next is merge (stage 8), review skippable (companion reviewed every commit). The observe buffer drains at plan-complete.**_
+diff --git a/src/cli/commands/doctor.ts b/src/cli/commands/doctor.ts
+index 88835ac..468071e 100644
+--- a/src/cli/commands/doctor.ts
++++ b/src/cli/commands/doctor.ts
+@@ -180,6 +180,7 @@ export function registerDoctorCommand(program: Command): void {
+ 
+         if (coordination.enabled) {
+           checks.push(checkPromptStateVocabularyDrift(content, dir));
++          checks.push(checkContractPhraseDrift(content, dir));
+         }
+ 
+         agentResults.push({ slug: entry.name, checks });
+@@ -564,7 +565,7 @@ function createRefAwareAjv(): InstanceType<typeof Ajv2020> {
+ // proceeds and the operator sees an empty timeline. This check warns at
+ // authoring time so the gap is caught before the demo / live run.
+ //
+-// Mirrors the 3-level fallback in src/mcp/tools/state.ts:insideStateSchemaPath.
++// Mirrors the 3-level fallback in src/mcp/tools/inside-state-schema.ts:insideStateSchemaPath.
+ // Re-implemented here rather than imported to avoid a cli → mcp dependency.
+ 
+ const DEFAULT_INSIDE_STATE_SCHEMA_PATH = fileURLToPath(
+@@ -686,6 +687,125 @@ function checkPromptStateVocabularyDrift(
+   };
+ }
+ 
++/**
++ * Plan 027 Phase 6 — Sensor B. Contract-phrase drift for coordinated companions.
++ *
++ * Mirrors checkPromptStateVocabularyDrift's per-agent shape (prompt content +
++ * agent dir → CheckResult). Guards three PACK-INTERNAL contract phrases the docs
++ * reconciled this phase, returning 'fail' on drift (promoted from 'warning'
++ * because the docs it guards are reconciled in this same phase):
++ *
++ *   1. exit-reason vocabulary — `no_engagement` (the run-timeout backstop reason
++ *      the runner emits) must appear in BOTH the prompt and output-schema.json's
++ *      `session.exitReason` enum, or NEITHER. Present-in-one-only = drift.
++ *   2. findings-home wording — for review companions (output-schema declares a
++ *      `findings` array), the prompt must state findings are sent live via
++ *      `inbox_send type:'finding'` AND that the envelope `findings[]` mirrors them.
++ *   3. state-vocab description — the per-pack inside-state schema's
++ *      status.description must NOT carry the stale "not yet enforced" phrasing
++ *      (Phase 3 corrected it; validation IS enforced).
++ *
++ * Tool-count / cross-doc prose (AGENTS_README, registry) are NOT scanned here:
++ * they are reconciled by deterministic file edits verified by this doctor pass.
++ * Re-implemented (not imported from mcp) to avoid a cli → mcp dependency.
++ */
++function checkContractPhraseDrift(
++  promptContent: string,
++  agentDir: string,
++): CheckResult {
++  const issues: string[] = [];
++  let anchored = false;
++
++  // Parse output-schema.json once (assertions 1 + 2).
++  const outputSchemaPath = path.join(agentDir, 'output-schema.json');
++  let outputSchema: {
++    properties?: {
++      session?: { properties?: { exitReason?: { enum?: unknown } } };
++      findings?: { type?: unknown };
++    };
++  } | null = null;
++  if (fs.existsSync(outputSchemaPath)) {
++    try {
++      outputSchema = JSON.parse(fs.readFileSync(outputSchemaPath, 'utf-8'));
++    } catch {
++      // Unparseable — the output-schema check owns that diagnostic.
++    }
++  }
++
++  // Assertion 1 — exit-reason `no_engagement` parity (prompt <-> enum).
++  const exitEnum =
++    outputSchema?.properties?.session?.properties?.exitReason?.enum;
++  if (Array.isArray(exitEnum)) {
++    anchored = true;
++    const enumHas = exitEnum.includes('no_engagement');
++    const promptHas = /\bno_engagement\b/.test(promptContent);
++    if (enumHas && !promptHas) {
++      issues.push(
++        "output-schema.json declares the 'no_engagement' exit reason but prompt.md does not document it",
++      );
++    } else if (promptHas && !enumHas) {
++      issues.push(
++        "prompt.md documents the 'no_engagement' exit reason but it is missing from output-schema.json's exitReason enum",
++      );
++    }
++  }
++
++  // Assertion 2 — findings-home wording (review companions: findings array).
++  if (outputSchema?.properties?.findings?.type === 'array') {
++    anchored = true;
++    const sendsLive = /inbox_send[^\n]*type\s*[:=]\s*['"`]?finding/i.test(
++      promptContent,
++    );
++    const mirrors =
++      /findings\s*\[\s*\]/.test(promptContent) ||
++      /report\.findings/.test(promptContent);
++    if (!sendsLive || !mirrors) {
++      issues.push(
++        "prompt.md is missing the findings-home contract (live `inbox_send type:'finding'` + the envelope `findings[]` mirror)",
++      );
++    }
++  }
++
++  // Assertion 3 — per-pack inside-state schema description not reverted.
++  const perPackSchema = [
++    path.join(agentDir, 'state', 'inside-state.schema.json'),
++    path.join(agentDir, 'inside-state.schema.json'),
++  ].find((p) => fs.existsSync(p));
++  if (perPackSchema) {
++    try {
++      const schema = JSON.parse(fs.readFileSync(perPackSchema, 'utf-8'));
++      const desc = schema?.properties?.status?.description;
++      if (typeof desc === 'string') {
++        anchored = true;
++        if (/not yet enforced/i.test(desc)) {
++          issues.push(
++            'inside-state schema status.description reverted to the stale "not yet enforced" phrasing — validation IS enforced (validateInsideState in src/mcp/tools/state.ts)',
++          );
++        }
++      }
++    } catch {
++      // Unreadable — prompt-state-vocabulary-drift owns that diagnostic.
++    }
++  }
++
++  if (issues.length > 0) {
++    return {
++      check: 'contract-phrase-drift',
++      status: 'fail',
++      message: issues.join('; '),
++    };
++  }
++  if (!anchored) {
++    return {
++      check: 'contract-phrase-drift',
++      status: 'skip',
++      message:
++        'no exit-reason / findings / inside-state contract surfaces to check',
++    };
++  }
++  return { check: 'contract-phrase-drift', status: 'pass' };
++}
++
+ // ─── plan 012 peer activity audit ─────────────────────────────────────
+ 
+ interface PeerAuditRow {
+diff --git a/src/mcp/tools/coordination-status.ts b/src/mcp/tools/coordination-status.ts
+index 61a32da..5e6ccb3 100644
+--- a/src/mcp/tools/coordination-status.ts
++++ b/src/mcp/tools/coordination-status.ts
+@@ -11,6 +11,7 @@
+  * `minih companion status` CLI verb uses, so the two surfaces never diverge.
+  */
+ 
++import * as fs from 'node:fs';
+ import {
+   buildDraftFarewell,
+   type CompanionDraftFarewell,
+@@ -22,6 +23,7 @@ import {
+ } from '../../runner/index.js';
+ import type { McpServerContext } from '../context.js';
+ import { McpToolError, type McpToolResult } from '../types.js';
++import { insideStateSchemaPath } from './inside-state-schema.js';
+ 
+ export interface CoordinationStatusResult {
+   /** Slug of the agent this MCP server is serving. */
+@@ -39,6 +41,36 @@ export interface CoordinationStatusResult {
+    * `idleBudgetSec` (not `*Ms`) is the Phase-6 self-discovery trio name.
+    */
+   idleBudgetSec: number;
++  /**
++   * Plan 027 Phase 6 (#29) — AC-14. The per-pack inside-state status enum,
++   * resolved via the shared mcp resolver from the agent ROOT (PIC-1). With
++   * `coordinationMode` + `idleBudgetSec` this completes the self-discovery trio
++   * in ONE call: the coordinated agent learns which states it may transition
++   * into without firing a request. `[]` when no schema resolves or it carries no
++   * `status` enum.
++   */
++  allowedStates: string[];
++}
++
++/**
++ * Reads the per-pack inside-state status enum via the shared mcp resolver
++ * (T002), defaulting to `[]` when the schema can't be resolved/parsed or has no
++ * `status` enum. Robust-by-design: never throws — `allowedStates` is advisory
++ * self-discovery, not a validation gate (validation stays in `state.ts`).
++ */
++function resolveAllowedStates(context: McpServerContext): string[] {
++  try {
++    const schema = JSON.parse(
++      fs.readFileSync(insideStateSchemaPath(context), 'utf8'),
++    ) as { properties?: { status?: { enum?: unknown } } };
++    const values = schema.properties?.status?.enum;
++    if (Array.isArray(values) && values.every((v) => typeof v === 'string')) {
++      return values;
++    }
++    return [];
++  } catch {
++    return [];
++  }
+ }
+ 
+ export function coordinationStatus(
+@@ -66,6 +98,7 @@ export function coordinationStatus(
+     ledger,
+     draftFarewell: buildDraftFarewell(ledger),
+     idleBudgetSec: Math.round(readIdleBudgetMs(context.runDir) / 1000),
++    allowedStates: resolveAllowedStates(context),
+   };
+ 
+   return {
+diff --git a/src/mcp/tools/inside-state-schema.ts b/src/mcp/tools/inside-state-schema.ts
+new file mode 100644
+index 0000000..97b668d
+--- /dev/null
++++ b/src/mcp/tools/inside-state-schema.ts
+@@ -0,0 +1,49 @@
++/**
++ * Plan 027 Phase 6 (T002) — shared mcp-internal inside-state schema resolver.
++ *
++ * Extracted verbatim from `state.ts` so BOTH surfaces resolve through one path:
++ *   - `state.ts` (validation: `state_set` / `state_transition`)
++ *   - `coordination-status.ts` (the AC-14 `allowedStates` self-discovery field)
++ *
++ * Intra-domain (mcp → mcp) by design — the cli `doctor` keeps its OWN resolver
++ * (`resolveInsideStateSchemaPath`), since mcp ↔ cli imports are illegal.
++ */
++
++import * as fs from 'node:fs';
++import * as path from 'node:path';
++import { fileURLToPath } from 'node:url';
++import type { McpServerContext } from '../context.js';
++
++/**
++ * Built-in default inside-state schema — used when an agent ships no per-pack
++ * schema at all. Resolved relative to THIS module; the file lives at
++ * `src/schemas/inside-state.json` (the `../../schemas/` path is sibling-stable
++ * across `state.ts` and this module).
++ */
++export const DEFAULT_INSIDE_STATE_SCHEMA = fileURLToPath(
++  new URL('../../schemas/inside-state.json', import.meta.url),
++);
++
++/**
++ * Resolves the inside-state JSON schema path with 3-level fallback:
++ *   1. `<agentDir>/state/inside-state.schema.json` — preferred convention
++ *      (groups state-related files under `state/`, matches Phase 2 view layout).
++ *   2. `<agentDir>/inside-state.schema.json` — legacy ROOT fallback. This is
++ *      where the `code-review-companion` schema lives and **stays** (PIC-1):
++ *      `state/` is install-denied (`RUNTIME_DIR_NAMES`), so a relocated schema
++ *      would drop out of the install payload and reopen #27/#31. Resolution must
++ *      keep finding it at the root.
++ *   3. `DEFAULT_INSIDE_STATE_SCHEMA` — built-in default
++ *      (preserves agents that ship no inside-state schema at all).
++ */
++export function insideStateSchemaPath(context: McpServerContext): string {
++  const preferred = path.join(
++    context.agentDir,
++    'state',
++    'inside-state.schema.json',
++  );
++  if (fs.existsSync(preferred)) return preferred;
++  const legacy = path.join(context.agentDir, 'inside-state.schema.json');
++  if (fs.existsSync(legacy)) return legacy;
++  return DEFAULT_INSIDE_STATE_SCHEMA;
++}
+diff --git a/src/mcp/tools/state.ts b/src/mcp/tools/state.ts
+index 2ce5fbc..38cace5 100644
+--- a/src/mcp/tools/state.ts
++++ b/src/mcp/tools/state.ts
+@@ -1,6 +1,4 @@
+ import * as fs from 'node:fs';
+-import * as path from 'node:path';
+-import { fileURLToPath } from 'node:url';
+ import Ajv2020 from 'ajv/dist/2020.js';
+ import addFormats from 'ajv-formats';
+ import { coordinationRunLocation } from '../../runner/folder.js';
+@@ -14,10 +12,7 @@ import {
+ import type { InsideState, Side, SideState } from '../../runner/types.js';
+ import type { McpServerContext } from '../context.js';
+ import { jsonResult, McpToolError, type McpToolResult } from '../types.js';
+-
+-const DEFAULT_INSIDE_STATE_SCHEMA = fileURLToPath(
+-  new URL('../../schemas/inside-state.json', import.meta.url),
+-);
++import { insideStateSchemaPath } from './inside-state-schema.js';
+ 
+ export interface StateGetOutput {
+   state?: SideState;
+@@ -169,28 +164,6 @@ function validateInsideState(
+   );
+ }
+ 
+-/**
+- * Resolves the inside-state JSON schema path with 3-level fallback:
+- *   1. `<agentDir>/state/inside-state.schema.json` — preferred convention
+- *      (groups state-related files under `state/`, matches Phase 2 view layout).
+- *   2. `<agentDir>/inside-state.schema.json` — legacy fallback
+- *      (preserves `coordination-loop-validator` and any other coordinated agent
+- *      that pre-dates the `state/` convention).
+- *   3. `DEFAULT_INSIDE_STATE_SCHEMA` — built-in default
+- *      (preserves agents that ship no inside-state schema at all).
+- */
+-function insideStateSchemaPath(context: McpServerContext): string {
+-  const preferred = path.join(
+-    context.agentDir,
+-    'state',
+-    'inside-state.schema.json',
+-  );
+-  if (fs.existsSync(preferred)) return preferred;
+-  const legacy = path.join(context.agentDir, 'inside-state.schema.json');
+-  if (fs.existsSync(legacy)) return legacy;
+-  return DEFAULT_INSIDE_STATE_SCHEMA;
+-}
+-
+ function requireNonEmptyString(value: unknown, field: string): string {
+   if (typeof value !== 'string' || value.trim() === '') {
+     throw new McpToolError(
+diff --git a/test/cli/doctor-contract-phrase.test.ts b/test/cli/doctor-contract-phrase.test.ts
+new file mode 100644
+index 0000000..d1a3caa
+--- /dev/null
++++ b/test/cli/doctor-contract-phrase.test.ts
+@@ -0,0 +1,187 @@
++import { execFileSync } from 'node:child_process';
++import * as fs from 'node:fs';
++import * as os from 'node:os';
++import * as path from 'node:path';
++import { afterEach, beforeEach, describe, expect, it } from 'vitest';
++
++/**
++ * Plan 027 Phase 6 — T004/T005. Sensor B: `contract-phrase-drift`. Mirrors
++ * `doctor-state-vocabulary.test.ts` (spawns the built CLI, reads the JSON
++ * envelope). Guards three PACK-INTERNAL contract phrases that this phase
++ * reconciled, returning 'fail' on drift (promoted from 'warning'):
++ *   1. exit-reason vocabulary — `no_engagement` parity between prompt + enum
++ *   2. findings-home wording   — live `inbox_send type:'finding'` + `findings[]`
++ *   3. state-vocab description — not reverted to the stale "not yet enforced"
++ *
++ * Tool-count / cross-doc prose are NOT scanned here (recon row 5) — they are
++ * deterministic file edits (T006/T007) verified by this doctor pass.
++ */
++
++let tmpDir: string;
++let agentsDir: string;
++const cliPath = path.resolve('dist/cli/index.js');
++
++beforeEach(() => {
++  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'minih-doctor-contract-'));
++  agentsDir = path.join(tmpDir, 'agents');
++});
++
++afterEach(() => {
++  fs.rmSync(tmpDir, { recursive: true, force: true });
++});
++
++function run(args: string[]): { stdout: string; exitCode: number } {
++  try {
++    const stdout = execFileSync('node', [cliPath, ...args], {
++      cwd: tmpDir,
++      env: { ...process.env, FORCE_COLOR: undefined, NO_COLOR: '1' },
++      encoding: 'utf-8',
++      stdio: ['pipe', 'pipe', 'pipe'],
++    });
++    return { stdout, exitCode: 0 };
++  } catch (error) {
++    const err = error as { stdout?: Buffer | string; status?: number };
++    return { stdout: String(err.stdout ?? ''), exitCode: err.status ?? 1 };
++  }
++}
++
++interface AgentCheck {
++  check: string;
++  status: string;
++  message?: string;
++}
++
++function checkFor(
++  stdout: string,
++  slug: string,
++  checkName: string,
++): AgentCheck | undefined {
++  const envelope = JSON.parse(stdout);
++  const agents = envelope.data?.agents ?? envelope.error?.details?.agents;
++  const agent = agents.find((a: { slug: string }) => a.slug === slug);
++  return agent?.checks?.find((c: AgentCheck) => c.check === checkName);
++}
++
++const FULL_EXIT_ENUM = [
++  'stop_requested',
++  'idle_budget',
++  'no_engagement',
++  'timeout',
++  'error',
++];
++const ENFORCED_DESC =
++  'Lifecycle status. The minih MCP runtime validates every state_transition against this enum: an out-of-enum status is rejected with MCP_INVALID_ARGUMENT.';
++// Documents no_engagement (parity with the enum) AND the findings-home contract.
++const CLEAN_BODY = [
++  'On the run-timeout backstop the runner farewells `no_engagement`.',
++  'Other exits: `stop_requested`, `idle_budget`, `timeout`, `error`.',
++  '',
++  "As findings emerge, send one `inbox_send({ type: 'finding', ackOf: task.id })`",
++  'per finding. The envelope `findings[]` mirrors what you sent inbox-style.',
++].join('\n');
++
++function writeCompanionFixture(
++  slug: string,
++  opts: { promptBody?: string; exitEnum?: string[]; statusDesc?: string } = {},
++): void {
++  const dir = path.join(agentsDir, slug);
++  fs.mkdirSync(dir, { recursive: true });
++  fs.writeFileSync(
++    path.join(dir, 'prompt.md'),
++    `---\ndescription: "${slug}"\ncoordination: enabled\n---\n\n# ${slug}\n\n${opts.promptBody ?? CLEAN_BODY}\n`,
++  );
++  fs.writeFileSync(
++    path.join(dir, 'output-schema.json'),
++    JSON.stringify(
++      {
++        type: 'object',
++        properties: {
++          session: {
++            type: 'object',
++            properties: {
++              exitReason: {
++                type: 'string',
++                enum: opts.exitEnum ?? FULL_EXIT_ENUM,
++              },
++            },
++          },
++          findings: { type: 'array', items: { type: 'object' } },
++        },
++      },
++      null,
++      2,
++    ),
++  );
++  // PIC-1: the per-pack inside-state schema lives at the agent ROOT.
++  fs.writeFileSync(
++    path.join(dir, 'inside-state.schema.json'),
++    JSON.stringify(
++      {
++        type: 'object',
++        properties: {
++          status: {
++            type: 'string',
++            enum: ['idle', 'reading', 'reviewing', 'reporting', 'blocked'],
++            description: opts.statusDesc ?? ENFORCED_DESC,
++          },
++        },
++      },
++      null,
++      2,
++    ),
++  );
++}
++
++describe('doctor contract-phrase-drift check (Sensor B)', () => {
++  it('passes for a clean companion-shaped fixture', () => {
++    writeCompanionFixture('clean');
++    const { stdout } = run(['doctor', '--agents-dir', agentsDir]);
++    expect(checkFor(stdout, 'clean', 'contract-phrase-drift')?.status).toBe(
++      'pass',
++    );
++  });
++
++  it("FAILS when output-schema's exitReason enum drops no_engagement while the prompt still documents it", () => {
++    writeCompanionFixture('enum-drift', {
++      exitEnum: ['stop_requested', 'idle_budget', 'timeout', 'error'],
++    });
++    const { stdout, exitCode } = run(['doctor', '--agents-dir', agentsDir]);
++    const c = checkFor(stdout, 'enum-drift', 'contract-phrase-drift');
++    expect(c?.status).toBe('fail');
++    expect(c?.message).toContain('no_engagement');
++    expect(exitCode).not.toBe(0); // a 'fail' check → non-zero doctor exit
++  });
++
++  it('FAILS when the prompt drops the findings-home contract wording', () => {
++    writeCompanionFixture('findings-drift', {
++      promptBody:
++        'On the run-timeout backstop the runner farewells `no_engagement`. Other exits: `stop_requested`, `idle_budget`, `timeout`, `error`.',
++    });
++    const { stdout } = run(['doctor', '--agents-dir', agentsDir]);
++    const c = checkFor(stdout, 'findings-drift', 'contract-phrase-drift');
++    expect(c?.status).toBe('fail');
++    expect(c?.message).toContain('findings-home');
++  });
++
++  it('FAILS when the inside-state schema description reverts to "not yet enforced"', () => {
++    writeCompanionFixture('desc-drift', {
++      statusDesc: 'Lifecycle status. Validation is not yet enforced.',
++    });
++    const { stdout } = run(['doctor', '--agents-dir', agentsDir]);
++    const c = checkFor(stdout, 'desc-drift', 'contract-phrase-drift');
++    expect(c?.status).toBe('fail');
++    expect(c?.message).toContain('not yet enforced');
++  });
++
++  it('passes for the real shipped code-review-companion pack (Sensor B green today)', () => {
++    // Pin the REAL pack: doctor must report no contract-phrase drift for
++    // code-review-companion, resolving its schema at the agent root (PIC-1).
++    // RED the moment the prompt, output-schema enum, or schema description drift.
++    const realAgentsDir = path.resolve('agents');
++    const { stdout } = run(['doctor', '--agents-dir', realAgentsDir]);
++    expect(
++      checkFor(stdout, 'code-review-companion', 'contract-phrase-drift')
++        ?.status,
++    ).toBe('pass');
++  });
++});
+diff --git a/test/mcp/coordination-status.test.ts b/test/mcp/coordination-status.test.ts
+index d7a0e56..930291a 100644
+--- a/test/mcp/coordination-status.test.ts
++++ b/test/mcp/coordination-status.test.ts
+@@ -170,3 +170,70 @@ describe('coordination_status idle budget (AC-12)', () => {
+     expect(sc?.idleBudgetSec).toBe(1800);
+   });
+ });
++
++/**
++ * Plan 027 Phase 6 — AC-14 / T001. The self-discovery trio. `coordination_status`
++ * returns `allowedStates` (the per-pack inside-state enum, resolved from the agent
++ * ROOT path per PIC-1 — NOT `state/`, which is install-denied) alongside the
++ * already-present `coordinationMode` + `idleBudgetSec`, so a coordinated agent
++ * learns all three in ONE call.
++ */
++describe('coordination_status self-discovery trio (AC-14)', () => {
++  const COMPANION_ENUM = [
++    'idle',
++    'reading',
++    'reviewing',
++    'reporting',
++    'blocked',
++    'stopping',
++  ];
++
++  function seedRootSchema(content: string): void {
++    // PIC-1: the per-pack schema lives at the agent ROOT, not under state/.
++    fs.writeFileSync(
++      path.join(context.agentDir, 'inside-state.schema.json'),
++      content,
++    );
++  }
++
++  function writeBudget(idleBudgetMs: number): void {
++    fs.writeFileSync(
++      path.join(context.runDir, 'run.json'),
++      `${JSON.stringify(
++        {
++          schemaVersion: 1,
++          slug: context.agentSlug,
++          runId: context.runId,
++          budgets: { idleBudgetMs },
++        },
++        null,
++        2,
++      )}\n`,
++    );
++  }
++
++  it('returns allowedStates resolved from the per-pack schema at the agent ROOT (PIC-1) — the trio in one call', () => {
++    seedRootSchema(
++      `${JSON.stringify({
++        $schema: 'https://json-schema.org/draft/2020-12/schema',
++        type: 'object',
++        properties: { status: { type: 'string', enum: COMPANION_ENUM } },
++      })}\n`,
++    );
++    writeBudget(120_000);
++
++    const sc = coordinationStatus(context).structuredContent;
++
++    // The self-discovery trio, all in ONE call:
++    expect(sc?.allowedStates).toEqual(COMPANION_ENUM);
++    expect(sc?.coordinationMode).toBe('disabled');
++    expect(sc?.idleBudgetSec).toBe(120);
++  });
++
++  it('falls back to empty allowedStates when the resolved schema cannot be parsed', () => {
++    // Resolver finds the root file, but it is unparseable → default [] (T003).
++    seedRootSchema('{ not valid json');
++    const sc = coordinationStatus(context).structuredContent;
++    expect(sc?.allowedStates).toEqual([]);
++  });
++});
+diff --git a/test/mcp/inside-state-schema.test.ts b/test/mcp/inside-state-schema.test.ts
+new file mode 100644
+index 0000000..9622f90
+--- /dev/null
++++ b/test/mcp/inside-state-schema.test.ts
+@@ -0,0 +1,68 @@
++import * as fs from 'node:fs';
++import * as os from 'node:os';
++import * as path from 'node:path';
++import { afterEach, beforeEach, describe, expect, it } from 'vitest';
++import type { McpServerContext } from '../../src/mcp/context.js';
++import {
++  DEFAULT_INSIDE_STATE_SCHEMA,
++  insideStateSchemaPath,
++} from '../../src/mcp/tools/inside-state-schema.js';
++
++/**
++ * Plan 027 Phase 6 — T002. Pins the 3-level fallback of the shared inside-state
++ * schema resolver after its extraction from state.ts. The legacy ROOT level is
++ * load-bearing (PIC-1): the code-review-companion's schema lives at the agent
++ * root and MUST keep resolving there, since `state/` is install-denied.
++ */
++
++let tmpDir: string;
++let context: McpServerContext;
++
++beforeEach(() => {
++  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'minih-inside-schema-'));
++  const agentsDir = path.join(tmpDir, 'agents');
++  const agentSlug = 'code-review-companion';
++  const agentDir = path.join(agentsDir, agentSlug);
++  fs.mkdirSync(agentDir, { recursive: true });
++  context = {
++    context: 'inside',
++    side: 'inside',
++    runId: 'run-1',
++    runDir: path.join(agentDir, 'runs', 'run-1'),
++    agentSlug,
++    agentsDir,
++    agentDir,
++    inboxDir: path.join(agentDir, 'runs', 'run-1', 'inbox'),
++    stateDir: path.join(agentDir, 'runs', 'run-1', 'state'),
++    processMarker: 'minih-mcp-run-1',
++  };
++});
++
++afterEach(() => {
++  fs.rmSync(tmpDir, { recursive: true, force: true });
++});
++
++describe('insideStateSchemaPath — 3-level fallback (T002)', () => {
++  it('returns the built-in DEFAULT when the agent ships no schema', () => {
++    expect(insideStateSchemaPath(context)).toBe(DEFAULT_INSIDE_STATE_SCHEMA);
++  });
++
++  it('resolves the legacy ROOT path (PIC-1: the companion keeps its schema here)', () => {
++    const root = path.join(context.agentDir, 'inside-state.schema.json');
++    fs.writeFileSync(root, '{}');
++    expect(insideStateSchemaPath(context)).toBe(root);
++  });
++
++  it('prefers state/ over the legacy ROOT when both exist', () => {
++    const root = path.join(context.agentDir, 'inside-state.schema.json');
++    const preferred = path.join(
++      context.agentDir,
++      'state',
++      'inside-state.schema.json',
++    );
++    fs.mkdirSync(path.dirname(preferred), { recursive: true });
++    fs.writeFileSync(root, '{}');
++    fs.writeFileSync(preferred, '{}');
++    expect(insideStateSchemaPath(context)).toBe(preferred);
++  });
++});
+
+## working tree diff
+diff --git a/docs/plans/027-companion-coordination/tasks/phase-2-inbox-delivery-parity/execution.log.md b/docs/plans/027-companion-coordination/tasks/phase-2-inbox-delivery-parity/execution.log.md
+index b845ae3..24f2219 100644
+--- a/docs/plans/027-companion-coordination/tasks/phase-2-inbox-delivery-parity/execution.log.md
++++ b/docs/plans/027-companion-coordination/tasks/phase-2-inbox-delivery-parity/execution.log.md
+@@ -132,3 +132,41 @@ Added `describe('waitForAny ↔ inbox_list unacked parity (#40 AC-4)')` to `even
+   - **magicWand**: *"Add the planned inside `coordination_status`/`report_draft` MCP tool that derives tasksReceived/findingsSent/summaries/unresolved/report.findings from the durable inbox/state ledger, then pre-fills the farewell envelope so the companion doesn't hand-count or risk touching run-dir files during shutdown."*
+ - **Reconciliation**: 0 findings to address/defer/dispute — clean. The magicWand is **already the plan's Phase 4** (`deriveCompanionLedger` → `coordination_status` MCP tool + draft farewell) — same independent re-derivation Phase 1's companion produced. No new follow-up dossier needed; it strengthens the case for Phase 4. Surfaced as a follow-up candidate only.
+ 
++
++---
++
++## Validation Record — code change (validate-v2, 2026-06-15)
++
++`/validate-v2 --artifact src/runner/event-wait.ts --scope broad` — a second-pair-of-eyes pass on the **implementation** (the earlier `## Validation Findings` block validated the *dossier*; the companion reviewed *commits*; this validates the *code*). 4 parallel Explore agents on the session model.
++
++### Validation Thesis
++- **Raison d'être**: Fix #40/CF-01 — `wait_for_any` snapshotted inbox IDs at entry and only emitted post-snapshot messages, so queued-while-busy work was invisible to the next wait. Unify the `inbox.message` branch onto the durable unread/ack model `inbox_list`/`pollInboxLane` uses.
++- **Value claim**: a companion receives queued-before-call work; `inbox_list` parity for the same filter; no-filter wildcard so a new `type` can't make it deaf.
++- **Proof target**: Implementation / Validated Evidence **at the unit level** (live e2e is an explicit non-goal — `MINIH_FAKE_ADAPTER` dropped with Phase 0).
++- **Thesis source**: `companion-coordination-spec.md:15,25,29`; plan `:149-153`; this dossier (Executive Briefing / Goals / Non-Goals).
++- **Thesis verdict**: **Advanced** at target proof level.
++- **Main thesis risk**: None detected — the snapshot bug is gone (not bypassed), the AC-3 test is discriminating (asserts message body, fails the old impl), lane direction matches production (seed `outside` lane + `side:'inside'`), and no claim overreaches into live-proven.
++
++| Agent | Lenses Covered | Issues | Verdict |
++|-------|----------------|--------|---------|
++| Correctness | System Behavior, Edge Cases, Hidden Assumptions, Technical Constraints | 0 | ✅ |
++| Regression + Ops | Integration & Ripple, Deployment & Ops, Performance & Scale | 0 | ✅ |
++| Domain + Forward-Compat | Domain Boundaries, Concept Docs, Forward-Compatibility, Contract Integrity | 0 | ✅ |
++| Thesis + Evidence | Thesis Alignment, Evidence Sufficiency, Proof-Level Fit | 0 | ✅ |
++
++Lens coverage: 13/15 (≥9 floor met). Not STANDALONE — Phase 4 + `mcp/tools/wait.ts` are named downstreams.
++
++### Forward-Compatibility Matrix
++| Consumer | Requirement | Failure Mode | Verdict | Evidence |
++|----------|-------------|--------------|---------|----------|
++| Phase 4 `deriveCompanionLedger` | derive over raw `folder.ts` lanes, NOT consume `listUnackedVisible` | shape mismatch | ✅ | `inbox-poll.ts:153-155` doc-comment forecloses ledger/drain reuse; no Phase 4 call sites |
++| `src/mcp/tools/wait.ts` | no-filter form wakes on unknown `type` | contract drift | ✅ | `parseInboxFilter(undefined)→undefined`→`filterTypes=null`→`listUnackedVisible({waitForAny:undefined})`; MCP wildcard test green |
++| `pollInboxLane` (same module) | signature + filter order byte-identical | contract drift | ✅ | `inbox-poll.ts:112-116` signature unchanged; filter order unread→type→waitForAny→after unchanged; `inbox-poll.test.ts` 12/12 |
++
++**Thesis alignment**: Value claim advanced at the Implementation/Validated-Evidence (unit) proof level; main thesis risk: none detected (discriminating tests, correct lane direction, no live-proof overreach).
++
++**Outcome alignment**: The artifact advances the VPO Outcome "Make the companion-coordination contract reliable and self-describing: queued messages reach the companion when they're queued (#40)" by making `wait_for_any` share the durable unread/ack filter model with `inbox_list`, guaranteeing already-queued unacked messages are delivered with wildcard wake, while preserving additive-only + single-settle invariants and scoping the new export to prevent downstream shape mismatches.
++
++**Standalone?**: No — Phase 4 (behavioral parity dependency) and `mcp/tools/wait.ts` (wildcard) are named consumers.
++
++Overall: ✅ **VALIDATED** — 0 issues across all 4 agents; no fixes required.
+diff --git a/docs/retros/code-review-companion.md b/docs/retros/code-review-companion.md
+index fd1b665..4588b47 100644
+--- a/docs/retros/code-review-companion.md
++++ b/docs/retros/code-review-companion.md
+@@ -258,3 +258,60 @@
+ - difficulties:
+   - [annoying] test: I attempted `npx vitest run ... --runInBand`, but this repo's Vitest CLI does not support that option. (workaround: Reran the focused suite with the repo-supported `npx vitest run <files>` invocation.)
+   - [annoying] debug: A large final-range `git diff` command overflowed the tool display and was saved to a temporary capture instead of being directly reviewable in the transcript. (workaround: Switched to targeted file views and smaller searches, then cleaned up the temporary capture.)
++
++## 2026-06-14T22:00:34.928Z — code-review-companion / 2026-06-15T07-39-33-328Z-5100
++
++- runId: 2026-06-15T07-39-33-328Z-5100
++- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-06-15T07-39-33-328Z-5100
++- summary: Reviewed three Phase 1 review requests for plan 027. T001's release-default E205 characterization tests correctly exercise the real compile() release-default path and the full CLI no-permissions repro; the runner.ts change is comment-only and in scope. T002/T003's close-comment evidence is mostly accurate, but one MEDIUM contract drift remains: permissions.md names the wrong physical inbox lane for the permission-error signal. No HIGH or CRITICAL findings were raised.
++- **magicWand** (target: coordination): Add a coordination_status/finalize MCP tool that derives task counts, findings, questions, unresolved requests, and a schema-valid draft farewell from the durable inbox/state ledger so companions do not reconstruct session accounting from prompt memory.
++- difficulties:
++  - [annoying] coordination: The outside briefing said control:stop was incoming after the final reply, but no stop/control message arrived before the post-task check-in window expired. (workaround: Followed the companion protocol: sent a still-needed question, waited replyWaitPolls, then exited with idle_budget and wrote the farewell envelope.)
++
++## 2026-06-14T23:46:18.318Z — code-review-companion / 2026-06-15T09-22-20-918Z-e4d5
++
++- runId: 2026-06-15T09-22-20-918Z-e4d5
++- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-06-15T09-22-20-918Z-e4d5
++- summary: Reviewed Phase 2 inbox delivery parity (#40) across six task pings and the final f86a0b9^..812e468 range. I found no blocking or actionable issues: the shared listUnackedVisible helper preserves pollInboxLane behavior, wait_for_any now delivers pre-queued unacked inbox messages with correct lane direction and corrupt-lane handling, parity/loop/wildcard coverage is in place, and cleanup teardown has focused real-fs coverage.
++- **magicWand** (target: coordination): Add the planned inside coordination_status/report_draft MCP tool that derives tasksReceived, findingsSent, summaries, unresolved requests, and report.findings from the durable inbox/state ledger, then pre-fills the farewell envelope so the companion does not hand-count or risk touching run-dir files during shutdown.
++- difficulties:
++  - [degrading] debug: A broad drift scan over docs/agents/src/test accidentally traversed historical agents/*/runs artifacts and produced unusably noisy output, which conflicts with the dogfood expectation to avoid direct run-dir inspection. (workaround: Reran the scan with explicit --glob exclusions for agents/*/runs/** and then narrowed terms to active source/docs/test surfaces.)
++  - [annoying] knowledge: The glob helper returned no matches for the active docs/plans tree when given an absolute project root, even though the files existed. (workaround: Used project-root shell find/listing and view with absolute file paths for the non-run plan documents.)
++
++## 2026-06-15T02:31:47.753Z — code-review-companion / 2026-06-15T12-21-24-317Z-ef6a
++
++- runId: 2026-06-15T12-21-24-317Z-ef6a
++- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-06-15T12-21-24-317Z-ef6a
++- summary: Reviewed Phase 3 state-vocabulary coherence across T001, T003, T004, and the final sweep. The AC-6 transition-acceptance tests use the real shipped root schema and a discriminating truncated-enum negative; the schema description now accurately states runtime enforcement; the AC-7 doctor test pins prompt-state-vocabulary-drift as pass for the real code-review-companion pack. No findings were raised.
++- **magicWand** (target: coordination): Add the planned coordination_status/report-draft primitive for companions so the inside agent can fetch reviewed task IDs, finding counts, summaries, unresolved requests, allowed states, and a schema-valid farewell draft from the ledger instead of hand-counting before exit.
++- difficulties:
++  - [annoying] debug: The glob tool returned no matches for docs/plans/027-companion-coordination even though the files existed under the project root. (workaround: Used find only to list project document filenames, then read the selected project files with the view tool.)
++
++## 2026-06-15T04:13:13.965Z — code-review-companion / 2026-06-15T13-38-10-236Z-a23d
++
++- runId: 2026-06-15T13-38-10-236Z-a23d
++- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-06-15T13-38-10-236Z-a23d
++- summary: Reviewed Phase 4 of plan 027 across seven review requests: the pure ledger deriver, strict draft farewell, coordination_status MCP tool, companion status CLI verb, findings[] schema home, domain docs, and final sweep. The MCP and CLI surfaces were thin and directionally correct, but I sent four findings total, including three HIGH issues that remained open at the final sweep.
++- **magicWand** (target: coordination): Provide a live coordination_status-style derived farewell/counts tool to the currently running companion so final reports can be generated from the coordination ledger instead of manually counting tasks, summaries, and findings.
++- difficulties:
++  - [degrading] build: harness boot --json failed on the lint sensor at companion startup, while later phase notes said just fft was green; this made baseline health ambiguous during review. (workaround: Treated the boot result as review context rather than starting feature work, and continued with focused code review of the requested commits.)
++  - [annoying] debug: One broad git show diff exceeded the tool output limit and was written to a temporary file I did not need, forcing a narrower second pass. (workaround: Re-ran narrower rg/view and compact git diff commands against the specific changed files and sections.)
++
++## 2026-06-15T06:53:09.102Z — code-review-companion / 2026-06-15T16-16-17-919Z-f932
++
++- runId: 2026-06-15T16-16-17-919Z-f932
++- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-06-15T16-16-17-919Z-f932
++- summary: Reviewed Plan 027 Phase 5 commit boundaries for T001 through T004 plus the final drain. T001 was clean; T002, T003, and T004 each had one MEDIUM finding. No HIGH or CRITICAL issues were found, but the three medium findings should be reconciled before declaring the phase fully clean.
++- **magicWand** (target: coordination): Add a companion finalize command/tool that takes the coordination_status draft, lets the agent provide only summary and retrospective text, writes the validated report, and runs minih check automatically.
++- difficulties:
++  - [annoying] config: MINIH_OUTPUT_PATH was not visible inside the bash tool despite being listed in the run preamble. (workaround: Used the literal output path from the prompt and validated with minih check --file.)
++  - [annoying] debug: glob returned no matches for docs/plans under the absolute project-root path even though the directory existed. (workaround: Used view for directory listings and rg for targeted file discovery.)
++
++## 2026-06-15T08:51:00.075Z — code-review-companion / 2026-06-15T18-22-48-527Z-a02d
++
++- runId: 2026-06-15T18-22-48-527Z-a02d
++- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-06-15T18-22-48-527Z-a02d
++- summary: Reviewed Phase 6 companion-coordination commit boundaries for AC-14 self-discovery, AC-15 Sensor B, AC-15/16 documentation reconciliation, and the final drain. The implementation preserved the key contracts I checked: PIC-1 root schema resolution, binary coordinationMode, mcp/cli dependency boundaries, Sensor B parity/scoping, real-tree doctor errors:0, and the updated public docs. I sent two findings: one LOW stale resolver-location comment in doctor.ts and one MEDIUM current-domain-map tool-count drift still saying six MCP tools.
++- **magicWand** (target: coordination): Have coordination_status include stable finding ids plus ackOf in draftFarewell.findings so the final report can be written directly from the draft without reconstructing IDs or reply links from memory.
++- difficulties:
++  - [annoying] debug: The optimized glob tool reported no docs/plans matches even though the project plan tree existed and find could list it from the project root. (workaround: Used project-root find plus direct view calls for orientation instead of relying on glob for the plan tree.)

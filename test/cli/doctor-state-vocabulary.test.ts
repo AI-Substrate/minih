@@ -285,4 +285,20 @@ describe('doctor prompt-state-vocabulary-drift check', () => {
     expect(check?.status).toBe('skip');
     expect(check?.message).toContain('no `properties.status.enum`');
   });
+
+  it('passes for the real shipped code-review-companion pack (AC-7)', () => {
+    // Pin the REAL pack, not a synthetic fixture: doctor must report no
+    // prompt<->enum drift for code-review-companion, so #27/#31 cannot silently
+    // reopen via a prompt edit or an enum change. Runs against the repo's actual
+    // agents/ dir, resolving the schema at agent root (the keep-root install
+    // location — PIC-1). Green today; RED the moment prompt and enum diverge.
+    const realAgentsDir = path.resolve('agents');
+    const { stdout } = run(['doctor', '--agents-dir', realAgentsDir]);
+    const check = checkFor(
+      stdout,
+      'code-review-companion',
+      'prompt-state-vocabulary-drift',
+    );
+    expect(check?.status).toBe('pass');
+  });
 });

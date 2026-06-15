@@ -14,11 +14,12 @@
  * (`atomic-write.ts` header). Windows is out of scope.
  */
 
+import { readFileSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { writeFileAtomicAsync } from './atomic-write.js';
 import { ManifestSchemaVersionError } from './human-view-errors.js';
-import type { LiveRunManifest } from './types.js';
+import { DEFAULT_IDLE_BUDGET_MS, type LiveRunManifest } from './types.js';
 
 const MANIFEST_FILENAME = 'run.json';
 const SUPPORTED_SCHEMA_VERSION = 1 as const;
@@ -51,6 +52,27 @@ export async function writeManifest(
   await enqueueManifestWrite(runDir, () =>
     writeFileAtomicAsync(target, `${JSON.stringify(next, null, 2)}\n`),
   );
+}
+
+/**
+ * Plan 027 Phase 5 (#35) — synchronous read of the effective idle budget that
+ * was recorded into run.json `budgets.idleBudgetMs` at run start. Returns the
+ * schema default ({@link DEFAULT_IDLE_BUDGET_MS}) when run.json is absent,
+ * unparseable, or predates the field. Sync (not the async `readManifest`) so the
+ * synchronous `coordination_status` MCP tool can surface `idleBudgetSec` without
+ * going async.
+ */
+export function readIdleBudgetMs(runDir: string): number {
+  try {
+    const parsed = JSON.parse(readFileSync(manifestPath(runDir), 'utf8')) as {
+      budgets?: { idleBudgetMs?: unknown };
+    };
+    const v = parsed.budgets?.idleBudgetMs;
+    if (typeof v === 'number' && Number.isFinite(v) && v > 0) return v;
+  } catch {
+    // absent / torn / pre-#35 run.json → fall back to the schema default
+  }
+  return DEFAULT_IDLE_BUDGET_MS;
 }
 
 export async function readManifest(

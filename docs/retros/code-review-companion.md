@@ -258,3 +258,60 @@
 - difficulties:
   - [annoying] test: I attempted `npx vitest run ... --runInBand`, but this repo's Vitest CLI does not support that option. (workaround: Reran the focused suite with the repo-supported `npx vitest run <files>` invocation.)
   - [annoying] debug: A large final-range `git diff` command overflowed the tool display and was saved to a temporary capture instead of being directly reviewable in the transcript. (workaround: Switched to targeted file views and smaller searches, then cleaned up the temporary capture.)
+
+## 2026-06-14T22:00:34.928Z — code-review-companion / 2026-06-15T07-39-33-328Z-5100
+
+- runId: 2026-06-15T07-39-33-328Z-5100
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-06-15T07-39-33-328Z-5100
+- summary: Reviewed three Phase 1 review requests for plan 027. T001's release-default E205 characterization tests correctly exercise the real compile() release-default path and the full CLI no-permissions repro; the runner.ts change is comment-only and in scope. T002/T003's close-comment evidence is mostly accurate, but one MEDIUM contract drift remains: permissions.md names the wrong physical inbox lane for the permission-error signal. No HIGH or CRITICAL findings were raised.
+- **magicWand** (target: coordination): Add a coordination_status/finalize MCP tool that derives task counts, findings, questions, unresolved requests, and a schema-valid draft farewell from the durable inbox/state ledger so companions do not reconstruct session accounting from prompt memory.
+- difficulties:
+  - [annoying] coordination: The outside briefing said control:stop was incoming after the final reply, but no stop/control message arrived before the post-task check-in window expired. (workaround: Followed the companion protocol: sent a still-needed question, waited replyWaitPolls, then exited with idle_budget and wrote the farewell envelope.)
+
+## 2026-06-14T23:46:18.318Z — code-review-companion / 2026-06-15T09-22-20-918Z-e4d5
+
+- runId: 2026-06-15T09-22-20-918Z-e4d5
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-06-15T09-22-20-918Z-e4d5
+- summary: Reviewed Phase 2 inbox delivery parity (#40) across six task pings and the final f86a0b9^..812e468 range. I found no blocking or actionable issues: the shared listUnackedVisible helper preserves pollInboxLane behavior, wait_for_any now delivers pre-queued unacked inbox messages with correct lane direction and corrupt-lane handling, parity/loop/wildcard coverage is in place, and cleanup teardown has focused real-fs coverage.
+- **magicWand** (target: coordination): Add the planned inside coordination_status/report_draft MCP tool that derives tasksReceived, findingsSent, summaries, unresolved requests, and report.findings from the durable inbox/state ledger, then pre-fills the farewell envelope so the companion does not hand-count or risk touching run-dir files during shutdown.
+- difficulties:
+  - [degrading] debug: A broad drift scan over docs/agents/src/test accidentally traversed historical agents/*/runs artifacts and produced unusably noisy output, which conflicts with the dogfood expectation to avoid direct run-dir inspection. (workaround: Reran the scan with explicit --glob exclusions for agents/*/runs/** and then narrowed terms to active source/docs/test surfaces.)
+  - [annoying] knowledge: The glob helper returned no matches for the active docs/plans tree when given an absolute project root, even though the files existed. (workaround: Used project-root shell find/listing and view with absolute file paths for the non-run plan documents.)
+
+## 2026-06-15T02:31:47.753Z — code-review-companion / 2026-06-15T12-21-24-317Z-ef6a
+
+- runId: 2026-06-15T12-21-24-317Z-ef6a
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-06-15T12-21-24-317Z-ef6a
+- summary: Reviewed Phase 3 state-vocabulary coherence across T001, T003, T004, and the final sweep. The AC-6 transition-acceptance tests use the real shipped root schema and a discriminating truncated-enum negative; the schema description now accurately states runtime enforcement; the AC-7 doctor test pins prompt-state-vocabulary-drift as pass for the real code-review-companion pack. No findings were raised.
+- **magicWand** (target: coordination): Add the planned coordination_status/report-draft primitive for companions so the inside agent can fetch reviewed task IDs, finding counts, summaries, unresolved requests, allowed states, and a schema-valid farewell draft from the ledger instead of hand-counting before exit.
+- difficulties:
+  - [annoying] debug: The glob tool returned no matches for docs/plans/027-companion-coordination even though the files existed under the project root. (workaround: Used find only to list project document filenames, then read the selected project files with the view tool.)
+
+## 2026-06-15T04:13:13.965Z — code-review-companion / 2026-06-15T13-38-10-236Z-a23d
+
+- runId: 2026-06-15T13-38-10-236Z-a23d
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-06-15T13-38-10-236Z-a23d
+- summary: Reviewed Phase 4 of plan 027 across seven review requests: the pure ledger deriver, strict draft farewell, coordination_status MCP tool, companion status CLI verb, findings[] schema home, domain docs, and final sweep. The MCP and CLI surfaces were thin and directionally correct, but I sent four findings total, including three HIGH issues that remained open at the final sweep.
+- **magicWand** (target: coordination): Provide a live coordination_status-style derived farewell/counts tool to the currently running companion so final reports can be generated from the coordination ledger instead of manually counting tasks, summaries, and findings.
+- difficulties:
+  - [degrading] build: harness boot --json failed on the lint sensor at companion startup, while later phase notes said just fft was green; this made baseline health ambiguous during review. (workaround: Treated the boot result as review context rather than starting feature work, and continued with focused code review of the requested commits.)
+  - [annoying] debug: One broad git show diff exceeded the tool output limit and was written to a temporary file I did not need, forcing a narrower second pass. (workaround: Re-ran narrower rg/view and compact git diff commands against the specific changed files and sections.)
+
+## 2026-06-15T06:53:09.102Z — code-review-companion / 2026-06-15T16-16-17-919Z-f932
+
+- runId: 2026-06-15T16-16-17-919Z-f932
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-06-15T16-16-17-919Z-f932
+- summary: Reviewed Plan 027 Phase 5 commit boundaries for T001 through T004 plus the final drain. T001 was clean; T002, T003, and T004 each had one MEDIUM finding. No HIGH or CRITICAL issues were found, but the three medium findings should be reconciled before declaring the phase fully clean.
+- **magicWand** (target: coordination): Add a companion finalize command/tool that takes the coordination_status draft, lets the agent provide only summary and retrospective text, writes the validated report, and runs minih check automatically.
+- difficulties:
+  - [annoying] config: MINIH_OUTPUT_PATH was not visible inside the bash tool despite being listed in the run preamble. (workaround: Used the literal output path from the prompt and validated with minih check --file.)
+  - [annoying] debug: glob returned no matches for docs/plans under the absolute project-root path even though the directory existed. (workaround: Used view for directory listings and rg for targeted file discovery.)
+
+## 2026-06-15T08:51:00.075Z — code-review-companion / 2026-06-15T18-22-48-527Z-a02d
+
+- runId: 2026-06-15T18-22-48-527Z-a02d
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-06-15T18-22-48-527Z-a02d
+- summary: Reviewed Phase 6 companion-coordination commit boundaries for AC-14 self-discovery, AC-15 Sensor B, AC-15/16 documentation reconciliation, and the final drain. The implementation preserved the key contracts I checked: PIC-1 root schema resolution, binary coordinationMode, mcp/cli dependency boundaries, Sensor B parity/scoping, real-tree doctor errors:0, and the updated public docs. I sent two findings: one LOW stale resolver-location comment in doctor.ts and one MEDIUM current-domain-map tool-count drift still saying six MCP tools.
+- **magicWand** (target: coordination): Have coordination_status include stable finding ids plus ackOf in draftFarewell.findings so the final report can be written directly from the draft without reconstructing IDs or reply links from memory.
+- difficulties:
+  - [annoying] debug: The optimized glob tool reported no docs/plans matches even though the project plan tree existed and find could list it from the project root. (workaround: Used project-root find plus direct view calls for orientation instead of relying on glob for the plan tree.)

@@ -21,6 +21,10 @@ import type {
 } from '../adapter/events.js';
 import type { IAgentAdapter } from '../adapter/interface.js';
 import {
+  drainAndReadInbox,
+  reconcileReportFindings,
+} from './coordination-drain.js';
+import {
   coordinationRunLocation,
   createRunFolder,
   inboxLanePath,
@@ -64,6 +68,7 @@ import {
   type AgentRunConfig,
   type AgentRunResult,
   type CompletedMetadata,
+  DEFAULT_IDLE_BUDGET_MS,
   DEFAULT_STALL_TIMEOUT_SEC,
   DEFAULT_TIMEOUT_SEC,
   type LiveRunManifest,
@@ -433,6 +438,16 @@ export async function runAgent(
       timeoutSec: config.timeout ?? DEFAULT_TIMEOUT_SEC,
       stallTimeoutSec: config.stallTimeout ?? DEFAULT_STALL_TIMEOUT_SEC,
       maxTurns: config.maxTurns ?? 0,
+      // Plan 027 Phase 5 (#35) — record the effective idle budget for coordination
+      // runs so `coordination_status` can surface `idleBudgetSec` (AC-12). The
+      // companion reads its budget off disk via the tool, NOT from MINIH_PARAMS
+      // (which never reaches the inside-MCP subprocess — PIC-P5-E / A2).
+      ...(coordinationEnabled && {
+        idleBudgetMs:
+          typeof config.params?.idleBudgetMs === 'number'
+            ? config.params.idleBudgetMs
+            : DEFAULT_IDLE_BUDGET_MS,
+      }),
     };
 
     // Initial run.json manifest — workshop 002 §1, plan 009.
@@ -644,11 +659,14 @@ export async function runAgent(
     // Plan 018 R1 — compile permissions policy. Resolution chain per AC24:
     // frontmatter → sidecar lockedDefault → env → release default constant.
     //
-    // R1 keeps backward-compat: agents without explicit `permissions:` get
-    // `releaseDefault.preset = 'yolo'` and behave exactly as before. The
-    // runtime permission handler is only constructed when the resolved
-    // policy is *non-yolo*; un-migrated agents fall through to the
-    // adapter's built-in `approveAll`.
+    // Since Plan 018 R6 the release default is `restricted` (write-deny),
+    // not `yolo` (see presets.ts `minihReleaseDefault`). Grandfathered
+    // installs keep `yolo` via a sticky sidecar `lockedDefault`; a *new*
+    // agent without explicit `permissions:` resolves to `restricted` here.
+    // A runtime permission handler is built for any non-yolo policy
+    // (`isNonDefaultPolicy`); only pure-yolo agents fall through to the
+    // adapter's built-in `approveAll`. For coordination-enabled agents a
+    // write-deny resolution trips the FX008 boot gate (E205) just below.
     const sidecarPolicy = readSidecarPermissions(definition.dir);
     const envPolicy = readEnvPermissions();
     // Plan 018 R2 + companion F005 — CLI `--permissions <preset>` overrides
@@ -1406,6 +1424,43 @@ export async function runAgent(
     }
 
     if (agentSucceeded && coordinationEnabled && agentsDir) {
+      // Plan 027 Phase 5 (#35) — shutdown drain (AC-13). Re-derive the ledger
+      // over the RAW live lanes AFTER the final inbox forward-commit (above,
+      // inside the resolved run promise) and BEFORE report.json is snapshotted,
+      // so a peer message that landed in the shutdown / report-write window is
+      // captured in report.findings[] rather than stranded (plan Findings 05/06).
+      // Disk-only — MCP teardown is implicit/SDK-owned (PIC-P5-C). Best-effort:
+      // a torn lane is tolerated inside drainAndReadInbox, and this whole block
+      // never fails an otherwise-successful run (PIC-P5-G).
+      try {
+        const drained = drainAndReadInbox(
+          coordinationRunLocation(definition.slug, agentsDir, runId),
+        );
+        if (drained === null) {
+          // log + skip (PIC-P5-G) — torn lane is tolerated but NOT silent (F002).
+          stderrLines.push(
+            '[coordination-drain] inbox re-derive skipped — corrupt/torn lane in the shutdown window; report findings left as authored (run not failed).',
+          );
+        } else {
+          const outcome = reconcileReportFindings(outputPath, drained);
+          // Only surface the ABNORMAL skip (a valid ledger whose draft failed
+          // validation). `report-absent` / `report-unparseable` are the EXPECTED
+          // no-structured-report paths (non-JSON agents / raw SDK fallback) and
+          // stay quiet so they don't manufacture a stderr artifact (F002).
+          if (!outcome.wrote && outcome.reason === 'draft-invalid') {
+            stderrLines.push(
+              '[coordination-drain] report.findings[] not reconciled (draft-invalid); preserved as authored.',
+            );
+          }
+        }
+      } catch (error) {
+        // best-effort — shutdown-drain hiccups must not fail the run, but say why.
+        const message = error instanceof Error ? error.message : String(error);
+        stderrLines.push(
+          `[coordination-drain] non-fatal drain error: ${message}`,
+        );
+      }
+
       try {
         snapshotCoordinationFiles(definition.slug, agentsDir, runId, runDir);
       } catch (error) {

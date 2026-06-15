@@ -23,6 +23,13 @@ import type { InboxMessage } from '../../src/runner/types.js';
  *       still works (preserves coordination-smoke-test, coordination-loop-validator).
  *   (c) inbox_send with `ackOf` — proves the field reaches disk through the
  *       MCP tool surface (Workshop 007's reply-correlation contract).
+ *   (d) AC-6 (#27/#31): every status the code-review-companion prompt publishes
+ *       (`idle/reading/reviewing/reporting/blocked/stopping`) is accepted by the
+ *       *real shipped* companion schema, resolved at agent ROOT (level 2 of the
+ *       3-level fallback — PIC-1: `state/` is install-denied, root ships the file).
+ *   (e) AC-6 discriminating negative: dropping one value from that enum makes the
+ *       matching transition hard-reject with `MCP_INVALID_ARGUMENT` — proving the
+ *       (d) acceptance test would fail loudly if an enum value were ever removed.
  */
 
 const CUSTOM_SCHEMA = {
@@ -148,5 +155,89 @@ describe('coordination contract — real MCP tool surface', () => {
     expect(insideMessages[0].ackOf).toBe(ackedId);
     expect(insideMessages[0].type).toBe('finding');
     expect(insideMessages[0].subject).toBe('finding: state pane empty');
+  });
+
+  it('(d) accepts every companion state_transition target against the resolved companion schema (AC-6)', () => {
+    // Read the *real shipped* companion schema and place it at the agent ROOT —
+    // the install-payload location. PIC-1: `state/` is install-denied, so the
+    // companion ships its schema at root, which insideStateSchemaPath resolves at
+    // level 2. No `state/` dir is created here, so a green run proves root-level
+    // resolution works for the published pack (the keep-root disposition, T002).
+    const ctx = buildContext('coord-contract-companion');
+    fs.mkdirSync(ctx.agentDir, { recursive: true });
+    const companionSchema = JSON.parse(
+      fs.readFileSync(
+        path.resolve('agents/code-review-companion/inside-state.schema.json'),
+        'utf8',
+      ),
+    ) as { properties: { status: { enum: string[] } } };
+    fs.writeFileSync(
+      path.join(ctx.agentDir, 'inside-state.schema.json'),
+      JSON.stringify(companionSchema),
+    );
+
+    const targets = companionSchema.properties.status.enum;
+    // Pin the published vocabulary itself: if the pack's enum ever changes, this
+    // assertion forces a deliberate revisit (it guards the #27/#31 contract).
+    expect(targets).toEqual([
+      'idle',
+      'reading',
+      'reviewing',
+      'reporting',
+      'blocked',
+      'stopping',
+    ]);
+
+    // Every published target must be ACCEPTED. validateInsideState runs at
+    // state.ts:100 *before* the no-op short-circuit, so each target is validated
+    // against the enum regardless of the prior status.
+    for (const target of targets) {
+      const result = stateTransition(ctx, { to: target }).structuredContent;
+      expect(result?.to).toBe(target);
+    }
+  });
+
+  it('(e) rejects a target dropped from a truncated companion schema with MCP_INVALID_ARGUMENT (discriminating negative, AC-6)', () => {
+    // Discriminating proof that (d) has teeth: drop one published value and the
+    // matching transition must hard-reject — so the suite fails loudly if an enum
+    // value is ever removed (the exact #27/#31 regression).
+    const ctx = buildContext('coord-contract-truncated');
+    fs.mkdirSync(ctx.agentDir, { recursive: true });
+    const companionSchema = JSON.parse(
+      fs.readFileSync(
+        path.resolve('agents/code-review-companion/inside-state.schema.json'),
+        'utf8',
+      ),
+    ) as { properties: { status: { enum: string[] } } };
+    const truncated = {
+      ...companionSchema,
+      properties: {
+        ...companionSchema.properties,
+        status: {
+          ...companionSchema.properties.status,
+          enum: companionSchema.properties.status.enum.filter(
+            (s) => s !== 'stopping',
+          ),
+        },
+      },
+    };
+    fs.writeFileSync(
+      path.join(ctx.agentDir, 'inside-state.schema.json'),
+      JSON.stringify(truncated),
+    );
+
+    let caught: unknown;
+    try {
+      stateTransition(ctx, { to: 'stopping' });
+    } catch (error) {
+      caught = error;
+    }
+    expect((caught as { code?: string })?.code).toBe('MCP_INVALID_ARGUMENT');
+
+    // A still-present value resolves fine — proving the rejection is about the
+    // dropped enum value, not a broken fixture.
+    expect(stateTransition(ctx, { to: 'reading' }).structuredContent?.to).toBe(
+      'reading',
+    );
   });
 });

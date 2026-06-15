@@ -3,8 +3,11 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  assembleDraftFarewell,
+  buildDraftFarewell,
   CompanionLedgerError,
   deriveCompanionLedger,
+  validateDraftFarewell,
 } from '../../src/runner/companion-ledger.js';
 import {
   type CoordinationRunLocation,
@@ -166,5 +169,67 @@ describe('deriveCompanionLedger — corruption convention', () => {
     expect(() => deriveCompanionLedger(location, { now: 1 })).toThrow(
       CompanionLedgerError,
     );
+  });
+});
+
+describe('draft farewell — strict validate before write (AC-9, finding 04)', () => {
+  it('assembles a draft that passes strict validation (no false-malformed)', () => {
+    appendMsg(
+      'inside',
+      msg('f1', 'inside', 'finding', '2026-06-15T10:00:00.000Z'),
+    );
+    appendMsg(
+      'inside',
+      msg('s1', 'inside', 'summary', '2026-06-15T10:01:00.000Z'),
+    );
+    writeInsideState('reviewing');
+    const ledger = deriveCompanionLedger(location, { now: 1 });
+
+    const draft = assembleDraftFarewell(ledger);
+    expect(draft.retrospective.coordination.peerUpdatesSent).toBe(2);
+    expect(draft.retrospective.coordination.statePublished).toBe(true);
+    expect(draft.summary.length).toBeGreaterThanOrEqual(20);
+    expect(validateDraftFarewell(draft).valid).toBe(true);
+    expect(buildDraftFarewell(ledger)).not.toBeNull();
+  });
+
+  it('strict gate rejects a draft missing the coordination block', () => {
+    // This object PASSES the permissive system-output.json contract (coordination
+    // is optional there) — the strict draft gate is what catches it (finding 04).
+    const malformed = {
+      summary: 'x'.repeat(25),
+      retrospective: {
+        workedWell: 'x'.repeat(12),
+        confusing: 'x'.repeat(12),
+        magicWand: 'x'.repeat(25),
+      },
+    };
+    expect(validateDraftFarewell(malformed).valid).toBe(false);
+  });
+
+  it('strict gate rejects junk extra keys (closes additionalProperties:true gap)', () => {
+    const base = assembleDraftFarewell(
+      deriveCompanionLedger(location, { now: 1 }),
+    );
+    const junk = { ...base, injectedJunk: 'should not persist' };
+    expect(validateDraftFarewell(junk).valid).toBe(false);
+  });
+
+  it('buildDraftFarewell safe-nulls an invalid ledger-shaped draft', () => {
+    // A negative count must never be offered as a farewell draft.
+    const bad = {
+      summary: 'x'.repeat(25),
+      retrospective: {
+        workedWell: 'x'.repeat(12),
+        confusing: 'x'.repeat(12),
+        magicWand: 'x'.repeat(25),
+        coordination: {
+          peerUpdatesSent: -1,
+          unresolvedPeerRequests: 0,
+          statePublished: false,
+        },
+      },
+    };
+    expect(validateDraftFarewell(bad).valid).toBe(false);
   });
 });

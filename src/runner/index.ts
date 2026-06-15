@@ -51,8 +51,11 @@ export {
 // needs its OWN export line; the `export type {…} from './types.js'` block
 // below carries only the `CompanionLedger` type (PIC-I).
 export {
+  assembleDraftFarewell,
+  buildDraftFarewell,
   CompanionLedgerError,
   deriveCompanionLedger,
+  validateDraftFarewell,
 } from './companion-ledger.js';
 export type { CoordinationEnv } from './context.js';
 export {
@@ -303,6 +306,7 @@ export type {
   AgentDefinition,
   AgentRunConfig,
   AgentRunResult,
+  CompanionDraftFarewell,
   CompanionLedger,
   CompletedMetadata,
   ControlTimelineEntry,

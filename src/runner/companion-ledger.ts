@@ -23,6 +23,8 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import Ajv2020 from 'ajv/dist/2020.js';
 import {
   type CoordinationRunLocation,
   coordinationRunDir,
@@ -31,7 +33,12 @@ import {
   parseFrontmatter,
   stateFilePath,
 } from './folder.js';
-import type { CompanionLedger, InboxMessage } from './types.js';
+import type {
+  CompanionDraftFarewell,
+  CompanionLedger,
+  InboxMessage,
+  ValidationResult,
+} from './types.js';
 
 /** Thrown when a durable lane / state file is present but unparseable. */
 export class CompanionLedgerError extends Error {
@@ -228,4 +235,132 @@ export function deriveCompanionLedger(
     idleElapsedMs,
     lastTaskId,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Draft farewell — strict validate before offer/write (AC-9, finding 04).
+//
+// `system-output.json` is `additionalProperties:true` and does NOT require the
+// `retrospective.coordination` block, and `validator.ts` runs AFTER `report.json`
+// is written. So a malformed / incomplete draft would slip through and persist.
+// The strict sub-schema below closes that gap: a draft is validated against BOTH
+// the canonical contract AND this strict shape BEFORE it is offered or written;
+// a draft that fails is safe-nulled and never reaches `report.json`.
+// ---------------------------------------------------------------------------
+
+const SYSTEM_OUTPUT_SCHEMA_PATH = fileURLToPath(
+  new URL('../schemas/system-output.json', import.meta.url),
+);
+
+/** Strict draft shape — `additionalProperties:false`, coordination required. */
+const STRICT_DRAFT_FAREWELL_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  required: ['summary', 'retrospective'],
+  additionalProperties: false,
+  properties: {
+    summary: { type: 'string', minLength: 20 },
+    retrospective: {
+      type: 'object',
+      required: ['workedWell', 'confusing', 'magicWand', 'coordination'],
+      additionalProperties: false,
+      properties: {
+        workedWell: { type: 'string', minLength: 10 },
+        confusing: { type: 'string', minLength: 10 },
+        magicWand: { type: 'string', minLength: 20 },
+        coordination: {
+          type: 'object',
+          required: [
+            'peerUpdatesSent',
+            'unresolvedPeerRequests',
+            'statePublished',
+          ],
+          additionalProperties: false,
+          properties: {
+            peerUpdatesSent: { type: 'integer', minimum: 0 },
+            unresolvedPeerRequests: { type: 'integer', minimum: 0 },
+            statePublished: { type: 'boolean' },
+          },
+        },
+      },
+    },
+  },
+};
+
+/**
+ * Assemble a draft farewell envelope from a ledger. The stub prose fields are
+ * deliberately authored to satisfy the system-output minLengths so a real draft
+ * never self-fails as false-malformed (the companion overwrites them at farewell).
+ */
+export function assembleDraftFarewell(
+  ledger: CompanionLedger,
+): CompanionDraftFarewell {
+  return {
+    summary: `Companion farewell draft: ${ledger.reviewedIds.length} reviewed, ${ledger.findingsCount} finding(s), ${ledger.summariesCount} summary(ies); coordination mode ${ledger.coordinationMode}.`,
+    retrospective: {
+      workedWell:
+        'Coordination lifecycle derived cleanly from the durable inbox and state lanes.',
+      confusing:
+        'Draft pre-fill is a stub the companion overwrites with its own farewell.',
+      magicWand:
+        'Auto-derive more of the farewell retrospective directly from the coordination ledger.',
+      coordination: {
+        peerUpdatesSent: ledger.findingsCount + ledger.summariesCount,
+        unresolvedPeerRequests: ledger.unresolvedPeerRequests,
+        statePublished: ledger.statePublished,
+      },
+    },
+  };
+}
+
+function ajvErrorStrings(
+  prefix: string,
+  errors: Array<{ instancePath?: string; message?: string }> | null | undefined,
+): string[] {
+  return (errors ?? []).map(
+    (e) => `${prefix} ${e.instancePath || '/'}: ${e.message ?? 'invalid'}`,
+  );
+}
+
+/**
+ * Validate a draft against BOTH the canonical `system-output.json` contract and
+ * the strict draft sub-schema. Never throws — a missing/unreadable schema is
+ * reported as an error so the caller safe-nulls rather than writing blind.
+ */
+export function validateDraftFarewell(draft: unknown): ValidationResult {
+  const errors: string[] = [];
+
+  const ajvStrict = new Ajv2020({ allErrors: true });
+  const strict = ajvStrict.compile(STRICT_DRAFT_FAREWELL_SCHEMA);
+  if (!strict(draft)) {
+    errors.push(...ajvErrorStrings('[strict]', strict.errors));
+  }
+
+  try {
+    const canonicalSchema = JSON.parse(
+      fs.readFileSync(SYSTEM_OUTPUT_SCHEMA_PATH, 'utf-8'),
+    ) as Record<string, unknown>;
+    const ajvCanonical = new Ajv2020({ allErrors: true });
+    const canonical = ajvCanonical.compile(canonicalSchema);
+    if (!canonical(draft)) {
+      errors.push(...ajvErrorStrings('[system-output]', canonical.errors));
+    }
+  } catch (err) {
+    errors.push(
+      `[system-output] schema unavailable: ${(err as Error).message}`,
+    );
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+/**
+ * Build a validated draft farewell from a ledger, or `null` if the assembled
+ * draft fails strict validation. The `null` is the safe-null that guarantees a
+ * malformed draft never reaches `report.json` (AC-9).
+ */
+export function buildDraftFarewell(
+  ledger: CompanionLedger,
+): CompanionDraftFarewell | null {
+  const draft = assembleDraftFarewell(ledger);
+  return validateDraftFarewell(draft).valid ? draft : null;
 }

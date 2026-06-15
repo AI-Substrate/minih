@@ -50,4 +50,14 @@ Decision: derive over **raw `folder.ts` lanes** (PIC-A), reusing only the unread
 - **Evidence**: 4/4 vitest green; `tsc --noEmit` exit 0; `biome check --write` clean.
 - **Purity**: no MCP/CLI/SDK imports — only `node:fs`/`node:path` + `folder.js`. `now` injectable for deterministic `idleElapsedMs`.
 
+### T003 — Draft farewell strict-validate-before-write (4.3) · AC-9 ✅
+
+- **RED→GREEN**: 4 new tests in `companion-ledger.test.ts` (now 8/8).
+- `assembleDraftFarewell(ledger)` builds a `CompanionDraftFarewell` (system-output-shaped); stub prose authored to satisfy minLengths (no false-malformed).
+- `validateDraftFarewell(draft)` validates against **both** the canonical `system-output.json` (read from disk via AJV 2020) **and** a strict inline sub-schema (`additionalProperties:false`, **coordination required**).
+- `buildDraftFarewell(ledger)` returns the draft **only if valid**, else **null** (the safe-null that guarantees a malformed draft never reaches `report.json`).
+- **Finding-04 proof** (the discriminating tests): a draft *missing the coordination block* and a draft *with junk extra keys* both **pass** the permissive `system-output.json` contract but are **rejected** by the strict gate. `parseReportJson` (runner.ts:1821) already safe-nulls on corrupt — confirmed, no change needed there.
+- `CompanionDraftFarewell` type added to `types.ts`; barrel exports the 3 fns + type.
+- **Evidence**: 8/8 vitest; `tsc --noEmit` exit 0; biome clean.
+
 _(Detailed per-task entries appended below as work lands.)_

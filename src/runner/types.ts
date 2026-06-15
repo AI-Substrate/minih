@@ -398,6 +398,28 @@ export interface CompanionLedger {
   lastTaskId: string | null;
 }
 
+/**
+ * Plan 027 Phase 4 (#36 / finding 04) — the draft farewell envelope assembled
+ * from a {@link CompanionLedger}. Shaped like a minih system output so it can be
+ * offered as a pre-filled `report.json`. It is **strictly validated before it is
+ * offered or written** (closing the `system-output.json` `additionalProperties:
+ * true` write-before-validate gap): a malformed draft is safe-nulled and never
+ * reaches `report.json`.
+ */
+export interface CompanionDraftFarewell {
+  summary: string;
+  retrospective: {
+    workedWell: string;
+    confusing: string;
+    magicWand: string;
+    coordination: {
+      peerUpdatesSent: number;
+      unresolvedPeerRequests: number;
+      statePublished: boolean;
+    };
+  };
+}
+
 // ===========================================================================
 // Human View — Phase 1 (plan 009-human-agent-view)
 //

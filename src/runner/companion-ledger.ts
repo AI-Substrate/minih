@@ -35,6 +35,7 @@ import {
 } from './folder.js';
 import type {
   CompanionDraftFarewell,
+  CompanionFinding,
   CompanionLedger,
   InboxMessage,
   ValidationResult,
@@ -172,6 +173,24 @@ function unique(values: string[]): string[] {
 }
 
 /**
+ * Parse an inside-lane `finding` message into a {@link CompanionFinding}. The
+ * structured fields ride in `meta` (mirroring the companion's `inbox_send`
+ * shape, prompt.md:227/284); `issue` falls back to the message body.
+ */
+function toFinding(m: InboxMessage): CompanionFinding {
+  const meta = (m.meta ?? {}) as Record<string, unknown>;
+  const str = (v: unknown, fallback = ''): string =>
+    typeof v === 'string' ? v : fallback;
+  return {
+    severity: str(meta.severity, 'UNKNOWN'),
+    file: str(meta.file),
+    category: str(meta.category),
+    issue: str(meta.issue, m.body),
+    recommendation: str(meta.recommendation),
+  };
+}
+
+/**
  * Derive the {@link CompanionLedger} for a coordination run from its durable
  * lanes. Pure: depends only on disk state and `opts.now` (default `Date.now()`,
  * injectable for deterministic tests).
@@ -200,7 +219,8 @@ export function deriveCompanionLedger(
     .map((m) => m.id)
     .sort();
 
-  const findingsCount = outbound.filter((m) => m.type === 'finding').length;
+  const findings = outbound.filter((m) => m.type === 'finding').map(toFinding);
+  const findingsCount = findings.length;
   const summariesCount = outbound.filter((m) => m.type === 'summary').length;
 
   const unresolvedPeerRequests = inbound.filter(
@@ -234,6 +254,7 @@ export function deriveCompanionLedger(
     unresolvedPeerRequests,
     idleElapsedMs,
     lastTaskId,
+    findings,
   };
 }
 
@@ -259,6 +280,21 @@ const STRICT_DRAFT_FAREWELL_SCHEMA: Record<string, unknown> = {
   additionalProperties: false,
   properties: {
     summary: { type: 'string', minLength: 20 },
+    findings: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['severity', 'file', 'category', 'issue', 'recommendation'],
+        additionalProperties: true,
+        properties: {
+          severity: { type: 'string' },
+          file: { type: 'string' },
+          category: { type: 'string' },
+          issue: { type: 'string' },
+          recommendation: { type: 'string' },
+        },
+      },
+    },
     retrospective: {
       type: 'object',
       required: ['workedWell', 'confusing', 'magicWand', 'coordination'],
@@ -309,6 +345,8 @@ export function assembleDraftFarewell(
         statePublished: ledger.statePublished,
       },
     },
+    // #32 — report.findings[] is DERIVED from the ledger, never re-authored.
+    findings: ledger.findings,
   };
 }
 

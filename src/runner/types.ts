@@ -366,6 +366,19 @@ export interface CoordinationFrontmatter {
 }
 
 /**
+ * Plan 027 Phase 4 (#32) — one review finding. The singular declared shape for
+ * the `findings[]` contract: it mirrors a live `inbox_send type:'finding'`
+ * message and is the item type the runner derives into `report.findings[]`.
+ */
+export interface CompanionFinding {
+  severity: string;
+  file: string;
+  category: string;
+  issue: string;
+  recommendation: string;
+}
+
+/**
  * Plan 027 Phase 4 (#36) — the companion lifecycle ledger.
  *
  * Derived (never reconstructed from prompt memory) from a run's durable
@@ -396,6 +409,8 @@ export interface CompanionLedger {
   idleElapsedMs: number | null;
   /** Id of the most recent inbound `task` message, or null. */
   lastTaskId: string | null;
+  /** Review findings (#32) derived from inside-lane `finding` messages. */
+  findings: CompanionFinding[];
 }
 
 /**
@@ -418,6 +433,8 @@ export interface CompanionDraftFarewell {
       statePublished: boolean;
     };
   };
+  /** Derived review findings (#32) — copied from the ledger, not re-authored. */
+  findings: CompanionFinding[];
 }
 
 // ===========================================================================

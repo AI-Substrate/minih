@@ -77,4 +77,14 @@ Decision: derive over **raw `folder.ts` lanes** (PIC-A), reusing only the unread
 - Registered in `src/cli/index.ts`.
 - **Evidence**: 3/3 CLI integration tests against **dist/** (PIC-F) — conforming envelope, default-latest picks the newer run, E171 on unknown. `tsc` exit 0; biome clean; `npm run build` exit 0.
 
+### T007 — #32 findings home (structural, AC-10 half) (4.6)
+
+- New `CompanionFinding` type (`{severity, file, category, issue, recommendation}`) — the singular shape mirroring `inbox_send type:'finding'` (prompt.md:227) and the farewell envelope's `findings[]` (prompt.md:284).
+- `deriveCompanionLedger` now returns `findings: CompanionFinding[]` parsed from inside-lane `finding` messages (`meta` carries the structured fields; `issue` falls back to the message body). `findingsCount = findings.length`.
+- `assembleDraftFarewell` **copies** `ledger.findings` into the draft (derived, not re-authored); strict draft schema gains a typed `findings` array.
+- **The single declared home**: added a `findings[]` property to `src/schemas/system-output.json` (item requires the 5 core fields, `additionalProperties:true` for `ackOf`/future). Today it lived only in the prompt example — declaring it here is what makes "schema agrees structurally" enforceable rather than asserted.
+- **AC-10 structural proof** (tests): findings derived from a `meta`-shaped message; the draft's `findings[]` validates against the schema home; a malformed finding (missing `recommendation`) is **rejected** by the strict gate.
+- **Scope note**: the doc-agreement-via-`contract-phrase`-sensor half of AC-10 **defers to Phase 6** (sensor not built — PIC-G). `prompt.md` read-only this phase.
+- **Evidence**: companion-ledger 11/11, validator 16/16, schema-compat 6/6, coordination-status 2/2, CLI 3/3 (rebuilt dist). `tsc` exit 0; biome clean.
+
 _(Detailed per-task entries appended below as work lands.)_

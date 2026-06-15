@@ -307,6 +307,7 @@ export type {
   AgentRunConfig,
   AgentRunResult,
   CompanionDraftFarewell,
+  CompanionFinding,
   CompanionLedger,
   CompletedMetadata,
   ControlTimelineEntry,

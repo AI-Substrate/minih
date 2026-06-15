@@ -108,6 +108,7 @@ describe('deriveCompanionLedger — empty run', () => {
       unresolvedPeerRequests: 0,
       idleElapsedMs: null,
       lastTaskId: null,
+      findings: [],
     });
   });
 });
@@ -229,6 +230,65 @@ describe('draft farewell — strict validate before write (AC-9, finding 04)', (
           statePublished: false,
         },
       },
+    };
+    expect(validateDraftFarewell(bad).valid).toBe(false);
+  });
+});
+
+describe('#32 findings home (AC-10 structural)', () => {
+  it('derives findings[] from inside finding messages (meta shape)', () => {
+    appendMsg(
+      'inside',
+      msg('f1', 'inside', 'finding', '2026-06-15T10:00:00.000Z', {
+        meta: {
+          severity: 'HIGH',
+          file: 'src/x.ts',
+          category: 'Bug',
+          issue: 'boom',
+          recommendation: 'fix it',
+        },
+      }),
+    );
+    const ledger = deriveCompanionLedger(location, { now: 1 });
+    expect(ledger.findingsCount).toBe(1);
+    expect(ledger.findings).toEqual([
+      {
+        severity: 'HIGH',
+        file: 'src/x.ts',
+        category: 'Bug',
+        issue: 'boom',
+        recommendation: 'fix it',
+      },
+    ]);
+  });
+
+  it('copies derived findings into the draft and they validate against the schema home', () => {
+    appendMsg(
+      'inside',
+      msg('f1', 'inside', 'finding', '2026-06-15T10:00:00.000Z', {
+        meta: {
+          severity: 'MEDIUM',
+          file: 'a',
+          category: 'b',
+          issue: 'c',
+          recommendation: 'd',
+        },
+      }),
+    );
+    const ledger = deriveCompanionLedger(location, { now: 1 });
+    const draft = buildDraftFarewell(ledger);
+    expect(draft).not.toBeNull();
+    expect(draft?.findings).toEqual(ledger.findings);
+    expect(validateDraftFarewell(draft).valid).toBe(true);
+  });
+
+  it('strict gate rejects a malformed finding (missing recommendation)', () => {
+    const base = assembleDraftFarewell(
+      deriveCompanionLedger(location, { now: 1 }),
+    );
+    const bad = {
+      ...base,
+      findings: [{ severity: 'HIGH', file: 'a', category: 'b', issue: 'c' }],
     };
     expect(validateDraftFarewell(bad).valid).toBe(false);
   });

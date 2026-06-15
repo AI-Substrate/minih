@@ -106,6 +106,14 @@ export {
 export type { HumanViewSources } from './human-view-model.js';
 export { buildHumanViewModel } from './human-view-model.js';
 export type {
+  CompanionIdleLedger,
+  IdlePolicyDecision,
+  IdlePolicyInput,
+} from './idle-policy.js';
+// Plan 027 Phase 5 — ledger-driven idle policy (#35). Pure stand-down decision
+// over the companion ledger; consumed by the prompt via `coordination_status`.
+export { evaluateIdlePolicy } from './idle-policy.js';
+export type {
   InboxPollErrorCode,
   PollInboxOptions,
   PollInboxResult,

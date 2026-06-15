@@ -1,0 +1,109 @@
+import type { CompanionLedger } from './types.js';
+
+/**
+ * Plan 027 Phase 5 (#35) — ledger-driven idle / stand-down policy.
+ *
+ * A PURE decision function (no fs, no SDK, no MCP/CLI imports) that replaces the
+ * companion prompt's integer poll-streak heuristic (`emptyPollStreak` /
+ * `firstContactPollThreshold` / `replyWaitPolls`, "no clock arithmetic") with a
+ * decision read off durable ledger state plus the configured budget and an
+ * absolute run-timeout ceiling. The companion prompt (T004) consults
+ * `coordination_status` and mirrors this exact logic in prose.
+ *
+ * It reads exactly two fields off the ledger — `idleElapsedMs` and
+ * `unresolvedPeerRequests` — so the input is typed as a `Pick` to make that
+ * coupling explicit and prevent accidental dependence on the rest of the ledger.
+ */
+export type CompanionIdleLedger = Pick<
+  CompanionLedger,
+  'idleElapsedMs' | 'unresolvedPeerRequests'
+>;
+
+export interface IdlePolicyInput {
+  /** Configured idle budget in ms (input-schema `idleBudgetMs`; min 60000, default 1_800_000). */
+  idleBudgetMs: number;
+  /**
+   * Wall-clock ms since the run started. Required because the ledger has NO
+   * clock for a peer that never spoke (`idleElapsedMs === null`) — without this
+   * a never-connected dead peer could never be stood down (PIC-P5-A / A1).
+   */
+  runElapsedMs: number;
+  /** Absolute run-timeout ceiling in seconds (`budgets.timeoutSec`). */
+  timeoutSec: number;
+  /** Reserved for symmetry with `deriveCompanionLedger(opts.now)`; unused by the pure decision. */
+  now?: number;
+}
+
+/** Stand-down decision. `exitReason` reuses the companion's existing exit vocabulary. */
+export interface IdlePolicyDecision {
+  standDown: boolean;
+  exitReason: 'idle_budget' | 'no_engagement' | null;
+  reason: string;
+}
+
+/**
+ * Decide whether the companion should stand down.
+ *
+ * Stand down when EITHER:
+ *  (a) the absolute backstop fires — `runElapsedMs >= timeoutSec*1000` — which
+ *      terminates even a never-spoke dead peer and overrides outstanding work; or
+ *  (b) nothing is outstanding AND the effective idle has reached the budget.
+ *
+ * A mid-phase gap (`unresolvedPeerRequests > 0`) under the backstop → CONTINUE:
+ * work is still owed, so an idle stretch alone must not stand the companion down.
+ *
+ * Effective idle = `idleElapsedMs ?? runElapsedMs`: a peer that never spoke has
+ * been idle since boot, so run-elapsed is the right clock for it.
+ *
+ * `exitReason` follows engagement, not the trigger: a peer that never spoke
+ * (`idleElapsedMs === null`) exits `no_engagement`; one that spoke exits
+ * `idle_budget`. The `reason` string carries the precise trigger.
+ */
+export function evaluateIdlePolicy(
+  ledger: CompanionIdleLedger,
+  opts: IdlePolicyInput,
+): IdlePolicyDecision {
+  const { idleBudgetMs, runElapsedMs, timeoutSec } = opts;
+  const neverSpoke = ledger.idleElapsedMs === null;
+  const effectiveIdleMs = ledger.idleElapsedMs ?? runElapsedMs;
+  const timeoutMs = timeoutSec * 1000;
+  const exitReason: 'idle_budget' | 'no_engagement' = neverSpoke
+    ? 'no_engagement'
+    : 'idle_budget';
+
+  // (a) Absolute backstop — fires regardless of outstanding work.
+  if (runElapsedMs >= timeoutMs) {
+    return {
+      standDown: true,
+      exitReason,
+      reason: `run elapsed ${runElapsedMs}ms reached the absolute timeout ceiling ${timeoutMs}ms (${timeoutSec}s)`,
+    };
+  }
+
+  // Work still outstanding under the backstop — keep going.
+  if (ledger.unresolvedPeerRequests > 0) {
+    return {
+      standDown: false,
+      exitReason: null,
+      reason: `${ledger.unresolvedPeerRequests} unresolved peer request(s) — work outstanding, continue`,
+    };
+  }
+
+  // (b) Nothing outstanding and idle past the budget — stand down.
+  if (effectiveIdleMs >= idleBudgetMs) {
+    return {
+      standDown: true,
+      exitReason,
+      reason: neverSpoke
+        ? `no inbound since boot; idle ${effectiveIdleMs}ms >= budget ${idleBudgetMs}ms`
+        : `idle ${effectiveIdleMs}ms since last inbound >= budget ${idleBudgetMs}ms`,
+    };
+  }
+
+  // Under budget, nothing outstanding — keep going.
+  return {
+    standDown: false,
+    exitReason: null,
+    reason: `idle ${effectiveIdleMs}ms < budget ${idleBudgetMs}ms — continue`,
+  };
+}

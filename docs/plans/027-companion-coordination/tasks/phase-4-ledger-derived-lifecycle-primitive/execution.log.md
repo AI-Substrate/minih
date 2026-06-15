@@ -87,4 +87,10 @@ Decision: derive over **raw `folder.ts` lanes** (PIC-A), reusing only the unread
 - **Scope note**: the doc-agreement-via-`contract-phrase`-sensor half of AC-10 **defers to Phase 6** (sensor not built — PIC-G). `prompt.md` read-only this phase.
 - **Evidence**: companion-ledger 11/11, validator 16/16, schema-compat 6/6, coordination-status 2/2, CLI 3/3 (rebuilt dist). `tsc` exit 0; biome clean.
 
+### T008 — Domain docs (runner / cli / mcp)
+
+- **runner/domain.md**: Composition (`companion-ledger.ts`), Contracts (`deriveCompanionLedger`/`CompanionLedger`/`CompanionFinding`/`buildDraftFarewell`/…), two Concepts rows (Companion lifecycle ledger + Draft farewell validation), History row (027 P4).
+- **cli/domain.md**: Composition (`companion.ts`), Contracts (`companion status`), Concepts (Companion lifecycle status), History row (027 P4).
+- **mcp/domain.md**: Composition (`coordination-status.ts`), Concepts intro + a new introspection concept, Dependencies (runner deriver), History row (027 P4). **Tool counts refreshed in THIS doc six→nine** (the manifest had been stale since wait_for_any/permission_status); registry-wide reconciliation across other docs stays Phase 6.3.
+
 _(Detailed per-task entries appended below as work lands.)_

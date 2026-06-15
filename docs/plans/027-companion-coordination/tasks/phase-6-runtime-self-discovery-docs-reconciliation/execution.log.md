@@ -52,3 +52,22 @@ Surgical + narrowed per the recon (Phases 4/5 already reconciled most docs).
 - **Evidence**: deterministic file edits, verified by `minih doctor` exit 0 + the contract-phrase real-pack test. The whole-plan `just fft` gate runs at phase close (AC-17).
 
 ---
+
+## AC-17 — whole-plan gate
+
+`just fft` → **exit 0** on the complete tree: lint ✓ · format ✓ · build ✓ · typecheck ✓ · **test 1386 passed / 16 skipped (124 files)** · audit (non-failing CVEs → Dependabot #13) · sdk-check ✓. The three new suites (`coordination-status` trio, `inside-state-schema`, `doctor-contract-phrase`) are included.
+
+---
+
+## Companion debrief — `code-review-companion` (run `2026-06-15T18-22-48-527Z-a02d`)
+
+- Booted Power-On-Mode at phase start; briefed once (hazards: PIC-1 root schema, no `coordinationMode` widening, `mcp ↔ cli` boundary, Sensor B parity/scope, doctor exit-0). Pinged at all 3 task commits (741be73, dcae0f8, 9014777) + a final drain. **control:stop → exit `stop_requested`** (clean); background process exited 0. `tasksReceived: 4`, `findingsSent: 2`.
+- **2 findings — both reconciled** (this commit):
+  - **MEDIUM** — `docs/domains/domain-map.md` still said "six backend-safe inbox/state tools" (mermaid node + health-summary table). I had reconciled registry / AGENTS_README / mcp / cli docs but **missed domain-map** — a real AC-16 completeness gap. Fixed both spots → "nine … (incl. `permission_status`, `coordination_status`)".
+  - **LOW** — `doctor.ts:568` comment "Mirrors … `src/mcp/tools/state.ts:insideStateSchemaPath`" went **stale** when T002 moved the resolver to `inside-state-schema.ts`. Fixed the reference.
+- **magicWand** (target `coordination`): "Have `coordination_status` include stable finding ids + `ackOf` in `draftFarewell.findings` so the final report can be written directly from the draft without reconstructing IDs/reply links." → follow-up candidate, buffered for the plan-complete retro.
+- **Phase-end harness seam** (`--event phase-end`): observe buffer non-empty (4 entries) → router routes **drain**; **deferred to plan-complete** per this plan's cadence (consistent with P2/P3/P5). Plus this session's notes (boot lint = own flight-plan JSON format; the parity design call) buffered for the same drain.
+
+**Phase 6 COMPLETE** — all 8 tasks + 2 harness seams done; AC-14/15/16/17 met; 2 companion findings reconciled; contingent T009 NOT taken (no GO).
+
+---

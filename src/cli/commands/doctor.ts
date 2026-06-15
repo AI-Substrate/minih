@@ -565,7 +565,7 @@ function createRefAwareAjv(): InstanceType<typeof Ajv2020> {
 // proceeds and the operator sees an empty timeline. This check warns at
 // authoring time so the gap is caught before the demo / live run.
 //
-// Mirrors the 3-level fallback in src/mcp/tools/state.ts:insideStateSchemaPath.
+// Mirrors the 3-level fallback in src/mcp/tools/inside-state-schema.ts:insideStateSchemaPath.
 // Re-implemented here rather than imported to avoid a cli → mcp dependency.
 
 const DEFAULT_INSIDE_STATE_SCHEMA_PATH = fileURLToPath(

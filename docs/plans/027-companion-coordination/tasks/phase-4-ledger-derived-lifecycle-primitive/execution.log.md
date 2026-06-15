@@ -93,4 +93,33 @@ Decision: derive over **raw `folder.ts` lanes** (PIC-A), reusing only the unread
 - **cli/domain.md**: Composition (`companion.ts`), Contracts (`companion status`), Concepts (Companion lifecycle status), History row (027 P4).
 - **mcp/domain.md**: Composition (`coordination-status.ts`), Concepts intro + a new introspection concept, Dependencies (runner deriver), History row (027 P4). **Tool counts refreshed in THIS doc six→nine** (the manifest had been stale since wait_for_any/permission_status); registry-wide reconciliation across other docs stays Phase 6.3.
 
+### Whole-phase gate — AC-17 ✅
+
+`just fft` (lint → format → build → typecheck → test → audit → sdk-check) reached the final `sdk-check` step (`✓ @github/copilot-sdk: 1.0.1 (latest)`) — `just` halts on first failure, so **lint/format/build/typecheck/test all passed**. The `audit` step is `npm audit --audit-level=high || true` (non-gating; the 12 vulns are the known pre-existing baseline). Coordination suite: no regression.
+
+- One friction tripped the gate first time: `just fft` lint (CI-mode biome) reddened on `the-flow.json` (the-flow regenerated it unformatted; fft runs lint **before** format). Workaround applied (`biome check --write the-flow.json`); re-ran → green. Captured as observe **DL-001** (same cluster as the deferred SUGG-001/SUGG-002).
+
+### T0z — Harness phase-end (`--event phase-end`)
+
+- Seam fired via `/eng-harness-flow --event phase-end --plan-dir docs/plans/027-companion-coordination --json`.
+- **Router decision**: `route` → `eng-harness-4-retro --drain` (observe buffer non-empty: 1 entry, DL-001).
+- **Deferred** the drain to **plan-complete** per this plan's established cadence (Phases 1–3 all deferred). The seam is advisory; nothing blocks.
+
+### Companion debrief (code-review-companion `2026-06-15T13-38-10-236Z-a23d`)
+
+- Briefed once at start; pinged at all 7 commits (T002 `6dd7ff3`, T003 `ee9add5`, T004/5 `37bdbc8`, T006 `4ce612c`, T007 `e779363`, T008 `c3ed91d`) + a final drain ping; `control:stop` sent; farewell read.
+- **⚠️ Process gotcha (corrected)**: my mid-phase finding-skims used `minih outside inbox list` which lists the **outside** lane — so I saw zero inside replies and wrongly proceeded as "clean." The companion was in fact **REQUEST_CHANGES**: per-commit verdicts T002 **REQUEST_CHANGES**, T003/T004-5/T006/T008 APPROVE_WITH_NOTES, T007 **REQUEST_CHANGES**, final sweep **REQUEST_CHANGES** — with **4 findings (3 HIGH, 1 MEDIUM)**. To skim the companion's own messages, read the **inside** lane (`inbox/inside/messages.ndjson`) or `minih inside inbox list`, not `outside inbox list`. (New process-friction candidate; same family as COORD-001.)
+- Farewell `coordination`: peerUpdatesSent 16, unresolvedPeerRequests 0, statePublished true. magicWand (target `coordination`): *"a live coordination_status-style derived farewell/counts tool to the running companion so final reports generate from the ledger instead of manual counting"* — which is **exactly the `coordination_status` tool this phase just built** (a 4th independent re-derivation).
+
+#### Findings reconciliation (assessment — fixes NOT yet applied; awaiting GO)
+
+| # | Sev | File | Issue | Assessment |
+|---|-----|------|-------|------------|
+| F001 | HIGH | types.ts | AC-8/T002 list "ackOf chains" but `CompanionLedger` exposes no ack-chain field | **Partially valid** — dossier T002 *did* list "ackOf chains"; shipped `reviewedIds`/`ackedIds` capture the ack relationships but not a chain map. Add an `ackChains` field or record the deliberate subsumption. |
+| F002 | HIGH | companion-ledger.ts:198 | `reviewedIds` = inbound tasks with an inside **ack**, but the protocol acks on **receipt** before review → in-flight tasks count as "reviewed" | **Valid** — live data confirms each task has both a receipt `ack` AND a completion `summary` (ackOf→task). Fix: derive `reviewedIds` from **summary** completion evidence; keep `ackedIds` as the receipt set. |
+| F003 | MED | companion-ledger.ts | `peerUpdatesSent = findings+summaries` omits `progress` messages | **Valid (minor)** — add a `progressCount` from inside `progress` messages; fold into `peerUpdatesSent`. |
+| F004 | HIGH | companion-ledger.ts:~180 | `toFinding` reads structured fields only from `meta`; live findings are **body-only** (`meta=NONE`) with a labelled `key: value` body → derived `report.findings[]` are empty-string shells | **Valid + confirmed by live data** — directly undermines T007's #32 deliverable. Fix: parse the labelled body as a fallback (and/or safe-null malformed findings); add a body-only regression fixture. |
+
+**Disposition**: F004 + F002 are real correctness issues on the foundational primitive that Phases 5/6 inherit; F001 add-or-document; F003 minor. Recommended as a Phase-4 fix pass **before** closing the phase. `just fft` is currently green on the as-built code, but the companion's REQUEST_CHANGES is not yet reconciled.
+
 _(Detailed per-task entries appended below as work lands.)_

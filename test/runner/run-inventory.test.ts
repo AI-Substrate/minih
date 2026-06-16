@@ -366,6 +366,45 @@ describe('listRunInventory — --all broadens vs default (plan 028 defect B)', (
   });
 });
 
+// Plan 028 Phase 2 (defect D) — confirm-only: compareRows already sorts by
+// startedAt (true UTC) first, runId only as a tie-break. After the UTC runId
+// fix, an OLD folder named with local-as-`Z` (13-50) but started earlier
+// (03:50 UTC) must still sort BELOW a NEW true-UTC folder (05-58) started later
+// (05:58 UTC) — i.e. chronological, not lexical-by-name.
+describe('listRunInventory — startedAt-primary sort survives mixed UTC/local folder names (defect D)', () => {
+  it('orders by startedAt even when the runId lexical order is the opposite', async () => {
+    // OLD: name 13-50 (local-as-Z), started EARLIER at 03:50 UTC.
+    const oldDir = makeRunDir('alpha', '2026-06-16T13-50-25-287Z-8a55');
+    writeFileSync(
+      path.join(oldDir, 'completed.json'),
+      JSON.stringify(
+        makeCompleted({
+          slug: 'alpha',
+          runId: '2026-06-16T13-50-25-287Z-8a55',
+          startedAt: '2026-06-16T03:50:25.286Z',
+        }),
+      ),
+    );
+    // NEW: name 05-58 (true UTC), started LATER at 05:58 UTC.
+    const newDir = makeRunDir('alpha', '2026-06-16T05-58-44-285Z-573c');
+    writeFileSync(
+      path.join(newDir, 'completed.json'),
+      JSON.stringify(
+        makeCompleted({
+          slug: 'alpha',
+          runId: '2026-06-16T05-58-44-285Z-573c',
+          startedAt: '2026-06-16T05:58:44.284Z',
+        }),
+      ),
+    );
+
+    const rows = await listRunInventory({ agentsDir, all: true });
+    // Newest-by-startedAt first; a name-sort would wrongly put 13-50 first.
+    expect(rows[0].runId).toBe('2026-06-16T05-58-44-285Z-573c');
+    expect(rows[1].runId).toBe('2026-06-16T13-50-25-287Z-8a55');
+  });
+});
+
 // Plan 028 Phase 1 (defect B) — best-effort heal-on-read: a stale dead-pid
 // `active` orphan is marked `crashed` during an inventory read (reusing the
 // reconcile lock), and must never drop or mislabel a genuinely-live run. The

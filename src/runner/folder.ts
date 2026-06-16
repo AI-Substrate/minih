@@ -795,6 +795,48 @@ export function createRunFolder(
   return { runDir, runId };
 }
 
+/**
+ * Read a run's start instant (true-UTC ISO) from its on-disk metadata.
+ * Precedence: run.json.startedAt → completed.json.startedAt → null. The runId
+ * (= folder name) is deliberately NOT consulted: for runs created before the
+ * UTC fix it encodes local time mislabeled `Z`, so it is unreliable as a
+ * chronological key. startedAt comes from `toISOString()` and is always UTC.
+ */
+export function runStartedAt(runDir: string): string | null {
+  for (const file of ['run.json', 'completed.json']) {
+    try {
+      const parsed = JSON.parse(
+        fs.readFileSync(path.join(runDir, file), 'utf-8'),
+      ) as { startedAt?: unknown };
+      if (typeof parsed.startedAt === 'string' && parsed.startedAt) {
+        return parsed.startedAt;
+      }
+    } catch {
+      // missing or unparseable — fall through to the next source
+    }
+  }
+  return null;
+}
+
+/**
+ * Sort run ids (folder names under `<agent>/runs`) newest-first by their
+ * recorded startedAt (true UTC), falling back to the folder name only when no
+ * startedAt is on disk. This keeps a mix of pre-fix (local-as-`Z`) and post-fix
+ * (true-UTC) folder names in chronological order — a lexical name sort would
+ * place a stale run first whenever local time sorted above a later UTC time.
+ */
+export function sortRunIdsNewestFirst(
+  runsDir: string,
+  runIds: string[],
+): string[] {
+  return [...runIds].sort((a, b) => {
+    const at = runStartedAt(path.join(runsDir, a)) ?? a;
+    const bt = runStartedAt(path.join(runsDir, b)) ?? b;
+    const byTime = bt.localeCompare(at);
+    return byTime !== 0 ? byTime : b.localeCompare(a);
+  });
+}
+
 /** Session lookup result from a prior run. */
 export interface RunSession {
   sessionId: string;

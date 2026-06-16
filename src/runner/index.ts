@@ -105,6 +105,8 @@ export {
   outsideMdPath,
   parseFrontmatter,
   resolveAgent,
+  runStartedAt,
+  sortRunIdsNewestFirst,
   stateFilePath,
   validateSlug,
   watermarkPath,

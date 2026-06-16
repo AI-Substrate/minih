@@ -22,4 +22,21 @@
 
 ## T002 — GREEN (D): getUTC* getters + optional `now?` seam
 
-_In progress._
+- `src/runner/folder.ts` `createRunFolder` now takes `opts?: { now?: () => Date }` and uses `getUTC*` getters. Existing single-arg caller compiles unchanged.
+- **GREEN**: both `createRunFolder` tests pass (new UTC instant + existing shape regex). Format + lint clean on touched files.
+- Commit **`8f850ba`** → companion pinged (`review-request: T001/T002 8f850ba`).
+
+## T003 — RED (D): mixed old/new folder chronological sort across all four selectors
+
+- New `test/cli/last-run-history-sort.test.ts` (integration vs dist) seeds a mixed fixture: OLD folder `…13-50…Z` started 03:50 UTC vs NEW `…05-58…Z` started 05:58 UTC — by name OLD sorts first (wrong), by startedAt NEW is newest (right).
+- **RED confirmed** for all three name-sorters: `last-run`, `history`, `companion status` each return `13-50` (stale) instead of `05-58`. (Fixed two fixture issues found via the companion's own RED loop: agent-root prompt.md for resolveAgent; `--json` is unknown to last-run/history but printEnvelope emits JSON regardless.)
+- `test/runner/run-inventory.test.ts` mixed-folder guard → **GREEN** (compareRows already startedAt-primary — confirm-only holds).
+- Finding-01 grep (`Date.parse(...runId)` / `runId.split('T')` / `new Date(...runId)`) → **no functional hit**; no consumer parses a timestamp back out of a name.
+- Also considered `run-inventory.ts listRunDirs:308-326` (sorts by runId) — it's a full enumeration for reconcile (order-independent outcome), NOT a newest-run selector; left unchanged.
+
+## T004 — GREEN (D): startedAt-primary sort across all selectors
+
+- New shared helpers in `src/runner/folder.ts` (exported via `runner/index.ts`): `runStartedAt(runDir)` (run.json → completed.json → null) and `sortRunIdsNewestFirst(runsDir, runIds)` (startedAt-primary, folder-name tie-break/fallback).
+- Wired the three name-sorters to the helper: `last-run.ts`, `history.ts`, `companion.ts latestRunId`. `run-inventory.ts compareRows` left as-is (already correct — confirmed by the guard).
+- **GREEN**: 3 cli sort tests pass; affected suites (folder + run-inventory + companion-status + new sort test) = **75 passed / 0 failed**; tsc + dist build clean. Existing companion-status test still green (no-run.json fixture falls back to name-sort).
+- Anti-reinvention: one helper, three call sites — no duplicated read/sort logic.

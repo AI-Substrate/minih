@@ -21,6 +21,7 @@ import {
   coordinationRunDir,
   coordinationRunLocation,
   deriveCompanionLedger,
+  sortRunIdsNewestFirst,
 } from '../../runner/index.js';
 import {
   ErrorCodes,
@@ -104,7 +105,11 @@ export function registerCompanionCommand(program: Command): void {
     });
 }
 
-/** Newest run id under `agents/<slug>/runs` (lexical sort = chronological). */
+/**
+ * Newest run id under `agents/<slug>/runs`, by recorded startedAt (true UTC) —
+ * NOT a lexical folder-name sort: old folders encode local time mislabeled `Z`
+ * (defect D), so a name sort could return a stale run as "newest".
+ */
 function latestRunId(agentsDir: string, slug: string): string | undefined {
   const runsDir = path.join(agentsDir, slug, 'runs');
   let entries: fs.Dirent[];
@@ -113,10 +118,8 @@ function latestRunId(agentsDir: string, slug: string): string | undefined {
   } catch {
     return undefined;
   }
-  return entries
-    .filter((e) => e.isDirectory())
-    .map((e) => e.name)
-    .sort((a, b) => b.localeCompare(a))[0];
+  const runIds = entries.filter((e) => e.isDirectory()).map((e) => e.name);
+  return sortRunIdsNewestFirst(runsDir, runIds)[0];
 }
 
 function renderLedgerTable(

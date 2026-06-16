@@ -2,7 +2,7 @@
 # the-flow — companion-mode-reliability (plan 028)
 
 **Plan**: companion-mode-reliability · **Mode**: Full · **Phases**: 5 (4 defect-fix + 1 user-added longevity)
-**Rail**: `[the-flow] ◆─◆─◆─[◆─◆─◇─◇─◇]─◇`   ·   **now**: Phase 2 COMPLETE (D/E) — built `--companion`; defect D's sort migration now spans ALL ~11 selectors · **next**: Phase 3 tasks (findings read-path, F)
+**Rail**: `[the-flow] ◆─◆─◆─[◆─◆─◆─◇─◇]─◇`   ·   **now**: Phase 3 COMPLETE (defect F) — `minih companion findings` built `--companion`; 2 companion findings fixed; suite 1408/0 · **next**: Phase 4 tasks (terminal classification G)
 
 ```mermaid
 flowchart TD
@@ -16,7 +16,7 @@ flowchart TD
 
     %% ── spine: spec → plan → 5 build phases → merge ──
     S[Spec]:::done --> PL[Plan]:::done --> P1[Phase 1 · Run-discovery fail-open A/B/C]:::done
-    P1 --> P2[Phase 2 · Identifier & env D/E]:::done --> P3[Phase 3 · Findings read-path F]:::known --> P4[Phase 4 · Terminal classification G]:::known --> P5[Phase 5 · Companion longevity · human gaps]:::known --> M[Merge]:::assumed
+    P1 --> P2[Phase 2 · Identifier & env D/E]:::done --> P3[Phase 3 · Findings read-path F]:::done --> P4[Phase 4 · Terminal classification G]:::known --> P5[Phase 5 · Companion longevity · human gaps]:::known --> M[Merge]:::assumed
 
     %% ── live code-review companions wrapping each built phase (kind:companion, render:wrap) ──
     subgraph CMP1["🤝 code-review-companion (Phase 1 · 0 findings)"]
@@ -24,6 +24,9 @@ flowchart TD
     end
     subgraph CMP2["🤝 code-review-companion (Phase 2 · 2 findings → F001+F002 fixed)"]
         P2
+    end
+    subgraph CMP3["🤝 code-review-companion (Phase 3 · 2 findings → F001+F002 fixed)"]
+        P3
     end
 
     %% ── optional post-spec backpressure survey (offered, not taken — dotted off the spine) ──
@@ -46,10 +49,12 @@ flowchart TD
     UB -.- P1
     UC>"🗣 pleae implemet with companion"]:::said
     UC -.- P2
+    UP3>"🗣 implemtn iwth companin"]:::said
+    UP3 -.- P3
     UP5>"🗣 Add as Phase 5 here"]:::said
     UP5 -.- P5
 ```
 
 **Legend**: 🟩 done · 🟧 in progress · 🟥 blocked · 🟦 known future (designed) · ⬜╴assumed future (dashed) · 🟨 🗣 verbatim user input · 🟪 harness seams (violet — routed via `/eng-harness-flow`)
 
-_Generated from `the-flow.json`. **Phase 1 (run-discovery fail-open, A/B/C) COMPLETE** — 5 commits, suite green. **Phase 2 (identifier & env, D/E) COMPLETE** — built with a live `code-review-companion`, 6 commits, full suite **1404 pass / 0 fail**, tsc clean. Defect **D**: `createRunFolder` emits true-UTC runIds (`getUTC*` + injectable `now?`), and every "newest/latest run" selector now sorts by `startedAt` (true UTC) via the shared `sortRunIdsNewestFirst` helper. The live companion earned its keep: `validate-v2` scoped the sort fix to **4** selectors, but the companion — reviewing each commit — caught that the migration was incomplete (`findRunSession` + a ~7-surface sweep), so on the human's "fix them all" call defect D now closes across **all ~11** latest/default selectors. Defect **E**: `MINIH_PROJECT_ROOT` = resolved git root (was the run dir). Phase-end retro drained 4 entries (incl. the companion's run-selector-audit magicWand). **Next: Phase 3 tasks (findings read-path, F)** — add `minih companion findings` over the existing ledger; then 4–5, then merge._
+_Generated from `the-flow.json`. **Phase 1 (A/B/C) COMPLETE** — 5 commits, suite green. **Phase 2 (D/E) COMPLETE** — built with a live `code-review-companion`, 6 commits, full suite **1404 pass / 0 fail**; defect **D** (true-UTC runId + `startedAt`-primary sort across all ~11 selectors — the companion caught the migration was incomplete beyond the 4 named) and **E** (`MINIH_PROJECT_ROOT` = resolved git root) closed. **Phase 3 (findings read-path, F) COMPLETE** — built with a live `code-review-companion` (cmp3), 5 commits, full suite **1408 pass / 0 fail**, `tsc` clean, `minih doctor` 0 failures. `minih companion findings <slug>` reads a companion's findings + summary over the lane-agnostic `deriveCompanionLedger().findings` + `buildDraftFarewell` (no new ledger API); `outside.md`, `docs/how/companion-mode.md` (§3a), and `AGENTS_README.md` corrected to that read-path. The live companion raised **2 MEDIUM** contract-drift findings (F001/F002 — adjacent guides still taught `cat report.json`); both fixed. **Dogfood moment**: `minih companion findings` (the command this phase built) surfaced 2 findings + 4 summaries that a raw inbox-lane `jq` skim reported as 0 — defect F reproduced and fixed in the same session. Phase-end retro drained 2 entries (DL-001 a pre-commit doc-budget sensor, MW-001 a companion contract-drift sweep). **Next: Phase 4 tasks** (terminal classification G); then Phase 5, merge._

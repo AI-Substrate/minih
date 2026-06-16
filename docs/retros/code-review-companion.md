@@ -324,3 +324,13 @@
 - **magicWand** (target: coordination): Add a lane-agnostic `minih companion open-findings <slug> --run <runId>` command that lists unresolved findings and whether later commits addressed them, so final drain reviews do not rely on the companion remembering prior inbox messages.
 - difficulties:
   - [degrading] test: Harness/phase evidence around lint was inconsistent: the phase log called the lint failure a missing Biome install, but `npx biome check .` ran and reported concrete format/lint failures. (workaround: Ran `npx biome check .` directly and carried the mismatch as review finding F001.)
+
+## 2026-06-16T06:42:28.440Z — code-review-companion / 2026-06-16T15-58-44-285Z-573c
+
+- runId: 2026-06-16T15-58-44-285Z-573c
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-06-16T15-58-44-285Z-573c
+- summary: Reviewed Phase 2 companion-mode reliability commits for true-UTC runId generation, startedAt-primary run sorting, and MINIH_PROJECT_ROOT correctness. I approved the UTC runId production change, flagged and saw fixed the TZ test-restore issue, found a HIGH central run-selector drift in findRunSession that was fixed, approved the MINIH_PROJECT_ROOT git-root change, and left the broader default/latest selector sweep as an explicit follow-up/scope decision rather than silently treating it as complete.
+- **magicWand** (target: project): Add a single run-selector audit fixture/command that seeds mixed old-local-Z and new true-UTC run folders and exercises every default/latest run selector automatically.
+- difficulties:
+  - [degrading] knowledge: The active plan scoped the run-sort migration to four selectors, but repo search found additional default/latest selectors with the same mixed-folder risk, forcing a manual scope decision during review. (workaround: Reported the central shared-resolver path as a HIGH finding and explicitly separated the broader selector sweep as a follow-up/scope decision.)
+  - [annoying] test: The documented Vitest command style did not support the Jest-style --runInBand flag I first tried during review. (workaround: Reran the targeted test with the repository-documented npx vitest run invocation.)

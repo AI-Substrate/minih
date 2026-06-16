@@ -34,6 +34,31 @@
 - Finding-01 grep (`Date.parse(...runId)` / `runId.split('T')` / `new Date(...runId)`) → **no functional hit**; no consumer parses a timestamp back out of a name.
 - Also considered `run-inventory.ts listRunDirs:308-326` (sorts by runId) — it's a full enumeration for reconcile (order-independent outcome), NOT a newest-run selector; left unchanged.
 
+## Companion review — findings reconciliation
+
+The live `code-review-companion` reviewed all three commits (per-commit summaries: T001/T002 **APPROVE_WITH_NOTES**, T003/T004 **REQUEST_CHANGES**, T005/T006 **APPROVE**) and sent 2 findings + a drain CONCERNS summary:
+
+| ID | Sev | File | Issue | Disposition |
+|----|-----|------|-------|-------------|
+| F001 | MEDIUM | `test/runner/folder.test.ts` | New UTC test restored an originally-unset `TZ` by assigning `undefined` → `TZ="undefined"`, leaking a mutated env to later tests in the worker. | **Fixed** `a143ec4` — explicit `delete` branch. |
+| F002 | HIGH | `src/runner/folder.ts` + sweep | Sort migration **incomplete**: `findRunSession()` (session-resume latest, delegated to by `run-resolver`) + other default/latest surfaces (`coordination.ts:226`, `harvest.ts:108`, `validate.ts:73`, `--latest` active-candidate sorts in `status/tail/view/connect`, `listRunDirs`) still sort by folder name/runId — a stale old-local-`Z` folder can still win during the mixed window. | **Central fixed** `a143ec4` — `findRunSession` routed through `sortRunIdsNewestFirst` + regression. **Broader sweep surfaced to the human as a scope decision** (beyond the validated 4-selector dossier). |
+
+This is the dogfooding payoff: validate-v2 caught `companion latestRunId` (a 4th selector); the live companion caught `findRunSession` (a 5th, more central) **and** a ~7-surface sweep that static validation missed.
+
+**Human decision: "fix them all now."** The full sweep landed in `e163ba1`:
+- `listActiveRunCandidates` (run-resolver) now returns candidates newest-first by `startedAt`; the four `--latest` active-run tie-breaks (`status`/`view`/`connect`/`tail`) drop their redundant runId re-sort and trust the source order.
+- `coordination`, `harvest`, `validate` route through the shared `sortRunIdsNewestFirst`.
+- New regression: `listActiveRunCandidates` ordering (run-resolver.test.ts).
+- **Defect D now closes across all ~11 latest/default run selectors.**
+
+**Companion debrief**: the `code-review-companion` run ended on its own (idle timeout → `completed`, `result: degraded` only because its farewell `findings[]` used `file` instead of an `id` field — a companion-output schema nit, not a code issue). Farewell verdict matched: approved UTC runId + MINIH_PROJECT_ROOT, flagged+saw-fixed the TZ test issue and the `findRunSession` HIGH, left the sweep as a scope decision. magicWand → captured as MW-001.
+
+**Phase-end harness seam**: drained 4 observations → `.harness/records/retro/2026-06-16/002-028-companion-mode-reliability-phase-2.md` (INS-001 encoded by `8f850ba`; INS-002 companion-caught-the-gap; MW-001 run-selector audit-fixture; DL-001 scope-completeness lesson).
+
+## Phase 2 — COMPLETE
+
+8 tasks (T000–T0z) + the companion sweep. **Full suite 1404 pass / 16 skip / 0 fail; tsc clean.** Commits: `8f850ba` (D UTC runId), `4f5164c` (D 4-selector sort), `d9d336e` (E project-root), `72609ee` (docs), `a143ec4` (F001/F002-central), `e163ba1` (F002 sweep). Defects D + E closed; defect D's sort migration complete across all ~11 selectors.
+
 ## T005 — RED (E) / T006 — GREEN (E): MINIH_PROJECT_ROOT = resolved git root
 
 - **T005 RED** (`test/runner/runner.test.ts`): fake repo with `.git`, `config.cwd` = a deep run-dir-like subdir; capture `process.env.MINIH_PROJECT_ROOT` via `onEvent`; assert it equals `realpath(repoRoot)`. RED confirmed (captured the run-dir cwd, not the git root).

@@ -2,7 +2,7 @@
 # the-flow — companion-mode-reliability (plan 028)
 
 **Plan**: companion-mode-reliability · **Mode**: Full · **Phases**: 5 (4 defect-fix + 1 user-added longevity)
-**Rail**: `[the-flow] ◆─◆─◆─[◆─◐─◇─◇─◇]─◇`   ·   **now**: Phase 1 COMPLETE (A/B/C) — 5 commits, 1396 tests pass, built with a live companion · **next**: Phase 2 tasks (D/E)
+**Rail**: `[the-flow] ◆─◆─◆─[◆─◆─◇─◇─◇]─◇`   ·   **now**: Phase 2 COMPLETE (D/E) — built `--companion`; defect D's sort migration now spans ALL ~11 selectors · **next**: Phase 3 tasks (findings read-path, F)
 
 ```mermaid
 flowchart TD
@@ -16,11 +16,14 @@ flowchart TD
 
     %% ── spine: spec → plan → 5 build phases → merge ──
     S[Spec]:::done --> PL[Plan]:::done --> P1[Phase 1 · Run-discovery fail-open A/B/C]:::done
-    P1 --> P2[Phase 2 · Identifier & env D/E]:::known --> P3[Phase 3 · Findings read-path F]:::known --> P4[Phase 4 · Terminal classification G]:::known --> P5[Phase 5 · Companion longevity · human gaps]:::known --> M[Merge]:::assumed
+    P1 --> P2[Phase 2 · Identifier & env D/E]:::done --> P3[Phase 3 · Findings read-path F]:::known --> P4[Phase 4 · Terminal classification G]:::known --> P5[Phase 5 · Companion longevity · human gaps]:::known --> M[Merge]:::assumed
 
-    %% ── live code-review companion wrapping Phase 1 (kind:companion, render:wrap) ──
-    subgraph CMP1["🤝 code-review-companion (Power-On · per-commit review)"]
+    %% ── live code-review companions wrapping each built phase (kind:companion, render:wrap) ──
+    subgraph CMP1["🤝 code-review-companion (Phase 1 · 0 findings)"]
         P1
+    end
+    subgraph CMP2["🤝 code-review-companion (Phase 2 · 2 findings → F001+F002 fixed)"]
+        P2
     end
 
     %% ── optional post-spec backpressure survey (offered, not taken — dotted off the spine) ──
@@ -39,14 +42,14 @@ flowchart TD
     US -.- S
     UW>"🗣 yeah do workshops please."]:::said
     UW -.- W1
-    UC>"🗣 implement with companion"]:::said
-    UC -.- PL
-    UP5>"🗣 Add as Phase 5 here"]:::said
-    UP5 -.- P5
     UB>"🗣 kick off the build with companion pleae"]:::said
     UB -.- P1
+    UC>"🗣 pleae implemet with companion"]:::said
+    UC -.- P2
+    UP5>"🗣 Add as Phase 5 here"]:::said
+    UP5 -.- P5
 ```
 
 **Legend**: 🟩 done · 🟧 in progress · 🟥 blocked · 🟦 known future (designed) · ⬜╴assumed future (dashed) · 🟨 🗣 verbatim user input · 🟪 harness seams (violet — routed via `/eng-harness-flow`)
 
-_Generated from `the-flow.json`. **Plan written and validated** (Status READY; all 5 phases passed thesis-aware multi-agent review against source, v1.1.1 folded in the fixes). **Phase 1 (run-discovery fail-open, A/B/C) is COMPLETE** — 5 commits on branch `028-companion-mode-reliability`, full suite **1396 pass / 0 fail**, `tsc` clean. Defect **A**: `computeStatusVerdict` fails open for a live-pid run (`status.ts`). Defect **B**: `runs list --all` wired (was a no-op) + best-effort heal-on-read of dead-pid orphans (`run-inventory.ts`). Defect **C**: AC-C fallback — the literal symptom is emitted by no core surface, so a `resolveAgent↔listAgents` parity lock + documented finding. Built with a **live `code-review-companion`** (briefed once, pinged per commit, 0 findings) and the **harness loop** (boot seam → friction capture → phase-end retro). **Next: Phase 2 tasks (Identifier & env, D/E)**, then 3–5, then merge._
+_Generated from `the-flow.json`. **Phase 1 (run-discovery fail-open, A/B/C) COMPLETE** — 5 commits, suite green. **Phase 2 (identifier & env, D/E) COMPLETE** — built with a live `code-review-companion`, 6 commits, full suite **1404 pass / 0 fail**, tsc clean. Defect **D**: `createRunFolder` emits true-UTC runIds (`getUTC*` + injectable `now?`), and every "newest/latest run" selector now sorts by `startedAt` (true UTC) via the shared `sortRunIdsNewestFirst` helper. The live companion earned its keep: `validate-v2` scoped the sort fix to **4** selectors, but the companion — reviewing each commit — caught that the migration was incomplete (`findRunSession` + a ~7-surface sweep), so on the human's "fix them all" call defect D now closes across **all ~11** latest/default selectors. Defect **E**: `MINIH_PROJECT_ROOT` = resolved git root (was the run dir). Phase-end retro drained 4 entries (incl. the companion's run-selector-audit magicWand). **Next: Phase 3 tasks (findings read-path, F)** — add `minih companion findings` over the existing ledger; then 4–5, then merge._

@@ -4,11 +4,11 @@
   "plan_dir": "docs/plans/028-companion-mode-reliability",
   "mode": "Full",
   "current_stage": "awaiting-6",
-  "pending_command": "/the-flow 5 tasks --phase \"Phase 2: Identifier & env correctness (D/E)\" --plan docs/plans/028-companion-mode-reliability/companion-mode-reliability-plan.md",
+  "pending_command": "/the-flow 5 tasks --phase \"Phase 3: Findings read-path (F)\" --plan docs/plans/028-companion-mode-reliability/companion-mode-reliability-plan.md",
   "intent": "Fix the companion-mode reliability defects from issue #50 (minih v0.2.1): orchestrator blind to a live run during its active window (A/B/C), local-time run IDs mislabeled Z (D), child MINIH_PROJECT_ROOT points at the run dir (E), inside-lane findings invisible to the documented operator read-path (F), clean runs misclassified as failed/degraded (G).",
   "milestones_total": 9,
-  "milestones_done": 4,
-  "last_checkpoint_at": "2026-06-16T04:21:50Z",
+  "milestones_done": 5,
+  "last_checkpoint_at": "2026-06-16T06:55:30Z",
   "compacted_seams": [],
   "status": "active"
 }

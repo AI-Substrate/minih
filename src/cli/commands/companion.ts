@@ -103,6 +103,73 @@ export function registerCompanionCommand(program: Command): void {
         }),
       );
     });
+
+  companion
+    .command('findings <slug>')
+    .description(
+      "Show a companion run's structured findings + summary regardless of inbox lane (#50 F)",
+    )
+    .option(
+      '--run <id>',
+      'Target run id (default: the most recent run for the slug)',
+    )
+    .option('--json', 'Emit only the JSON envelope (suppress the human table)')
+    .action((slug: string, opts: StatusOpts) => {
+      const agentsDir: string = program.opts().agentsDir ?? 'agents';
+
+      const runId = opts.run ?? latestRunId(agentsDir, slug);
+      if (!runId) {
+        exitWithEnvelope(
+          formatError(
+            'companion.findings',
+            ErrorCodes.RUN_NOT_FOUND,
+            `No runs found for companion "${slug}" under ${agentsDir}.`,
+          ),
+        );
+      }
+
+      const location = coordinationRunLocation(slug, agentsDir, runId);
+      if (!fs.existsSync(coordinationRunDir(location))) {
+        exitWithEnvelope(
+          formatError(
+            'companion.findings',
+            ErrorCodes.RUN_NOT_FOUND,
+            `Run "${slug}/${runId}" not found.`,
+          ),
+        );
+      }
+
+      let ledger: CompanionLedger;
+      try {
+        ledger = deriveCompanionLedger(location);
+      } catch (err) {
+        if (err instanceof CompanionLedgerError) {
+          exitWithEnvelope(
+            formatError(
+              'companion.findings',
+              ErrorCodes.INBOX_CORRUPT,
+              err.message,
+            ),
+          );
+        }
+        throw err;
+      }
+
+      // Summary CONTENT lives in the draft farewell (the ledger exposes only the
+      // count); emit both so AC-F's "finding AND summary" holds with no new API.
+      const draftFarewell = buildDraftFarewell(ledger);
+      if (!opts.json) renderFindingsTable(slug, runId, ledger);
+
+      exitWithEnvelope(
+        formatSuccess('companion.findings', {
+          slug,
+          runId,
+          findings: ledger.findings,
+          summariesCount: ledger.summariesCount,
+          draftFarewell,
+        }),
+      );
+    });
 }
 
 /**
@@ -144,4 +211,31 @@ function renderLedgerTable(
     ['Idle', ledger.idleElapsedMs === null ? '—' : `${ledger.idleElapsedMs}ms`],
   );
   process.stderr.write(`\n${table.toString()}\n`);
+}
+
+function renderFindingsTable(
+  slug: string,
+  runId: string,
+  ledger: CompanionLedger,
+): void {
+  if (!process.stderr.isTTY) return;
+  const table = new Table({
+    head: ['Severity', 'File', 'Category', 'Recommendation'],
+    style: { head: [], border: [] },
+  });
+  if (ledger.findings.length === 0) {
+    table.push(['—', '—', '—', 'no structured findings']);
+  } else {
+    for (const f of ledger.findings) {
+      table.push([
+        f.severity,
+        f.file || '—',
+        f.category || '—',
+        f.recommendation || '—',
+      ]);
+    }
+  }
+  process.stderr.write(
+    `\n${slug} / ${runId} — ${ledger.findingsCount} finding message(s), ${ledger.summariesCount} summary(ies)\n${table.toString()}\n`,
+  );
 }

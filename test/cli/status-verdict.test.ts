@@ -372,3 +372,54 @@ describe('TTY verdict arms (T004)', () => {
     }
   });
 });
+
+// Plan 028 Phase 1 (defect A) — a freshly-booted live-pid run in an ACTIVE
+// status with a fresh `updatedAt` is `active` even before events.ndjson exists.
+// Today computeStatusVerdict falls to `unknown` here: the pid probe sets the
+// diagnostic fields then falls through to the events.ndjson mtime path. The fix
+// mirrors the resolver/inventory predicate (run-inventory.ts:204) — freshness
+// from manifest.updatedAt — while keeping events.ndjson mtime as a tie-break so
+// a stale updatedAt never overrides a genuinely fresh events log.
+describe('computeStatusVerdict — defect A: live-pid fail-open (plan 028)', () => {
+  const ACTIVE_AT = '2026-06-11T10:00:00.000Z';
+  const within = () => Date.parse('2026-06-11T10:00:30.000Z'); // +30s, < 60s
+  const beyond = () => Date.parse('2026-06-11T10:02:00.000Z'); // +120s, > 60s
+
+  it('live pid + status:active + fresh updatedAt + NO events.ndjson → active', () => {
+    const runDir = makeRunDir();
+    writeRunJson(runDir, { status: 'active', updatedAt: ACTIVE_AT });
+    // intentionally no events.ndjson — the defect-A boot window
+    expect(
+      computeStatusVerdict(runDir, { isProcessAlive: () => true, now: within })
+        .verdict,
+    ).toBe('active');
+  });
+
+  it('live pid + status:starting + fresh updatedAt + NO events.ndjson → active', () => {
+    const runDir = makeRunDir();
+    writeRunJson(runDir, { status: 'starting', updatedAt: ACTIVE_AT });
+    expect(
+      computeStatusVerdict(runDir, { isProcessAlive: () => true, now: within })
+        .verdict,
+    ).toBe('active');
+  });
+
+  it('live pid + ACTIVE status + STALE updatedAt + NO events.ndjson → stale (not unknown)', () => {
+    const runDir = makeRunDir();
+    writeRunJson(runDir, { status: 'active', updatedAt: ACTIVE_AT });
+    expect(
+      computeStatusVerdict(runDir, { isProcessAlive: () => true, now: beyond })
+        .verdict,
+    ).toBe('stale');
+  });
+
+  it('a fresh events.ndjson still yields active even when updatedAt is stale (tie-break preserved)', () => {
+    const runDir = makeRunDir();
+    writeRunJson(runDir, { status: 'active', updatedAt: ACTIVE_AT });
+    writeEvents(runDir);
+    // real now ≫ updatedAt, but the fresh events log carries the verdict
+    expect(
+      computeStatusVerdict(runDir, { isProcessAlive: () => true }).verdict,
+    ).toBe('active');
+  });
+});

@@ -31,3 +31,16 @@
 4. `resolveAgent(slug, agentsDir)` (`folder.ts:733-739`) is literally `listAgents(agentsDir).find(a => a.slug === slug) ?? null`. `history.ts:32` and `last-run.ts:31` both call it → **they already resolve exactly what `minih list` resolves**. `E121 AGENT_NOT_FOUND` only fires for an agent that is genuinely unlistable (no `prompt.md`, empty `description`, `_`-prefixed, or invalid slug).
 
 **Decision (AC-C fallback, per Finding 05)**: the literal defect-C symptom is **not reproducible against current core** — it is external/older-build. C is satisfied by (a) a **characterization test** locking `history`/`last-run` ↔ `list` resolution consistency (no future divergence), and (b) this documented finding. **No core production edit** for the C symptom. (Note: `history.ts:53` / `last-run.ts:58` sort run dirs by `.name` — that's defect D, owned by Phase 2 task 2.4, not touched here.)
+
+### T002/T003 — Defect A: live-pid fail-open ✅ (commit pending)
+
+**RED**: added a 4-case block to `test/cli/status-verdict.test.ts`. `npx vitest run -t "defect A"` → 3 fail (`expected 'unknown' to be 'active'`/`'stale'`), 1 pass (tie-break guard). The pid probe set the diagnostic fields then fell through to the events.ndjson path, hitting `unknown` at `status.ts:216`.
+
+**GREEN**: in `computeStatusVerdict`, after the pid-alive gate, added an `ACTIVE_STATUSES` fail-open branch keyed on `manifest.updatedAt` freshness (mirrors `run-inventory.ts:204`):
+- fresh `updatedAt` (`now()-updated < 60s`) → `active` (defect A, even with no events.ndjson);
+- stale `updatedAt` + no events.ndjson → `stale` (was `unknown`);
+- stale `updatedAt` + events.ndjson present → fall through to the existing mtime tie-break (so a fresh events log still wins).
+Added a local `ACTIVE_STATUSES = {starting, active, completing}` (mirrors the two existing private copies in `run-inventory.ts:16` / `run-resolver.ts:38`; `idle` excluded).
+**Result**: `npx vitest run test/cli/status-verdict.test.ts` → **31/31 green**, no regressions. AC-A satisfied at the unit level.
+
+**Debt note** (retro candidate): `ACTIVE_STATUSES` now exists in **three** private copies (run-inventory, run-resolver, status). Consistent with the existing pattern, but a future refactor could hoist one shared exported constant.

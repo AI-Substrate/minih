@@ -87,6 +87,16 @@ export type StatusVerdict =
 /** Manifest statuses that claim a live process — the only ones worth probing. */
 const PROBE_STATUSES = new Set(['starting', 'active', 'idle', 'completing']);
 
+/**
+ * Plan 028 (defect A) — the subset of {@link PROBE_STATUSES} that counts as
+ * "active" for fail-open. Mirrors the canonical resolver/inventory predicate
+ * (`run-inventory.ts:16`, `run-resolver.ts:38`): a live-pid run in one of these
+ * is `active` as soon as it boots — decided by `updatedAt` freshness, before any
+ * `events.ndjson` exists. `idle` is deliberately excluded (an idle run is quiet;
+ * the events.ndjson tie-break decides it).
+ */
+const ACTIVE_STATUSES = new Set(['starting', 'active', 'completing']);
+
 /** Injection seams for the verdict computation (plan 025 T002, FX009-2). */
 export interface StatusVerdictDeps {
   /** Inject the pid-liveness probe. Defaults to the shared runner probe. */
@@ -198,6 +208,24 @@ export function computeStatusVerdict(
         probe = { pid: manifest.pid, pidAlive, lastEventAt };
         if (!pidAlive) {
           return { verdict: 'dead', ...probe };
+        }
+        // Plan 028 (defect A) — a live-pid run in an ACTIVE status is `active`
+        // the moment it boots, before any events.ndjson exists. Decide from
+        // `manifest.updatedAt` freshness (the resolver/inventory predicate);
+        // events.ndjson mtime stays a tie-break so a stale updatedAt never
+        // overrides a genuinely fresh events log.
+        if (ACTIVE_STATUSES.has(manifest.status)) {
+          const updated = Date.parse(manifest.updatedAt);
+          if (Number.isFinite(updated)) {
+            if (now() - updated < STALE_THRESHOLD_MS) {
+              return { verdict: 'active', ...probe };
+            }
+            // updatedAt present but stale: with no events.ndjson to consult the
+            // run is genuinely quiet → stale (not unknown).
+            if (!fs.existsSync(eventsPath)) {
+              return { verdict: 'stale', ...probe };
+            }
+          }
         }
       }
     } catch {

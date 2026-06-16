@@ -200,3 +200,64 @@ describe('terminal classification — clean reasons render non-red (T005/T006)',
     }
   });
 });
+
+describe('terminal classification — operator-stop reconcile (T007)', () => {
+  it('honours an operator-stop marker fixture: reconciles to completed, preserves the reason', async () => {
+    // Hand-written marker — the `minih stop` producer is out of scope (028
+    // lands the union member + reconcile honouring only; producer is follow-up).
+    const runDir = await seedReconcileRun(
+      'operator-stopped',
+      '2026-06-16T00-00-00-000Z-c',
+      { status: 'idle', pid: 999997, terminalReason: 'operator-stop' },
+    );
+
+    const report = await reconcileRuns({
+      agentsDir: tmpDir,
+      isProcessAlive: () => false,
+    });
+
+    const manifest = readManifest(runDir);
+    expect(manifest.status).toBe('completed');
+    // The clean reason is preserved, never overwritten to pid-vanished.
+    expect(manifest.terminalReason).toBe('operator-stop');
+    expect(report.healed).toEqual([]);
+    expect(report.reconciledClean.map((r) => r.runId)).toContain(
+      '2026-06-16T00-00-00-000Z-c',
+    );
+  });
+});
+
+describe('028 ↔ #49 boundary — recordable, not triggered (T008)', () => {
+  // 028 lands the VOCABULARY + write path. #49 wires `evaluateIdlePolicy`
+  // (dead code today, Finding 09). These tests assert the union members are
+  // RECORDABLE and round-trip — NONE asserts the runner triggers an idle
+  // stand-down (that arm is #49 / Phase 5 task 5.5).
+  it('the clean reasons are recordable on a manifest and round-trip', async () => {
+    for (const reason of [
+      'operator-stop',
+      'idle-budget',
+      'no-engagement',
+    ] as const) {
+      const runDir = await seedReconcileRun(
+        `recordable-${reason}`,
+        '2026-06-16T00-00-00-000Z-r',
+        { status: 'completed', pid: 1, terminalReason: reason },
+      );
+      expect(readManifest(runDir).terminalReason).toBe(reason);
+    }
+  });
+
+  it('reason-spelling map: idle-policy emits underscore, the union uses hyphen', () => {
+    // idle-policy.ts (#49's input) emits `idle_budget` / `no_engagement`;
+    // this union uses `idle-budget` / `no-engagement` (consistent with the
+    // sibling reasons `pid-vanished` / `stalled-stream`). #49 maps across.
+    const exitToTerminal: Record<string, string> = {
+      idle_budget: 'idle-budget',
+      no_engagement: 'no-engagement',
+    };
+    for (const [exitReason, terminalReason] of Object.entries(exitToTerminal)) {
+      expect(exitReason.replace('_', '-')).toBe(terminalReason);
+      expect(isCleanTerminalReason(terminalReason)).toBe(true);
+    }
+  });
+});

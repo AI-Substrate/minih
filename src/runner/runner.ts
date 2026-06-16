@@ -44,8 +44,8 @@ import {
   fireTerminalDenial,
   minihReleaseDefault,
   type PermissionPolicy,
-  resolveDefaultAllowedRoots,
   type ResolvedPolicy,
+  resolveDefaultAllowedRoots,
 } from './permissions/index.js';
 import { buildInsidePreamble } from './preamble-builder.js';
 import {

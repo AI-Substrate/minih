@@ -34,6 +34,13 @@
 - Finding-01 grep (`Date.parse(...runId)` / `runId.split('T')` / `new Date(...runId)`) → **no functional hit**; no consumer parses a timestamp back out of a name.
 - Also considered `run-inventory.ts listRunDirs:308-326` (sorts by runId) — it's a full enumeration for reconcile (order-independent outcome), NOT a newest-run selector; left unchanged.
 
+## T005 — RED (E) / T006 — GREEN (E): MINIH_PROJECT_ROOT = resolved git root
+
+- **T005 RED** (`test/runner/runner.test.ts`): fake repo with `.git`, `config.cwd` = a deep run-dir-like subdir; capture `process.env.MINIH_PROJECT_ROOT` via `onEvent`; assert it equals `realpath(repoRoot)`. RED confirmed (captured the run-dir cwd, not the git root).
+- **T006 GREEN** (`src/runner/runner.ts:631`): `MINIH_PROJECT_ROOT = resolveDefaultAllowedRoots(config.cwd ?? process.cwd()).roots[0]` (imported from `./permissions/index.js`). GREEN; env regression suite still green.
+- Verify (concrete): no reader assumes depth/child-of-cwd — `inspect.ts:206` computes its OWN repoRoot (doesn't read the env var); `shared-preamble.md` only documents it; no `path.relative`/`path.resolve` against it. fs-guard permission boundaries unchanged (child re-derives roots from cwd).
+- Commit pending in this batch.
+
 ## T004 — GREEN (D): startedAt-primary sort across all selectors
 
 - New shared helpers in `src/runner/folder.ts` (exported via `runner/index.ts`): `runStartedAt(runDir)` (run.json → completed.json → null) and `sortRunIdsNewestFirst(runsDir, runIds)` (startedAt-primary, folder-name tie-break/fallback).

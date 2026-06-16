@@ -44,6 +44,7 @@ import {
   fireTerminalDenial,
   minihReleaseDefault,
   type PermissionPolicy,
+  resolveDefaultAllowedRoots,
   type ResolvedPolicy,
 } from './permissions/index.js';
 import { buildInsidePreamble } from './preamble-builder.js';
@@ -628,7 +629,14 @@ export async function runAgent(
     process.env.MINIH_RUN_DIR = runDir;
     process.env.MINIH_OUTPUT_PATH = outputPath;
     process.env.MINIH_AGENTS_DIR = resolvedAgentsDir;
-    process.env.MINIH_PROJECT_ROOT = config.cwd ?? process.cwd();
+    // The project root is the resolved git root, NOT config.cwd: a spawned
+    // companion's cwd IS its run dir, so config.cwd would point the child at
+    // its own run folder. resolveDefaultAllowedRoots walks up to .git and
+    // realpaths it (cwd-fallback when there is no repo). Informational only —
+    // fs-guard permission boundaries are derived separately (defect E).
+    process.env.MINIH_PROJECT_ROOT = resolveDefaultAllowedRoots(
+      config.cwd ?? process.cwd(),
+    ).roots[0];
     process.env.MINIH_MODEL = config.model ?? '';
     process.env.MINIH_TIMEOUT = String(config.timeout ?? 300);
     process.env.MINIH_SCHEMA_PATH = definition.schemaPath ?? '';

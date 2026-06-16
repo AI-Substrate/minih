@@ -19,7 +19,11 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { writeFileAtomicAsync } from './atomic-write.js';
 import { ManifestSchemaVersionError } from './human-view-errors.js';
-import { DEFAULT_IDLE_BUDGET_MS, type LiveRunManifest } from './types.js';
+import {
+  DEFAULT_IDLE_BUDGET_MS,
+  type LiveRunManifest,
+  SURVIVE_GAPS_HEARTBEAT_INTERVAL_MS,
+} from './types.js';
 
 const MANIFEST_FILENAME = 'run.json';
 const SUPPORTED_SCHEMA_VERSION = 1 as const;
@@ -156,6 +160,48 @@ export async function flushThrottled(runDir: string): Promise<void> {
     state.timer = null;
   }
   await enqueueManifestWrite(runDir, () => applyPatch(runDir, patch));
+}
+
+/**
+ * Plan 028 Phase 5 (#50 follow-up) — opt-in survive-gaps heartbeat.
+ *
+ * Starts a timer that bumps `run.json.updatedAt` (via {@link updateManifest},
+ * which always re-stamps `updatedAt` on apply) on a cadence that beats the 60s
+ * run-active staleness window — so a survive-gaps companion waiting quietly
+ * through a long human gap keeps satisfying the Phase-1 active predicate
+ * (pid-alive ∧ recent `updatedAt`) instead of being read as `stale`.
+ *
+ * Decoupled from the stall watchdog BY CONSTRUCTION: this module has no access
+ * to `resetStallDeadline` (runner.ts) — it only writes the manifest. The
+ * provider-event-driven watchdog stays the progress guard and the wall-clock
+ * timeout stays the backstop (Finding 11: a heartbeat proves the process is
+ * alive, not that the agent is progressing). Opt-in — the runner starts one
+ * only when `config.surviveGaps` is set, so default runs keep the strict
+ * freshness signal plan 026 relies on.
+ *
+ * @returns a stop function — call it on terminal/cleanup to clear the timer.
+ */
+export function startManifestHeartbeat(
+  runDir: string,
+  intervalMs: number = SURVIVE_GAPS_HEARTBEAT_INTERVAL_MS,
+): () => void {
+  const timer = setInterval(() => {
+    void updateManifest(runDir, {
+      updatedAt: new Date().toISOString(),
+    }).catch((err: unknown) => {
+      // A torn/absent manifest is already a silent no-op in applyPatch; any
+      // other fault is genuine — surface it without killing the run's hot path.
+      queueMicrotask(() => {
+        throw err instanceof Error ? err : new Error(String(err));
+      });
+    });
+  }, intervalMs);
+  // Never hold the process open on the heartbeat alone — the run lifecycle owns
+  // liveness (mirrors the watchdog/timeout handles cleared in runner.ts).
+  timer.unref?.();
+  return () => {
+    clearInterval(timer);
+  };
 }
 
 async function enqueueManifestWrite(

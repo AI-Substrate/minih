@@ -56,6 +56,7 @@ import {
 } from './retro-ledger.js';
 import {
   flushThrottled as flushManifestThrottled,
+  startManifestHeartbeat,
   updateManifest,
   writeManifest,
 } from './run-manifest.js';
@@ -1168,6 +1169,15 @@ export async function runAgent(
     };
 
     let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    // Plan 028 Phase 5 (#50 follow-up) — opt-in survive-gaps heartbeat. Bumps
+    // run.json.updatedAt independent of provider events so a quietly-waiting
+    // survive-gaps companion keeps reading `active` across long human gaps.
+    // Decoupled from resetStallDeadline by construction (the factory only
+    // writes the manifest); cleared in the finally below alongside the
+    // watchdog/timeout handles. Default runs start none (opt-in).
+    const stopHeartbeat = config.surviveGaps
+      ? startManifestHeartbeat(runDir, config.heartbeatIntervalMs)
+      : undefined;
     try {
       // MCP config resolution:
       // - Explicit mcpServers (from --mcp-config): use directly
@@ -1378,6 +1388,7 @@ export async function runAgent(
     } finally {
       if (timeoutHandle) clearTimeout(timeoutHandle);
       if (stallHandle) clearTimeout(stallHandle);
+      stopHeartbeat?.();
       closeForwarders();
     }
 

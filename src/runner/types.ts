@@ -69,6 +69,16 @@ export const DEFAULT_STALL_TIMEOUT_SEC = 300;
  */
 export const DEFAULT_IDLE_BUDGET_MS = 1_800_000;
 
+/**
+ * Plan 028 Phase 5 (#50 follow-up) — survive-gaps heartbeat interval in ms.
+ * The opt-in heartbeat bumps `run.json.updatedAt` on this cadence so a quietly
+ * waiting survive-gaps companion keeps reading `active` (Phase-1 predicate:
+ * pid-alive ∧ updatedAt < 60s). Must comfortably beat the hardcoded 60s
+ * staleness window (`status.ts` / `run-inventory.ts` / `run-resolver.ts`):
+ * 20s is a 3× margin. Internal-only; tests pass a tiny interval explicitly.
+ */
+export const SURVIVE_GAPS_HEARTBEAT_INTERVAL_MS = 20_000;
+
 /** Configuration for a single agent run. */
 export interface AgentRunConfig {
   slug: string;
@@ -93,6 +103,23 @@ export interface AgentRunConfig {
    * production uses the default.
    */
   cleanupGraceMs?: number;
+  /**
+   * Plan 028 Phase 5 (#50 follow-up) — survive-gaps profile switch. When true,
+   * the runner starts an opt-in manifest heartbeat that bumps
+   * `run.json.updatedAt` independent of provider events, so the run keeps
+   * reading `active` through long human-in-the-loop gaps. Unset/false = no
+   * heartbeat: the strict Phase-1 `updatedAt`-staleness signal (plan 026) is
+   * preserved. The event-based stall watchdog is unaffected either way — the
+   * heartbeat never resets it (Finding 11: it proves the process is alive, not
+   * that the agent is progressing).
+   */
+  surviveGaps?: boolean;
+  /**
+   * Plan 028 Phase 5 — heartbeat interval (ms) override. Internal test seam
+   * only (mirrors `cleanupGraceMs`); production uses
+   * {@link SURVIVE_GAPS_HEARTBEAT_INTERVAL_MS}.
+   */
+  heartbeatIntervalMs?: number;
   cwd?: string;
   params?: Record<string, unknown>;
   /** Session ID to resume — if set, uses resumeSession() instead of createSession() */

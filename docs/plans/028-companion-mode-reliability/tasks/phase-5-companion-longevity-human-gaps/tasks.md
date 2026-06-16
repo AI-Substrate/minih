@@ -98,8 +98,8 @@ flowchart TD
     classDef completed fill:#4CAF50,stroke:#388E3C,color:#fff
 
     subgraph P5a["Phase 5a — build-ready"]
-        T001["T001 RED: heartbeat advances updatedAt"]:::pending
-        T002["T002 GREEN: opt-in heartbeat timer"]:::pending
+        T001["T001 RED: heartbeat advances updatedAt"]:::completed
+        T002["T002 GREEN: opt-in heartbeat timer"]:::completed
         T003["T003 RED: survive-gaps ceilings"]:::pending
         T004["T004 GREEN: stallTimeout frontmatter leg + profile"]:::pending
         T001 --> T002 --> T003 --> T004
@@ -117,8 +117,8 @@ flowchart TD
     T004 --> T007
 
     subgraph Files["Files"]
-        F1["src/runner/runner.ts (heartbeat)"]:::pending
-        F2["src/runner/run-manifest.ts (updateManifest)"]:::pending
+        F1["src/runner/runner.ts (heartbeat)"]:::completed
+        F2["src/runner/run-manifest.ts (updateManifest)"]:::completed
         F3["src/runner/types.ts (AgentDefinition.stallTimeout)"]:::pending
         F4["src/runner/folder.ts (frontmatter parse)"]:::pending
         F5["src/cli/budget-flags.ts (definitionStallTimeout)"]:::pending
@@ -145,9 +145,9 @@ flowchart TD
 
 | Status | ID | Task | Domain | Path(s) | Done When | Notes |
 |--------|-----|------|--------|---------|-----------|-------|
-| [ ] | T000 | **Harness pre-flight** — `/eng-harness-flow --event pre-implement --phase "Phase 5: Companion longevity through human gaps" --plan-dir docs/plans/028-companion-mode-reliability` | — | — | Router envelope handled; boot verdict narrated verbatim before any code | _Harness seam_ |
-| [ ] | T001 | **RED (5a)** — failing test: a run with **no provider events** for longer than the heartbeat interval still advances `run.json.updatedAt` on the timer, so the AC-A predicate (pid-alive ∧ recent `updatedAt`) still reports `active`. Use clock injection. | runner (test) | `test/runner/companion-longevity.test.ts` | Test fails today (`updatedAt` advances only on events) | Plan 5.1; Finding 11; mirror `test/runner/run-resolver.test.ts` clock injection |
-| [ ] | T002 | **GREEN (5a)** — add an **opt-in** runner-side heartbeat: a timer bumping `run.json.updatedAt` via `updateManifest` (`run-manifest.ts:108`) on a configurable interval, decoupled from provider events; **only when the survive-gaps profile is active** (default runs keep the strict staleness signal). It **never** calls `resetStallDeadline` (`runner.ts:998`). **Clear the timer on terminal/cleanup** (no leaked interval). Interval must comfortably beat the hardcoded 60s staleness window. | runner | `src/runner/runner.ts`, `src/runner/run-manifest.ts` | T001 passes; a survive-gaps run reads `active` while quiet. **Three named regressions**: (a) a run **without** the survive-gaps profile has **no** heartbeat timer — `updatedAt` advances only on provider events and the run goes `stale` past the 60s window (default-run invariant); (b) the heartbeat **never calls `resetStallDeadline`** — a survive-gaps run with no events still fires `stalled-stream` at its stall budget (watchdog unaffected); (c) the timer is **cleared on terminal/cleanup** (fake-timer assertion — no leaked interval). | Plan 5.2; Finding 11; validation Claim 3/5, T4; **load-bearing invariant — assert (a) explicitly** |
+| [x] | T000 | **Harness pre-flight** — `/eng-harness-flow --event pre-implement --phase "Phase 5: Companion longevity through human gaps" --plan-dir docs/plans/028-companion-mode-reliability` | — | — | Router envelope handled; boot verdict narrated verbatim before any code | _Harness seam_ · doctor=degraded (only `biome` not on PATH; runs via `just fft`) — non-blocking |
+| [x] | T001 | **RED (5a)** — failing test: a run with **no provider events** for longer than the heartbeat interval still advances `run.json.updatedAt` on the timer, so the AC-A predicate (pid-alive ∧ recent `updatedAt`) still reports `active`. Use clock injection. | runner (test) | `test/runner/companion-longevity.test.ts` | Test fails today (`updatedAt` advances only on events) | Plan 5.1; Finding 11; mirror `test/runner/run-resolver.test.ts` clock injection |
+| [x] | T002 | **GREEN (5a)** — add an **opt-in** runner-side heartbeat: a timer bumping `run.json.updatedAt` via `updateManifest` (`run-manifest.ts:108`) on a configurable interval, decoupled from provider events; **only when the survive-gaps profile is active** (default runs keep the strict staleness signal). It **never** calls `resetStallDeadline` (`runner.ts:998`). **Clear the timer on terminal/cleanup** (no leaked interval). Interval must comfortably beat the hardcoded 60s staleness window. | runner | `src/runner/runner.ts`, `src/runner/run-manifest.ts` | T001 passes; a survive-gaps run reads `active` while quiet. **Three named regressions**: (a) a run **without** the survive-gaps profile has **no** heartbeat timer — `updatedAt` advances only on provider events and the run goes `stale` past the 60s window (default-run invariant); (b) the heartbeat **never calls `resetStallDeadline`** — a survive-gaps run with no events still fires `stalled-stream` at its stall budget (watchdog unaffected); (c) the timer is **cleared on terminal/cleanup** (fake-timer assertion — no leaked interval). | Plan 5.2; Finding 11; validation Claim 3/5, T4; **load-bearing invariant — assert (a) explicitly** |
 | [ ] | T003 | **RED (5a)** — failing test: a companion with the survive-gaps profile gets large/disabled `stallTimeout`, large `idleBudgetMs`, large `timeout`; a simulated >300s model pause does **not** fire `stalled-stream`. | runner (test) | `test/runner/companion-longevity.test.ts` | Test fails today (frontmatter can't carry `stallTimeout`) | Plan 5.3; Finding 11 |
 | [ ] | T004 | **GREEN (5a)** — close the **frontmatter→config leg** (the per-run `--stall-timeout` override already works): (1) add `stallTimeout?: number` to `AgentDefinition` (`types.ts:12-50`); (2) parse it in `parseFrontmatter` (`folder.ts:334-340`, mirror the `timeout` regex) and thread through `listAgents`/`resolveAgent`; (3) add a `definitionStallTimeout?` 4th param to `resolveEffectiveBudgets` (**`src/cli/budget-flags.ts:72`**) used as the `stallTimeout` fallback, and pass `definition.stallTimeout` from callers (`run.ts:274`, `resume.ts:623`); (4) wire a **survive-gaps profile** raising the three ceilings together; (5) set an explicit survive-gaps `stallTimeout` (e.g. `0` = disabled, or a large value) in the companion frontmatter, **and assert in a test that the frontmatter value reaches `budgets.stallTimeoutSec`**. Wall-clock `timeout` stays the ultimate backstop. **Field names: `stallTimeout` (config) / `stallTimeoutSec` (budgets).** | runner / cli / agents | `src/runner/types.ts`, `src/runner/folder.ts`, `src/cli/budget-flags.ts`, `src/cli/commands/run.ts`, `src/cli/commands/resume.ts`, `agents/code-review-companion/prompt.md` | T003 passes; companion frontmatter carries `stallTimeout` **and a test proves it reaches `budgets.stallTimeoutSec`**; `--stall-timeout 0` still works | Plan 5.4 (re-scoped by validation T3); ⚠️ corrected path |
 | [ ] | T007 | **NOTE / DOC** — document that longevity is the **survival half**; the **engagement half** (companion actually seeing new commits) needs the deferred `git log`-cursor → `outside inbox send` feeder (Finding 12 — durable inbox already delivers). Recommend the feeder as a **fast-follow** (its own small plan), not an open-ended "if needed". | docs | `docs/how/companion-mode.md` (or plan § Related/Deferred) | The survival/engagement split + the cheap feeder substrate are documented | Plan 5.7; Finding 12; validation T1 |
@@ -231,6 +231,8 @@ _Populated during implementation by the implement verb._
 
 | Date | Task | Type | Discovery | Resolution | References |
 |------|------|------|-----------|------------|------------|
+| 2026-06-16 | T002 | gotcha | A run takes one early startup `updatedAt` write even with no provider events, so "default updatedAt frozen == startedAt" is too strict for the (a) regression. | Assert the *delta*: default stops advancing well before the gap ends (<60ms into a 120ms gap); survive-gaps keeps advancing past it. | `companion-longevity.test.ts` (a) |
+| 2026-06-16 | T002 | insight | After `stop()`, a write scheduled by the last pre-stop heartbeat tick can still settle (`updateManifest` is async). Not a leak — `updateManifest` serializes per-runDir, so the runner's terminal write always lands after any in-flight heartbeat write. | (c) test waits one interval post-stop before snapshotting the frozen value; production clears the heartbeat in the `finally` before the terminal writes. | `run-manifest.ts`, `runner.ts:1378` |
 
 **Types**: `gotcha` | `research-needed` | `unexpected-behavior` | `workaround` | `decision` | `debt` | `insight`
 

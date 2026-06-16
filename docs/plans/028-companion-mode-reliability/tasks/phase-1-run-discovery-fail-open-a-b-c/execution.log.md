@@ -70,3 +70,22 @@ Added an injectable `healOrphan` seam (mirrors the existing `isProcessAlive`/`no
 **Result**: 13/13 inventory + `tsc --noEmit` clean. No-regression: the live run (pid alive) is never an orphan target, so it always resolves `active`.
 
 **Scope note**: heal-on-read landed in `listRunInventory` only (where the read enumerates all runs + where the test targets it); `run-resolver`'s existing orphan-skip already prevents mislabeling, so no resolver edit was needed.
+
+### T008 — Defect C: resolution-parity characterization ✅ (commit pending)
+
+Per the T001 decision (AC-C fallback). Added 2 characterization tests to `test/runner/folder.test.ts` (`resolveAgent ↔ listAgents parity`): every listed agent resolves (no spurious `E121`), and `resolveAgent` excludes exactly what `listAgents` excludes (no-description / `_`-prefixed). **Passes immediately** — that's the point: T001 found no core defect, so AC-C is met by locking the already-correct parity against regression + the documented finding (the literal `{runId:null,…}` symptom is emitted by no core surface). No production edit.
+
+---
+
+## Phase 1 complete ✅
+
+**All tasks [x].** Full suite: **1396 passed, 16 skipped, 0 failed** (131 files, `npm test`). `tsc --noEmit` clean.
+
+**Acceptance criteria**:
+- **AC-A** ✅ — `computeStatusVerdict` fails open for a live-pid run (fresh `updatedAt`, no `events.ndjson`) → `active` + live runId.
+- **AC-B** ✅ — `runs list`/`--active` surface a live run; `--all` measurably broadens (was a no-op); dead-pid orphans heal-on-read to `crashed` without dropping the live run (best-effort, swallowed).
+- **AC-C** ✅ (fallback) — `history`/`last-run` ↔ `list` resolution parity pinned; literal symptom documented as external/older-build (no core emitter).
+
+**Production files**: `src/cli/commands/status.ts` (A), `src/runner/run-inventory.ts` (B-list + B-heal). **Tests**: `status-verdict.test.ts` (+4), `run-inventory.test.ts` (+4), `folder.test.ts` (+2). No `run-resolver`/`history`/`last-run`/`peer-activity`/`coordination-status` production edits (defect C is the fallback; resolver already skips orphans).
+
+**Retro candidates**: `DL-001` (boot biome verdict), `DL-002` (`ACTIVE_STATUSES` triplication), `INS-001` (live defect-D sighting). Drained at the phase-end seam.

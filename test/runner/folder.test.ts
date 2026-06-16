@@ -257,6 +257,63 @@ describe('resolveAgent', () => {
   });
 });
 
+// Plan 028 Phase 1 (defect C) — characterization. `minih history` and
+// `minih last-run` resolve via resolveAgent(), and resolveAgent IS
+// listAgents().find() (folder.ts), so they resolve *exactly* what `minih list`
+// resolves. These tests pin that parity so a future change can't reintroduce a
+// spurious E121 (AGENT_NOT_FOUND) for an agent `minih list` shows. T001 found
+// the literal {runId:null,…} symptom from #50 is emitted by no core surface
+// (external/older build) — so AC-C is met by this consistency lock, not a
+// production edit. See the Phase-1 execution log.
+describe('resolveAgent ↔ listAgents parity (plan 028 defect C)', () => {
+  it('resolves every agent that listAgents lists (no spurious AGENT_NOT_FOUND)', () => {
+    for (const slug of ['alpha', 'bravo', 'charlie']) {
+      const dir = path.join(tmpDir, slug);
+      fs.mkdirSync(dir);
+      fs.writeFileSync(
+        path.join(dir, 'prompt.md'),
+        `---\ndescription: "${slug}"\n---\n\n# ${slug}`,
+      );
+    }
+    const listed = listAgents(tmpDir).map((a) => a.slug);
+    expect(listed).toEqual(['alpha', 'bravo', 'charlie']);
+    // history/last-run call resolveAgent; it must resolve every listed slug
+    for (const slug of listed) {
+      expect(resolveAgent(slug, tmpDir)?.slug).toBe(slug);
+    }
+  });
+
+  it('excludes exactly what listAgents excludes (no divergent resolution)', () => {
+    const ok = path.join(tmpDir, 'listed');
+    fs.mkdirSync(ok);
+    fs.writeFileSync(
+      path.join(ok, 'prompt.md'),
+      '---\ndescription: "ok"\n---\n\n# ok',
+    );
+    // not listable: prompt.md present but no frontmatter description
+    const noDesc = path.join(tmpDir, 'no-desc');
+    fs.mkdirSync(noDesc);
+    fs.writeFileSync(path.join(noDesc, 'prompt.md'), '# body only');
+    // not listable: underscore-prefixed shared folder
+    const shared = path.join(tmpDir, '_shared');
+    fs.mkdirSync(shared);
+    fs.writeFileSync(
+      path.join(shared, 'prompt.md'),
+      '---\ndescription: "x"\n---\n',
+    );
+
+    const listed = new Set(listAgents(tmpDir).map((a) => a.slug));
+    expect(listed.has('listed')).toBe(true);
+    expect(listed.has('no-desc')).toBe(false);
+    expect(listed.has('_shared')).toBe(false);
+    // resolveAgent agrees on every case — no divergence that could E121 a
+    // listable agent or resolve an unlistable one.
+    expect(resolveAgent('listed', tmpDir)).not.toBeNull();
+    expect(resolveAgent('no-desc', tmpDir)).toBeNull();
+    expect(resolveAgent('_shared', tmpDir)).toBeNull();
+  });
+});
+
 describe('createRunFolder', () => {
   it('creates timestamped run folder with frozen copies', () => {
     const dir = path.join(tmpDir, 'test-agent');

@@ -72,26 +72,26 @@ flowchart TD
     subgraph Phase["Phase 1: Run-discovery fail-open (A/B/C)"]
         T000["T000 · harness pre-flight"]:::seam
         T001["T001 · investigate C (spike)"]:::spike
-        T002["T002 · RED verdict=active"]:::pending
-        T003["T003 · GREEN computeStatusVerdict"]:::pending
-        T004["T004 · RED runs list / --all"]:::pending
-        T005["T005 · GREEN wire --all"]:::pending
-        T006["T006 · RED heal + swallow"]:::pending
-        T007["T007 · GREEN bounded heal-on-read"]:::pending
-        T008["T008 · RED→GREEN history/last-run reframe"]:::pending
+        T002["T002 · RED verdict=active"]:::completed
+        T003["T003 · GREEN computeStatusVerdict"]:::completed
+        T004["T004 · RED runs list / --all"]:::completed
+        T005["T005 · GREEN wire --all"]:::completed
+        T006["T006 · RED heal + swallow"]:::completed
+        T007["T007 · GREEN bounded heal-on-read"]:::completed
+        T008["T008 · RED→GREEN history/last-run reframe"]:::completed
         T009["T009 · harness phase-end"]:::seam
 
         T000 --> T001 --> T002 --> T003 --> T004 --> T005 --> T006 --> T007 --> T008 --> T009
     end
 
     subgraph Files["Files touched"]
-        F1["src/cli/commands/status.ts"]:::pending
-        F2["src/runner/run-inventory.ts"]:::pending
-        F3["src/runner/run-resolver.ts"]:::pending
-        F4["src/runner/reconcile-lock.ts (reuse)"]:::pending
-        F5["src/cli/commands/runs.ts"]:::pending
-        F6["src/cli/commands/history.ts"]:::pending
-        F7["src/cli/commands/last-run.ts"]:::pending
+        F1["src/cli/commands/status.ts"]:::completed
+        F2["src/runner/run-inventory.ts"]:::completed
+        F3["src/runner/run-resolver.ts"]:::completed
+        F4["src/runner/reconcile-lock.ts (reuse)"]:::completed
+        F5["src/cli/commands/runs.ts"]:::completed
+        F6["src/cli/commands/history.ts"]:::completed
+        F7["src/cli/commands/last-run.ts"]:::completed
         F8["C symptom surface (TBD by T001)"]:::spike
     end
 
@@ -120,8 +120,8 @@ flowchart TD
 | [x] | T005 | **GREEN** — wire `--all` in the inventory filter (default = active/recent bounded window; `--all` = full history incl. completed/crashed, bounded by `--limit`); confirm liveness reports `alive` for a running pid; plumb `--all` from `runs.ts` | runner/cli | `/Users/jordanknight/substrate/minih/src/runner/run-inventory.ts` (`runs.ts` already plumbed) | ✅ default = active/recent (live rows + newest terminal per agent); `--all` = full history. 11/11 inventory + 20/20 adjacent green | Plan 1.5; Workshop D3-A. `runs.ts` already passed `all:` through — only the reader was missing |
 | [x] | T006 | **RED** — failing tests: (a) a stale dead-pid `active` orphan does not drop/mislabel a live run — the orphan is healed to `crashed` on an inventory read (or, fallback, skipped); (b) **the swallow contract** — a heal that throws a *non-lock* error (write error / torn manifest mid-heal) still returns the live run un-healed, no exception propagates to the read | runner | `/Users/jordanknight/substrate/minih/test/runner/run-inventory.test.ts` | ✅ RED shown: orphan stayed `active` (expected `crashed`). 2-case block (heal + swallow) | Plan 1.6 (targeted the inventory read, where the test lives) |
 | [x] | T007 | **GREEN** — bounded heal-on-read: when a read sees an `ACTIVE_STATUS` manifest with a dead pid, mark it `crashed` inside `withReconcileLock`; **catch `ReconcileLockHeldError` → skip + read proceeds**; wrap the whole heal in try/catch so **any** failure is swallowed and the read returns. Fallback to D2-A (skip-but-don't-heal) if lock-safety is fiddly — record the choice in the execution log | runner | `/Users/jordanknight/substrate/minih/src/runner/run-inventory.ts` (reuses `reconcile-lock.ts`) | ✅ chose **D2-B** (full heal). `healDeadPidOrphan` re-reads+re-probes under `withReconcileLock`; blanket try/catch swallows lock-held + write errors; no lock on the orphan-free path. 13/13 + tsc clean | Plan 1.7; Findings 03, 04. run-resolver already *skips* orphans (no edit needed) |
-| [ ] | T008 | **RED→GREEN** — `history`/`last-run` resolve any agent that `minih list` resolves from the same cwd (no spurious `E121` when `prompt.md` exists); fix/reframe C's surface per T001; test pins the corrected behaviour | cli | `/Users/jordanknight/substrate/minih/src/cli/commands/history.ts`, `/Users/jordanknight/substrate/minih/src/cli/commands/last-run.ts`, *(+ C symptom surface from T001)* | AC-C met; the boot-detection surface returns the live `runId` during the active window | Plan 1.8; Finding 05. If T001 finds no core surface emits the symptom, AC-C is met by the `E121` reframe + a documented finding (AC-C fallback) |
-| [ ] | T009 | **Harness phase-end** — `/eng-harness-flow --event phase-end --plan-dir docs/plans/028-companion-mode-reliability` | — | — | Router envelope handled at phase end | Harness seam (plan 1.z); advisory |
+| [x] | T008 | **RED→GREEN** — `history`/`last-run` resolve any agent that `minih list` resolves from the same cwd (no spurious `E121` when `prompt.md` exists); fix/reframe C's surface per T001; test pins the corrected behaviour | cli/runner | `/Users/jordanknight/substrate/minih/test/runner/folder.test.ts` | ✅ **AC-C fallback** (per T001): 2-case characterization locks `resolveAgent ↔ listAgents` parity; documented finding that the literal symptom isn't core-emitted. No production edit needed | Plan 1.8; Finding 05 |
+| [x] | T009 | **Harness phase-end** — `/eng-harness-flow --event phase-end --plan-dir docs/plans/028-companion-mode-reliability` | — | — | Router envelope handled at phase end | Harness seam (plan 1.z); drains/harvests the session retro |
 
 **Legend** — Status: `[ ]` pending · `[~]` in progress · `[x]` complete · `[!]` blocked.
 **Sequencing note**: T001 (the C spike) runs first so T008 has a named target; T002–T003 (A), T004–T005 (B-list), T006–T007 (B-heal) are otherwise independent RED→GREEN pairs and can interleave. The two harness seams bracket the phase.

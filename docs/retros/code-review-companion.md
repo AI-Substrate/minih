@@ -334,3 +334,13 @@
 - difficulties:
   - [degrading] knowledge: The active plan scoped the run-sort migration to four selectors, but repo search found additional default/latest selectors with the same mixed-folder risk, forcing a manual scope decision during review. (workaround: Reported the central shared-resolver path as a HIGH finding and explicitly separated the broader selector sweep as a follow-up/scope decision.)
   - [annoying] test: The documented Vitest command style did not support the Jest-style --runInBand flag I first tried during review. (workaround: Reran the targeted test with the repository-documented npx vitest run invocation.)
+
+## 2026-06-16T07:40:21.051Z — code-review-companion / 2026-06-16T07-24-05-445Z-061c
+
+- runId: 2026-06-16T07-24-05-445Z-061c
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-06-16T07-24-05-445Z-061c
+- summary: Reviewed Phase 3 of plan 028 across four task messages: the RED companion-findings test, the GREEN `minih companion findings <slug>` implementation, the docs update, and the final range through 78cbbbe. The code/test path is approved: it is additive, reuses deriveCompanionLedger/buildDraftFarewell, preserves existing status/ledger/error-code/lane contracts, keeps cli -> runner direction, and the focused companion-findings regression passes. I sent two MEDIUM documentation drift findings for remaining companion-mode dogfood/read-path guidance.
+- **magicWand** (target: coordination): Have the coordination companion automatically run a bounded contract-drift sweep template for the surfaces named in its prompt after every contract-changing doc/code review, including AGENTS_README and dogfood-report examples.
+- difficulties:
+  - [degrading] build: Session-start `harness boot --json` failed on the lint sensor and also reported doctor/audit warnings, even though this run was acting as a reviewer rather than the implementer. (workaround: Treated the boot result as baseline context, continued review-only work, and used focused validation for the commits under review.)
+  - [annoying] test: I tried `npx vitest run ... --runInBand`; Vitest in this repo rejects that Jest-style flag. (workaround: Reran the focused test with the documented `npx vitest run test/cli/companion-findings.test.ts` command.)

@@ -707,6 +707,16 @@ The companion either:
 
 Fire-and-forget — the orchestrator does NOT wait. If a finding arrives, address it in the next commit and ping the new SHA. Use `--ack-of <id>` (see [Reply chains](#reply-chains)) to thread responses to specific reviews.
 
+#### 3a. Read the findings (the lane-agnostic read-path)
+
+Findings land on the companion's **inside** lane. Read them with the dedicated command — not by hand-`jq`-ing a raw lane file (guessing the wrong lane is what made findings invisible in #50 **F**):
+
+```bash
+minih companion findings code-review-companion --run "$RUN_ID" --json | jq '.data.findings'
+```
+
+`.data.findings` is the structured findings; `.data.summariesCount` and `.data.draftFarewell.summary` surface the review summary. It derives over the same ledger as `minih companion status`, and resolves the newest run by `startedAt` when `--run` is omitted.
+
 #### 4. Drain (optional but recommended)
 
 Before stopping, ping with the final SHA and ask for a full sweep:
@@ -732,11 +742,12 @@ npx minih outside inbox send code-review-companion --run "$RUN_ID" \
   --body "stop — session complete. Please write your farewell envelope and exit."
 ```
 
-The companion sees the `type:control` message, matches the body against `^stop\b`, transitions to `stopping`, writes a final report to `$MINIH_OUTPUT_PATH`, and exits. Then read the farewell:
+The companion sees the `type:control` message, matches the body against `^stop\b`, transitions to `stopping`, writes a final report to `$MINIH_OUTPUT_PATH`, and exits. Then read the farewell — via the CLI dogfood surfaces, not a raw `cat` of the run dir:
 
 ```bash
-RUN_DIR=agents/code-review-companion/runs/$RUN_ID
-cat $RUN_DIR/output/report.json | jq
+minih companion findings code-review-companion --run "$RUN_ID" --json | jq '.data.findings'
+minih last-run code-review-companion
+minih validate code-review-companion --file <path-from-last-run>
 ```
 
 The farewell envelope contains the canonical session record. Fold any open findings or retro insights into your operator-facing report.

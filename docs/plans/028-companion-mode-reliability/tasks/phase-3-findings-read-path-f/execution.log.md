@@ -39,3 +39,16 @@
 - All phase tasks `[x]`; suite **1408 pass / 16 skip / 0 fail**, `tsc` clean.
 - AC-F met end-to-end: `minih companion findings <slug>` surfaces an inside-lane HIGH finding + summary regardless of lane (T001/T002); `outside.md` + `docs/how/companion-mode.md` document the read-path (T003).
 - Domain `cli` (internal) — additive subcommand, no contract change; `_docs` — exemplar + guide. `cli → runner` import only.
+
+## Companion debrief & findings reconciliation
+
+Live `code-review-companion` (runId `2026-06-16T07-24-05-445Z-061c`) reviewed all 4 pings. Verdicts: **T001 APPROVE** (0), **T002 APPROVE** (0), **T003 APPROVE_WITH_NOTES** (1 MED), **final APPROVE_WITH_NOTES** (2 MED). 4 summaries, 2 findings.
+
+> **Dogfood data point (the phase fixing itself):** a raw `minih outside inbox list … | jq 'select(.sender=="inside")'` skim showed **0** inside messages, but `minih companion findings` (this phase's NEW command, over the lane-agnostic ledger) surfaced **2 findings + 4 summaries** — a live reproduction of #50 F *and* direct proof the new read-path fixes it.
+
+| ID | Sev | File | Issue | Disposition |
+|----|-----|------|-------|-------------|
+| F001 | MEDIUM | `docs/how/companion-mode.md` | §5 + quick-ref still taught `cat output/report.json` for the farewell — contradicts the dogfood rule and the read-path message this phase adds | **Fixed** (`b…`): both replaced with `minih companion findings` / `last-run` / `validate` |
+| F002 | MEDIUM | `AGENTS_README.md` | bundled guide didn't document the `minih companion findings` read-path; §5 farewell still `cat`-ed report.json | **Fixed**: added §3a read-path step + replaced farewell `cat` with CLI surfaces; left the line-966 *migration smoke-check* raw (it intentionally verifies report.json was written) |
+
+Both MEDIUM, both contract-drift, both adjacent to F's thesis (CLI read-paths > raw file reads) → fixed inline (matches Phase 2's "fix them all"). Companion `report.json` was not yet written at the stop-read (the SDK was still finalizing the farewell); findings/summaries above were captured via the ledger (`minih companion findings`). Companion run exited cleanly after `control:stop`.

@@ -85,27 +85,16 @@ minih outside inbox send code-review-companion --run "$RUN_ID" \
 
 ### Read findings between commits
 
-The canonical, **lane-agnostic** findings read-path — one command, regardless of which inbox lane the companion wrote to (#50 F):
+Read findings + summary with the dedicated **lane-agnostic** command — never hand-`jq` a raw lane (findings live on the *inside* lane; the wrong-lane guess was #50 F):
 
 ```bash
 minih companion findings code-review-companion --run "$RUN_ID" --json | jq '.data.findings'
 ```
 
-`.data.findings` is the companion's structured findings (severity / file / category / issue / recommendation); `.data.summariesCount` and `.data.draftFarewell.summary` surface the review summary. It derives over the same ledger `minih companion status` uses, so the two never drift.
+`.data.findings` + `.data.summariesCount` + `.data.draftFarewell.summary`, over the same ledger as `minih companion status`.
 
-> ⚠️ Do **not** hand-`jq` a raw inbox lane file for findings — the companion writes findings to its *inside* lane, so `jq`-ing the outside lane silently misses them. `minih companion findings` reads the right lane for you.
-
-To just check whether the companion sent *anything* new since the last commit (a cheap liveness skim — **not** the findings read-path):
-
-```bash
-minih outside inbox list code-review-companion --run "$RUN_ID" --unread 2>&1 | jq '.data.messages | map({id, from, type, subject, ackOf})'
-```
-
-- **No new messages** → proceed.
-- **`finding` HIGH/CRITICAL** → read it via `minih companion findings` above; address inline before the next task.
-- **`finding` MEDIUM/LOW** → queue for end-of-phase. Log the `ackOf` mapping for end-of-session reconciliation.
-- **`summary` APPROVE** → log it; proceed.
-- **`question` `still-needed`** → check-in protocol fired (plan 019). Reply with another `task`/`directive` to keep alive, or `control:stop` to end. Ignoring leads to `no_engagement` / `idle_budget` exit. See [`docs/how/companion-mode.md § Lifecycle and check-in protocol`](../../docs/how/companion-mode.md#lifecycle-and-check-in-protocol).
+- **HIGH/CRITICAL finding** → fix inline; **MEDIUM/LOW** → queue for phase end (log the `ackOf`).
+- **`question` `still-needed`** → check-in fired (plan 019); reply `task`/`directive` or `control:stop`. Ignoring → `no_engagement`/`idle_budget` exit. See [`companion-mode.md`](../../docs/how/companion-mode.md#lifecycle-and-check-in-protocol).
 
 ### Handling findings inline
 

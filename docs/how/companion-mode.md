@@ -129,11 +129,13 @@ npx minih outside inbox send <slug> --run "$RUN_ID" \
 
 The companion sees the `type:control` message, matches its body against `^stop\b`, transitions to `stopping`, and writes a final report to `$MINIH_OUTPUT_PATH` (typically `agents/<slug>/runs/<runId>/output/report.json`).
 
-Then **read the farewell**:
+Then **read the farewell** — via the CLI dogfood surfaces, not a raw `cat` of the run dir (reading `output/report.json` directly is exactly the wrong-lane / raw-file anti-pattern #50 **F** corrected for findings):
 
 ```bash
-RUN_DIR=agents/<slug>/runs/$RUN_ID
-cat $RUN_DIR/output/report.json
+minih companion findings <slug> --run "$RUN_ID" --json | jq '.data.findings'   # structured findings + summary
+minih last-run <slug>                                                          # the just-completed run + its report path
+minih validate <slug> --file <path-from-last-run>                              # validate the farewell envelope
+# (or: minih retros --slug <slug> for the retrospective)
 ```
 
 The farewell envelope contains the canonical session record — fold any open findings or retro insights into your operator-facing report.
@@ -321,8 +323,9 @@ npx minih outside inbox send my-companion --run "$RUN_ID" \
 # Wait for the farewell to land (a few seconds)
 sleep 5
 
-# Read it
-cat agents/my-companion/runs/$RUN_ID/output/report.json | jq
+# Read it (CLI dogfood surfaces — not a raw cat of the run dir)
+minih companion findings my-companion --run "$RUN_ID" --json | jq '.data.findings'
+minih last-run my-companion
 
 # 5. Now you can report back to your operator with the farewell folded in.
 ```

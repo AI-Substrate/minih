@@ -6,8 +6,8 @@
   "mode": "Full",
   "cursor": "p4",
   "recommended_next": "p4",
-  "now": "Phase 3 COMPLETE (defect F) — built --companion. `minih companion findings <slug>` over the lane-agnostic `deriveCompanionLedger().findings` + `buildDraftFarewell` (no new ledger API); outside.md + companion-mode.md + AGENTS_README corrected to that read-path. 5 commits (RED 0c23f07, GREEN 521ff50, DOC 1304e8d, domain 78cbbbe, companion-fix ce07fa7). Live companion reviewed all 4 commits and raised 2 MEDIUM contract-drift findings (F001/F002) — both fixed. Suite 1408 pass / 0 fail; tsc clean; minih doctor 0 failures. AC-F met. DOGFOOD MOMENT: `minih companion findings` (the command this phase built) surfaced 2 findings + 4 summaries that a raw inbox-lane jq skim reported as 0 — the phase fixing itself live.",
-  "next": "Phase 4 tasks (terminal classification G) — degraded->status:completed, farewell/cleanStop honoured, terminalReason union extended",
+  "now": "Phase 4 tasks PREPPED + VALIDATED (terminal classification G). tasks.md expands plan 4.0-4.z into T000-T0z (RED/GREEN pairs). CRITICAL re-anchoring: the plan's stale line numbers were re-verified live against post-Phase-1/2 source — degraded-collapse is runner.ts:1597-1598 (NOT 1590), terminalReason red-render is status.ts:441-442 (NOT 415); all 9 anchors source-truth-verified. Validated by a 4-agent thesis-aware pass (source-truth ALL anchors ✓, cross-ref 1:1 plan fidelity, thesis advanced, forward-compat: Phase 5 AC-H + #49 both satisfied). Applied fixes: T004 strengthened (3 candidate farewell-signal sources + lifecycle/producer spike + provisional field shapes farewellAt?:number/cleanStop?:boolean), T008 doc target named (exec log + plan Related/Deferred), T006 domain.md History reminder. The hard task is T004 — no farewell/cleanStop signal exists in runner.ts/reconcile.ts today; it must be sourced before written.",
+  "next": "Phase 4 implement (terminal classification G) — RED/GREEN per T000-T0z; --companion has been the per-phase build mode for this plan",
   "_comment": "Fresh flight plan for plan 028 (issue #50 companion-mode reliability defects). Clear ask — root causes already diagnosed with file:line this session and captured in original-ask.md — so the spine starts at SPEC with no explore/research node. The /eng-harness-flow router IS installed, so the post-spec backpressure seam + plan-complete retro seam appear as assumed harness nodes. Phases are unknown until stage 30 (architect) reveals them (assumed->known). Generated the-flow.md is rendered from this file — never hand-edit the .md as primary.",
   "agents": [
     {
@@ -152,9 +152,12 @@
       "id": "p4",
       "type": "phase",
       "label": "Phase 4 · Terminal classification (G)",
-      "status": "known",
-      "command": "/the-flow 5 tasks --phase \"Phase 4: Terminal classification (G)\" --plan docs/plans/028-companion-mode-reliability/companion-mode-reliability-plan.md",
-      "note": "degraded->status:completed; farewell/cleanStop honoured (define the observed signal first); extend terminalReason union; update the real consumers (status.ts:415/probe-aggregator). 028 = vocabulary+write path; #49 wires the idle trigger.",
+      "status": "in_progress",
+      "command": "/the-flow 6 implement --companion --phase \"Phase 4: Terminal classification (G)\" --plan docs/plans/028-companion-mode-reliability/companion-mode-reliability-plan.md",
+      "ran_at": "2026-06-16T08:11:31Z",
+      "user_input": "prep netx phae and then validate",
+      "note": "TASKS PREPPED + VALIDATED (implement pending). tasks.md = T000-T0z: T001/T002 degraded->status:completed (runner.ts:1597-1598, re-anchored from the plan's stale 1590; velocity guard stays at 1535 keyed on result==='completed', Workshop Q1); T003/T004 farewell/cleanStop (the HARD task — no farewell signal exists in runner.ts/reconcile.ts; T004 spikes 3 candidate sources + confirms lifecycle/producer first, pins farewellAt?:number/cleanStop?:boolean); T005/T006 extend terminalReason union (types.ts:575-581 + 679 mirror) + de-red the real consumers (status.ts:441-442 render, probe/aggregator tolerant); T007 operator-stop reconcile (marker fixture; producer is follow-up); T008 #49 boundary + underscore->hyphen spelling map (idle-policy.ts:40,70). Validated by 4 agents (all source-verified); fixes applied (T004 candidates+fields, T008 doc target, T006 domain.md note). 028 = vocabulary+write path; #49 wires the idle trigger.",
+      "artifacts": ["tasks/phase-4-terminal-classification-g/tasks.md"],
       "next": ["p5"]
     },
 

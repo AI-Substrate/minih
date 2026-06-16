@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "slug": "companion-mode-reliability",
+  "plan_dir": "docs/plans/028-companion-mode-reliability",
+  "mode": "Full",
+  "current_stage": "awaiting-5",
+  "pending_command": "/the-flow 6 implement --companion --phase \"Phase 1: Run-discovery fail-open (A/B/C)\" --plan docs/plans/028-companion-mode-reliability/companion-mode-reliability-plan.md",
+  "intent": "Fix the companion-mode reliability defects from issue #50 (minih v0.2.1): orchestrator blind to a live run during its active window (A/B/C), local-time run IDs mislabeled Z (D), child MINIH_PROJECT_ROOT points at the run dir (E), inside-lane findings invisible to the documented operator read-path (F), clean runs misclassified as failed/degraded (G).",
+  "milestones_total": 9,
+  "milestones_done": 3,
+  "last_checkpoint_at": "2026-06-16T03:45:03Z",
+  "compacted_seams": [],
+  "status": "active"
+}

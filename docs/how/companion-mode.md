@@ -93,6 +93,16 @@ The companion either:
 
 Fire-and-forget — the orchestrator does NOT wait for the companion before moving on. If a finding arrives, address it in the next commit and ping the new SHA.
 
+### 3a. Read the findings (the lane-agnostic read-path)
+
+Findings land in the companion's **inside** inbox lane. Read them with the dedicated command — **not** by hand-`jq`-ing a raw lane file, which silently misses them when you guess the wrong lane (this was defect #50 **F**):
+
+```bash
+minih companion findings <slug> --run "$RUN_ID" --json | jq '.data.findings'
+```
+
+`.data.findings` is the structured findings (`severity` / `file` / `category` / `issue` / `recommendation`); `.data.summariesCount` and `.data.draftFarewell.summary` surface the review summary. It derives over the same `deriveCompanionLedger` ledger as `minih companion status`, so the findings read-path and the lifecycle view can never drift, and it resolves the newest run by `startedAt` when `--run` is omitted.
+
 ### 4. Drain (optional but recommended)
 
 When the implementation is done but you haven't reported yet, ping the companion with the final SHA and ask for a full sweep:

@@ -26,3 +26,16 @@
 - **Pinned emit shape** (validate-v2 HIGH): `formatSuccess('companion.findings', { slug, runId, findings: ledger.findings, summariesCount: ledger.summariesCount, draftFarewell })` where `draftFarewell = buildDraftFarewell(ledger)` — the only no-new-API path to summary *content*. Added a `renderFindingsTable` (TTY-only, suppressed by `--json`).
 - **Reuse, not reinvent** (Finding 02): no new ledger API, no change to `status`, the ledger, error codes, or inbox lanes. `cli → runner` import only (all helpers already imported).
 - **Evidence (GREEN)**: `npx vitest run test/cli/companion-findings.test.ts` → **4 passed / 4**; full suite `npx vitest run` → **1408 passed / 16 skipped / 0 failed** (was 1404; +4 new); `tsc --noEmit` clean.
+- **Commit**: `521ff50` (GREEN); companion pinged (`review-request: T002`).
+
+## T003 — DOC — fix exemplar + guide
+
+- **`agents/code-review-companion/outside.md`**: replaced the "Skim the inbox between commits" block (the old `inbox list --unread | jq` findings instruction) with a "Read findings between commits" section that leads with `minih companion findings code-review-companion --run "$RUN_ID" --json | jq '.data.findings'` as the canonical **lane-agnostic** read-path, plus an explicit ⚠️ "don't hand-`jq` a raw lane — findings live on the *inside* lane". Kept the `--unread` skim, re-scoped as a cheap liveness check (not the findings read-path).
+- **`docs/how/companion-mode.md`**: added §3a "Read the findings (the lane-agnostic read-path)" after §3, documenting the command, the `{ findings, summariesCount, draftFarewell.summary }` surface, the shared-ledger-with-`status` rationale, and the newest-run-by-`startedAt` default.
+- **Evidence**: both edits ground AC-F's doc clause — the exemplar no longer points operators at the wrong lane, and the guide documents the read-path.
+
+## Phase complete
+
+- All phase tasks `[x]`; suite **1408 pass / 16 skip / 0 fail**, `tsc` clean.
+- AC-F met end-to-end: `minih companion findings <slug>` surfaces an inside-lane HIGH finding + summary regardless of lane (T001/T002); `outside.md` + `docs/how/companion-mode.md` document the read-path (T003).
+- Domain `cli` (internal) — additive subcommand, no contract change; `_docs` — exemplar + guide. `cli → runner` import only.

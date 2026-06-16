@@ -83,14 +83,26 @@ minih outside inbox send code-review-companion --run "$RUN_ID" \
 
 **Fire-and-forget.** Do NOT wait for a reply before moving on. The companion replies asynchronously only on findings.
 
-### Skim the inbox between commits
+### Read findings between commits
+
+The canonical, **lane-agnostic** findings read-path — one command, regardless of which inbox lane the companion wrote to (#50 F):
+
+```bash
+minih companion findings code-review-companion --run "$RUN_ID" --json | jq '.data.findings'
+```
+
+`.data.findings` is the companion's structured findings (severity / file / category / issue / recommendation); `.data.summariesCount` and `.data.draftFarewell.summary` surface the review summary. It derives over the same ledger `minih companion status` uses, so the two never drift.
+
+> ⚠️ Do **not** hand-`jq` a raw inbox lane file for findings — the companion writes findings to its *inside* lane, so `jq`-ing the outside lane silently misses them. `minih companion findings` reads the right lane for you.
+
+To just check whether the companion sent *anything* new since the last commit (a cheap liveness skim — **not** the findings read-path):
 
 ```bash
 minih outside inbox list code-review-companion --run "$RUN_ID" --unread 2>&1 | jq '.data.messages | map({id, from, type, subject, ackOf})'
 ```
 
 - **No new messages** → proceed.
-- **`finding` HIGH/CRITICAL** → address inline before the next task.
+- **`finding` HIGH/CRITICAL** → read it via `minih companion findings` above; address inline before the next task.
 - **`finding` MEDIUM/LOW** → queue for end-of-phase. Log the `ackOf` mapping for end-of-session reconciliation.
 - **`summary` APPROVE** → log it; proceed.
 - **`question` `still-needed`** → check-in protocol fired (plan 019). Reply with another `task`/`directive` to keep alive, or `control:stop` to end. Ignoring leads to `no_engagement` / `idle_budget` exit. See [`docs/how/companion-mode.md § Lifecycle and check-in protocol`](../../docs/how/companion-mode.md#lifecycle-and-check-in-protocol).

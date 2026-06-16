@@ -870,14 +870,19 @@ export function findRunSession(
     if (!fs.existsSync(targetRunDir)) return null;
     targetRunId = runId;
   } else {
-    // Find latest completed run (skip incomplete/corrupt entries)
-    const entries = fs
-      .readdirSync(runsDir, { withFileTypes: true })
-      .filter((e) => e.isDirectory())
-      .sort((a, b) => b.name.localeCompare(a.name));
+    // Find latest completed run (skip incomplete/corrupt entries). Newest by
+    // recorded startedAt (true UTC), not folder name — old folders encode local
+    // time mislabeled `Z` (defect D), so a name sort could resume a stale run.
+    const runIds = sortRunIdsNewestFirst(
+      runsDir,
+      fs
+        .readdirSync(runsDir, { withFileTypes: true })
+        .filter((e) => e.isDirectory())
+        .map((e) => e.name),
+    );
 
-    for (const entry of entries) {
-      const candidateDir = path.join(runsDir, entry.name);
+    for (const name of runIds) {
+      const candidateDir = path.join(runsDir, name);
       const completedPath = path.join(candidateDir, 'completed.json');
       if (!fs.existsSync(completedPath)) continue;
       try {
@@ -885,7 +890,7 @@ export function findRunSession(
         if (metadata.sessionId) {
           return {
             sessionId: metadata.sessionId,
-            runId: entry.name,
+            runId: name,
             runDir: candidateDir,
           };
         }

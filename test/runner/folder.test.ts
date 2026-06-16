@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   coordinationRunLocation,
   createRunFolder,
+  findRunSession,
   hasOutsideMd,
   historyPath,
   InvalidCoordinationFrontmatterError,
@@ -376,8 +377,50 @@ describe('createRunFolder', () => {
       const encoded = new Date(`${y}-${mo}-${d}T${h}:${mi}:${s}.${ms}Z`);
       expect(encoded.getTime()).toBe(startedAt.getTime());
     } finally {
-      process.env.TZ = origTZ;
+      // Restore precisely: assigning `undefined` would set TZ="undefined"
+      // (string) and leak a mutated timezone to later tests in this worker.
+      if (origTZ === undefined) delete process.env.TZ;
+      else process.env.TZ = origTZ;
     }
+  });
+});
+
+// Companion F002 (defect D) — findRunSession is the session-resume "latest run"
+// selector; it must pick the newest by startedAt (true UTC), not by folder name.
+describe('findRunSession — newest by startedAt, not folder name (defect D)', () => {
+  function seedCompleted(
+    slug: string,
+    runId: string,
+    startedAt: string,
+    sessionId: string,
+  ): void {
+    const runDir = path.join(tmpDir, slug, 'runs', runId);
+    fs.mkdirSync(runDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(runDir, 'completed.json'),
+      JSON.stringify({ runId, startedAt, sessionId, result: 'completed' }),
+    );
+  }
+
+  it('resumes the chronologically newest completed run, not the lexically last name', () => {
+    // OLD: name 13-50 (local-as-Z), started EARLIER at 03:50 UTC.
+    seedCompleted(
+      'resume-agent',
+      '2026-06-16T13-50-25-287Z-8a55',
+      '2026-06-16T03:50:25.286Z',
+      'sess-old',
+    );
+    // NEW: name 05-58 (true UTC), started LATER at 05:58 UTC.
+    seedCompleted(
+      'resume-agent',
+      '2026-06-16T05-58-44-285Z-573c',
+      '2026-06-16T05:58:44.284Z',
+      'sess-new',
+    );
+
+    const session = findRunSession('resume-agent', tmpDir);
+    expect(session?.sessionId).toBe('sess-new');
+    expect(session?.runId).toBe('2026-06-16T05-58-44-285Z-573c');
   });
 });
 

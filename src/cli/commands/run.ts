@@ -275,6 +275,7 @@ export function registerRunCommand(program: Command): void {
           'run',
           opts,
           definition.timeout,
+          definition.stallTimeout,
         );
         const budgets = {
           timeoutSec: timeout,
@@ -448,6 +449,9 @@ export function registerRunCommand(program: Command): void {
           timeout,
           stallTimeout,
           maxTurns,
+          // Plan 028 Phase 5 — survive-gaps profile from frontmatter enables the
+          // opt-in manifest heartbeat (keeps a long-running companion `active`).
+          ...(definition.surviveGaps && { surviveGaps: true }),
           cwd: process.cwd(),
           params: Object.keys(params).length > 0 ? params : undefined,
           ...(labelResult.label && { label: labelResult.label }),

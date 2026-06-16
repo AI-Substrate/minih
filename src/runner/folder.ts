@@ -242,6 +242,10 @@ export function parseFrontmatter(content: string): {
   model?: string;
   reasoning?: string;
   timeout?: number;
+  /** Plan 028 Phase 5 — stall budget (seconds) from frontmatter; `0` disables. */
+  stallTimeout?: number;
+  /** Plan 028 Phase 5 — survive-gaps profile switch from frontmatter. */
+  surviveGaps?: boolean;
   /** Always populated (workshop 005:95) — `{enabled:false}` when absent or `disabled`. */
   coordination: CoordinationFrontmatter;
   /** Plan 018 R1 — `undefined` when absent (legacy agents). */
@@ -293,12 +297,16 @@ function parseYamlSimple(yaml: string): {
   model?: string;
   reasoning?: string;
   timeout?: number;
+  stallTimeout?: number;
+  surviveGaps?: boolean;
 } {
   let description = '';
   let tags: string[] = [];
   let model: string | undefined;
   let reasoning: string | undefined;
   let timeout: number | undefined;
+  let stallTimeout: number | undefined;
+  let surviveGaps: boolean | undefined;
 
   for (const line of yaml.split('\n')) {
     const descMatch = line.match(/^description:\s*"([^"]*)"$/);
@@ -335,9 +343,28 @@ function parseYamlSimple(yaml: string): {
     if (timeoutMatch) {
       timeout = Number.parseInt(timeoutMatch[1], 10);
     }
+    // Plan 028 Phase 5 — `stallTimeout` mirrors the `timeout` parse; `0` is a
+    // meaningful value (disables the watchdog), so match \d+ including 0.
+    const stallTimeoutMatch = line.match(/^stallTimeout:\s*(\d+)$/);
+    if (stallTimeoutMatch) {
+      stallTimeout = Number.parseInt(stallTimeoutMatch[1], 10);
+    }
+    // Plan 028 Phase 5 — survive-gaps profile switch (boolean).
+    const surviveGapsMatch = line.match(/^surviveGaps:\s*(true|false)$/);
+    if (surviveGapsMatch) {
+      surviveGaps = surviveGapsMatch[1] === 'true';
+    }
   }
 
-  return { description, tags, model, reasoning, timeout };
+  return {
+    description,
+    tags,
+    model,
+    reasoning,
+    timeout,
+    stallTimeout,
+    surviveGaps,
+  };
 }
 
 /**
@@ -696,6 +723,8 @@ export function listAgents(agentsDir: string): AgentDefinition[] {
       model,
       reasoning,
       timeout,
+      stallTimeout,
+      surviveGaps,
       coordination,
       permissions,
     } = parseFrontmatter(promptContent);
@@ -710,6 +739,8 @@ export function listAgents(agentsDir: string): AgentDefinition[] {
       model,
       reasoning,
       timeout,
+      stallTimeout,
+      surviveGaps,
       dir,
       promptPath,
       schemaPath: fs.existsSync(schemaPath) ? schemaPath : null,

@@ -3,6 +3,8 @@ description: "Long-running coordinated code-review companion that pairs alongsid
 tags: [companion, review, quality, coordination, exemplar]
 model: gpt-5.5
 timeout: 7200
+stallTimeout: 0
+surviveGaps: true
 coordination: enabled
 permissions:
   preset: read-only

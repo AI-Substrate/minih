@@ -31,3 +31,12 @@
 - **Tests** (`companion-longevity.test.ts`, 4): factory advance; (c) cleanup/no-leak; (a) default run does NOT advance updatedAt through a silent gap while survive-gaps does; (b) survive-gaps run still fires `stalled-stream` (heartbeat never resets the watchdog).
 - **Evidence**: 4/4 green; `just format` (1 file), `just typecheck` clean; runner-stall + run-manifest suites still green (26 total).
 
+### T003 (RED) / T004 (GREEN) — stallTimeout frontmatter→config leg + survive-gaps profile
+
+- **Parse**: `folder.ts` `parseYamlSimple` now reads `stallTimeout` (mirrors the `timeout` regex; `0` honoured) + `surviveGaps` (boolean); `parseFrontmatter`'s explicit return type + `listAgents` thread both onto `AgentDefinition` (new fields in `types.ts`).
+- **Resolve**: `resolveEffectiveBudgets` gains a 4th `definitionStallTimeout?` param → stall precedence is now flag → frontmatter → `DEFAULT_STALL_TIMEOUT_SEC` (`0` honoured via `??`, not collapsed). Callers `run.ts:274` + `resume.ts:623` pass `definition.stallTimeout`.
+- **Profile**: both callers set `config.surviveGaps` from `definition.surviveGaps`. The real `agents/code-review-companion/prompt.md` frontmatter now carries `stallTimeout: 0` (watchdog disabled — wall-clock `timeout: 7200` is the backstop) + `surviveGaps: true` (heartbeat on). `idleBudgetMs` (the third ceiling) stays the durable run.json input #49 reads — left for 5b.
+- **Tests** (+4 in `companion-longevity.test.ts`): frontmatter parse; `resolveEffectiveBudgets` definition-fallback + flag-wins + default; the real companion frontmatter carries the profile; a survive-gaps profile (stallTimeout 0) times out on wall-clock instead of `stalled-stream`.
+- **Evidence**: typecheck clean (caught + fixed `parseFrontmatter`'s return-type annotation); 68 green across companion-longevity + budget-flags + folder.
+- **Type gotcha**: `parseFrontmatter` has an explicit return-type annotation (not inferred), so new `parseYamlSimple` fields must be added there too or `listAgents` can't see them.
+

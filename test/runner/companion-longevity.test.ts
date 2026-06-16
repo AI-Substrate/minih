@@ -27,6 +27,7 @@ import type {
   AgentRunOptions,
   IAgentAdapter,
 } from '../../src/adapter/index.js';
+import { resolveEffectiveBudgets } from '../../src/cli/budget-flags.js';
 import { resolveAgent } from '../../src/runner/folder.js';
 import {
   __resetThrottleStateForTest,
@@ -269,5 +270,61 @@ describe('survive-gaps heartbeat — runner integration (plan 028 T002)', () => 
     expect(result.metadata.result).toBe('failed');
     expect(readManifest(result.runDir).terminalReason).toBe('stalled-stream');
     expect(adapter.terminateHistory.length).toBeGreaterThan(0);
+  });
+});
+
+describe('stallTimeout frontmatter → config leg (plan 028 T003/T004)', () => {
+  it('parseFrontmatter/resolveAgent reads stallTimeout + surviveGaps', () => {
+    const slug = 'sg-frontmatter';
+    const dir = path.join(tmpDir, slug);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, 'prompt.md'),
+      `---\ndescription: "sg agent"\ntimeout: 7200\nstallTimeout: 0\nsurviveGaps: true\n---\n\n# ${slug}\n\nbody`,
+    );
+    const def = resolveAgent(slug, tmpDir);
+    if (!def) throw new Error('expected agent to resolve');
+    expect(def.stallTimeout).toBe(0);
+    expect(def.surviveGaps).toBe(true);
+    expect(def.timeout).toBe(7200);
+  });
+
+  it('resolveEffectiveBudgets uses the definition stallTimeout when no flag — and the flag still wins', () => {
+    // frontmatter value reaches budgets.stallTimeoutSec (no flag):
+    expect(resolveEffectiveBudgets('run', {}, 7200, 0).stallTimeout).toBe(0);
+    // an explicit --stall-timeout flag overrides the frontmatter value:
+    expect(
+      resolveEffectiveBudgets('run', { stallTimeout: '5' }, 7200, 0)
+        .stallTimeout,
+    ).toBe(5);
+    // no flag, no definition value → the shared default:
+    expect(resolveEffectiveBudgets('run', {}, 7200).stallTimeout).toBe(300);
+  });
+
+  it('the real code-review-companion frontmatter carries the survive-gaps profile', () => {
+    const def = resolveAgent('code-review-companion', path.resolve('agents'));
+    if (!def) throw new Error('expected code-review-companion to resolve');
+    expect(def.surviveGaps).toBe(true);
+    expect(def.stallTimeout).toBe(0); // watchdog disabled — wall-clock backstops
+  });
+
+  it('a survive-gaps profile (stallTimeout 0) does NOT fire stalled-stream on a long silent pause — wall-clock backstops', async () => {
+    const def = createAgent('sg-profile');
+    const adapter = new SilentAdapter();
+    const result = await runAgent(
+      adapter,
+      def,
+      {
+        slug: 'sg-profile',
+        surviveGaps: true,
+        heartbeatIntervalMs: 15,
+        stallTimeout: 0, // the profile disables the watchdog
+        timeout: 0.3, // wall-clock is the only backstop
+      },
+      undefined,
+      tmpDir,
+    );
+    expect(result.metadata.result).toBe('timeout');
+    expect(readManifest(result.runDir).terminalReason).toBe('timeout');
   });
 });

@@ -624,12 +624,16 @@ async function runResumed(args: RunResumedArgs): Promise<void> {
     'resume',
     opts,
     definition.timeout,
+    definition.stallTimeout,
   );
   const config: AgentRunConfig = {
     slug,
     timeout: effectiveBudgets.timeout,
     stallTimeout: effectiveBudgets.stallTimeout,
     maxTurns: effectiveBudgets.maxTurns,
+    // Plan 028 Phase 5 — carry the survive-gaps profile through a resume too,
+    // so a re-taken-over companion keeps its heartbeat.
+    ...(definition.surviveGaps && { surviveGaps: true }),
     cwd: process.cwd(),
     sessionId: session.sessionId,
     resumedFromRunId: session.runId,

@@ -21,6 +21,20 @@ export interface AgentDefinition {
   reasoning?: string;
   /** Default timeout in seconds from prompt.md frontmatter (overridable via --timeout) */
   timeout?: number;
+  /**
+   * Plan 028 Phase 5 — default inactivity (stall) budget in seconds from
+   * prompt.md frontmatter (overridable via `--stall-timeout`). `0` disables the
+   * watchdog. Threaded into `resolveEffectiveBudgets` as the frontmatter
+   * fallback (the per-run flag still wins).
+   */
+  stallTimeout?: number;
+  /**
+   * Plan 028 Phase 5 — survive-gaps profile switch from prompt.md frontmatter.
+   * When `true`, the runner starts the opt-in manifest heartbeat (see
+   * {@link AgentRunConfig.surviveGaps}) so a long-running companion keeps
+   * reading `active` across long human-in-the-loop gaps.
+   */
+  surviveGaps?: boolean;
   dir: string;
   promptPath: string;
   schemaPath: string | null;

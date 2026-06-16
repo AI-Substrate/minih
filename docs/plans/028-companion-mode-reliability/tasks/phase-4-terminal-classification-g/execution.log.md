@@ -70,3 +70,26 @@ Grep confirmed **no** `farewell`/`farewellAt`/`cleanStop` reference in `runner.t
 
 - **Tests**: (a) the 3 clean reasons are **recordable** on a manifest and round-trip; (b) the spelling map — `idle_budget`→`idle-budget`, `no_engagement`→`no-engagement` (underscore→hyphen) — holds and the hyphen forms are clean. **No test asserts the runner triggers an idle stand-down** (Finding 09; that arm is #49 / Phase 5 task 5.5).
 - **Doc**: boundary + spelling map written to the plan's **§ Related / Deferred** (verified `idle-policy.ts:40,70` emit underscore; the union uses hyphen, consistent with `pid-vanished`/`stalled-stream`). #49 maps `exitReason → terminalReason`; a survive-gaps stand-down then records a clean reason `reconcile` already honours.
+
+## Companion findings reconciliation (live `code-review-companion`, run `2026-06-16T08-33-08-895Z-6c45`)
+
+Read via `minih companion findings code-review-companion` (dogfooding the Phase-3 read-path). 4 reviewed, 2 findings, 4 summaries.
+
+| ID | Sev | File | Finding | Disposition |
+|----|-----|------|---------|-------------|
+| C-F001 | **HIGH** | `runner.ts:1597` | The `cleanStop`/`farewellAt` marker is stamped only in the **final** manifest patch (as `status` flips to `completed`), so in the normal path reconcile skips the run via completed.json anyway; it does **not** cover the actual incident — a process killed while the manifest is still `active`/`completing` after a farewell. The reconcile **honouring** + hand-written-marker test are correct, but no test proves "sent farewell → killed before terminal write → reconcile honours". So AC-G's *farewell arm* is recordability+honouring, not an end-to-end fix. | **Confirmed correct** — matches the T004 spike's documented lifecycle limit. There is **no** real sent-farewell signal in the codebase (no `farewell` inbox type, no ledger field), so closing the arm needs a **new active-phase producer** (mcp shutdown signal) — beyond this phase's runner+render scope. **Surfaced to the user for a fix-now vs defer scope decision** (see below). |
+| C-F002 | MEDIUM | `docs/domains/runner/domain.md` | The contract change (union + `cleanStop`/`farewellAt` + `CLEAN_TERMINAL_REASONS`) wasn't noted in domain.md History. | **Already resolved** — commit `826d33c` added the Phase-4 History row (the companion reviewed `21cc8d8`, before that commit). |
+
+**Companion magicWand**: "Auto-derive more of the farewell retrospective directly from the coordination ledger" — backlog candidate, not Phase-4 scope.
+
+## ▶ RESUME MARKER (compaction checkpoint, 2026-06-16)
+
+**State**: T001–T008 committed; full suite 1417 pass / 0 fail; biome clean; tsc clean. Commits: lint `19f8370`, T001/2 `20ebba4`, T003/4 `cdc8f0c`, T005/6 `21cc8d8`, T007/8 `ab282b9`, domain.md `826d33c`.
+
+**Decision**: user chose **Fix now (extend scope)** for C-F001 (the HIGH). Build a **real active-phase farewell/clean-stop producer** so a companion killed mid-run after a clean shutdown is reconciled to `completed`, not `crashed` — closing AC-G's farewell arm end-to-end (reconcile honouring + clean-result marker already landed; the gap is a producer that writes the marker *while the manifest is still `active`/`completing`*).
+
+**Design direction (under investigation, not yet coded)**: the orchestrator's `control:stop` is the companion's clean-shutdown path (set via `attach.ts`; manifest `control` field at `types.ts:515`). Plan: when the runner **observes/applies `control:stop`**, write `cleanStop:true` + `terminalReason:'operator-stop'` to `run.json` **immediately (active-phase)** — stays in the **runner domain** (control handling is `runner.ts`), no new MCP tool needed. Then a kill during the drain/shutdown is honoured by the existing reconcile path. Was tracing `control` observation in `runner.ts` (grep showed `468` init, drain block `1435-1465`); need to find where the runner READS an incoming `control:stop` during the loop and add the marker write there. RED test: a run with `control:stop` set + killed (PROBE status, dead pid, cleanStop now present) reconciles clean; without the control signal it still crashes.
+
+**Companion**: `code-review-companion`, run `2026-06-16T08-33-08-895Z-6c45`, **kept ALIVE** to review the fix (reconnect via `minih status code-review-companion`). Debrief (drain ping → control:stop → farewell read) is **deferred until after the fix lands**.
+
+**Still owed after the fix**: re-ping companion with the fix sha → reconcile any new findings → companion debrief → T0z phase-end seam (`/eng-harness-flow --event phase-end`) → drain the observe buffer (carries DL-001 from Phase 3) → hand-crank the flight plan (`the-flow.json`/`.md`, mark p4 done, milestones_done 6→7) → narrate Phase-4-complete + offer Phase 5.

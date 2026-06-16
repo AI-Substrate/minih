@@ -1595,7 +1595,16 @@ export async function runAgent(
     await drainTrackedManifestUpdates();
     await flushManifestThrottled(runDir);
     await updateManifest(runDir, {
-      status: resultStatus === 'completed' ? 'completed' : 'failed',
+      // Plan 028 Phase 4 (AC-G, T002) — a clean-but-schema-nit run
+      // (`result:'degraded'`) is recorded `completed` on the live manifest;
+      // completed.json.result (above) keeps the honest `degraded`. The velocity
+      // guard (above, keyed on `resultStatus === 'completed'`) is deliberately
+      // NOT widened — a degraded run still skips velocity (Workshop Q1;
+      // measurement domain untouched).
+      status:
+        resultStatus === 'completed' || resultStatus === 'degraded'
+          ? 'completed'
+          : 'failed',
       sessionId: agentResult.sessionId || null,
       ...(budgetReason &&
         !denialState.terminalFired &&

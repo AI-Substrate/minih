@@ -353,3 +353,12 @@
 - **magicWand** (target: coordination): Expose an explicit idle decision field in coordination_status, such as nextAction: keep_polling | send_checkin | stop_idle_budget, plus remainingIdleMs and checkInOutstanding, so companion agents do not have to reconcile prompt-era lifecycle rules by inference.
 - difficulties:
   - [annoying] coordination: The companion lifecycle instructions disagreed about post-check-in behavior: one section describes exiting after replyWaitPolls, while the ledger-driven contract says stand-down is controlled by idleBudgetSec/backstop and check-ins are not the exit mechanism. (workaround: Followed the ledger-driven coordination_status budget and continued polling until idleElapsedMs exceeded idleBudgetSec.)
+
+## 2026-06-16T22:05:37.962Z — code-review-companion / 2026-06-16T21-31-43-201Z-ce1c
+
+- runId: 2026-06-16T21-31-43-201Z-ce1c
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-06-16T21-31-43-201Z-ce1c
+- summary: Companion stopped on request after Phase 5a review. I reviewed four commit-boundary requests: T001/T002 49d8326 approved with no findings, T003/T004 83ebe3c approved with F001, T007 d90aeaa approved with no findings, and wrap 163b29d approved with F002. The outside peer then reported that F001 and F002 were fixed in ab31cd3 and sent control:stop in the same batch, so I honored stop precedence and did not perform a separate review of that final fix commit.
+- **magicWand** (target: coordination): Add a first-class companion farewell generator that converts the coordination ledger into a schema-valid report with reviewed task IDs, findings, summaries, and final unresolved status prefilled.
+- difficulties:
+  - [annoying] test: `npx vitest --runInBand` is not accepted by this repo's Vitest setup. (workaround: Use the documented `npx vitest run <files>` invocation.)

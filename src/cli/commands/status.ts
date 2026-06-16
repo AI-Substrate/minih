@@ -10,6 +10,7 @@ import * as path from 'node:path';
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import {
+  isCleanTerminalReason,
   isProcessAliveDefault,
   listActiveRunCandidates,
   MultipleActiveRunsError,
@@ -26,6 +27,16 @@ import {
 
 const STALE_THRESHOLD_MS = 60_000;
 const DEFAULT_TURNS = 5;
+
+/**
+ * Plan 028 Phase 4 (G) — style a `terminalReason` for the status render. A
+ * clean terminal (operator-stop / idle-budget / no-engagement) renders dim, not
+ * red — only genuine failure reasons render red, so a clean stop no longer
+ * looks like a crash. Exported for the render test.
+ */
+export function styleTerminalReason(reason: string): string {
+  return isCleanTerminalReason(reason) ? chalk.dim(reason) : chalk.red(reason);
+}
 
 interface TurnEntry {
   type: string;
@@ -439,7 +450,9 @@ export function registerStatusCommand(program: Command): void {
           // Plan 026 — surface WHY a run terminalized (timeout /
           // stalled-stream / max-turns / permission-denied / …).
           if (terminalReason) {
-            process.stderr.write(`  Reason:   ${chalk.red(terminalReason)}\n`);
+            process.stderr.write(
+              `  Reason:   ${styleTerminalReason(terminalReason)}\n`,
+            );
           }
           if (sessionId)
             process.stderr.write(`  Session:  ${chalk.dim(sessionId)}\n`);

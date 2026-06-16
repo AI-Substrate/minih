@@ -578,7 +578,13 @@ export interface LiveRunManifest {
     | 'pid-vanished'
     | 'timeout'
     | 'stalled-stream'
-    | 'max-turns';
+    | 'max-turns'
+    // Plan 028 Phase 4 (G) — clean terminals. Recordable now; producers are
+    // follow-up: `operator-stop` = a `minih stop` command, `idle-budget` /
+    // `no-engagement` = #49's idle trigger (see CLEAN_TERMINAL_REASONS).
+    | 'operator-stop'
+    | 'idle-budget'
+    | 'no-engagement';
   /**
    * Plan 028 Phase 4 (G) — clean-stop marker. `cleanStop: true` means the run
    * reached a clean terminal (the agent farewelled / a clean result), so a
@@ -629,6 +635,27 @@ export interface LiveRunManifest {
    * never thrown).
    */
   coordinationSignals?: Array<{ signal: string; error: string }>;
+}
+
+/**
+ * Plan 028 Phase 4 (G) — the `terminalReason` members that denote a *clean*
+ * stop (farewell / operator stop / idle stand-down), as opposed to a failure.
+ * Single source of truth: `reconcile.ts` (honours these as `completed`, not
+ * `crashed`) and `status.ts` (renders them dim, not red) both consume this —
+ * never re-list the members inline, so the vocabulary can't drift across
+ * consumers.
+ */
+export const CLEAN_TERMINAL_REASONS = new Set<string>([
+  'operator-stop',
+  'idle-budget',
+  'no-engagement',
+]);
+
+/** True when `reason` is a clean terminal (see {@link CLEAN_TERMINAL_REASONS}). */
+export function isCleanTerminalReason(
+  reason: string | null | undefined,
+): boolean {
+  return reason != null && CLEAN_TERMINAL_REASONS.has(reason);
 }
 
 /** Mode passed to `resolveRun({ slug, mode })`. */

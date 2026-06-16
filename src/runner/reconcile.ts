@@ -19,21 +19,10 @@ import * as path from 'node:path';
 import { isProcessAliveDefault } from './run-eligibility.js';
 import { listAgentSlugs, listRunDirs } from './run-inventory.js';
 import { updateManifest } from './run-manifest.js';
+import { isCleanTerminalReason } from './types.js';
 
 /** Manifest statuses that claim a live process — the heal candidates. */
 const PROBE_STATUSES = new Set(['starting', 'active', 'idle', 'completing']);
-
-/**
- * Plan 028 Phase 4 (G) — terminalReasons that denote a *clean* stop, not a
- * crash. A dead-pid manifest carrying one of these (or `cleanStop: true`)
- * reconciles to `completed`, never `crashed`. Kept as a string set so a
- * tolerant-parsed reason matches regardless of the union's compile-time shape.
- */
-const CLEAN_REASONS = new Set([
-  'operator-stop',
-  'idle-budget',
-  'no-engagement',
-]);
 
 export interface ReconcileOptions {
   agentsDir?: string;
@@ -129,8 +118,7 @@ export async function reconcileRuns(
       // crashed + pid-vanished.
       const isCleanStop =
         manifest.cleanStop === true ||
-        (manifest.terminalReason !== undefined &&
-          CLEAN_REASONS.has(manifest.terminalReason));
+        isCleanTerminalReason(manifest.terminalReason);
       if (isCleanStop) {
         await updateManifest(runDir, { status: 'completed' });
         report.reconciledClean.push({

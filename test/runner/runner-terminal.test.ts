@@ -1,10 +1,13 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import chalk from 'chalk';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FakeAgentAdapter } from '../../src/adapter/index.js';
+import { styleTerminalReason } from '../../src/cli/commands/status.js';
 import { resolveAgent } from '../../src/runner/folder.js';
 import { makeManifest } from '../../src/runner/human-view-fixtures.js';
+import { isCleanTerminalReason } from '../../src/runner/index.js';
 import { reconcileRuns } from '../../src/runner/reconcile.js';
 import { writeManifest } from '../../src/runner/run-manifest.js';
 import { runAgent } from '../../src/runner/runner.js';
@@ -160,5 +163,40 @@ describe('terminal classification — farewell / cleanStop (T003/T004)', () => {
     const manifest = readManifest(result.runDir);
     expect(manifest.cleanStop).toBe(true);
     expect(typeof manifest.farewellAt).toBe('number');
+  });
+});
+
+describe('terminal classification — clean reasons render non-red (T005/T006)', () => {
+  it('classifies the 3 new clean reasons as clean; failure reasons as not', () => {
+    for (const reason of ['operator-stop', 'idle-budget', 'no-engagement']) {
+      expect(isCleanTerminalReason(reason)).toBe(true);
+    }
+    for (const reason of [
+      'timeout',
+      'pid-vanished',
+      'permission-denied',
+      'stalled-stream',
+      'max-turns',
+    ]) {
+      expect(isCleanTerminalReason(reason)).toBe(false);
+    }
+    expect(isCleanTerminalReason(null)).toBe(false);
+    expect(isCleanTerminalReason(undefined)).toBe(false);
+  });
+
+  it('status render styles a clean reason dim (not red), a failure reason red', () => {
+    const prev = chalk.level;
+    chalk.level = 1; // force ANSI so the branch is observable in a non-TTY test
+    try {
+      const RED = '\x1b[31m';
+      // Clean reason → NOT red.
+      expect(styleTerminalReason('operator-stop')).not.toContain(RED);
+      expect(styleTerminalReason('idle-budget')).not.toContain(RED);
+      // Failure reason → still red.
+      expect(styleTerminalReason('timeout')).toContain(RED);
+      expect(styleTerminalReason('pid-vanished')).toContain(RED);
+    } finally {
+      chalk.level = prev;
+    }
   });
 });

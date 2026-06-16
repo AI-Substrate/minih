@@ -4,7 +4,11 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FakeAgentAdapter } from '../../src/adapter/index.js';
 import { resolveAgent } from '../../src/runner/folder.js';
+import { makeManifest } from '../../src/runner/human-view-fixtures.js';
+import { reconcileRuns } from '../../src/runner/reconcile.js';
+import { writeManifest } from '../../src/runner/run-manifest.js';
 import { runAgent } from '../../src/runner/runner.js';
+import type { LiveRunManifest } from '../../src/runner/types.js';
 import { validSystemOutput } from '../helpers/fixtures.js';
 
 // Plan 028 Phase 4 — Terminal classification (G).
@@ -73,5 +77,88 @@ describe('terminal classification — degraded (T001/T002)', () => {
     // … but the live manifest must read `completed`, NOT `failed` (AC-G).
     const manifest = readManifest(result.runDir);
     expect(manifest.status).toBe('completed');
+  });
+});
+
+/** Seed a dead-pid run record under tmpDir (the agents dir) for reconcile. */
+async function seedReconcileRun(
+  slug: string,
+  runId: string,
+  patch: Partial<LiveRunManifest>,
+): Promise<string> {
+  const runDir = path.join(tmpDir, slug, 'runs', runId);
+  fs.mkdirSync(runDir, { recursive: true });
+  await writeManifest(
+    runDir,
+    makeManifest({
+      slug,
+      runId,
+      runDir,
+      status: 'completing',
+      pid: 999999,
+      ...patch,
+    }),
+  );
+  return runDir;
+}
+
+describe('terminal classification — farewell / cleanStop (T003/T004)', () => {
+  it('reconcile keeps a dead-pid run with a cleanStop marker as completed, not crashed', async () => {
+    const runDir = await seedReconcileRun(
+      'farewelled',
+      '2026-06-16T00-00-00-000Z-a',
+      { status: 'completing', pid: 999999, cleanStop: true },
+    );
+
+    const report = await reconcileRuns({
+      agentsDir: tmpDir,
+      isProcessAlive: () => false, // pid is gone
+    });
+
+    const manifest = readManifest(runDir);
+    // Clean stop → completed, NOT a crash diagnosis.
+    expect(manifest.status).toBe('completed');
+    expect(manifest.terminalReason).not.toBe('pid-vanished');
+    // It is reconciled-clean, never "healed" (which means crashed).
+    expect(report.healed).toEqual([]);
+    expect(report.reconciledClean.map((r) => r.runId)).toEqual([
+      '2026-06-16T00-00-00-000Z-a',
+    ]);
+  });
+
+  it('still crashes a dead-pid run with NO clean-stop marker (regression guard)', async () => {
+    const runDir = await seedReconcileRun(
+      'orphan',
+      '2026-06-16T00-00-00-000Z-b',
+      {
+        status: 'active',
+        pid: 999998,
+      },
+    );
+
+    await reconcileRuns({ agentsDir: tmpDir, isProcessAlive: () => false });
+
+    const manifest = readManifest(runDir);
+    expect(manifest.status).toBe('crashed');
+    expect(manifest.terminalReason).toBe('pid-vanished');
+  });
+
+  it('a clean run records cleanStop + farewellAt on the manifest (producer)', async () => {
+    const def = createAgent('clean-farewell');
+    const fake = new FakeAgentAdapter({
+      output: validSystemOutput({ result: 'ok' }),
+    });
+    const result = await runAgent(
+      fake,
+      def,
+      { slug: 'clean-farewell' },
+      undefined,
+      tmpDir,
+    );
+
+    expect(result.metadata.result).toBe('completed');
+    const manifest = readManifest(result.runDir);
+    expect(manifest.cleanStop).toBe(true);
+    expect(typeof manifest.farewellAt).toBe('number');
   });
 });

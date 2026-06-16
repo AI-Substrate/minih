@@ -1594,18 +1594,23 @@ export async function runAgent(
           : undefined;
     await drainTrackedManifestUpdates();
     await flushManifestThrottled(runDir);
+    // Plan 028 Phase 4 (AC-G) — a clean result (completed, or a clean-but-
+    // schema-nit `degraded`) is a clean terminal: record it `completed` on the
+    // live manifest (T002) and stamp a `cleanStop`/`farewellAt` marker (T004)
+    // so a later dead-pid sighting reconciles to `completed`, not `crashed`.
+    // `completed.json.result` (above) keeps the honest `degraded`. The velocity
+    // guard (above, keyed on `resultStatus === 'completed'`) is deliberately
+    // NOT widened — a degraded run still skips velocity (Workshop Q1;
+    // measurement domain untouched).
+    const cleanTerminal =
+      resultStatus === 'completed' || resultStatus === 'degraded';
     await updateManifest(runDir, {
-      // Plan 028 Phase 4 (AC-G, T002) — a clean-but-schema-nit run
-      // (`result:'degraded'`) is recorded `completed` on the live manifest;
-      // completed.json.result (above) keeps the honest `degraded`. The velocity
-      // guard (above, keyed on `resultStatus === 'completed'`) is deliberately
-      // NOT widened — a degraded run still skips velocity (Workshop Q1;
-      // measurement domain untouched).
-      status:
-        resultStatus === 'completed' || resultStatus === 'degraded'
-          ? 'completed'
-          : 'failed',
+      status: cleanTerminal ? 'completed' : 'failed',
       sessionId: agentResult.sessionId || null,
+      ...(cleanTerminal && {
+        cleanStop: true,
+        farewellAt: completedAt.getTime(),
+      }),
       ...(budgetReason &&
         !denialState.terminalFired &&
         !streamAborted && { terminalReason: budgetReason }),

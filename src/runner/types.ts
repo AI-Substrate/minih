@@ -580,6 +580,18 @@ export interface LiveRunManifest {
     | 'stalled-stream'
     | 'max-turns';
   /**
+   * Plan 028 Phase 4 (G) — clean-stop marker. `cleanStop: true` means the run
+   * reached a clean terminal (the agent farewelled / a clean result), so a
+   * later dead-pid sighting must reconcile to `completed`, NOT `crashed`
+   * (`reconcile.ts` honours this). `farewellAt` is the Unix-ms instant the
+   * clean stop was observed. Both absent on runs that never reached a clean
+   * terminal and on runs written before plan 028. The full operator-stop /
+   * idle producers (a `minih stop` command, #49's idle trigger) are follow-up;
+   * this phase lands the vocabulary + the reconcile honouring.
+   */
+  cleanStop?: boolean;
+  farewellAt?: number;
+  /**
    * Plan 026 — the effective run budgets, recorded at run start so
    * operators can see what limits a run was under without consulting
    * shell history. Absent on runs written before plan 026.

@@ -315,3 +315,12 @@
 - **magicWand** (target: coordination): Have coordination_status include stable finding ids plus ackOf in draftFarewell.findings so the final report can be written directly from the draft without reconstructing IDs or reply links from memory.
 - difficulties:
   - [annoying] debug: The optimized glob tool reported no docs/plans matches even though the project plan tree existed and find could list it from the project root. (workaround: Used project-root find plus direct view calls for orientation instead of relying on glob for the plan tree.)
+
+## 2026-06-16T04:22:42.848Z — code-review-companion / 2026-06-16T13-50-25-287Z-8a55
+
+- runId: 2026-06-16T13-50-25-287Z-8a55
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-06-16T13-50-25-287Z-8a55
+- summary: Reviewed five Phase 1 companion-mode reliability commits covering defect C investigation, defect A status fail-open, defect B `runs list --all`, defect B heal-on-read, and final AC-C characterization/domain history. The code changes for A/B/C looked sound and targeted tests passed, but the overall phase verdict remains REQUEST_CHANGES because F001 is still outstanding: the newly added plan JSON is not Biome-formatted and the execution evidence misdiagnoses that lint failure.
+- **magicWand** (target: coordination): Add a lane-agnostic `minih companion open-findings <slug> --run <runId>` command that lists unresolved findings and whether later commits addressed them, so final drain reviews do not rely on the companion remembering prior inbox messages.
+- difficulties:
+  - [degrading] test: Harness/phase evidence around lint was inconsistent: the phase log called the lint failure a missing Biome install, but `npx biome check .` ran and reported concrete format/lint failures. (workaround: Ran `npx biome check .` directly and carried the mismatch as review finding F001.)

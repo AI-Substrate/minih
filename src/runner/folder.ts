@@ -743,19 +743,26 @@ export function resolveAgent(
  * Freezes copies of prompt, instructions, and schemas.
  * @returns Absolute path to the created run folder + the run ID
  */
-export function createRunFolder(agentDef: AgentDefinition): {
+export function createRunFolder(
+  agentDef: AgentDefinition,
+  opts?: { now?: () => Date },
+): {
   runDir: string;
   runId: string;
 } {
-  const now = new Date();
+  // The runId encodes the start instant in TRUE UTC (the trailing `Z` is now
+  // truthful). `now` is injectable so tests can pin an exact instant; default
+  // is the real wall clock. The UTC getters keep the runId's lexicographic
+  // order aligned with chronological order regardless of the host timezone.
+  const now = (opts?.now ?? (() => new Date()))();
   const suffix = crypto.randomBytes(2).toString('hex');
-  const yyyy = String(now.getFullYear());
-  const mm = String(now.getMonth() + 1).padStart(2, '0');
-  const dd = String(now.getDate()).padStart(2, '0');
-  const hh = String(now.getHours()).padStart(2, '0');
-  const min = String(now.getMinutes()).padStart(2, '0');
-  const ss = String(now.getSeconds()).padStart(2, '0');
-  const ms = String(now.getMilliseconds()).padStart(3, '0');
+  const yyyy = String(now.getUTCFullYear());
+  const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(now.getUTCDate()).padStart(2, '0');
+  const hh = String(now.getUTCHours()).padStart(2, '0');
+  const min = String(now.getUTCMinutes()).padStart(2, '0');
+  const ss = String(now.getUTCSeconds()).padStart(2, '0');
+  const ms = String(now.getUTCMilliseconds()).padStart(3, '0');
   const runId = `${yyyy}-${mm}-${dd}T${hh}-${min}-${ss}-${ms}Z-${suffix}`;
 
   const runsDir = path.join(agentDef.dir, 'runs');

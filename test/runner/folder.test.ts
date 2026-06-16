@@ -346,6 +346,39 @@ describe('createRunFolder', () => {
       '# Test prompt',
     );
   });
+
+  // T001 (defect D) — the runId's encoded timestamp must be TRUE UTC: it should
+  // parse back to the same instant as the run's startedAt clock, not a local
+  // time mislabeled `Z`. Pinned via an injected `now` so the assertion is exact.
+  // Forced to a UTC+10 zone so a local-getter regression is always caught (on a
+  // UTC machine local==UTC would hide it).
+  it('encodes the runId in true UTC (== injected startedAt instant), not local time', () => {
+    const dir = path.join(tmpDir, 'utc-agent');
+    fs.mkdirSync(dir);
+    fs.writeFileSync(
+      path.join(dir, 'prompt.md'),
+      '---\ndescription: "Test"\n---\n\n# Test prompt',
+    );
+    const agent = resolveAgent('utc-agent', tmpDir);
+    if (!agent) throw new Error('expected utc-agent to resolve');
+
+    // startedAt for this run, as an absolute instant (TZ-independent).
+    const startedAt = new Date('2026-03-15T08:09:10.123Z');
+    const origTZ = process.env.TZ;
+    process.env.TZ = 'Etc/GMT-10'; // UTC+10 — local hour differs from UTC
+    try {
+      const { runId } = createRunFolder(agent, { now: () => startedAt });
+      const m = runId.match(
+        /^(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z-[0-9a-f]{4}$/,
+      );
+      if (!m) throw new Error(`unexpected runId shape: ${runId}`);
+      const [, y, mo, d, h, mi, s, ms] = m;
+      const encoded = new Date(`${y}-${mo}-${d}T${h}:${mi}:${s}.${ms}Z`);
+      expect(encoded.getTime()).toBe(startedAt.getTime());
+    } finally {
+      process.env.TZ = origTZ;
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------

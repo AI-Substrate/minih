@@ -356,9 +356,7 @@ function isLiveRow(row: RunInventoryRow): boolean {
  * table shows what is running and what last finished. Full terminal history is
  * surfaced by `--all`.
  */
-function selectActiveOrRecent(
-  slugRows: RunInventoryRow[],
-): RunInventoryRow[] {
+function selectActiveOrRecent(slugRows: RunInventoryRow[]): RunInventoryRow[] {
   const live = slugRows.filter(isLiveRow);
   const terminal = slugRows.filter((row) => !isLiveRow(row)).sort(compareRows);
   return terminal.length > 0 ? [...live, terminal[0]] : live;

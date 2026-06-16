@@ -384,10 +384,14 @@ describe('listRunInventory — heal-on-read of dead-pid orphans (plan 028 defect
     );
     return dir;
   }
-  function readManifestJson(dir: string): { status: string; terminalReason?: string } {
-    return JSON.parse(
-      readFileSync(path.join(dir, 'run.json'), 'utf8'),
-    ) as { status: string; terminalReason?: string };
+  function readManifestJson(dir: string): {
+    status: string;
+    terminalReason?: string;
+  } {
+    return JSON.parse(readFileSync(path.join(dir, 'run.json'), 'utf8')) as {
+      status: string;
+      terminalReason?: string;
+    };
   }
 
   it('heals a stale dead-pid active orphan to crashed without dropping the live run', async () => {
@@ -434,7 +438,8 @@ describe('listRunInventory — heal-on-read of dead-pid orphans (plan 028 defect
       isProcessAlive: (pid) => pid === 111,
       staleThresholdMs: Number.MAX_SAFE_INTEGER,
       // a held reconcile lock / write error is modelled as a throwing heal
-      healOrphan: () => Promise.reject(new Error('boom: write failed mid-heal')),
+      healOrphan: () =>
+        Promise.reject(new Error('boom: write failed mid-heal')),
     });
 
     // the read survives and the live run is still reported

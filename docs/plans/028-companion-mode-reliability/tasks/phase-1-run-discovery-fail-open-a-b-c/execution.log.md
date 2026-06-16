@@ -10,6 +10,7 @@
 - **Boot verdict**: `status: error` — **but the sole failing sensor is `lint` (`npx biome check .`) and biome is not installed** (doctor's `toolchain` layer flags the same). Substantive sensors: `typecheck` **pass (clean)**, `build+test` (`just check`) **pass (clean)**, `minih-doctor` warn, `audit` warn (1 critical / 5 high).
 - **Decision (override logged)**: proceed. The governance doc states "day-one degraded is honest, not broken" and `just check` runs no biome; the real readiness gates (typecheck + build+test) are green, so the TDD baseline is sound. Failure is the documented biome gap, not a real break.
 - **Friction captured** (retro): `DL-001` — boot's single overall verdict can't distinguish a missing optional tool (biome) from a real break; `INS-001` — live defect-D sighting (companion runId `2026-06-16T13-50-25-287Z` vs real UTC `03:52` — local-time-as-Z, the exact bug Phase 2 fixes).
+- **⚠️ Correction (companion finding F001)**: the T000 diagnosis above was **wrong**. `biome` is missing only from `$PATH` (doctor's "missing tools"); `npx biome check .` runs fine and the lint failure included **real format violations in my own new/edited files** — not a benign "biome absent" state. The correct action was to run the format gate (`just fft` per governance) **before** committing, which I skipped. Fixed at phase end: `npx biome format --write` on the 6 changed files (the-flow.json, run-inventory.ts/.test.ts formatted), re-check clean, suites re-run green. Lesson: run the format gate before each commit.
 
 ## Companion boot (C0/C0a)
 
@@ -89,3 +90,12 @@ Per the T001 decision (AC-C fallback). Added 2 characterization tests to `test/r
 **Production files**: `src/cli/commands/status.ts` (A), `src/runner/run-inventory.ts` (B-list + B-heal). **Tests**: `status-verdict.test.ts` (+4), `run-inventory.test.ts` (+4), `folder.test.ts` (+2). No `run-resolver`/`history`/`last-run`/`peer-activity`/`coordination-status` production edits (defect C is the fallback; resolver already skips orphans).
 
 **Retro candidates**: `DL-001` (boot biome verdict), `DL-002` (`ACTIVE_STATUSES` triplication), `INS-001` (live defect-D sighting). Drained at the phase-end seam.
+
+## Companion debrief (Power-Off)
+
+The `code-review-companion` ran the full phase (briefed once, pinged at all 5 commit boundaries, fire-and-forget), then was stopped with `control:stop` and **farewelled cleanly** (run ended; 168 tool calls, 9850 events, ~32 min). It sent **0 inline inbox findings** (it accumulated internally and emitted the verdict only at the farewell) — a real "survival vs engagement" data point for Phase 5 (it stayed alive and *did* review, but never used the inbox reply channel or set `selfReportedState`).
+
+- **Verdict**: `REQUEST_CHANGES` — "code changes for A/B/C looked sound and targeted tests passed", but **F001** kept it from APPROVE.
+- **F001** (addressed ✅): the new files weren't Biome-formatted **and** the phase evidence misdiagnosed the lint failure (claimed biome was uninstalled; in fact `npx biome check .` ran and found real format violations). **Resolution**: ran the format gate on the changed files (re-check clean, suites green) and corrected the T000 evidence above. The companion was right.
+- **magicWand** (→ follow-up): *"a lane-agnostic `minih companion open-findings <slug> --run <runId>` that lists unresolved findings and whether later commits addressed them, so final drain reviews don't rely on the companion remembering prior inbox messages."* Strongly overlaps **Phase 3** (the findings read-path, F) — captured as a retro for Phase 3 to consider.
+- **Companion self-nit**: its own run validated `degraded` (`/findings/0 must have required property 'id'`) — its output schema wants an `id` on each finding; minor, the companion-agent's own concern, logged for its maintainer.

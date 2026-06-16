@@ -44,3 +44,14 @@ Added a local `ACTIVE_STATUSES = {starting, active, completing}` (mirrors the tw
 **Result**: `npx vitest run test/cli/status-verdict.test.ts` → **31/31 green**, no regressions. AC-A satisfied at the unit level.
 
 **Debt note** (retro candidate): `ACTIVE_STATUSES` now exists in **three** private copies (run-inventory, run-resolver, status). Consistent with the existing pattern, but a future refactor could hoist one shared exported constant.
+
+### T004/T005 — Defect B (list): `--all` was a silent no-op ✅ (commit pending)
+
+**RED**: `input.all` was declared on `ListRunInventoryInput` (line 26) and plumbed from `runs.ts:58`, but never read — default and `--all` returned the same set. Added a 2-case block to `test/runner/run-inventory.test.ts`; RED shown as `expected 4 to be greater than 4`.
+
+**GREEN**: restructured `listRunInventory`'s per-slug loop. New contract:
+- `--active`: live attention set only (unchanged).
+- **default**: "active or recent" — every live row + each agent's **single newest terminal row** (`selectActiveOrRecent` + `isLiveRow` helpers).
+- **`--all`**: full terminal history, bounded by `--limit`.
+`runs.ts` already passed `all:` through, so no CLI change was needed — the reader was the whole gap.
+**Result**: `run-inventory.test.ts` 11/11 (incl. the pre-existing default-limit test); `cli/runs.test.ts` + `run-resolver.test.ts` 20/20. Only `runs.ts` consumes `listRunInventory`, so no other surface shifted. AC-B (`--all` broadens) met.

@@ -48,6 +48,7 @@ export async function listRunInventory(
 
   for (const slug of slugs) {
     const runDirs = await listRunDirs(path.join(agentsDir, slug));
+    const slugRows: RunInventoryRow[] = [];
     for (const run of runDirs) {
       const row = await projectRunRow({
         agentsDir,
@@ -67,7 +68,16 @@ export async function listRunInventory(
           continue;
         }
       }
-      rows.push(row);
+      slugRows.push(row);
+    }
+    // Plan 028 (defect B) — the default view is "active or recent": every live
+    // row for this agent plus its single newest terminal row, so the table
+    // shows what is running and what last finished. Full terminal history is
+    // `--all` (previously a silent no-op). `--active` keeps its own filter.
+    if (!input.active && !input.all) {
+      rows.push(...selectActiveOrRecent(slugRows));
+    } else {
+      rows.push(...slugRows);
     }
   }
 
@@ -270,4 +280,31 @@ function compareRows(a: RunInventoryRow, b: RunInventoryRow): number {
   const bt = b.startedAt ?? b.updatedAt ?? '';
   const byTime = bt.localeCompare(at);
   return byTime !== 0 ? byTime : b.runId.localeCompare(a.runId);
+}
+
+/**
+ * A row that belongs to the live "attention" set: actively running, live-but-
+ * quiet (stale), or an unhealed dead-pid run. Healed `crashed` runs have left
+ * the attention queue and read as terminal here.
+ */
+function isLiveRow(row: RunInventoryRow): boolean {
+  return (
+    row.liveness === 'active' ||
+    row.liveness === 'stale' ||
+    (row.liveness === 'dead' && row.manifestStatus !== 'crashed')
+  );
+}
+
+/**
+ * Plan 028 (defect B) — the default "active or recent" projection for a single
+ * agent's rows: keep every live row, plus the single newest terminal row so the
+ * table shows what is running and what last finished. Full terminal history is
+ * surfaced by `--all`.
+ */
+function selectActiveOrRecent(
+  slugRows: RunInventoryRow[],
+): RunInventoryRow[] {
+  const live = slugRows.filter(isLiveRow);
+  const terminal = slugRows.filter((row) => !isLiveRow(row)).sort(compareRows);
+  return terminal.length > 0 ? [...live, terminal[0]] : live;
 }

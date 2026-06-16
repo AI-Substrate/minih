@@ -295,6 +295,71 @@ describe('listRunInventory', () => {
   });
 });
 
+// Plan 028 Phase 1 (defect B) — `--all` must measurably broaden the result set
+// (it was declared on ListRunInventoryInput but never read → a silent no-op).
+// New contract: default = active/recent (every live row + each agent's single
+// newest terminal row); --all = full history, bounded by --limit.
+describe('listRunInventory — --all broadens vs default (plan 028 defect B)', () => {
+  async function seedActive(
+    slug: string,
+    runId: string,
+    pid: number,
+  ): Promise<void> {
+    const dir = makeRunDir(slug, runId);
+    await writeManifest(
+      dir,
+      makeManifest({ slug, runId, runDir: dir, status: 'active', pid }),
+    );
+  }
+  function seedCompleted(slug: string, runId: string): void {
+    const dir = makeRunDir(slug, runId);
+    writeFileSync(
+      path.join(dir, 'completed.json'),
+      JSON.stringify(makeCompleted({ slug, runId })),
+    );
+  }
+
+  it('default shows active + only the newest terminal row; --all shows full history', async () => {
+    await seedActive('alpha', '2026-06-08T00-00-09-000Z-live', 4242);
+    seedCompleted('alpha', '2026-06-08T00-00-00-000Z-c0');
+    seedCompleted('alpha', '2026-06-08T00-00-01-000Z-c1');
+    seedCompleted('alpha', '2026-06-08T00-00-02-000Z-c2');
+
+    const common = {
+      agentsDir,
+      isProcessAlive: () => true,
+      staleThresholdMs: Number.MAX_SAFE_INTEGER,
+    };
+    const def = await listRunInventory(common);
+    const all = await listRunInventory({ ...common, all: true });
+
+    // --all is measurably broader — no silent no-op flag remains
+    expect(all.length).toBeGreaterThan(def.length);
+    // default = the live run + exactly one (newest) terminal row
+    expect(def.map((r) => r.liveness).sort()).toEqual(['active', 'completed']);
+    expect(def.find((r) => r.liveness === 'completed')?.runId).toBe(
+      '2026-06-08T00-00-02-000Z-c2',
+    );
+    // --all = the live run + all three terminal rows
+    expect(all.filter((r) => r.liveness === 'completed')).toHaveLength(3);
+    expect(all.find((r) => r.liveness === 'active')?.runId).toBe(
+      '2026-06-08T00-00-09-000Z-live',
+    );
+  });
+
+  it('--active still surfaces the genuinely-live run', async () => {
+    await seedActive('alpha', '2026-06-08T00-00-09-000Z-live', 4242);
+    seedCompleted('alpha', '2026-06-08T00-00-00-000Z-c0');
+    const rows = await listRunInventory({
+      agentsDir,
+      active: true,
+      isProcessAlive: () => true,
+      staleThresholdMs: Number.MAX_SAFE_INTEGER,
+    });
+    expect(rows.map((r) => r.liveness)).toEqual(['active']);
+  });
+});
+
 describe('getRunStatuses', () => {
   it('returns row-level missing errors without aborting the batch', async () => {
     const runId = '2026-06-08T00-00-03-000Z-d';

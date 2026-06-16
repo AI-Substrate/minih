@@ -185,13 +185,25 @@ export function startManifestHeartbeat(
   runDir: string,
   intervalMs: number = SURVIVE_GAPS_HEARTBEAT_INTERVAL_MS,
 ): () => void {
+  // F002 (companion review of P5 wrap) — a fully-silent catch would hide a
+  // PERSISTENTLY broken heartbeat: a real fault (permissions, disk) would let a
+  // survive-gaps run go stale with no operator clue. So surface the first
+  // non-teardown failure ONCE on stderr (then stay quiet — no 20s spam), while
+  // still ignoring the expected teardown race (`ENOENT` = run dir gone / torn
+  // manifest after cleanup). Never throws either way — the heartbeat is
+  // advisory; the stall watchdog + wall-clock timeout are the real guards.
+  let warnedOnce = false;
   const timer = setInterval(() => {
-    // Best-effort liveness refresh: a failed bump (torn manifest, or the run
-    // dir being torn down at shutdown) must NEVER destabilise the run — the
-    // heartbeat is advisory, the stall watchdog + wall-clock timeout are the
-    // real guards, and the next tick retries. Swallow write errors.
     void updateManifest(runDir, { updatedAt: new Date().toISOString() }).catch(
-      () => {},
+      (err: unknown) => {
+        const code = (err as NodeJS.ErrnoException | undefined)?.code;
+        if (!warnedOnce && code !== 'ENOENT') {
+          warnedOnce = true;
+          console.error(
+            `[survive-gaps heartbeat] manifest bump failed for ${runDir} (${code ?? 'unknown'}); heartbeat continues but the run may read stale`,
+          );
+        }
+      },
     );
   }, intervalMs);
   // Never hold the process open on the heartbeat alone — the run lifecycle owns

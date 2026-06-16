@@ -50,4 +50,15 @@
 - **fft-caught hardening (heartbeat write errors)**: the first full `just fft` surfaced 1 unhandled error — a heartbeat write whose atomic rename lost the race against test teardown (`afterEach` rm of tmpDir) was being **re-thrown** via `queueMicrotask`. A best-effort liveness heartbeat must never destabilise the run, so the factory now **swallows** write errors (the next tick retries; the watchdog + wall-clock are the real guards). Re-ran the file 3× clean; full `just fft` green (1426 pass, 16 skip, **0 errors**; the only `audit` output is pre-existing `ws` transitive vulns, non-fatal).
 - **Final gate**: `just fft` GREEN. 5a tasks T001–T004 + T007 all `[x]`. 5b (T005/T006) left workshop-gated, NOT built.
 
+## Companion review (dogfood) — findings reconciliation
+
+The live `code-review-companion` reviewed all 4 commits. Verdicts: T001/T002 **APPROVE** (0); T003/T004 **APPROVE_WITH_NOTES** (F001); T007 **APPROVE** (0); P5 wrap **APPROVE_WITH_NOTES** (F002). It confirmed: heartbeat opt-in + isolated, no `resetStallDeadline` access, no `idle-policy.ts` scope creep, `??` honours `stallTimeout: 0`, both callers thread the profile.
+
+| ID | Sev | Finding | Disposition |
+|----|-----|---------|-------------|
+| **F001** | MEDIUM | Contract drift: plan doc (lines 30/70/71/88) + `budget-flags.test.ts` header still said `stallTimeoutSec`/"wall-clock only" for the frontmatter field, contradicting the shipped `stallTimeout` (config) / `stallTimeoutSec` (budgets) split. | **Fixed inline** — plan-doc frontmatter mentions → `stallTimeout`; test header now names `stallTimeout` frontmatter. |
+| **F002** | MEDIUM | Observability: the heartbeat's `catch(() => {})` swallowed *every* `updateManifest` rejection, so a persistently-broken survive-gaps heartbeat would go stale silently. | **Fixed inline** — `startManifestHeartbeat` now logs the first **non-`ENOENT`** failure once to stderr (real fault → operator clue), still ignores `ENOENT` teardown races, still never throws. |
+
+**Dogfood note**: the companion delivered real value — F002 in particular is a genuine quality improvement (silent-failure observability) that the inline review caught before merge. (Earlier in the session I misread the inbox lane and reported "not reviewing"; the companion had in fact acked + reviewed every commit — corrected.)
+
 

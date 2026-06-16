@@ -1,7 +1,8 @@
 /**
  * Plan 026 review FT-004 — unit proof of the budget resolution `run` and
- * `resume` share: explicit flag → agent frontmatter (wall-clock only) →
- * shared runner defaults. The E108 invalid-input paths are covered by the
+ * `resume` share: explicit flag → agent frontmatter (`timeout` wall-clock +
+ * `stallTimeout`, plan 028) → shared runner defaults. The E108 invalid-input
+ * paths are covered by the
  * built-CLI subprocess tests in run-budget-flags.test.ts.
  */
 

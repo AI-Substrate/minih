@@ -315,9 +315,8 @@ export function registerStatusCommand(program: Command): void {
               mode: { kind: 'latest-active' },
               agentsDir,
             });
-            const newest = active.candidates.sort((a, b) =>
-              b.runId.localeCompare(a.runId),
-            )[0];
+            // candidates are returned newest-first by startedAt (defect D).
+            const newest = active.candidates[0];
             if (newest) {
               selection = {
                 mode: 'latest',

@@ -131,18 +131,25 @@ export async function listActiveRunCandidates(input: ResolveRunInput): Promise<{
     slugDir,
     input,
   );
-  return {
-    candidates: active.map((a) => ({
-      runId: a.runId,
-      startedAt: a.manifest.startedAt,
-      sessionId: a.manifest.sessionId,
-      ...(a.manifest.label && { label: a.manifest.label }),
-      ...(a.manifest.paramsSummary && {
-        paramsSummary: a.manifest.paramsSummary,
-      }),
-    })),
-    diagnostics,
-  };
+  const candidates: ActiveRunCandidate[] = active.map((a) => ({
+    runId: a.runId,
+    startedAt: a.manifest.startedAt,
+    sessionId: a.manifest.sessionId,
+    ...(a.manifest.label && { label: a.manifest.label }),
+    ...(a.manifest.paramsSummary && {
+      paramsSummary: a.manifest.paramsSummary,
+    }),
+  }));
+  // Newest-first by startedAt (true UTC), runId only as a tie-break — folder
+  // names can encode pre-fix local time mislabeled `Z` (defect D), so callers
+  // taking candidates[0] as "latest" must not rely on lexical name order.
+  candidates.sort((a, b) => {
+    const at = a.startedAt ?? a.runId;
+    const bt = b.startedAt ?? b.runId;
+    const byTime = bt.localeCompare(at);
+    return byTime !== 0 ? byTime : b.runId.localeCompare(a.runId);
+  });
+  return { candidates, diagnostics };
 }
 
 export async function resolveRunWithDiagnostics(

@@ -8,6 +8,7 @@ import chalk from 'chalk';
 import type { Command } from 'commander';
 import {
   resolveAgent,
+  sortRunIdsNewestFirst,
   validateOutput,
   validateSlug,
 } from '../../runner/index.js';
@@ -67,12 +68,16 @@ export function registerValidateCommand(program: Command): void {
         return;
       }
 
-      const entries = fs
-        .readdirSync(runsDir, { withFileTypes: true })
-        .filter((e) => e.isDirectory())
-        .sort((a, b) => b.name.localeCompare(a.name));
+      // Newest-first by startedAt (true UTC), not folder name (defect D).
+      const runIds = sortRunIdsNewestFirst(
+        runsDir,
+        fs
+          .readdirSync(runsDir, { withFileTypes: true })
+          .filter((e) => e.isDirectory())
+          .map((e) => e.name),
+      );
 
-      if (entries.length === 0) {
+      if (runIds.length === 0) {
         exitWithEnvelope(
           formatError(
             'validate',
@@ -83,8 +88,8 @@ export function registerValidateCommand(program: Command): void {
         return;
       }
 
-      const latestRun = opts.run ?? entries[0].name;
-      if (!entries.some((entry) => entry.name === latestRun)) {
+      const latestRun = opts.run ?? runIds[0];
+      if (!runIds.includes(latestRun)) {
         exitWithEnvelope(
           formatError(
             'validate',

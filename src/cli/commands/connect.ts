@@ -248,9 +248,8 @@ async function resolveConnectActiveSelection(opts: {
     return new MultipleActiveRunsError(opts.slug, active.candidates);
   }
   if (!opts.latest || active.candidates.length === 0) return null;
-  const newest = active.candidates.sort((a, b) =>
-    b.runId.localeCompare(a.runId),
-  )[0];
+  // candidates are returned newest-first by startedAt (defect D).
+  const newest = active.candidates[0];
   if (!newest) return null;
   const resolved = await resolveRunWithDiagnostics({
     slug: opts.slug,

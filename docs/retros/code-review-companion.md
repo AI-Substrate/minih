@@ -344,3 +344,12 @@
 - difficulties:
   - [degrading] build: Session-start `harness boot --json` failed on the lint sensor and also reported doctor/audit warnings, even though this run was acting as a reviewer rather than the implementer. (workaround: Treated the boot result as baseline context, continued review-only work, and used focused validation for the commits under review.)
   - [annoying] test: I tried `npx vitest run ... --runInBand`; Vitest in this repo rejects that Jest-style flag. (workaround: Reran the focused test with the documented `npx vitest run test/cli/companion-findings.test.ts` command.)
+
+## 2026-06-16T09:24:31.944Z — code-review-companion / 2026-06-16T08-33-08-895Z-6c45
+
+- runId: 2026-06-16T08-33-08-895Z-6c45
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-06-16T08-33-08-895Z-6c45
+- summary: Reviewed four Phase 4 terminal-classification commit requests. T001/T002 and T007/T008 were approved with no new findings; T005/T006 code was approved with a medium domain-documentation drift finding. The main unresolved blocker is F001: T004 currently stamps cleanStop only on normal final clean completion, not on an actual sent-farewell signal before an interrupted runner terminal write, so the AC-G killed-after-farewell path remains unproven.
+- **magicWand** (target: coordination): Expose an explicit idle decision field in coordination_status, such as nextAction: keep_polling | send_checkin | stop_idle_budget, plus remainingIdleMs and checkInOutstanding, so companion agents do not have to reconcile prompt-era lifecycle rules by inference.
+- difficulties:
+  - [annoying] coordination: The companion lifecycle instructions disagreed about post-check-in behavior: one section describes exiting after replyWaitPolls, while the ledger-driven contract says stand-down is controlled by idleBudgetSec/backstop and check-ins are not the exit mechanism. (workaround: Followed the ledger-driven coordination_status budget and continued polling until idleElapsedMs exceeded idleBudgetSec.)

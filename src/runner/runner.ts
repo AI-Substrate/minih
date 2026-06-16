@@ -1297,7 +1297,23 @@ export async function runAgent(
           if (budgetBreached()) return result;
           // Manifest: status → completing right before terminal-condition wait
           // (workshop 002 §Write points).
-          await updateManifest(runDir, { status: 'completing' });
+          //
+          // Plan 028 Phase 4 (C-F001) — active-phase clean-stop producer. The
+          // agent has just resolved cleanly (`result.status === 'completed'`):
+          // that IS the observable farewell. Stamp `cleanStop` NOW, while the
+          // manifest is still a PROBE status, so a process killed anywhere in
+          // the finalization window that follows (forwarder drain → coordination
+          // drain → validation → completed.json) is reconciled to `completed`,
+          // not `crashed`. The terminal patch below re-affirms or clears this
+          // once `resultStatus` is fully known (a `degraded` schema-nit stays
+          // clean; a finalization failure clears it). Without this, the marker
+          // was coupled to the terminal patch — which never runs on a kill —
+          // so the very incident AC-G targets (clean farewell, then killed
+          // mid-shutdown) was mis-diagnosed as a crash.
+          await updateManifest(runDir, {
+            status: 'completing',
+            ...(result.status === 'completed' && { cleanStop: true }),
+          });
           if (budgetBreached()) return result;
           const terminal = await awaitTerminalCondition(result, () =>
             budgetBreached() ? 0 : pendingForwarderCount(),
@@ -1607,8 +1623,12 @@ export async function runAgent(
     await updateManifest(runDir, {
       status: cleanTerminal ? 'completed' : 'failed',
       sessionId: agentResult.sessionId || null,
+      // Re-affirm or CLEAR the active-phase clean-stop marker (set at the
+      // 'completing' transition above). Written explicitly in both directions:
+      // a finalization failure that flipped a clean agent to `failed` (e.g. a
+      // coordination-snapshot error) must not leave a stale `cleanStop:true`.
+      cleanStop: cleanTerminal,
       ...(cleanTerminal && {
-        cleanStop: true,
         farewellAt: completedAt.getTime(),
       }),
       ...(budgetReason &&

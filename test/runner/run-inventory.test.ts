@@ -1,4 +1,10 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -357,6 +363,84 @@ describe('listRunInventory — --all broadens vs default (plan 028 defect B)', (
       staleThresholdMs: Number.MAX_SAFE_INTEGER,
     });
     expect(rows.map((r) => r.liveness)).toEqual(['active']);
+  });
+});
+
+// Plan 028 Phase 1 (defect B) — best-effort heal-on-read: a stale dead-pid
+// `active` orphan is marked `crashed` during an inventory read (reusing the
+// reconcile lock), and must never drop or mislabel a genuinely-live run. The
+// heal is fully swallowed — a held lock or a write error leaves the orphan
+// un-healed but the read always returns.
+describe('listRunInventory — heal-on-read of dead-pid orphans (plan 028 defect B)', () => {
+  async function seedManifest(
+    slug: string,
+    runId: string,
+    patch: Record<string, unknown>,
+  ): Promise<string> {
+    const dir = makeRunDir(slug, runId);
+    await writeManifest(
+      dir,
+      makeManifest({ slug, runId, runDir: dir, ...patch }),
+    );
+    return dir;
+  }
+  function readManifestJson(dir: string): { status: string; terminalReason?: string } {
+    return JSON.parse(
+      readFileSync(path.join(dir, 'run.json'), 'utf8'),
+    ) as { status: string; terminalReason?: string };
+  }
+
+  it('heals a stale dead-pid active orphan to crashed without dropping the live run', async () => {
+    const liveDir = await seedManifest(
+      'alpha',
+      '2026-06-08T00-00-09-000Z-live',
+      { status: 'active', pid: 111 },
+    );
+    const orphanDir = await seedManifest(
+      'alpha',
+      '2026-06-08T00-00-00-000Z-orphan',
+      { status: 'active', pid: 999 },
+    );
+
+    const rows = await listRunInventory({
+      agentsDir,
+      all: true,
+      isProcessAlive: (pid) => pid === 111,
+      staleThresholdMs: Number.MAX_SAFE_INTEGER,
+    });
+
+    // the live run still resolves as active (never healed)
+    expect(rows.find((r) => r.runId.endsWith('live'))?.liveness).toBe('active');
+    expect(readManifestJson(liveDir).status).toBe('active');
+    // the orphan is healed on disk: crashed + pid-vanished
+    expect(readManifestJson(orphanDir).status).toBe('crashed');
+    expect(readManifestJson(orphanDir).terminalReason).toBe('pid-vanished');
+  });
+
+  it('swallows a failing heal — the read still returns the live run, orphan left un-healed', async () => {
+    await seedManifest('alpha', '2026-06-08T00-00-09-000Z-live', {
+      status: 'active',
+      pid: 111,
+    });
+    const orphanDir = await seedManifest(
+      'alpha',
+      '2026-06-08T00-00-00-000Z-orphan',
+      { status: 'active', pid: 999 },
+    );
+
+    const rows = await listRunInventory({
+      agentsDir,
+      all: true,
+      isProcessAlive: (pid) => pid === 111,
+      staleThresholdMs: Number.MAX_SAFE_INTEGER,
+      // a held reconcile lock / write error is modelled as a throwing heal
+      healOrphan: () => Promise.reject(new Error('boom: write failed mid-heal')),
+    });
+
+    // the read survives and the live run is still reported
+    expect(rows.find((r) => r.runId.endsWith('live'))?.liveness).toBe('active');
+    // orphan untouched (left for the next read / `minih reconcile`)
+    expect(readManifestJson(orphanDir).status).toBe('active');
   });
 });
 

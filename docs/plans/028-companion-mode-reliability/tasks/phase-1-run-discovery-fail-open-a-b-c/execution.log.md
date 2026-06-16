@@ -55,3 +55,18 @@ Added a local `ACTIVE_STATUSES = {starting, active, completing}` (mirrors the tw
 - **`--all`**: full terminal history, bounded by `--limit`.
 `runs.ts` already passed `all:` through, so no CLI change was needed — the reader was the whole gap.
 **Result**: `run-inventory.test.ts` 11/11 (incl. the pre-existing default-limit test); `cli/runs.test.ts` + `run-resolver.test.ts` 20/20. Only `runs.ts` consumes `listRunInventory`, so no other surface shifted. AC-B (`--all` broadens) met.
+
+### T006/T007 — Defect B (heal): best-effort heal-on-read ✅ (commit pending)
+
+**Decision: D2-B (full heal), not the D2-A fallback** — lock-safety was tractable. `run-resolver.ts` already *skips* dead-pid orphans (`:308`), so resolution never mislabels a live run today; the heal adds **persistence** (the orphan stops masquerading as live on disk).
+
+**RED**: 2-case block in `test/runner/run-inventory.test.ts`. (a) heal-happens: RED shown as orphan staying `active` (expected `crashed`). (b) swallow: a throwing `healOrphan` seam.
+
+**GREEN**: `listRunInventory` collects dead-pid `active` orphans during enumeration, then heals each after projection via `healDeadPidOrphan`:
+- re-reads + re-probes the pid immediately before the write (TOCTOU-minimal, mirrors `reconcile.ts:101`), under `withReconcileLock`;
+- writes `status:'crashed'` + `terminalReason:'pid-vanished'` (preserve-if-unset);
+- the **caller wraps each heal in a blanket try/catch** → a held lock (`ReconcileLockHeldError`) or any write error is swallowed, the read returns; **no lock is taken on the orphan-free common path**.
+Added an injectable `healOrphan` seam (mirrors the existing `isProcessAlive`/`now` seams) for the swallow test. No import cycle (imports `reconcile-lock.ts`/`run-manifest.ts`, never `reconcile.ts`).
+**Result**: 13/13 inventory + `tsc --noEmit` clean. No-regression: the live run (pid alive) is never an orphan target, so it always resolves `active`.
+
+**Scope note**: heal-on-read landed in `listRunInventory` only (where the read enumerates all runs + where the test targets it); `run-resolver`'s existing orphan-skip already prevents mislabeling, so no resolver edit was needed.

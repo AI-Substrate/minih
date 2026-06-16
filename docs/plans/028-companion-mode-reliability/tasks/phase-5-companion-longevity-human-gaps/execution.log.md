@@ -40,3 +40,8 @@
 - **Evidence**: typecheck clean (caught + fixed `parseFrontmatter`'s return-type annotation); 68 green across companion-longevity + budget-flags + folder.
 - **Type gotcha**: `parseFrontmatter` has an explicit return-type annotation (not inferred), so new `parseYamlSimple` fields must be added there too or `listAgents` can't see them.
 
+### T007 (NOTE/DOC) — survival vs engagement
+
+- Added `docs/how/companion-mode.md` § "Surviving long human gaps — the survive-gaps profile": the three killers (staleness/stall/wall-clock) + the profile that addresses each; the heartbeat decoupling; **survival is necessary, not sufficient**; the deferred **`git log`-cursor → `outside inbox send` feeder** as the engagement-half fast-follow (its own small plan); AC-H proves alive, not that a review happened.
+
+

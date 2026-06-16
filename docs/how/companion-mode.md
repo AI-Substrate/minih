@@ -235,6 +235,43 @@ The check-in is the **canonical example** of a broader pattern: the inside compa
 
 ---
 
+## Surviving long human gaps — the survive-gaps profile (plan 028 Phase 5)
+
+> Introduced in **plan 028** (#50 follow-up). The check-in protocol above keeps a companion from *wasting* compute when the outside goes quiet; the survive-gaps profile is the opposite knob — it keeps a companion **alive on purpose** across long human-in-the-loop gaps (minutes → hours) so it is still there when reviewable work finally lands.
+
+A long-lived companion has three independent ways to die before its human comes back:
+
+| Killer | Default | Survive-gaps setting | Where |
+|---|---|---|---|
+| **Run-active staleness** — orchestrators read the run as `stale`/dead once `run.json.updatedAt` is >60s old with no provider events | updatedAt only advances on provider events | **runner heartbeat** bumps `updatedAt` every 20s (opt-in) | `surviveGaps: true` frontmatter |
+| **Stall watchdog** — `stalled-stream` fires when no provider event arrives within the stall budget | 300s | **disabled** (`stallTimeout: 0`) | `stallTimeout` frontmatter |
+| **Wall-clock timeout** — the ultimate backstop | 900s | raised (e.g. `7200`) | `timeout` frontmatter |
+
+The canonical `code-review-companion` adopts the profile in its frontmatter:
+
+```yaml
+timeout: 7200        # wall-clock backstop — the ONLY hard cap that remains
+stallTimeout: 0      # disable the inactivity watchdog (a quiet companion is healthy)
+surviveGaps: true    # start the runner heartbeat → stays readable as `active`
+```
+
+The **heartbeat** is a runner-side timer that calls `updateManifest` to bump `run.json.updatedAt` on a cadence (20s) that comfortably beats the 60s staleness window. It is decoupled from the stall watchdog **by construction** — it proves the *process* is alive, not that the *agent* is progressing (so it never resets the stall deadline). Default runs start no heartbeat: the strict freshness signal the orchestrator relies on is preserved.
+
+### Survival is necessary, not sufficient
+
+The survive-gaps profile keeps the companion **alive to be driven**. It does **not** make the companion *see* new commits on its own — a companion only reviews what the orchestrator pushes into its inbox (`minih outside inbox send … --type review-request`). Keeping it alive through a gap and then never sending it the commits that landed during the gap still produces no review.
+
+So the longevity work has two halves:
+
+- **Survival half (shipped, plan 028 Phase 5)** — the profile above. A quietly-waiting companion stays `active` instead of being stale/stall/timeout-killed.
+- **Engagement half (deferred fast-follow)** — a small **`git log`-cursor feeder**: a loop that watches for commits landing after a stored cursor and pushes each as a `review-request` via `minih outside inbox send`. The durable inbox already delivers reliably (plan 027 #40), so the feeder is a thin, well-scoped addition — recommend it as its own small plan, not an open-ended "if needed".
+
+### What the longevity acceptance criterion proves
+
+AC-H ("a quietly-waiting survive-gaps companion reads `active` across a long gap") proves the companion **stays alive** — it does **not** prove a review happened. Don't read survival as closing the original "companion missed the commits" incident; that needs the engagement-half feeder above.
+
+---
+
 ## Farewell envelope shape
 
 Companion-mode agents SHOULD emit a farewell envelope structurally similar to:

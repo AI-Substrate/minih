@@ -233,6 +233,7 @@ _Populated during implementation by the implement verb._
 |------|------|------|-----------|------------|------------|
 | 2026-06-16 | T002 | gotcha | A run takes one early startup `updatedAt` write even with no provider events, so "default updatedAt frozen == startedAt" is too strict for the (a) regression. | Assert the *delta*: default stops advancing well before the gap ends (<60ms into a 120ms gap); survive-gaps keeps advancing past it. | `companion-longevity.test.ts` (a) |
 | 2026-06-16 | T002 | insight | After `stop()`, a write scheduled by the last pre-stop heartbeat tick can still settle (`updateManifest` is async). Not a leak — `updateManifest` serializes per-runDir, so the runner's terminal write always lands after any in-flight heartbeat write. | (c) test waits one interval post-stop before snapshotting the frozen value; production clears the heartbeat in the `finally` before the terminal writes. | `run-manifest.ts`, `runner.ts:1378` |
+| 2026-06-16 | T002 | gotcha | `just fft` (full suite) surfaced an unhandled error: a heartbeat write's atomic rename racing test teardown (tmpDir rm) was re-thrown via `queueMicrotask`. | The heartbeat is best-effort liveness — swallow write errors (next tick retries; watchdog + wall-clock are the real guards). Per-file 3× + full fft clean after. | `run-manifest.ts` `startManifestHeartbeat` |
 
 **Types**: `gotcha` | `research-needed` | `unexpected-behavior` | `workaround` | `decision` | `debt` | `insight`
 

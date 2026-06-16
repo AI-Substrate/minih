@@ -186,15 +186,13 @@ export function startManifestHeartbeat(
   intervalMs: number = SURVIVE_GAPS_HEARTBEAT_INTERVAL_MS,
 ): () => void {
   const timer = setInterval(() => {
-    void updateManifest(runDir, {
-      updatedAt: new Date().toISOString(),
-    }).catch((err: unknown) => {
-      // A torn/absent manifest is already a silent no-op in applyPatch; any
-      // other fault is genuine — surface it without killing the run's hot path.
-      queueMicrotask(() => {
-        throw err instanceof Error ? err : new Error(String(err));
-      });
-    });
+    // Best-effort liveness refresh: a failed bump (torn manifest, or the run
+    // dir being torn down at shutdown) must NEVER destabilise the run — the
+    // heartbeat is advisory, the stall watchdog + wall-clock timeout are the
+    // real guards, and the next tick retries. Swallow write errors.
+    void updateManifest(runDir, { updatedAt: new Date().toISOString() }).catch(
+      () => {},
+    );
   }, intervalMs);
   // Never hold the process open on the heartbeat alone — the run lifecycle owns
   // liveness (mirrors the watchdog/timeout handles cleared in runner.ts).

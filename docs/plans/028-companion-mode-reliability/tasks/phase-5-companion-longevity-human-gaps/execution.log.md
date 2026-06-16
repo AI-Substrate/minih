@@ -44,4 +44,10 @@
 
 - Added `docs/how/companion-mode.md` § "Surviving long human gaps — the survive-gaps profile": the three killers (staleness/stall/wall-clock) + the profile that addresses each; the heartbeat decoupling; **survival is necessary, not sufficient**; the deferred **`git log`-cursor → `outside inbox send` feeder** as the engagement-half fast-follow (its own small plan); AC-H proves alive, not that a review happened.
 
+## Phase 5a complete
+
+- Domain docs updated: `runner/domain.md` § History (P5 heartbeat + frontmatter fields) and `cli/domain.md` § History (`resolveEffectiveBudgets` 4th param + caller threading).
+- **fft-caught hardening (heartbeat write errors)**: the first full `just fft` surfaced 1 unhandled error — a heartbeat write whose atomic rename lost the race against test teardown (`afterEach` rm of tmpDir) was being **re-thrown** via `queueMicrotask`. A best-effort liveness heartbeat must never destabilise the run, so the factory now **swallows** write errors (the next tick retries; the watchdog + wall-clock are the real guards). Re-ran the file 3× clean; full `just fft` green (1426 pass, 16 skip, **0 errors**; the only `audit` output is pre-existing `ws` transitive vulns, non-fatal).
+- **Final gate**: `just fft` GREEN. 5a tasks T001–T004 + T007 all `[x]`. 5b (T005/T006) left workshop-gated, NOT built.
+
 

@@ -64,9 +64,11 @@ entries:
     suggested_encoding: "a pre-commit hook (or implement-verb step) that runs the format gate, so unformatted files can't be committed"
     system:
       compound:
-        status: open
+        status: encoded
         source: agent-self
         first_seen_at: "2026-06-16T04:25:13.245Z"
+        resolved_by: "f04dc5d"
+        note: "fft reordered to format-before-lint (f04dc5d) so fresh files auto-format under the gate; the recurring the-flow.json format-gate friction (also 027) is encoded. A pre-commit hook that runs fft remains a separate open suggestion."
 system:
   compound:
     bubble_action: "all-save"

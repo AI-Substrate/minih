@@ -183,8 +183,9 @@ describe('survive-gaps heartbeat factory (plan 028 T001/T002)', () => {
     seedManifest(runDir, old);
 
     const stop = startManifestHeartbeat(runDir, 15);
-    await delay(70); // ~4 ticks
+    await delay(300); // many ticks even on a slow/loaded CI runner
     stop();
+    await delay(120); // let the last fire-and-forget async write settle
 
     expect(updatedAtMs(runDir)).toBeGreaterThan(new Date(old).getTime());
   });
@@ -208,10 +209,13 @@ describe('survive-gaps heartbeat factory (plan 028 T001/T002)', () => {
 
 describe('survive-gaps heartbeat — runner integration (plan 028 T002)', () => {
   it('(a) a default run starts NO heartbeat (updatedAt frozen through a silent gap); survive-gaps advances it', async () => {
+    // Generous quiet gap so slow/loaded CI timing can't blur the default-vs-
+    // heartbeat distinction (the assertions key on halves of this window).
+    const GAP_MS = 600;
     const defDefault = createAgent('sg-default');
     const adDefault = new SilentSnapshotAdapter(
       path.join(tmpDir, 'sg-default', 'runs'),
-      120,
+      GAP_MS,
     );
     await runAgent(
       adDefault,
@@ -220,17 +224,17 @@ describe('survive-gaps heartbeat — runner integration (plan 028 T002)', () => 
       undefined,
       tmpDir,
     );
-    // No survive-gaps → no heartbeat. updatedAt may take one early startup
-    // write, but it STOPS advancing well before the 120ms quiet gap ends.
+    // No survive-gaps → no heartbeat. updatedAt may take early startup writes,
+    // but it STOPS advancing within the first half of the quiet gap.
     const defaultDelta =
       new Date(adDefault.capturedUpdatedAt as string).getTime() -
       new Date(adDefault.startedAt as string).getTime();
-    expect(defaultDelta).toBeLessThan(60);
+    expect(defaultDelta).toBeLessThan(GAP_MS / 2);
 
     const defOn = createAgent('sg-on');
     const adOn = new SilentSnapshotAdapter(
       path.join(tmpDir, 'sg-on', 'runs'),
-      120,
+      GAP_MS,
     );
     await runAgent(
       adOn,
@@ -245,12 +249,12 @@ describe('survive-gaps heartbeat — runner integration (plan 028 T002)', () => 
       undefined,
       tmpDir,
     );
-    // Survive-gaps → heartbeat kept advancing updatedAt deep into the same
-    // 120ms quiet gap (past the 60s/3 boundary the default run froze before).
+    // Survive-gaps → heartbeat kept advancing updatedAt well into the last 40%
+    // of the same quiet gap, long after the default run froze.
     const onDelta =
       new Date(adOn.capturedUpdatedAt as string).getTime() -
       new Date(adOn.startedAt as string).getTime();
-    expect(onDelta).toBeGreaterThan(60);
+    expect(onDelta).toBeGreaterThan(GAP_MS * 0.6);
   });
 
   it('(b) a survive-gaps run still fires stalled-stream — the heartbeat never resets the watchdog', async () => {

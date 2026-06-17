@@ -197,12 +197,14 @@ describe('survive-gaps heartbeat factory (plan 028 T001/T002)', () => {
     const stop = startManifestHeartbeat(runDir, 15);
     await delay(50);
     stop();
-    // Let any write scheduled by the last pre-stop tick settle (updateManifest
-    // is async + per-runDir serialized), then snapshot the stable value.
-    await delay(40);
+    // Generously let any write scheduled by the last pre-stop tick settle
+    // (updateManifest is async + per-runDir serialized) before snapshotting —
+    // slow/loaded CI can delay that write well past a few ms, so this margin is
+    // wide on purpose.
+    await delay(250);
     const frozen = updatedAtMs(runDir);
 
-    await delay(70); // would tick ~4 more times if the interval leaked
+    await delay(150); // a leaked 15ms interval would tick ~10x in this window
     expect(updatedAtMs(runDir)).toBe(frozen);
   });
 });

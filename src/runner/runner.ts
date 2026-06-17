@@ -450,6 +450,11 @@ export async function runAgent(
             ? config.params.idleBudgetMs
             : DEFAULT_IDLE_BUDGET_MS,
       }),
+      // Plan 028 Phase 5b (workshop 003) — record the survive-gaps posture
+      // durably so #49's future idle trigger reads it the same way it reads
+      // idleBudgetMs (via readSurviveGaps). Recorded whenever the run opts into
+      // survive-gaps, independent of coordination.
+      ...(config.surviveGaps && { surviveGaps: true }),
     };
 
     // Initial run.json manifest — workshop 002 §1, plan 009.

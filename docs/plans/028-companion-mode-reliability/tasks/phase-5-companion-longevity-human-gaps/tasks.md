@@ -7,7 +7,7 @@
 
 > ⚠️ **Two halves — read before building.** This phase has a hard internal seam:
 > - **5a (build-ready now)** — tasks T001–T004: heartbeat + `stallTimeout` frontmatter leg + ceiling-raising profile. No contract #49 must honour. **Green to build.**
-> - **5b (workshop-gated)** — tasks T005–T006: the idle-policy *engagement* compose. It **changes `evaluateIdlePolicy`'s contract** (what counts as engagement), which #49 must honour. **Do NOT build T005/T006 until the engagement-definition workshop lands** (plan § Phase 5 "Open (workshop 5b)"). The dossier carries them for completeness; the gate is real.
+> - **5b (workshop decided — buildable)** — tasks T005–T006: the idle-policy *engagement* compose. It **changes `evaluateIdlePolicy`'s contract** (what counts as engagement), which #49 must honour. ✅ **Gate lifted**: [workshop 003](../../workshops/003-survive-gaps-engagement-and-idle-trigger-seam.md) resolved the fork (Option C — add a typed `IdlePolicyInput.surviveGaps`, suppress the idle stand-down, record `budgets.surviveGaps` durably). T005/T006 below are folded to that decision and ready to build.
 
 ---
 
@@ -95,6 +95,7 @@
 flowchart TD
     classDef pending fill:#9E9E9E,stroke:#757575,color:#fff
     classDef gated fill:#F9A825,stroke:#F57F17,color:#000
+    classDef inprogress fill:#FF9800,stroke:#F57C00,color:#000
     classDef completed fill:#4CAF50,stroke:#388E3C,color:#fff
 
     subgraph P5a["Phase 5a — build-ready"]
@@ -105,15 +106,15 @@ flowchart TD
         T001 --> T002 --> T003 --> T004
     end
 
-    subgraph P5b["Phase 5b — WORKSHOP-GATED"]
-        T005["T005 RED: evaluateIdlePolicy survive-gaps"]:::gated
-        T006["T006 GREEN: typed durable #49 seam"]:::gated
+    subgraph P5b["Phase 5b — workshop 003 decided (buildable)"]
+        T005["T005 RED: evaluateIdlePolicy survive-gaps"]:::completed
+        T006["T006 GREEN: typed durable #49 seam"]:::completed
         T005 --> T006
     end
 
     T007["T007 NOTE: survival vs engagement split + feeder fast-follow"]:::completed
 
-    T004 -.workshop gate.-> T005
+    T004 -.workshop 003 ✓.-> T005
     T004 --> T007
 
     subgraph Files["Files"]
@@ -123,7 +124,7 @@ flowchart TD
         F4["src/runner/folder.ts (frontmatter parse)"]:::completed
         F5["src/cli/budget-flags.ts (definitionStallTimeout)"]:::completed
         F6["agents/code-review-companion/prompt.md"]:::completed
-        F7["src/runner/idle-policy.ts (5b)"]:::gated
+        F7["src/runner/idle-policy.ts (5b)"]:::completed
     end
 
     T002 -.-> F1
@@ -155,16 +156,14 @@ flowchart TD
 
 > **T0z note**: the phase-end seam fires after the **5a** build (T000–T004 + T007). **5b (T005/T006) is a separate, post-workshop implement run** — it does not block closing the 5a portion of the phase.
 
-### Tasks — 5b · ⛔ WORKSHOP-GATED (do NOT build until the engagement-definition workshop lands)
+### Tasks — 5b · ✅ workshop 003 decided — buildable
 
-> **Hard gate — not advisory.** T005/T006 **change `evaluateIdlePolicy`'s contract**, which #49 must honour. The implement verb must **NOT** queue these after T004. Building them requires, first: `/the-flow 2c workshop "Phase 5b: survive-gaps engagement definition + #49 idle-trigger seam"`. The fork to resolve (plan § Phase 5 "Open"): does survive-gaps **redefine engagement** (expecting-a-commit counts as outstanding work → a named `IdlePolicyInput` field) **or** just **enlarge `idleBudgetMs`**?
->
-> **Defensible minimum #49 can rely on TODAY, regardless of the workshop**: `budgets.idleBudgetMs` is already a durable, run.json-recorded input read via `readIdleBudgetMs` (Plan 027 #35). The workshop only decides whether to **add a named field on top** — it never removes this floor.
+> **Gate lifted.** [Workshop 003](../../workshops/003-survive-gaps-engagement-and-idle-trigger-seam.md) (Approved) resolved the fork. **Binding decision (Option C)**: add a typed `surviveGaps?: boolean` to `IdlePolicyInput`; when true, `evaluateIdlePolicy` **suppresses the idle-budget stand-down (branch b)** so only the wall-clock backstop (branch a) terminates the companion. Record the posture **durably** to `run.json` `budgets.surviveGaps` (read like `readIdleBudgetMs`); `budgets.idleBudgetMs` **remains** the floor. `evaluateIdlePolicy` stays **unwired** — #49 wires the trigger, passes the durable posture, and writes the clean hyphen `terminalReason`. The never-spoke arm (`idleElapsedMs===null`, the #50 incident) is a **fixed test requirement**, not a tunable.
 
 | Status | ID | Task | Domain | Path(s) | Done When | Notes |
 |--------|-----|------|--------|---------|-----------|-------|
-| [ ] | T005 | **RED (5b — ⛔ workshop-gated)** — failing test: `evaluateIdlePolicy` under the survive-gaps posture returns `continue` across a long idle gap, **including the never-spoke arm** (`idleElapsedMs===null` ⇒ `effectiveIdleMs=runElapsedMs` — the actual incident), standing down only past the (large) budget; assert the posture is read from a **durable typed input**. **Fixture**: ledger `idleElapsedMs:null` + `runElapsedMs` < large survive-gaps `idleBudgetMs` ⇒ `continue`; then `runElapsedMs` ≥ budget ⇒ stand-down with `no_engagement`. The never-spoke arm is a **fixed requirement** (the #50 incident), **not** a workshop variable. | runner (test) | `test/runner/companion-longevity.test.ts`, `src/runner/idle-policy.ts:62-110` | Pins the compose + the named #49 seam before the trigger is wired; never-spoke arm covered | Plan 5.5; validation T6. **BLOCKED until the 5b workshop lands.** |
-| [ ] | T006 | **GREEN (5b — ⛔ workshop-gated)** — implement the survive-gaps compose as a **named, durable input** to `evaluateIdlePolicy`: commit to `budgets.idleBudgetMs` as the floor (#49 reads it today via `readIdleBudgetMs`), **and/or** add a typed `surviveGaps`/`expectingWork` field to `IdlePolicyInput` — the **named-field choice is the 5b workshop's decision**, the floor is not. Own the **reason-spelling map** here: assert in a test that `idle-policy.ts`'s underscore `idle_budget`/`no_engagement` map to the hyphen `terminalReason` members `idle-budget`/`no-engagement` (the map #49 applies in `exitReason → terminalReason`). **`evaluateIdlePolicy` stays unwired** — Phase 5 lands the typed seam, #49 wires the trigger and cannot ignore the posture. A survive-gaps stand-down records a **clean Phase-4 reason**. | runner | `src/runner/idle-policy.ts` | T005 passes; the #49 seam is a typed durable field/floor (not a bare default); a test asserts the underscore→hyphen map; `budgets.idleBudgetMs` works as the floor even if no named field is added; clean terminal composes with Phase 4 | Plan 5.6; Finding 09; validation T5/T7. **BLOCKED until the 5b workshop lands.** |
+| [x] | T005 | **RED (5b)** — failing test: `evaluateIdlePolicy` with `opts.surviveGaps === true` returns `continue` across a long idle gap, **including the never-spoke arm** (`idleElapsedMs===null` ⇒ `effectiveIdleMs=runElapsedMs` — the actual #50 incident); it stands down **only** at the wall-clock backstop (branch a), never on branch (b). **Fixture**: ledger `idleElapsedMs:null`, `surviveGaps:true`, `runElapsedMs` < `timeoutSec*1000` ⇒ `continue` (even though `effectiveIdleMs ≥ idleBudgetMs`); then `runElapsedMs` ≥ `timeoutSec*1000` ⇒ stand-down with `no_engagement`. Add a default-unchanged guard: same fixture with `surviveGaps` unset ⇒ stands down at `idleBudgetMs` (plan 027 #35 behaviour preserved). | runner (test) | `test/runner/companion-longevity.test.ts`, `src/runner/idle-policy.ts:62-110` | Never-spoke arm covered; branch-(b) suppression proven; default behaviour unchanged | Plan 5.5; validation T6; workshop 003 § Contract. |
+| [x] | T006 | **GREEN (5b)** — implement workshop 003's decision: (1) add `surviveGaps?: boolean` to `IdlePolicyInput` (`idle-policy.ts:22`); (2) in `evaluateIdlePolicy`, **suppress branch (b)** (`effectiveIdleMs >= idleBudgetMs`) when `opts.surviveGaps === true` — branch (a) backstop + the `unresolvedPeerRequests` continue are **unchanged**, and `surviveGaps` falsy/unset is byte-for-byte the current behaviour; (3) record the posture durably at run start — `run.json` `budgets.surviveGaps` (mirror how `idleBudgetMs` is recorded in `runner.ts`), read it synchronously like `readIdleBudgetMs` (extend that reader or add `readSurviveGaps`); `budgets.idleBudgetMs` **remains the floor**. Own the **reason-spelling map test**: assert `idle-policy.ts`'s underscore `idle_budget`/`no_engagement` map to the hyphen `terminalReason` members `idle-budget`/`no-engagement` (the map #49 applies in `exitReason → terminalReason`). **`evaluateIdlePolicy` stays unwired** — #49 wires the trigger and cannot ignore `surviveGaps`. A survive-gaps stand-down records a **clean Phase-4 reason**. | runner | `src/runner/idle-policy.ts`, `src/runner/types.ts` (budgets), `src/runner/run-manifest.ts` (`readSurviveGaps`), `src/runner/runner.ts` (record `budgets.surviveGaps`) | T005 passes; `surviveGaps` is a typed durable run.json field (not a bare default); branch (b) suppressed only under `surviveGaps`; a test asserts the underscore→hyphen map; clean terminal composes with Phase 4 | Plan 5.6; Finding 09; validation T5/T7; workshop 003 § Contract (binding). |
 
 ---
 
@@ -234,6 +233,8 @@ _Populated during implementation by the implement verb._
 | 2026-06-16 | T002 | gotcha | A run takes one early startup `updatedAt` write even with no provider events, so "default updatedAt frozen == startedAt" is too strict for the (a) regression. | Assert the *delta*: default stops advancing well before the gap ends (<60ms into a 120ms gap); survive-gaps keeps advancing past it. | `companion-longevity.test.ts` (a) |
 | 2026-06-16 | T002 | insight | After `stop()`, a write scheduled by the last pre-stop heartbeat tick can still settle (`updateManifest` is async). Not a leak — `updateManifest` serializes per-runDir, so the runner's terminal write always lands after any in-flight heartbeat write. | (c) test waits one interval post-stop before snapshotting the frozen value; production clears the heartbeat in the `finally` before the terminal writes. | `run-manifest.ts`, `runner.ts:1378` |
 | 2026-06-16 | T002 | gotcha | `just fft` (full suite) surfaced an unhandled error: a heartbeat write's atomic rename racing test teardown (tmpDir rm) was re-thrown via `queueMicrotask`. | The heartbeat is best-effort liveness — swallow write errors (next tick retries; watchdog + wall-clock are the real guards). Per-file 3× + full fft clean after. | `run-manifest.ts` `startManifestHeartbeat` |
+| 2026-06-17 | T006 | decision | `budgets.idleBudgetMs` is recorded **only** when `coordinationEnabled`; `budgets.surviveGaps` is recorded whenever `config.surviveGaps` is truthy, **independent of coordination**. | Deliberate divergence: #49's idle trigger must always be able to read the posture, and survive-gaps is conceptually independent of coordination even if they co-occur on the companion today. Mirrors `readIdleBudgetMs` in *shape* (sync, default-on-absent) but not in *gating*. | `runner.ts` budgets spread; `run-manifest.ts` `readSurviveGaps` |
+| 2026-06-17 | T006 | insight | Suppressing branch (b) only (`!surviveGaps && effectiveIdleMs >= idleBudgetMs`) keeps branch (a) backstop + the `unresolvedPeerRequests` continue byte-for-byte unchanged, so `surviveGaps` falsy/unset is provably the plan-027 #35 path (default-unchanged guard test). The fall-through `continue` reason is made conditional so a survive-gaps-over-budget continue reads honestly instead of "idle < budget". | Single-line guard + conditional reason string; no new branch. | `idle-policy.ts:93` |
 
 **Types**: `gotcha` | `research-needed` | `unexpected-behavior` | `workaround` | `decision` | `debt` | `insight`
 

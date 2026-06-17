@@ -653,6 +653,14 @@ export interface LiveRunManifest {
      * (AC-12). Absent on non-coordination runs and on runs written before #35.
      */
     idleBudgetMs?: number;
+    /**
+     * Plan 028 Phase 5b (workshop 003) — the survive-gaps posture, recorded so
+     * #49's future idle trigger cannot be written ignorant of it. When true,
+     * `evaluateIdlePolicy` suppresses the idle-budget stand-down (branch b) and
+     * only the wall-clock backstop terminates the companion. Absent on
+     * non-survive-gaps runs and on runs written before 5b.
+     */
+    surviveGaps?: boolean;
   };
   /**
    * Plan 018 R1 — populated alongside `terminalReason: 'permission-denied'`.

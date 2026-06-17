@@ -294,6 +294,7 @@ export {
   flushThrottled as flushManifestThrottled,
   readIdleBudgetMs,
   readManifest,
+  readSurviveGaps,
   updateManifest,
   writeManifest,
 } from './run-manifest.js';

@@ -61,4 +61,26 @@ The live `code-review-companion` reviewed all 4 commits. Verdicts: T001/T002 **A
 
 **Dogfood note**: the companion delivered real value — F002 in particular is a genuine quality improvement (silent-failure observability) that the inline review caught before merge. (Earlier in the session I misread the inbox lane and reported "not reviewing"; the companion had in fact acked + reviewed every commit — corrected.)
 
+---
+
+## 5b run (post-workshop) — T005/T006
+
+**Scope**: 5b only (T005 RED, T006 GREEN), after [workshop 003](../../workshops/003-survive-gaps-engagement-and-idle-trigger-seam.md) lifted the gate (Option C). Separate implement run from 5a, same phase.
+
+### Pre-implement harness seam
+
+- 5b is a continuation of Phase 5; the pre-implement seam already fired in the 5a run (T000) with verdict **degraded** (sole failing layer `toolchain: biome` — resolves via `just fft`, non-blocking). The 5b run inherits that posture; no change to the deterministic substrate since, so the verdict is unchanged — proceeded with standard + survive-gaps testing. Not re-escalated.
+
+### Companion boot (C0/C0a)
+
+- Booted a fresh `code-review-companion` — runId `2026-06-17T02-58-06-834Z-77aa`; reached `active` on poll (the prior 5a run had stopped clean → `completed`, so no active run to attach).
+- Briefed once (type=briefing): scope = 5b only, the binding workshop-003 contract (typed `surviveGaps`, suppress branch (b), durable `budgets.surviveGaps`, reason map), and the hazards (don't change default behaviour, keep `idle-policy.ts` pure, no wiring, `idleBudgetMs` stays the floor).
+
+### T005 (RED) / T006 (GREEN) — typed survive-gaps idle-policy seam
+
+- **RED**: added a `evaluateIdlePolicy survive-gaps posture` describe block (6 tests) to `companion-longevity.test.ts`: never-spoke + `surviveGaps` continues past the idle budget (the #50 incident); still stands down at the wall-clock backstop (`no_engagement`); spoke-then-idle parallel (`idle_budget`); outstanding-work continue unaffected; **default-unchanged guard** (no `surviveGaps` ⇒ stands down at `idleBudgetMs`, plan-027 #35 preserved); the underscore→hyphen reason-map asserted against `isCleanTerminalReason`. Confirmed RED: exactly the 2 suppress tests failed (12/14 passed) against today's code.
+- **GREEN** (workshop 003, Option C): (1) `IdlePolicyInput.surviveGaps?: boolean` (`idle-policy.ts`); (2) `evaluateIdlePolicy` suppresses branch (b) under `!surviveGaps` only — branch (a) backstop + `unresolvedPeerRequests` continue unchanged; fall-through `continue` reason made conditional so a survive-gaps-over-budget continue reads honestly; (3) durable record — `budgets.surviveGaps` added to the manifest `budgets` type (`types.ts`), recorded at run start in `runner.ts` (independent of `coordinationEnabled`), read via new sync `readSurviveGaps` (`run-manifest.ts`, mirrors `readIdleBudgetMs`), exported from `runner/index.ts`. `evaluateIdlePolicy` stays **unwired** — #49 wires the trigger.
+- **Purity preserved**: `idle-policy.ts` gains no fs/SDK imports — durability reading lives in `run-manifest.ts`/`runner.ts`.
+- **Evidence**: typecheck clean (`tsc --noEmit`); `just fft` green through to sdk-check (`@github/copilot-sdk 1.0.1 latest`); audit = pre-existing transitive vulns only (hono/ws/qs/tar/vitest), non-fatal. Full suite **1432 passed / 16 skipped** (+6 over 5a's 1426 — the new 5b tests).
+
 

@@ -79,6 +79,27 @@ export function readIdleBudgetMs(runDir: string): number {
   return DEFAULT_IDLE_BUDGET_MS;
 }
 
+/**
+ * Plan 028 Phase 5b (workshop 003) — synchronous read of the survive-gaps
+ * posture recorded into run.json `budgets.surviveGaps` at run start. Returns
+ * false when run.json is absent, unparseable, or predates the field. Sync (like
+ * {@link readIdleBudgetMs}) so #49's future runner-side idle trigger reads the
+ * posture the same way it reads the idle budget. A survive-gaps run is never
+ * stood down on idle alone — only the wall-clock backstop (see
+ * `evaluateIdlePolicy`).
+ */
+export function readSurviveGaps(runDir: string): boolean {
+  try {
+    const parsed = JSON.parse(readFileSync(manifestPath(runDir), 'utf8')) as {
+      budgets?: { surviveGaps?: unknown };
+    };
+    return parsed.budgets?.surviveGaps === true;
+  } catch {
+    // absent / torn / pre-5b run.json → default posture (not survive-gaps)
+  }
+  return false;
+}
+
 export async function readManifest(
   runDir: string,
 ): Promise<LiveRunManifest | null> {

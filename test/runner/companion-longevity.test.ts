@@ -30,6 +30,10 @@ import type {
 import { resolveEffectiveBudgets } from '../../src/cli/budget-flags.js';
 import { resolveAgent } from '../../src/runner/folder.js';
 import {
+  evaluateIdlePolicy,
+  isCleanTerminalReason,
+} from '../../src/runner/index.js';
+import {
   __resetThrottleStateForTest,
   startManifestHeartbeat,
 } from '../../src/runner/run-manifest.js';
@@ -326,5 +330,106 @@ describe('stallTimeout frontmatter → config leg (plan 028 T003/T004)', () => {
     );
     expect(result.metadata.result).toBe('timeout');
     expect(readManifest(result.runDir).terminalReason).toBe('timeout');
+  });
+});
+
+/**
+ * Plan 028 Phase 5b (workshop 003, Option C) — the typed survive-gaps posture on
+ * `evaluateIdlePolicy`. When `surviveGaps === true` the companion is EXPECTING
+ * work across a long human gap, so an idle stretch alone must not stand it down:
+ * branch (b) (`effectiveIdleMs >= idleBudgetMs`) is suppressed and ONLY the
+ * wall-clock backstop (a) terminates it. The never-spoke arm
+ * (`idleElapsedMs === null` — the actual #50 incident) is a FIXED requirement,
+ * not a tunable. `surviveGaps` falsy/unset is byte-for-byte the plan-027 #35
+ * behaviour. `evaluateIdlePolicy` stays UNWIRED — #49 wires the trigger.
+ */
+describe('evaluateIdlePolicy survive-gaps posture (plan 028 5b — T005/T006)', () => {
+  // effectiveIdleMs(=runElapsedMs for never-spoke) is 1500: past the 1000ms
+  // budget (branch b would fire) but under the 2000ms wall-clock backstop.
+  const underBackstopOverBudget = {
+    idleBudgetMs: 1000,
+    runElapsedMs: 1500,
+    timeoutSec: 2,
+  };
+  const atBackstop = { idleBudgetMs: 1000, runElapsedMs: 2000, timeoutSec: 2 };
+
+  it('never-spoke + surviveGaps: continues past the idle budget (the #50 incident)', () => {
+    const neverSpoke = { idleElapsedMs: null, unresolvedPeerRequests: 0 };
+    const d = evaluateIdlePolicy(neverSpoke, {
+      ...underBackstopOverBudget,
+      surviveGaps: true,
+    });
+    expect(d.standDown).toBe(false);
+    expect(d.exitReason).toBeNull();
+  });
+
+  it('never-spoke + surviveGaps: still stands down at the wall-clock backstop (no_engagement)', () => {
+    const neverSpoke = { idleElapsedMs: null, unresolvedPeerRequests: 0 };
+    const d = evaluateIdlePolicy(neverSpoke, {
+      ...atBackstop,
+      surviveGaps: true,
+    });
+    expect(d.standDown).toBe(true);
+    expect(d.exitReason).toBe('no_engagement');
+  });
+
+  it('spoke-then-idle + surviveGaps: continues past the budget, stands down only at the backstop (idle_budget)', () => {
+    const spoke = { idleElapsedMs: 1500, unresolvedPeerRequests: 0 };
+    expect(
+      evaluateIdlePolicy(spoke, {
+        ...underBackstopOverBudget,
+        surviveGaps: true,
+      }).standDown,
+    ).toBe(false);
+    const atCeiling = evaluateIdlePolicy(spoke, {
+      ...atBackstop,
+      surviveGaps: true,
+    });
+    expect(atCeiling.standDown).toBe(true);
+    expect(atCeiling.exitReason).toBe('idle_budget');
+  });
+
+  it('surviveGaps does NOT override outstanding work — unresolved peer requests still continue', () => {
+    const outstanding = { idleElapsedMs: 1500, unresolvedPeerRequests: 2 };
+    const d = evaluateIdlePolicy(outstanding, {
+      ...underBackstopOverBudget,
+      surviveGaps: true,
+    });
+    expect(d.standDown).toBe(false);
+  });
+
+  it('default-unchanged guard: same fixture with surviveGaps unset stands down at the idle budget (plan 027 #35)', () => {
+    const neverSpoke = { idleElapsedMs: null, unresolvedPeerRequests: 0 };
+    const d = evaluateIdlePolicy(neverSpoke, underBackstopOverBudget);
+    expect(d.standDown).toBe(true);
+    expect(d.exitReason).toBe('no_engagement');
+
+    const spoke = { idleElapsedMs: 1500, unresolvedPeerRequests: 0 };
+    const d2 = evaluateIdlePolicy(spoke, underBackstopOverBudget);
+    expect(d2.standDown).toBe(true);
+    expect(d2.exitReason).toBe('idle_budget');
+  });
+
+  it('the underscore exitReasons map to clean hyphen terminalReason members (the #49 seam)', () => {
+    // Drive the exitReasons from real policy output (not literals), then assert
+    // the mechanical underscore→hyphen map #49 applies lands on Phase-4 CLEAN
+    // terminal reasons — so a survive-gaps stand-down reconciles to `completed`.
+    const noEngagement = evaluateIdlePolicy(
+      { idleElapsedMs: null, unresolvedPeerRequests: 0 },
+      { idleBudgetMs: 1, runElapsedMs: 10, timeoutSec: 0 },
+    ).exitReason;
+    const idleBudget = evaluateIdlePolicy(
+      { idleElapsedMs: 5000, unresolvedPeerRequests: 0 },
+      { idleBudgetMs: 1, runElapsedMs: 10, timeoutSec: 0 },
+    ).exitReason;
+    expect(noEngagement).toBe('no_engagement');
+    expect(idleBudget).toBe('idle_budget');
+
+    for (const exitReason of [noEngagement, idleBudget]) {
+      const terminalReason = (exitReason as string).replace(/_/g, '-');
+      expect(isCleanTerminalReason(terminalReason)).toBe(true);
+    }
+    expect(isCleanTerminalReason('idle-budget')).toBe(true);
+    expect(isCleanTerminalReason('no-engagement')).toBe(true);
   });
 });

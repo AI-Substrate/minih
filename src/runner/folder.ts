@@ -242,6 +242,10 @@ export function parseFrontmatter(content: string): {
   model?: string;
   reasoning?: string;
   timeout?: number;
+  /** Plan 028 Phase 5 — stall budget (seconds) from frontmatter; `0` disables. */
+  stallTimeout?: number;
+  /** Plan 028 Phase 5 — survive-gaps profile switch from frontmatter. */
+  surviveGaps?: boolean;
   /** Always populated (workshop 005:95) — `{enabled:false}` when absent or `disabled`. */
   coordination: CoordinationFrontmatter;
   /** Plan 018 R1 — `undefined` when absent (legacy agents). */
@@ -293,12 +297,16 @@ function parseYamlSimple(yaml: string): {
   model?: string;
   reasoning?: string;
   timeout?: number;
+  stallTimeout?: number;
+  surviveGaps?: boolean;
 } {
   let description = '';
   let tags: string[] = [];
   let model: string | undefined;
   let reasoning: string | undefined;
   let timeout: number | undefined;
+  let stallTimeout: number | undefined;
+  let surviveGaps: boolean | undefined;
 
   for (const line of yaml.split('\n')) {
     const descMatch = line.match(/^description:\s*"([^"]*)"$/);
@@ -335,9 +343,28 @@ function parseYamlSimple(yaml: string): {
     if (timeoutMatch) {
       timeout = Number.parseInt(timeoutMatch[1], 10);
     }
+    // Plan 028 Phase 5 — `stallTimeout` mirrors the `timeout` parse; `0` is a
+    // meaningful value (disables the watchdog), so match \d+ including 0.
+    const stallTimeoutMatch = line.match(/^stallTimeout:\s*(\d+)$/);
+    if (stallTimeoutMatch) {
+      stallTimeout = Number.parseInt(stallTimeoutMatch[1], 10);
+    }
+    // Plan 028 Phase 5 — survive-gaps profile switch (boolean).
+    const surviveGapsMatch = line.match(/^surviveGaps:\s*(true|false)$/);
+    if (surviveGapsMatch) {
+      surviveGaps = surviveGapsMatch[1] === 'true';
+    }
   }
 
-  return { description, tags, model, reasoning, timeout };
+  return {
+    description,
+    tags,
+    model,
+    reasoning,
+    timeout,
+    stallTimeout,
+    surviveGaps,
+  };
 }
 
 /**
@@ -696,6 +723,8 @@ export function listAgents(agentsDir: string): AgentDefinition[] {
       model,
       reasoning,
       timeout,
+      stallTimeout,
+      surviveGaps,
       coordination,
       permissions,
     } = parseFrontmatter(promptContent);
@@ -710,6 +739,8 @@ export function listAgents(agentsDir: string): AgentDefinition[] {
       model,
       reasoning,
       timeout,
+      stallTimeout,
+      surviveGaps,
       dir,
       promptPath,
       schemaPath: fs.existsSync(schemaPath) ? schemaPath : null,
@@ -743,19 +774,26 @@ export function resolveAgent(
  * Freezes copies of prompt, instructions, and schemas.
  * @returns Absolute path to the created run folder + the run ID
  */
-export function createRunFolder(agentDef: AgentDefinition): {
+export function createRunFolder(
+  agentDef: AgentDefinition,
+  opts?: { now?: () => Date },
+): {
   runDir: string;
   runId: string;
 } {
-  const now = new Date();
+  // The runId encodes the start instant in TRUE UTC (the trailing `Z` is now
+  // truthful). `now` is injectable so tests can pin an exact instant; default
+  // is the real wall clock. The UTC getters keep the runId's lexicographic
+  // order aligned with chronological order regardless of the host timezone.
+  const now = (opts?.now ?? (() => new Date()))();
   const suffix = crypto.randomBytes(2).toString('hex');
-  const yyyy = String(now.getFullYear());
-  const mm = String(now.getMonth() + 1).padStart(2, '0');
-  const dd = String(now.getDate()).padStart(2, '0');
-  const hh = String(now.getHours()).padStart(2, '0');
-  const min = String(now.getMinutes()).padStart(2, '0');
-  const ss = String(now.getSeconds()).padStart(2, '0');
-  const ms = String(now.getMilliseconds()).padStart(3, '0');
+  const yyyy = String(now.getUTCFullYear());
+  const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(now.getUTCDate()).padStart(2, '0');
+  const hh = String(now.getUTCHours()).padStart(2, '0');
+  const min = String(now.getUTCMinutes()).padStart(2, '0');
+  const ss = String(now.getUTCSeconds()).padStart(2, '0');
+  const ms = String(now.getUTCMilliseconds()).padStart(3, '0');
   const runId = `${yyyy}-${mm}-${dd}T${hh}-${min}-${ss}-${ms}Z-${suffix}`;
 
   const runsDir = path.join(agentDef.dir, 'runs');
@@ -786,6 +824,48 @@ export function createRunFolder(agentDef: AgentDefinition): {
   fs.mkdirSync(path.join(runDir, 'output'), { recursive: true });
 
   return { runDir, runId };
+}
+
+/**
+ * Read a run's start instant (true-UTC ISO) from its on-disk metadata.
+ * Precedence: run.json.startedAt → completed.json.startedAt → null. The runId
+ * (= folder name) is deliberately NOT consulted: for runs created before the
+ * UTC fix it encodes local time mislabeled `Z`, so it is unreliable as a
+ * chronological key. startedAt comes from `toISOString()` and is always UTC.
+ */
+export function runStartedAt(runDir: string): string | null {
+  for (const file of ['run.json', 'completed.json']) {
+    try {
+      const parsed = JSON.parse(
+        fs.readFileSync(path.join(runDir, file), 'utf-8'),
+      ) as { startedAt?: unknown };
+      if (typeof parsed.startedAt === 'string' && parsed.startedAt) {
+        return parsed.startedAt;
+      }
+    } catch {
+      // missing or unparseable — fall through to the next source
+    }
+  }
+  return null;
+}
+
+/**
+ * Sort run ids (folder names under `<agent>/runs`) newest-first by their
+ * recorded startedAt (true UTC), falling back to the folder name only when no
+ * startedAt is on disk. This keeps a mix of pre-fix (local-as-`Z`) and post-fix
+ * (true-UTC) folder names in chronological order — a lexical name sort would
+ * place a stale run first whenever local time sorted above a later UTC time.
+ */
+export function sortRunIdsNewestFirst(
+  runsDir: string,
+  runIds: string[],
+): string[] {
+  return [...runIds].sort((a, b) => {
+    const at = runStartedAt(path.join(runsDir, a)) ?? a;
+    const bt = runStartedAt(path.join(runsDir, b)) ?? b;
+    const byTime = bt.localeCompare(at);
+    return byTime !== 0 ? byTime : b.localeCompare(a);
+  });
 }
 
 /** Session lookup result from a prior run. */
@@ -821,14 +901,19 @@ export function findRunSession(
     if (!fs.existsSync(targetRunDir)) return null;
     targetRunId = runId;
   } else {
-    // Find latest completed run (skip incomplete/corrupt entries)
-    const entries = fs
-      .readdirSync(runsDir, { withFileTypes: true })
-      .filter((e) => e.isDirectory())
-      .sort((a, b) => b.name.localeCompare(a.name));
+    // Find latest completed run (skip incomplete/corrupt entries). Newest by
+    // recorded startedAt (true UTC), not folder name — old folders encode local
+    // time mislabeled `Z` (defect D), so a name sort could resume a stale run.
+    const runIds = sortRunIdsNewestFirst(
+      runsDir,
+      fs
+        .readdirSync(runsDir, { withFileTypes: true })
+        .filter((e) => e.isDirectory())
+        .map((e) => e.name),
+    );
 
-    for (const entry of entries) {
-      const candidateDir = path.join(runsDir, entry.name);
+    for (const name of runIds) {
+      const candidateDir = path.join(runsDir, name);
       const completedPath = path.join(candidateDir, 'completed.json');
       if (!fs.existsSync(completedPath)) continue;
       try {
@@ -836,7 +921,7 @@ export function findRunSession(
         if (metadata.sessionId) {
           return {
             sessionId: metadata.sessionId,
-            runId: entry.name,
+            runId: name,
             runDir: candidateDir,
           };
         }

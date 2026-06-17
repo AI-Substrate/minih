@@ -19,6 +19,7 @@ import * as path from 'node:path';
 import { isProcessAliveDefault } from './run-eligibility.js';
 import { listAgentSlugs, listRunDirs } from './run-inventory.js';
 import { updateManifest } from './run-manifest.js';
+import { isCleanTerminalReason } from './types.js';
 
 /** Manifest statuses that claim a live process — the heal candidates. */
 const PROBE_STATUSES = new Set(['starting', 'active', 'idle', 'completing']);
@@ -44,6 +45,12 @@ export interface ReconcileReport {
   /** Run dirs inspected (after slug/runId scoping). */
   scanned: number;
   healed: ReconcileHealedRun[];
+  /**
+   * Plan 028 Phase 4 (G) — dead-pid runs that carried a clean-stop marker
+   * (`cleanStop: true` or a clean `terminalReason`) and were reconciled to
+   * `completed` rather than `crashed`. A clean shutdown is not a heal.
+   */
+  reconciledClean: ReconcileHealedRun[];
   skipped: {
     /** completed.json present or manifest already terminal. */
     terminal: number;
@@ -66,6 +73,7 @@ export async function reconcileRuns(
   const report: ReconcileReport = {
     scanned: 0,
     healed: [],
+    reconciledClean: [],
     skipped: { terminal: 0, alive: 0, noPid: 0, torn: 0 },
   };
 
@@ -103,6 +111,25 @@ export async function reconcileRuns(
         continue;
       }
 
+      // Plan 028 Phase 4 (G) — a clean-stop marker (`cleanStop: true` or a
+      // clean `terminalReason`) means this dead pid is the tail of a clean
+      // shutdown (farewell / operator-stop / idle), NOT a crash. Reconcile to
+      // `completed` and preserve any clean reason — never overwrite to
+      // crashed + pid-vanished.
+      const isCleanStop =
+        manifest.cleanStop === true ||
+        isCleanTerminalReason(manifest.terminalReason);
+      if (isCleanStop) {
+        await updateManifest(runDir, { status: 'completed' });
+        report.reconciledClean.push({
+          slug,
+          runId,
+          pid,
+          previousStatus: manifest.status,
+        });
+        continue;
+      }
+
       await updateManifest(runDir, {
         status: 'crashed',
         // Preservation invariant — never overwrite an existing diagnosis.
@@ -126,13 +153,15 @@ interface TolerantManifest {
   status?: unknown;
   pid?: unknown;
   terminalReason?: unknown;
+  cleanStop?: unknown;
   [key: string]: unknown;
 }
 
 async function readJsonTolerant(filePath: string): Promise<
-  | (Omit<TolerantManifest, 'status' | 'terminalReason'> & {
+  | (Omit<TolerantManifest, 'status' | 'terminalReason' | 'cleanStop'> & {
       status?: string;
       terminalReason?: string;
+      cleanStop?: boolean;
     })
   | null
 > {
@@ -151,6 +180,8 @@ async function readJsonTolerant(filePath: string): Promise<
         typeof parsed.terminalReason === 'string'
           ? parsed.terminalReason
           : undefined,
+      // Plan 028 Phase 4 (G) — only the literal `true` counts as a clean stop.
+      cleanStop: parsed.cleanStop === true,
     };
   } catch {
     return null;

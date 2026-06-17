@@ -66,13 +66,19 @@ export interface EffectiveBudgets {
  * `run` and `resume` share (plan 026 review FT-004 pins resume's positive
  * path through this helper).
  *
- * Precedence: explicit flag → frontmatter `timeout` (wall-clock only) →
+ * Precedence: explicit flag → frontmatter (`timeout` / `stallTimeout`) →
  * `DEFAULT_TIMEOUT_SEC` / `DEFAULT_STALL_TIMEOUT_SEC` / 0 (unlimited turns).
+ *
+ * Plan 028 Phase 5 — `definitionStallTimeout` closes the frontmatter→config leg
+ * for the stall budget (the per-run `--stall-timeout` flag already worked). `0`
+ * is a meaningful frontmatter value (disables the watchdog), so it is honoured
+ * via `??` rather than collapsed to the default.
  */
 export function resolveEffectiveBudgets(
   commandName: string,
   flags: { timeout?: string; stallTimeout?: string; maxTurns?: string },
   definitionTimeout?: number,
+  definitionStallTimeout?: number,
 ): EffectiveBudgets {
   return {
     timeout:
@@ -90,7 +96,9 @@ export function resolveEffectiveBudgets(
         '--stall-timeout',
         flags.stallTimeout,
         'non-negative-seconds',
-      ) ?? DEFAULT_STALL_TIMEOUT_SEC,
+      ) ??
+      definitionStallTimeout ??
+      DEFAULT_STALL_TIMEOUT_SEC,
     maxTurns:
       parseBudgetFlag(
         commandName,

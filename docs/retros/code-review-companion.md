@@ -315,3 +315,50 @@
 - **magicWand** (target: coordination): Have coordination_status include stable finding ids plus ackOf in draftFarewell.findings so the final report can be written directly from the draft without reconstructing IDs or reply links from memory.
 - difficulties:
   - [annoying] debug: The optimized glob tool reported no docs/plans matches even though the project plan tree existed and find could list it from the project root. (workaround: Used project-root find plus direct view calls for orientation instead of relying on glob for the plan tree.)
+
+## 2026-06-16T04:22:42.848Z — code-review-companion / 2026-06-16T13-50-25-287Z-8a55
+
+- runId: 2026-06-16T13-50-25-287Z-8a55
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-06-16T13-50-25-287Z-8a55
+- summary: Reviewed five Phase 1 companion-mode reliability commits covering defect C investigation, defect A status fail-open, defect B `runs list --all`, defect B heal-on-read, and final AC-C characterization/domain history. The code changes for A/B/C looked sound and targeted tests passed, but the overall phase verdict remains REQUEST_CHANGES because F001 is still outstanding: the newly added plan JSON is not Biome-formatted and the execution evidence misdiagnoses that lint failure.
+- **magicWand** (target: coordination): Add a lane-agnostic `minih companion open-findings <slug> --run <runId>` command that lists unresolved findings and whether later commits addressed them, so final drain reviews do not rely on the companion remembering prior inbox messages.
+- difficulties:
+  - [degrading] test: Harness/phase evidence around lint was inconsistent: the phase log called the lint failure a missing Biome install, but `npx biome check .` ran and reported concrete format/lint failures. (workaround: Ran `npx biome check .` directly and carried the mismatch as review finding F001.)
+
+## 2026-06-16T06:42:28.440Z — code-review-companion / 2026-06-16T15-58-44-285Z-573c
+
+- runId: 2026-06-16T15-58-44-285Z-573c
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-06-16T15-58-44-285Z-573c
+- summary: Reviewed Phase 2 companion-mode reliability commits for true-UTC runId generation, startedAt-primary run sorting, and MINIH_PROJECT_ROOT correctness. I approved the UTC runId production change, flagged and saw fixed the TZ test-restore issue, found a HIGH central run-selector drift in findRunSession that was fixed, approved the MINIH_PROJECT_ROOT git-root change, and left the broader default/latest selector sweep as an explicit follow-up/scope decision rather than silently treating it as complete.
+- **magicWand** (target: project): Add a single run-selector audit fixture/command that seeds mixed old-local-Z and new true-UTC run folders and exercises every default/latest run selector automatically.
+- difficulties:
+  - [degrading] knowledge: The active plan scoped the run-sort migration to four selectors, but repo search found additional default/latest selectors with the same mixed-folder risk, forcing a manual scope decision during review. (workaround: Reported the central shared-resolver path as a HIGH finding and explicitly separated the broader selector sweep as a follow-up/scope decision.)
+  - [annoying] test: The documented Vitest command style did not support the Jest-style --runInBand flag I first tried during review. (workaround: Reran the targeted test with the repository-documented npx vitest run invocation.)
+
+## 2026-06-16T07:40:21.051Z — code-review-companion / 2026-06-16T07-24-05-445Z-061c
+
+- runId: 2026-06-16T07-24-05-445Z-061c
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-06-16T07-24-05-445Z-061c
+- summary: Reviewed Phase 3 of plan 028 across four task messages: the RED companion-findings test, the GREEN `minih companion findings <slug>` implementation, the docs update, and the final range through 78cbbbe. The code/test path is approved: it is additive, reuses deriveCompanionLedger/buildDraftFarewell, preserves existing status/ledger/error-code/lane contracts, keeps cli -> runner direction, and the focused companion-findings regression passes. I sent two MEDIUM documentation drift findings for remaining companion-mode dogfood/read-path guidance.
+- **magicWand** (target: coordination): Have the coordination companion automatically run a bounded contract-drift sweep template for the surfaces named in its prompt after every contract-changing doc/code review, including AGENTS_README and dogfood-report examples.
+- difficulties:
+  - [degrading] build: Session-start `harness boot --json` failed on the lint sensor and also reported doctor/audit warnings, even though this run was acting as a reviewer rather than the implementer. (workaround: Treated the boot result as baseline context, continued review-only work, and used focused validation for the commits under review.)
+  - [annoying] test: I tried `npx vitest run ... --runInBand`; Vitest in this repo rejects that Jest-style flag. (workaround: Reran the focused test with the documented `npx vitest run test/cli/companion-findings.test.ts` command.)
+
+## 2026-06-16T09:24:31.944Z — code-review-companion / 2026-06-16T08-33-08-895Z-6c45
+
+- runId: 2026-06-16T08-33-08-895Z-6c45
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-06-16T08-33-08-895Z-6c45
+- summary: Reviewed four Phase 4 terminal-classification commit requests. T001/T002 and T007/T008 were approved with no new findings; T005/T006 code was approved with a medium domain-documentation drift finding. The main unresolved blocker is F001: T004 currently stamps cleanStop only on normal final clean completion, not on an actual sent-farewell signal before an interrupted runner terminal write, so the AC-G killed-after-farewell path remains unproven.
+- **magicWand** (target: coordination): Expose an explicit idle decision field in coordination_status, such as nextAction: keep_polling | send_checkin | stop_idle_budget, plus remainingIdleMs and checkInOutstanding, so companion agents do not have to reconcile prompt-era lifecycle rules by inference.
+- difficulties:
+  - [annoying] coordination: The companion lifecycle instructions disagreed about post-check-in behavior: one section describes exiting after replyWaitPolls, while the ledger-driven contract says stand-down is controlled by idleBudgetSec/backstop and check-ins are not the exit mechanism. (workaround: Followed the ledger-driven coordination_status budget and continued polling until idleElapsedMs exceeded idleBudgetSec.)
+
+## 2026-06-16T22:05:37.962Z — code-review-companion / 2026-06-16T21-31-43-201Z-ce1c
+
+- runId: 2026-06-16T21-31-43-201Z-ce1c
+- runDir: /Users/jordanknight/substrate/minih/agents/code-review-companion/runs/2026-06-16T21-31-43-201Z-ce1c
+- summary: Companion stopped on request after Phase 5a review. I reviewed four commit-boundary requests: T001/T002 49d8326 approved with no findings, T003/T004 83ebe3c approved with F001, T007 d90aeaa approved with no findings, and wrap 163b29d approved with F002. The outside peer then reported that F001 and F002 were fixed in ab31cd3 and sent control:stop in the same batch, so I honored stop precedence and did not perform a separate review of that final fix commit.
+- **magicWand** (target: coordination): Add a first-class companion farewell generator that converts the coordination ledger into a schema-valid report with reviewed task IDs, findings, summaries, and final unresolved status prefilled.
+- difficulties:
+  - [annoying] test: `npx vitest --runInBand` is not accepted by this repo's Vitest setup. (workaround: Use the documented `npx vitest run <files>` invocation.)

@@ -1,7 +1,11 @@
 # minih — declarative agent runner
 
-# Full pipeline: lint → format → build → typecheck → test → audit → sdk-check
-fft: lint format build typecheck test audit sdk-check
+# Full pipeline: format → lint → build → typecheck → test → audit → sdk-check
+# format runs BEFORE lint so freshly-authored files are auto-formatted first;
+# otherwise `lint` (biome check, CI-mode) fails on format drift before `format`
+# ever runs (recurring friction on hand-cranked docs/plans/**/the-flow.json —
+# bit plans 027 and 028; encoded from the harness retro harvest).
+fft: format lint build typecheck test audit sdk-check
 
 # Lint (code quality, suspicious patterns)
 lint:

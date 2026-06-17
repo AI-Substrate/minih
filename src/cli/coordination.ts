@@ -15,6 +15,7 @@ import {
   listAgents,
   OutsideAgentsDirError,
   resolveAgent,
+  sortRunIdsNewestFirst,
   validateSlug,
 } from '../runner/index.js';
 import {
@@ -220,12 +221,16 @@ export function resolveCoordinationRunOrExit(
     );
   }
 
-  const entries = fs
-    .readdirSync(runsDir, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .sort((a, b) => b.name.localeCompare(a.name));
+  // Newest-first by startedAt (true UTC), not folder name (defect D).
+  const runIds = sortRunIdsNewestFirst(
+    runsDir,
+    fs
+      .readdirSync(runsDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name),
+  );
 
-  if (entries.length === 0) {
+  if (runIds.length === 0) {
     exitWithEnvelope(
       formatError(
         commandName,
@@ -237,15 +242,15 @@ export function resolveCoordinationRunOrExit(
 
   let targetRunId = runId;
   if (targetRunId === undefined) {
-    const activeRuns = entries.filter((entry) => {
-      const dir = path.join(runsDir, entry.name);
+    const activeRuns = runIds.filter((name) => {
+      const dir = path.join(runsDir, name);
       return (
         fs.existsSync(path.join(dir, 'events.ndjson')) &&
         !fs.existsSync(path.join(dir, 'completed.json'))
       );
     });
     if (activeRuns.length === 1) {
-      targetRunId = activeRuns[0].name;
+      targetRunId = activeRuns[0];
     } else if (activeRuns.length > 1) {
       exitWithEnvelope(
         formatError(
@@ -254,7 +259,7 @@ export function resolveCoordinationRunOrExit(
           `Multiple active runs found for "${slug}". Pass --run <runId> to choose the coordination conversation.`,
           {
             slug,
-            candidates: activeRuns.map((entry) => ({ runId: entry.name })),
+            candidates: activeRuns.map((name) => ({ runId: name })),
             remedies: [
               `minih runs list --active --slug ${slug}`,
               `${commandName} ${slug} --run <runId>`,
@@ -262,14 +267,14 @@ export function resolveCoordinationRunOrExit(
           },
         ),
       );
-    } else if (entries.length === 1) {
-      targetRunId = entries[0].name;
+    } else if (runIds.length === 1) {
+      targetRunId = runIds[0];
     } else {
       exitWithEnvelope(
         invalidArgs(
           commandName,
           `Multiple runs found for "${slug}". Pass --run <runId> to choose the coordination conversation.`,
-          { runs: entries.map((entry) => entry.name) },
+          { runs: runIds },
         ),
       );
     }

@@ -1,4 +1,10 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -292,6 +298,193 @@ describe('listRunInventory', () => {
       `zulu/${newest}`,
       'alpha/2026-06-08T00-00-03-000Z-3',
     ]);
+  });
+});
+
+// Plan 028 Phase 1 (defect B) — `--all` must measurably broaden the result set
+// (it was declared on ListRunInventoryInput but never read → a silent no-op).
+// New contract: default = active/recent (every live row + each agent's single
+// newest terminal row); --all = full history, bounded by --limit.
+describe('listRunInventory — --all broadens vs default (plan 028 defect B)', () => {
+  async function seedActive(
+    slug: string,
+    runId: string,
+    pid: number,
+  ): Promise<void> {
+    const dir = makeRunDir(slug, runId);
+    await writeManifest(
+      dir,
+      makeManifest({ slug, runId, runDir: dir, status: 'active', pid }),
+    );
+  }
+  function seedCompleted(slug: string, runId: string): void {
+    const dir = makeRunDir(slug, runId);
+    writeFileSync(
+      path.join(dir, 'completed.json'),
+      JSON.stringify(makeCompleted({ slug, runId })),
+    );
+  }
+
+  it('default shows active + only the newest terminal row; --all shows full history', async () => {
+    await seedActive('alpha', '2026-06-08T00-00-09-000Z-live', 4242);
+    seedCompleted('alpha', '2026-06-08T00-00-00-000Z-c0');
+    seedCompleted('alpha', '2026-06-08T00-00-01-000Z-c1');
+    seedCompleted('alpha', '2026-06-08T00-00-02-000Z-c2');
+
+    const common = {
+      agentsDir,
+      isProcessAlive: () => true,
+      staleThresholdMs: Number.MAX_SAFE_INTEGER,
+    };
+    const def = await listRunInventory(common);
+    const all = await listRunInventory({ ...common, all: true });
+
+    // --all is measurably broader — no silent no-op flag remains
+    expect(all.length).toBeGreaterThan(def.length);
+    // default = the live run + exactly one (newest) terminal row
+    expect(def.map((r) => r.liveness).sort()).toEqual(['active', 'completed']);
+    expect(def.find((r) => r.liveness === 'completed')?.runId).toBe(
+      '2026-06-08T00-00-02-000Z-c2',
+    );
+    // --all = the live run + all three terminal rows
+    expect(all.filter((r) => r.liveness === 'completed')).toHaveLength(3);
+    expect(all.find((r) => r.liveness === 'active')?.runId).toBe(
+      '2026-06-08T00-00-09-000Z-live',
+    );
+  });
+
+  it('--active still surfaces the genuinely-live run', async () => {
+    await seedActive('alpha', '2026-06-08T00-00-09-000Z-live', 4242);
+    seedCompleted('alpha', '2026-06-08T00-00-00-000Z-c0');
+    const rows = await listRunInventory({
+      agentsDir,
+      active: true,
+      isProcessAlive: () => true,
+      staleThresholdMs: Number.MAX_SAFE_INTEGER,
+    });
+    expect(rows.map((r) => r.liveness)).toEqual(['active']);
+  });
+});
+
+// Plan 028 Phase 2 (defect D) — confirm-only: compareRows already sorts by
+// startedAt (true UTC) first, runId only as a tie-break. After the UTC runId
+// fix, an OLD folder named with local-as-`Z` (13-50) but started earlier
+// (03:50 UTC) must still sort BELOW a NEW true-UTC folder (05-58) started later
+// (05:58 UTC) — i.e. chronological, not lexical-by-name.
+describe('listRunInventory — startedAt-primary sort survives mixed UTC/local folder names (defect D)', () => {
+  it('orders by startedAt even when the runId lexical order is the opposite', async () => {
+    // OLD: name 13-50 (local-as-Z), started EARLIER at 03:50 UTC.
+    const oldDir = makeRunDir('alpha', '2026-06-16T13-50-25-287Z-8a55');
+    writeFileSync(
+      path.join(oldDir, 'completed.json'),
+      JSON.stringify(
+        makeCompleted({
+          slug: 'alpha',
+          runId: '2026-06-16T13-50-25-287Z-8a55',
+          startedAt: '2026-06-16T03:50:25.286Z',
+        }),
+      ),
+    );
+    // NEW: name 05-58 (true UTC), started LATER at 05:58 UTC.
+    const newDir = makeRunDir('alpha', '2026-06-16T05-58-44-285Z-573c');
+    writeFileSync(
+      path.join(newDir, 'completed.json'),
+      JSON.stringify(
+        makeCompleted({
+          slug: 'alpha',
+          runId: '2026-06-16T05-58-44-285Z-573c',
+          startedAt: '2026-06-16T05:58:44.284Z',
+        }),
+      ),
+    );
+
+    const rows = await listRunInventory({ agentsDir, all: true });
+    // Newest-by-startedAt first; a name-sort would wrongly put 13-50 first.
+    expect(rows[0].runId).toBe('2026-06-16T05-58-44-285Z-573c');
+    expect(rows[1].runId).toBe('2026-06-16T13-50-25-287Z-8a55');
+  });
+});
+
+// Plan 028 Phase 1 (defect B) — best-effort heal-on-read: a stale dead-pid
+// `active` orphan is marked `crashed` during an inventory read (reusing the
+// reconcile lock), and must never drop or mislabel a genuinely-live run. The
+// heal is fully swallowed — a held lock or a write error leaves the orphan
+// un-healed but the read always returns.
+describe('listRunInventory — heal-on-read of dead-pid orphans (plan 028 defect B)', () => {
+  async function seedManifest(
+    slug: string,
+    runId: string,
+    patch: Record<string, unknown>,
+  ): Promise<string> {
+    const dir = makeRunDir(slug, runId);
+    await writeManifest(
+      dir,
+      makeManifest({ slug, runId, runDir: dir, ...patch }),
+    );
+    return dir;
+  }
+  function readManifestJson(dir: string): {
+    status: string;
+    terminalReason?: string;
+  } {
+    return JSON.parse(readFileSync(path.join(dir, 'run.json'), 'utf8')) as {
+      status: string;
+      terminalReason?: string;
+    };
+  }
+
+  it('heals a stale dead-pid active orphan to crashed without dropping the live run', async () => {
+    const liveDir = await seedManifest(
+      'alpha',
+      '2026-06-08T00-00-09-000Z-live',
+      { status: 'active', pid: 111 },
+    );
+    const orphanDir = await seedManifest(
+      'alpha',
+      '2026-06-08T00-00-00-000Z-orphan',
+      { status: 'active', pid: 999 },
+    );
+
+    const rows = await listRunInventory({
+      agentsDir,
+      all: true,
+      isProcessAlive: (pid) => pid === 111,
+      staleThresholdMs: Number.MAX_SAFE_INTEGER,
+    });
+
+    // the live run still resolves as active (never healed)
+    expect(rows.find((r) => r.runId.endsWith('live'))?.liveness).toBe('active');
+    expect(readManifestJson(liveDir).status).toBe('active');
+    // the orphan is healed on disk: crashed + pid-vanished
+    expect(readManifestJson(orphanDir).status).toBe('crashed');
+    expect(readManifestJson(orphanDir).terminalReason).toBe('pid-vanished');
+  });
+
+  it('swallows a failing heal — the read still returns the live run, orphan left un-healed', async () => {
+    await seedManifest('alpha', '2026-06-08T00-00-09-000Z-live', {
+      status: 'active',
+      pid: 111,
+    });
+    const orphanDir = await seedManifest(
+      'alpha',
+      '2026-06-08T00-00-00-000Z-orphan',
+      { status: 'active', pid: 999 },
+    );
+
+    const rows = await listRunInventory({
+      agentsDir,
+      all: true,
+      isProcessAlive: (pid) => pid === 111,
+      staleThresholdMs: Number.MAX_SAFE_INTEGER,
+      // a held reconcile lock / write error is modelled as a throwing heal
+      healOrphan: () =>
+        Promise.reject(new Error('boom: write failed mid-heal')),
+    });
+
+    // the read survives and the live run is still reported
+    expect(rows.find((r) => r.runId.endsWith('live'))?.liveness).toBe('active');
+    // orphan untouched (left for the next read / `minih reconcile`)
+    expect(readManifestJson(orphanDir).status).toBe('active');
   });
 });
 

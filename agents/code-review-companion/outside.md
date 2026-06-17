@@ -83,17 +83,18 @@ minih outside inbox send code-review-companion --run "$RUN_ID" \
 
 **Fire-and-forget.** Do NOT wait for a reply before moving on. The companion replies asynchronously only on findings.
 
-### Skim the inbox between commits
+### Read findings between commits
+
+Read findings + summary with the dedicated **lane-agnostic** command — never hand-`jq` a raw lane (findings live on the *inside* lane; the wrong-lane guess was #50 F):
 
 ```bash
-minih outside inbox list code-review-companion --run "$RUN_ID" --unread 2>&1 | jq '.data.messages | map({id, from, type, subject, ackOf})'
+minih companion findings code-review-companion --run "$RUN_ID" --json | jq '.data.findings'
 ```
 
-- **No new messages** → proceed.
-- **`finding` HIGH/CRITICAL** → address inline before the next task.
-- **`finding` MEDIUM/LOW** → queue for end-of-phase. Log the `ackOf` mapping for end-of-session reconciliation.
-- **`summary` APPROVE** → log it; proceed.
-- **`question` `still-needed`** → check-in protocol fired (plan 019). Reply with another `task`/`directive` to keep alive, or `control:stop` to end. Ignoring leads to `no_engagement` / `idle_budget` exit. See [`docs/how/companion-mode.md § Lifecycle and check-in protocol`](../../docs/how/companion-mode.md#lifecycle-and-check-in-protocol).
+`.data.findings` + `.data.summariesCount` + `.data.draftFarewell.summary`, over the same ledger as `minih companion status`.
+
+- **HIGH/CRITICAL finding** → fix inline; **MEDIUM/LOW** → queue for phase end (log the `ackOf`).
+- **`question` `still-needed`** → check-in fired (plan 019); reply `task`/`directive` or `control:stop`. Ignoring → `no_engagement`/`idle_budget` exit. See [`companion-mode.md`](../../docs/how/companion-mode.md#lifecycle-and-check-in-protocol).
 
 ### Handling findings inline
 

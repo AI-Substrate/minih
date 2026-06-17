@@ -45,6 +45,7 @@ import {
   minihReleaseDefault,
   type PermissionPolicy,
   type ResolvedPolicy,
+  resolveDefaultAllowedRoots,
 } from './permissions/index.js';
 import { buildInsidePreamble } from './preamble-builder.js';
 import {
@@ -55,6 +56,7 @@ import {
 } from './retro-ledger.js';
 import {
   flushThrottled as flushManifestThrottled,
+  startManifestHeartbeat,
   updateManifest,
   writeManifest,
 } from './run-manifest.js';
@@ -448,6 +450,11 @@ export async function runAgent(
             ? config.params.idleBudgetMs
             : DEFAULT_IDLE_BUDGET_MS,
       }),
+      // Plan 028 Phase 5b (workshop 003) — record the survive-gaps posture
+      // durably so #49's future idle trigger reads it the same way it reads
+      // idleBudgetMs (via readSurviveGaps). Recorded whenever the run opts into
+      // survive-gaps, independent of coordination.
+      ...(config.surviveGaps && { surviveGaps: true }),
     };
 
     // Initial run.json manifest — workshop 002 §1, plan 009.
@@ -628,7 +635,14 @@ export async function runAgent(
     process.env.MINIH_RUN_DIR = runDir;
     process.env.MINIH_OUTPUT_PATH = outputPath;
     process.env.MINIH_AGENTS_DIR = resolvedAgentsDir;
-    process.env.MINIH_PROJECT_ROOT = config.cwd ?? process.cwd();
+    // The project root is the resolved git root, NOT config.cwd: a spawned
+    // companion's cwd IS its run dir, so config.cwd would point the child at
+    // its own run folder. resolveDefaultAllowedRoots walks up to .git and
+    // realpaths it (cwd-fallback when there is no repo). Informational only —
+    // fs-guard permission boundaries are derived separately (defect E).
+    process.env.MINIH_PROJECT_ROOT = resolveDefaultAllowedRoots(
+      config.cwd ?? process.cwd(),
+    ).roots[0];
     process.env.MINIH_MODEL = config.model ?? '';
     process.env.MINIH_TIMEOUT = String(config.timeout ?? 300);
     process.env.MINIH_SCHEMA_PATH = definition.schemaPath ?? '';
@@ -1160,6 +1174,15 @@ export async function runAgent(
     };
 
     let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    // Plan 028 Phase 5 (#50 follow-up) — opt-in survive-gaps heartbeat. Bumps
+    // run.json.updatedAt independent of provider events so a quietly-waiting
+    // survive-gaps companion keeps reading `active` across long human gaps.
+    // Decoupled from resetStallDeadline by construction (the factory only
+    // writes the manifest); cleared in the finally below alongside the
+    // watchdog/timeout handles. Default runs start none (opt-in).
+    const stopHeartbeat = config.surviveGaps
+      ? startManifestHeartbeat(runDir, config.heartbeatIntervalMs)
+      : undefined;
     try {
       // MCP config resolution:
       // - Explicit mcpServers (from --mcp-config): use directly
@@ -1289,7 +1312,23 @@ export async function runAgent(
           if (budgetBreached()) return result;
           // Manifest: status → completing right before terminal-condition wait
           // (workshop 002 §Write points).
-          await updateManifest(runDir, { status: 'completing' });
+          //
+          // Plan 028 Phase 4 (C-F001) — active-phase clean-stop producer. The
+          // agent has just resolved cleanly (`result.status === 'completed'`):
+          // that IS the observable farewell. Stamp `cleanStop` NOW, while the
+          // manifest is still a PROBE status, so a process killed anywhere in
+          // the finalization window that follows (forwarder drain → coordination
+          // drain → validation → completed.json) is reconciled to `completed`,
+          // not `crashed`. The terminal patch below re-affirms or clears this
+          // once `resultStatus` is fully known (a `degraded` schema-nit stays
+          // clean; a finalization failure clears it). Without this, the marker
+          // was coupled to the terminal patch — which never runs on a kill —
+          // so the very incident AC-G targets (clean farewell, then killed
+          // mid-shutdown) was mis-diagnosed as a crash.
+          await updateManifest(runDir, {
+            status: 'completing',
+            ...(result.status === 'completed' && { cleanStop: true }),
+          });
           if (budgetBreached()) return result;
           const terminal = await awaitTerminalCondition(result, () =>
             budgetBreached() ? 0 : pendingForwarderCount(),
@@ -1354,6 +1393,7 @@ export async function runAgent(
     } finally {
       if (timeoutHandle) clearTimeout(timeoutHandle);
       if (stallHandle) clearTimeout(stallHandle);
+      stopHeartbeat?.();
       closeForwarders();
     }
 
@@ -1586,9 +1626,27 @@ export async function runAgent(
           : undefined;
     await drainTrackedManifestUpdates();
     await flushManifestThrottled(runDir);
+    // Plan 028 Phase 4 (AC-G) — a clean result (completed, or a clean-but-
+    // schema-nit `degraded`) is a clean terminal: record it `completed` on the
+    // live manifest (T002) and stamp a `cleanStop`/`farewellAt` marker (T004)
+    // so a later dead-pid sighting reconciles to `completed`, not `crashed`.
+    // `completed.json.result` (above) keeps the honest `degraded`. The velocity
+    // guard (above, keyed on `resultStatus === 'completed'`) is deliberately
+    // NOT widened — a degraded run still skips velocity (Workshop Q1;
+    // measurement domain untouched).
+    const cleanTerminal =
+      resultStatus === 'completed' || resultStatus === 'degraded';
     await updateManifest(runDir, {
-      status: resultStatus === 'completed' ? 'completed' : 'failed',
+      status: cleanTerminal ? 'completed' : 'failed',
       sessionId: agentResult.sessionId || null,
+      // Re-affirm or CLEAR the active-phase clean-stop marker (set at the
+      // 'completing' transition above). Written explicitly in both directions:
+      // a finalization failure that flipped a clean agent to `failed` (e.g. a
+      // coordination-snapshot error) must not leave a stale `cleanStop:true`.
+      cleanStop: cleanTerminal,
+      ...(cleanTerminal && {
+        farewellAt: completedAt.getTime(),
+      }),
       ...(budgetReason &&
         !denialState.terminalFired &&
         !streamAborted && { terminalReason: budgetReason }),

@@ -206,7 +206,8 @@ describe('stall watchdog (plan 026 T005)', () => {
 
   it('never false-triggers while events of any type keep flowing', async () => {
     const def = createAgent('stall-flowing');
-    // Total run 400ms > stall budget 250ms, but no inter-event gap exceeds it.
+    // Total run 1200ms > stall budget 900ms, but no inter-event gap (≤300ms)
+    // comes close — wide margins so a slow/loaded CI runner can't false-trigger.
     const adapter = new ScriptedAdapter(
       [
         {
@@ -217,25 +218,25 @@ describe('stall watchdog (plan 026 T005)', () => {
             input: {},
           }),
         },
-        { atMs: 100, event: event('thinking', { content: 'hmm' }) },
+        { atMs: 300, event: event('thinking', { content: 'hmm' }) },
         {
-          atMs: 200,
+          atMs: 600,
           event: event('tool_result', {
             toolCallId: 't1',
             output: 'ok',
             isError: false,
           }),
         },
-        { atMs: 300, event: event('message', { content: 'done' }) },
-        { atMs: 350, event: event('session_idle') },
+        { atMs: 900, event: event('message', { content: 'done' }) },
+        { atMs: 1050, event: event('session_idle') },
       ],
-      { settleAtMs: 400, result: { output: validSystemOutput() } },
+      { settleAtMs: 1200, result: { output: validSystemOutput() } },
     );
 
     const result = await runAgent(
       adapter,
       def,
-      { slug: 'stall-flowing', stallTimeout: 0.25, timeout: 10 },
+      { slug: 'stall-flowing', stallTimeout: 0.9, timeout: 10 },
       undefined,
       tmpDir,
     );

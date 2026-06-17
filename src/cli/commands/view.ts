@@ -218,9 +218,8 @@ async function resolveRunWithFallback(
       mode: { kind: 'latest-active' },
       agentsDir: agentsDirOverride,
     });
-    const newest = active.candidates.sort((a, b) =>
-      b.runId.localeCompare(a.runId),
-    )[0];
+    // candidates are returned newest-first by startedAt (defect D).
+    const newest = active.candidates[0];
     if (newest) {
       if (active.candidates.length > 1) {
         process.stderr.write(

@@ -29,6 +29,7 @@ import {
   appendRetroEntry,
   appendRetroStub,
   RetroLedgerError,
+  sortRunIdsNewestFirst,
 } from '../../runner/index.js';
 import {
   ErrorCodes,
@@ -102,10 +103,18 @@ function listRunDirs(slug: string, agentsDir: string): string[] {
 }
 
 function latestRunDir(slug: string, agentsDir: string): string | null {
-  const dirs = listRunDirs(slug, agentsDir);
-  if (dirs.length === 0) return null;
-  // Run IDs sort lexicographically by ISO timestamp prefix.
-  return dirs.sort().reverse()[0] ?? null;
+  // Newest by startedAt (true UTC), not folder name — old folders encode local
+  // time mislabeled `Z` (defect D), so a lexical name sort can pick a stale run.
+  const runsDir = path.join(agentsDir, slug, 'runs');
+  if (!fs.existsSync(runsDir)) return null;
+  const ids = sortRunIdsNewestFirst(
+    runsDir,
+    fs
+      .readdirSync(runsDir, { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => e.name),
+  );
+  return ids.length > 0 ? path.join(runsDir, ids[0]) : null;
 }
 
 function buildLedgerPaths(

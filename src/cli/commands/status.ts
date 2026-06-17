@@ -10,6 +10,7 @@ import * as path from 'node:path';
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import {
+  isCleanTerminalReason,
   isProcessAliveDefault,
   listActiveRunCandidates,
   MultipleActiveRunsError,
@@ -26,6 +27,16 @@ import {
 
 const STALE_THRESHOLD_MS = 60_000;
 const DEFAULT_TURNS = 5;
+
+/**
+ * Plan 028 Phase 4 (G) — style a `terminalReason` for the status render. A
+ * clean terminal (operator-stop / idle-budget / no-engagement) renders dim, not
+ * red — only genuine failure reasons render red, so a clean stop no longer
+ * looks like a crash. Exported for the render test.
+ */
+export function styleTerminalReason(reason: string): string {
+  return isCleanTerminalReason(reason) ? chalk.dim(reason) : chalk.red(reason);
+}
 
 interface TurnEntry {
   type: string;
@@ -86,6 +97,16 @@ export type StatusVerdict =
 
 /** Manifest statuses that claim a live process — the only ones worth probing. */
 const PROBE_STATUSES = new Set(['starting', 'active', 'idle', 'completing']);
+
+/**
+ * Plan 028 (defect A) — the subset of {@link PROBE_STATUSES} that counts as
+ * "active" for fail-open. Mirrors the canonical resolver/inventory predicate
+ * (`run-inventory.ts:16`, `run-resolver.ts:38`): a live-pid run in one of these
+ * is `active` as soon as it boots — decided by `updatedAt` freshness, before any
+ * `events.ndjson` exists. `idle` is deliberately excluded (an idle run is quiet;
+ * the events.ndjson tie-break decides it).
+ */
+const ACTIVE_STATUSES = new Set(['starting', 'active', 'completing']);
 
 /** Injection seams for the verdict computation (plan 025 T002, FX009-2). */
 export interface StatusVerdictDeps {
@@ -199,6 +220,24 @@ export function computeStatusVerdict(
         if (!pidAlive) {
           return { verdict: 'dead', ...probe };
         }
+        // Plan 028 (defect A) — a live-pid run in an ACTIVE status is `active`
+        // the moment it boots, before any events.ndjson exists. Decide from
+        // `manifest.updatedAt` freshness (the resolver/inventory predicate);
+        // events.ndjson mtime stays a tie-break so a stale updatedAt never
+        // overrides a genuinely fresh events log.
+        if (ACTIVE_STATUSES.has(manifest.status)) {
+          const updated = Date.parse(manifest.updatedAt);
+          if (Number.isFinite(updated)) {
+            if (now() - updated < STALE_THRESHOLD_MS) {
+              return { verdict: 'active', ...probe };
+            }
+            // updatedAt present but stale: with no events.ndjson to consult the
+            // run is genuinely quiet → stale (not unknown).
+            if (!fs.existsSync(eventsPath)) {
+              return { verdict: 'stale', ...probe };
+            }
+          }
+        }
       }
     } catch {
       // Torn run.json — fall through to mtime semantics, as before.
@@ -287,9 +326,8 @@ export function registerStatusCommand(program: Command): void {
               mode: { kind: 'latest-active' },
               agentsDir,
             });
-            const newest = active.candidates.sort((a, b) =>
-              b.runId.localeCompare(a.runId),
-            )[0];
+            // candidates are returned newest-first by startedAt (defect D).
+            const newest = active.candidates[0];
             if (newest) {
               selection = {
                 mode: 'latest',
@@ -412,7 +450,9 @@ export function registerStatusCommand(program: Command): void {
           // Plan 026 — surface WHY a run terminalized (timeout /
           // stalled-stream / max-turns / permission-denied / …).
           if (terminalReason) {
-            process.stderr.write(`  Reason:   ${chalk.red(terminalReason)}\n`);
+            process.stderr.write(
+              `  Reason:   ${styleTerminalReason(terminalReason)}\n`,
+            );
           }
           if (sessionId)
             process.stderr.write(`  Session:  ${chalk.dim(sessionId)}\n`);

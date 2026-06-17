@@ -1,0 +1,195 @@
+{
+  "schema_version": 1,
+  "kind": "flight-plan",
+  "slug": "companion-mode-reliability",
+  "plan_dir": "docs/plans/028-companion-mode-reliability",
+  "mode": "Full",
+  "cursor": "p4",
+  "recommended_next": "p4",
+  "now": "Phase 4 tasks PREPPED + VALIDATED (terminal classification G). tasks.md expands plan 4.0-4.z into T000-T0z (RED/GREEN pairs). CRITICAL re-anchoring: the plan's stale line numbers were re-verified live against post-Phase-1/2 source — degraded-collapse is runner.ts:1597-1598 (NOT 1590), terminalReason red-render is status.ts:441-442 (NOT 415); all 9 anchors source-truth-verified. Validated by a 4-agent thesis-aware pass (source-truth ALL anchors ✓, cross-ref 1:1 plan fidelity, thesis advanced, forward-compat: Phase 5 AC-H + #49 both satisfied). Applied fixes: T004 strengthened (3 candidate farewell-signal sources + lifecycle/producer spike + provisional field shapes farewellAt?:number/cleanStop?:boolean), T008 doc target named (exec log + plan Related/Deferred), T006 domain.md History reminder. The hard task is T004 — no farewell/cleanStop signal exists in runner.ts/reconcile.ts today; it must be sourced before written.",
+  "next": "Phase 4 implement (terminal classification G) — RED/GREEN per T000-T0z; --companion has been the per-phase build mode for this plan",
+  "_comment": "Fresh flight plan for plan 028 (issue #50 companion-mode reliability defects). Clear ask — root causes already diagnosed with file:line this session and captured in original-ask.md — so the spine starts at SPEC with no explore/research node. The /eng-harness-flow router IS installed, so the post-spec backpressure seam + plan-complete retro seam appear as assumed harness nodes. Phases are unknown until stage 30 (architect) reveals them (assumed->known). Generated the-flow.md is rendered from this file — never hand-edit the .md as primary.",
+  "agents": [
+    {
+      "id": "cmp1",
+      "kind": "companion",
+      "slug": "code-review-companion",
+      "runId": "2026-06-16T13-50-25-287Z-8a55",
+      "render": "wrap",
+      "covers": ["p1"],
+      "note": "Power-On companion for Phase 1; briefed once, pinged per commit (5), fire-and-forget. Sent 0 findings (clean or under-engaged — never set selfReportedState, a live 'survival vs engagement' data point for Phase 5). Stopped at phase end."
+    },
+    {
+      "id": "cmp2",
+      "kind": "companion",
+      "slug": "code-review-companion",
+      "runId": "2026-06-16T15-58-44-285Z-573c",
+      "render": "wrap",
+      "covers": ["p2"],
+      "note": "Power-On companion for Phase 2; briefed once, pinged per commit (3) + a drain. ENGAGED this time: 3 per-commit verdicts (APPROVE_WITH_NOTES / REQUEST_CHANGES / APPROVE) + 2 findings — F001 (MEDIUM test TZ-restore leak) and F002 (HIGH: sort migration incomplete — findRunSession + ~7 more selectors validate-v2 missed). Both fixed; sweep landed on 'fix them all'. magicWand = a run-selector audit fixture (MW-001). Run ended on idle timeout (verdict completed, result degraded only due to a farewell findings[] schema nit: 'file' vs 'id'). Contrast with cmp1's 0 findings — a strong engagement data point for Phase 5."
+    },
+    {
+      "id": "cmp3",
+      "kind": "companion",
+      "slug": "code-review-companion",
+      "runId": "2026-06-16T07-24-05-445Z-061c",
+      "render": "wrap",
+      "covers": ["p3"],
+      "note": "Power-On companion for Phase 3; briefed once, pinged per commit (T001/T002/T003) + a final drain. ENGAGED: 4 reviews (T001 APPROVE, T002 APPROVE, T003 APPROVE_WITH_NOTES, final APPROVE_WITH_NOTES), 2 MEDIUM contract-drift findings — F001 (companion-mode.md still taught `cat report.json` for the farewell) + F002 (AGENTS_README missed the new read-path + cat-ed report.json). Both fixed inline (ce07fa7). magicWand MW-001 = a companion-run contract-drift sweep over prompt-named surfaces after contract-changing reviews. DOGFOOD: `minih companion findings` (the command this phase BUILT) surfaced its 2 findings + 4 summaries when a raw inbox-lane jq skim showed 0 — defect F reproduced and fixed live. Stopped cleanly at phase end."
+    }
+  ],
+  "nodes": [
+    {
+      "id": "spec",
+      "type": "spec",
+      "label": "Spec",
+      "status": "done",
+      "command": "/the-flow 1b specify",
+      "ran_at": "2026-06-15T22:29:47Z",
+      "user_input": "set up a new plan for them please",
+      "note": "CS-4 -> Full; Full TDD, real fixtures, docs/how+exemplar. 8 ACs (A-G + meta), 4 phases anticipated. Round 2 not triggered (all existing domains). Schema #5 out of scope; G coordinates with #49.",
+      "artifacts": ["companion-mode-reliability-spec.md", "original-ask.md"],
+      "next": ["ws1", "bp"]
+    },
+
+    {
+      "id": "ws1",
+      "type": "workshop",
+      "label": "Workshop 1 · run read-path fail-open (A/B/C)",
+      "status": "done",
+      "branch_of": "spec",
+      "ran_at": "2026-06-15T23:37:46Z",
+      "user_input": "yeah do workshops please.",
+      "note": "Canonical 'active' predicate already exists in collectActiveRuns + run-inventory (pid-alive + recent updatedAt); only computeStatusVerdict diverges by gating on events.ndjson. Decisions: fail-open status verdict (D1-A), lazy reconcile-on-read preferred but flagged (D2-B), wire --all (D3-A). Boot-window race documented.",
+      "artifacts": ["workshops/001-run-read-path-fail-open.md"],
+      "next": ["ws2"]
+    },
+
+    {
+      "id": "ws2",
+      "type": "workshop",
+      "label": "Workshop 2 · terminal-state taxonomy (G)",
+      "status": "done",
+      "branch_of": "spec",
+      "ran_at": "2026-06-15T23:37:46Z",
+      "note": "degraded collapses to status:failed (runner.ts:1590); farewell never consulted; terminalReason union has no clean member. Decisions: degraded!=failed (D1-A), farewell authoritative (D2-A), operator-stop marker (D3), and the 028-vs-#49 split (028 lands the vocabulary+write path; #49 wires the idle trigger).",
+      "artifacts": ["workshops/002-terminal-state-taxonomy.md"],
+      "next": ["bp"]
+    },
+
+    {
+      "id": "bp",
+      "type": "backpressure",
+      "label": "Backpressure Check (post-spec seam)",
+      "status": "assumed",
+      "command": "/eng-harness-flow --event post-spec --spec docs/plans/028-companion-mode-reliability/companion-mode-reliability-spec.md",
+      "note": "Optional post-spec harness seam (router installed). Surveys which fixes can be proven deterministically before architecting — e.g. a regression test that a freshly-booted run resolves as active, a UTC-runId assertion, an env-var assertion. Advisory; never blocks.",
+      "next": ["plan"]
+    },
+
+    {
+      "id": "plan",
+      "type": "plan",
+      "label": "Plan",
+      "status": "done",
+      "command": "/the-flow 3 architect",
+      "ran_at": "2026-06-16T02:05:00Z",
+      "user_input": "implement with companion",
+      "note": "Status READY (G1/G5/G6/G7 PASS; G2/G3/G4 N/A). Now 5 phases (Phase 5 added post-validation as a user-directed scope extension), domains runner+cli (no new domains). Phases 1-4 validated by a 4-agent thesis-aware review (all source-verified); v1.0.1 refinements applied: corrected doctor.ts path (src/cli/commands), re-aimed the terminalReason consumer sweep at status.ts:415/probe-aggregator, split task 4.6, scoped operator-stop/farewell (producer is follow-up), resolved velocity-for-degraded, added heal-failure + no-parser tests. v1.1.0 added Phase 5 (companion longevity). BUILD MODE: user wants implement --companion — exercised at the tasks->implement seam (awaiting-5).",
+      "artifacts": ["companion-mode-reliability-plan.md"],
+      "next": ["p1"]
+    },
+
+    {
+      "id": "p1",
+      "type": "phase",
+      "label": "Phase 1 · Run-discovery fail-open (A/B/C)",
+      "status": "done",
+      "command": "/the-flow 6 implement --companion --phase \"Phase 1: Run-discovery fail-open (A/B/C)\" --plan docs/plans/028-companion-mode-reliability/companion-mode-reliability-plan.md",
+      "ran_at": "2026-06-16T04:21:50Z",
+      "user_input": "kick off the build with companion pleae",
+      "note": "COMPLETE. 5 commits (38ef6eb foundation+T001 spike; c275457 A; 5fcfcd6 B-list --all; 05ed702 B-heal; f1aa9b2 C parity+phase-complete). A = computeStatusVerdict fail-open (status.ts); B = --all wiring + best-effort heal-on-read of dead-pid orphans (run-inventory.ts); C = AC-C fallback (T001 found no core emitter; resolveAgent≡listAgents().find() → characterization parity lock). Full suite 1396 pass / 0 fail, tsc clean. Built with a live code-review-companion (0 findings) + harness boot seam + retro capture (DL-001 biome, DL-002 ACTIVE_STATUSES triplication, INS-001 live defect-D sighting).",
+      "artifacts": [
+        "tasks/phase-1-run-discovery-fail-open-a-b-c/tasks.md",
+        "tasks/phase-1-run-discovery-fail-open-a-b-c/execution.log.md"
+      ],
+      "next": ["p2"]
+    },
+
+    {
+      "id": "p2",
+      "type": "phase",
+      "label": "Phase 2 · Identifier & env correctness (D/E)",
+      "status": "done",
+      "command": "/the-flow 6 implement --companion --phase \"Phase 2: Identifier & env correctness (D/E)\" --plan docs/plans/028-companion-mode-reliability/companion-mode-reliability-plan.md",
+      "ran_at": "2026-06-16T06:55:00Z",
+      "user_input": "pleae implemet with companion",
+      "note": "COMPLETE. Built --companion. 6 commits: 8f850ba (D true-UTC runId + now? seam, getUTC* getters), 4f5164c (D startedAt-primary sort across the 4 named selectors), d9d336e (E MINIH_PROJECT_ROOT=resolved git root via resolveDefaultAllowedRoots), 72609ee (domain docs), a143ec4 (companion F001 test-TZ-leak + F002-central findRunSession), e163ba1 (F002 full sweep). The live companion REVIEWED every commit and caught a HIGH validate-v2 missed: the sort migration was incomplete beyond the 4 named selectors — findRunSession (session-resume, 5th) + listActiveRunCandidates (status/view/connect/tail) + coordination/harvest/validate (~11 total). Human chose 'fix them all'; defect D now closes across ALL latest/default run selectors via the shared sortRunIdsNewestFirst helper. Full suite 1404 pass / 16 skip / 0 fail; tsc clean. Phase-end retro drained 4 entries (002-...-phase-2.md).",
+      "artifacts": [
+        "tasks/phase-2-identifier-env-correctness-d-e/tasks.md",
+        "tasks/phase-2-identifier-env-correctness-d-e/execution.log.md"
+      ],
+      "next": ["p3"]
+    },
+
+    {
+      "id": "p3",
+      "type": "phase",
+      "label": "Phase 3 · Findings read-path (F)",
+      "status": "done",
+      "command": "/the-flow 6 implement --companion --phase \"Phase 3: Findings read-path (F)\" --plan docs/plans/028-companion-mode-reliability/companion-mode-reliability-plan.md",
+      "ran_at": "2026-06-16T07:47:53Z",
+      "user_input": "implemtn iwth companin",
+      "note": "COMPLETE (defect F). Built --companion (cmp3). 5 commits: 0c23f07 (RED test/cli/companion-findings.test.ts — parseable-HIGH seed, summary-surface + INBOX_CORRUPT cases), 521ff50 (GREEN `companion findings <slug>` mirroring `status`, emits { slug, runId, findings, summariesCount, draftFarewell } over deriveCompanionLedger + buildDraftFarewell — no new ledger API), 1304e8d (DOC outside.md + companion-mode.md §3a), 78cbbbe (cli domain.md), ce07fa7 (companion-fix F001/F002 + outside.md trimmed under 8KB cap + harvested retro). Live companion: 4 reviews (T001/T002 APPROVE, T003/final APPROVE_WITH_NOTES), 2 MED contract-drift findings (F001 companion-mode.md cat report.json; F002 AGENTS_README missed read-path) — both fixed. Suite 1408 pass / 0 fail; tsc clean; doctor 0 failures. AC-F met end-to-end. The 8KB outside.md cap + dist-bundle staleness (computational tier) caught what the companion (inferential tier) missed; logged as DL-001/MW-001 in the phase-end retro drain (.harness/records/retro/2026-06-16/003-...).",
+      "artifacts": [
+        "tasks/phase-3-findings-read-path-f/tasks.md",
+        "tasks/phase-3-findings-read-path-f/execution.log.md"
+      ],
+      "next": ["p4"]
+    },
+
+    {
+      "id": "p4",
+      "type": "phase",
+      "label": "Phase 4 · Terminal classification (G)",
+      "status": "in_progress",
+      "command": "/the-flow 6 implement --companion --phase \"Phase 4: Terminal classification (G)\" --plan docs/plans/028-companion-mode-reliability/companion-mode-reliability-plan.md",
+      "ran_at": "2026-06-16T08:11:31Z",
+      "user_input": "prep netx phae and then validate",
+      "note": "TASKS PREPPED + VALIDATED (implement pending). tasks.md = T000-T0z: T001/T002 degraded->status:completed (runner.ts:1597-1598, re-anchored from the plan's stale 1590; velocity guard stays at 1535 keyed on result==='completed', Workshop Q1); T003/T004 farewell/cleanStop (the HARD task — no farewell signal exists in runner.ts/reconcile.ts; T004 spikes 3 candidate sources + confirms lifecycle/producer first, pins farewellAt?:number/cleanStop?:boolean); T005/T006 extend terminalReason union (types.ts:575-581 + 679 mirror) + de-red the real consumers (status.ts:441-442 render, probe/aggregator tolerant); T007 operator-stop reconcile (marker fixture; producer is follow-up); T008 #49 boundary + underscore->hyphen spelling map (idle-policy.ts:40,70). Validated by 4 agents (all source-verified); fixes applied (T004 candidates+fields, T008 doc target, T006 domain.md note). 028 = vocabulary+write path; #49 wires the idle trigger.",
+      "artifacts": ["tasks/phase-4-terminal-classification-g/tasks.md"],
+      "next": ["p5"]
+    },
+
+    {
+      "id": "p5",
+      "type": "phase",
+      "label": "Phase 5 · Companion longevity (human gaps, #50 follow-up)",
+      "status": "known",
+      "command": "/the-flow 5 tasks --phase \"Phase 5: Companion longevity through human gaps\" --plan docs/plans/028-companion-mode-reliability/companion-mode-reliability-plan.md",
+      "user_input": "Add as Phase 5 here",
+      "note": "USER-DIRECTED SCOPE EXTENSION (from the #50 follow-up comment). VALIDATED by its own 3-agent pass; v1.1.1 refinements applied. Longevity = the SURVIVAL half: opt-in runner heartbeat (advance updatedAt on a timer, decoupled from provider events — also makes AC-A honest) + raise the 3 ceilings (stallTimeout frontmatter leg — the per-run --stall-timeout already exists; idleBudgetMs; wall-clock timeout) + a DURABLE TYPED #49 seam (budgets.idleBudgetMs) so #49 can't ignore the posture. Split: 5a (heartbeat+ceilings) build-ready; 5b (idle-policy engagement compose) workshop-gated. The ENGAGEMENT half (companion sees new commits) is the deferred git->inbox feeder (Finding 12) — recommended fast-follow; longevity alone is necessary but not sufficient to close the incident.",
+      "next": ["merge"]
+    },
+
+    {
+      "id": "merge",
+      "type": "merge",
+      "label": "Merge",
+      "status": "assumed",
+      "command": "/the-flow 8 merge",
+      "next": ["hh"]
+    },
+
+    {
+      "id": "hh",
+      "type": "harness-retro",
+      "label": "Harness plan-complete (seam)",
+      "status": "assumed",
+      "command": "/eng-harness-flow --event plan-complete",
+      "branch_of": "merge",
+      "note": "Plan-complete harness seam — fired by the merge verb after the merge; the router owns the long-horizon reflection.",
+      "next": []
+    }
+  ]
+}

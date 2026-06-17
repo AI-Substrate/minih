@@ -126,6 +126,7 @@ describe('drainAndReadInbox + reconcileReportFindings (AC-13)', () => {
     // A first drain at author-time sees no findings.
     const early = drainAndReadInbox(location);
     expect(early).not.toBeNull();
+    // biome-ignore lint/style/noNonNullAssertion: guarded by expect().not.toBeNull() above
     reconcileReportFindings(reportPath, early!);
     expect(JSON.parse(fs.readFileSync(reportPath, 'utf8')).findings).toEqual(
       [],
@@ -142,6 +143,7 @@ describe('drainAndReadInbox + reconcileReportFindings (AC-13)', () => {
     // The drain re-derives over the live lanes → the late finding is captured.
     const drained = drainAndReadInbox(location);
     expect(drained).not.toBeNull();
+    // biome-ignore lint/style/noNonNullAssertion: guarded by expect().not.toBeNull() above
     const wrote = reconcileReportFindings(reportPath, drained!);
     expect(wrote.wrote).toBe(true);
     expect(wrote.reason).toBe('written');
@@ -194,6 +196,7 @@ describe('drainAndReadInbox + reconcileReportFindings (AC-13)', () => {
       'output',
       'report.json',
     );
+    // biome-ignore lint/style/noNonNullAssertion: fixture seeds coordination lanes; drain yields a non-null ledger
     const outcome = reconcileReportFindings(missing, drained!);
     expect(outcome.wrote).toBe(false);
     expect(outcome.reason).toBe('report-absent');
@@ -215,6 +218,7 @@ describe('drainAndReadInbox + reconcileReportFindings (AC-13)', () => {
       }),
     );
     const drained = drainAndReadInbox(location);
+    // biome-ignore lint/style/noNonNullAssertion: fixture seeds coordination lanes; drain yields a non-null ledger
     const outcome = reconcileReportFindings(reportPath, drained!);
     expect(outcome.wrote).toBe(false);
     expect(outcome.reason).toBe('report-unparseable');

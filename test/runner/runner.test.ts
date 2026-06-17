@@ -551,6 +551,57 @@ describe('runAgent', () => {
     expect(process.env.MINIH_AGENT_SLUG).toBeUndefined();
   });
 
+  // T005 (defect E) — a spawned child's MINIH_PROJECT_ROOT must be the resolved
+  // project (git) root, not config.cwd. A companion is spawned into its own run
+  // dir, so config.cwd IS the run dir; the old `config.cwd ?? process.cwd()`
+  // pointed the child at its run folder instead of the repository root.
+  it('sets MINIH_PROJECT_ROOT to the resolved git root, not config.cwd (run dir)', async () => {
+    const def = createAgent('proj-root-test', {
+      schema: null,
+      instructions: null,
+      preamble: null,
+    });
+
+    // Fake repo with a .git marker; config.cwd is a run-dir-like subdir deep
+    // inside it — exactly what a spawned companion receives.
+    const repoRoot = path.join(tmpDir, 'fake-repo');
+    fs.mkdirSync(path.join(repoRoot, '.git'), { recursive: true });
+    const runDirCwd = path.join(
+      repoRoot,
+      'agents',
+      'proj-root-test',
+      'runs',
+      '2026-06-16T00-00-00-000Z-r1',
+    );
+    fs.mkdirSync(runDirCwd, { recursive: true });
+
+    let captured: string | undefined;
+    const fake = new FakeAgentAdapter({
+      output: validSystemOutput(),
+      events: [
+        {
+          type: 'message',
+          timestamp: new Date().toISOString(),
+          data: { content: 'checking project root' },
+        },
+      ],
+    });
+
+    await runAgent(
+      fake,
+      def,
+      { slug: 'proj-root-test', cwd: runDirCwd, timeout: 60 },
+      () => {
+        captured = process.env.MINIH_PROJECT_ROOT;
+      },
+      tmpDir,
+    );
+
+    // The resolved git root, not the run-dir cwd the child was spawned into.
+    expect(captured).toBe(fs.realpathSync(repoRoot));
+    expect(captured).not.toBe(runDirCwd);
+  });
+
   it('sets coordination env vars during coordinated runs and cleans up after', async () => {
     const def = createAgent('coord-env-test', {
       prompt:

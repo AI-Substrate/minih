@@ -7,7 +7,11 @@ import * as path from 'node:path';
 import chalk from 'chalk';
 import Table from 'cli-table3';
 import type { Command } from 'commander';
-import { resolveAgent, validateSlug } from '../../runner/index.js';
+import {
+  resolveAgent,
+  sortRunIdsNewestFirst,
+  validateSlug,
+} from '../../runner/index.js';
 import {
   ErrorCodes,
   exitWithEnvelope,
@@ -47,21 +51,26 @@ export function registerHistoryCommand(program: Command): void {
         return;
       }
 
-      const entries = fs
-        .readdirSync(runsDir, { withFileTypes: true })
-        .filter((e) => e.isDirectory())
-        .sort((a, b) => b.name.localeCompare(a.name));
+      // Newest-first by recorded startedAt (true UTC), not by folder name —
+      // old folders encode local time mislabeled `Z` (defect D).
+      const runIds = sortRunIdsNewestFirst(
+        runsDir,
+        fs
+          .readdirSync(runsDir, { withFileTypes: true })
+          .filter((e) => e.isDirectory())
+          .map((e) => e.name),
+      );
 
-      const runs = entries.map((e) => {
-        const completedPath = path.join(runsDir, e.name, 'completed.json');
+      const runs = runIds.map((name) => {
+        const completedPath = path.join(runsDir, name, 'completed.json');
         if (fs.existsSync(completedPath)) {
           try {
             return JSON.parse(fs.readFileSync(completedPath, 'utf-8'));
           } catch {
-            return { runId: e.name, result: 'unknown' };
+            return { runId: name, result: 'unknown' };
           }
         }
-        return { runId: e.name, result: 'incomplete' };
+        return { runId: name, result: 'incomplete' };
       });
 
       if (process.stderr.isTTY && runs.length > 0) {

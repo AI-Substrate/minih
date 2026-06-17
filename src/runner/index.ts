@@ -105,6 +105,8 @@ export {
   outsideMdPath,
   parseFrontmatter,
   resolveAgent,
+  runStartedAt,
+  sortRunIdsNewestFirst,
   stateFilePath,
   validateSlug,
   watermarkPath,
@@ -292,6 +294,7 @@ export {
   flushThrottled as flushManifestThrottled,
   readIdleBudgetMs,
   readManifest,
+  readSurviveGaps,
   updateManifest,
   writeManifest,
 } from './run-manifest.js';
@@ -370,12 +373,17 @@ export type {
   WaitForAnyResult,
   WatchEntry,
 } from './types.js';
+// Plan 028 Phase 4 (G) — clean-terminal vocabulary. Runtime value + predicate,
+// so they need their OWN value export (the `export type {…} from './types.js'`
+// block below carries only type members).
 // Plan 026 — shared budget defaults (CD-05: one default source for the
 // runner and the CLI run/resume commands).
 export {
+  CLEAN_TERMINAL_REASONS,
   DEFAULT_IDLE_BUDGET_MS,
   DEFAULT_STALL_TIMEOUT_SEC,
   DEFAULT_TIMEOUT_SEC,
+  isCleanTerminalReason,
 } from './types.js';
 export { ulid } from './ulid.js';
 export {

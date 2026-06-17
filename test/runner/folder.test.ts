@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   coordinationRunLocation,
   createRunFolder,
+  findRunSession,
   hasOutsideMd,
   historyPath,
   InvalidCoordinationFrontmatterError,
@@ -257,6 +258,63 @@ describe('resolveAgent', () => {
   });
 });
 
+// Plan 028 Phase 1 (defect C) — characterization. `minih history` and
+// `minih last-run` resolve via resolveAgent(), and resolveAgent IS
+// listAgents().find() (folder.ts), so they resolve *exactly* what `minih list`
+// resolves. These tests pin that parity so a future change can't reintroduce a
+// spurious E121 (AGENT_NOT_FOUND) for an agent `minih list` shows. T001 found
+// the literal {runId:null,…} symptom from #50 is emitted by no core surface
+// (external/older build) — so AC-C is met by this consistency lock, not a
+// production edit. See the Phase-1 execution log.
+describe('resolveAgent ↔ listAgents parity (plan 028 defect C)', () => {
+  it('resolves every agent that listAgents lists (no spurious AGENT_NOT_FOUND)', () => {
+    for (const slug of ['alpha', 'bravo', 'charlie']) {
+      const dir = path.join(tmpDir, slug);
+      fs.mkdirSync(dir);
+      fs.writeFileSync(
+        path.join(dir, 'prompt.md'),
+        `---\ndescription: "${slug}"\n---\n\n# ${slug}`,
+      );
+    }
+    const listed = listAgents(tmpDir).map((a) => a.slug);
+    expect(listed).toEqual(['alpha', 'bravo', 'charlie']);
+    // history/last-run call resolveAgent; it must resolve every listed slug
+    for (const slug of listed) {
+      expect(resolveAgent(slug, tmpDir)?.slug).toBe(slug);
+    }
+  });
+
+  it('excludes exactly what listAgents excludes (no divergent resolution)', () => {
+    const ok = path.join(tmpDir, 'listed');
+    fs.mkdirSync(ok);
+    fs.writeFileSync(
+      path.join(ok, 'prompt.md'),
+      '---\ndescription: "ok"\n---\n\n# ok',
+    );
+    // not listable: prompt.md present but no frontmatter description
+    const noDesc = path.join(tmpDir, 'no-desc');
+    fs.mkdirSync(noDesc);
+    fs.writeFileSync(path.join(noDesc, 'prompt.md'), '# body only');
+    // not listable: underscore-prefixed shared folder
+    const shared = path.join(tmpDir, '_shared');
+    fs.mkdirSync(shared);
+    fs.writeFileSync(
+      path.join(shared, 'prompt.md'),
+      '---\ndescription: "x"\n---\n',
+    );
+
+    const listed = new Set(listAgents(tmpDir).map((a) => a.slug));
+    expect(listed.has('listed')).toBe(true);
+    expect(listed.has('no-desc')).toBe(false);
+    expect(listed.has('_shared')).toBe(false);
+    // resolveAgent agrees on every case — no divergence that could E121 a
+    // listable agent or resolve an unlistable one.
+    expect(resolveAgent('listed', tmpDir)).not.toBeNull();
+    expect(resolveAgent('no-desc', tmpDir)).toBeNull();
+    expect(resolveAgent('_shared', tmpDir)).toBeNull();
+  });
+});
+
 describe('createRunFolder', () => {
   it('creates timestamped run folder with frozen copies', () => {
     const dir = path.join(tmpDir, 'test-agent');
@@ -288,6 +346,81 @@ describe('createRunFolder', () => {
     expect(fs.readFileSync(path.join(runDir, 'prompt.md'), 'utf-8')).toContain(
       '# Test prompt',
     );
+  });
+
+  // T001 (defect D) — the runId's encoded timestamp must be TRUE UTC: it should
+  // parse back to the same instant as the run's startedAt clock, not a local
+  // time mislabeled `Z`. Pinned via an injected `now` so the assertion is exact.
+  // Forced to a UTC+10 zone so a local-getter regression is always caught (on a
+  // UTC machine local==UTC would hide it).
+  it('encodes the runId in true UTC (== injected startedAt instant), not local time', () => {
+    const dir = path.join(tmpDir, 'utc-agent');
+    fs.mkdirSync(dir);
+    fs.writeFileSync(
+      path.join(dir, 'prompt.md'),
+      '---\ndescription: "Test"\n---\n\n# Test prompt',
+    );
+    const agent = resolveAgent('utc-agent', tmpDir);
+    if (!agent) throw new Error('expected utc-agent to resolve');
+
+    // startedAt for this run, as an absolute instant (TZ-independent).
+    const startedAt = new Date('2026-03-15T08:09:10.123Z');
+    const origTZ = process.env.TZ;
+    process.env.TZ = 'Etc/GMT-10'; // UTC+10 — local hour differs from UTC
+    try {
+      const { runId } = createRunFolder(agent, { now: () => startedAt });
+      const m = runId.match(
+        /^(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z-[0-9a-f]{4}$/,
+      );
+      if (!m) throw new Error(`unexpected runId shape: ${runId}`);
+      const [, y, mo, d, h, mi, s, ms] = m;
+      const encoded = new Date(`${y}-${mo}-${d}T${h}:${mi}:${s}.${ms}Z`);
+      expect(encoded.getTime()).toBe(startedAt.getTime());
+    } finally {
+      // Restore precisely: assigning `undefined` would set TZ="undefined"
+      // (string) and leak a mutated timezone to later tests in this worker.
+      if (origTZ === undefined) delete process.env.TZ;
+      else process.env.TZ = origTZ;
+    }
+  });
+});
+
+// Companion F002 (defect D) — findRunSession is the session-resume "latest run"
+// selector; it must pick the newest by startedAt (true UTC), not by folder name.
+describe('findRunSession — newest by startedAt, not folder name (defect D)', () => {
+  function seedCompleted(
+    slug: string,
+    runId: string,
+    startedAt: string,
+    sessionId: string,
+  ): void {
+    const runDir = path.join(tmpDir, slug, 'runs', runId);
+    fs.mkdirSync(runDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(runDir, 'completed.json'),
+      JSON.stringify({ runId, startedAt, sessionId, result: 'completed' }),
+    );
+  }
+
+  it('resumes the chronologically newest completed run, not the lexically last name', () => {
+    // OLD: name 13-50 (local-as-Z), started EARLIER at 03:50 UTC.
+    seedCompleted(
+      'resume-agent',
+      '2026-06-16T13-50-25-287Z-8a55',
+      '2026-06-16T03:50:25.286Z',
+      'sess-old',
+    );
+    // NEW: name 05-58 (true UTC), started LATER at 05:58 UTC.
+    seedCompleted(
+      'resume-agent',
+      '2026-06-16T05-58-44-285Z-573c',
+      '2026-06-16T05:58:44.284Z',
+      'sess-new',
+    );
+
+    const session = findRunSession('resume-agent', tmpDir);
+    expect(session?.sessionId).toBe('sess-new');
+    expect(session?.runId).toBe('2026-06-16T05-58-44-285Z-573c');
   });
 });
 

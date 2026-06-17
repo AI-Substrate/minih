@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "slug": "companion-mode-reliability",
+  "plan_dir": "docs/plans/028-companion-mode-reliability",
+  "mode": "Full",
+  "current_stage": "complete",
+  "pending_command": "merge via external GitHub PR (flow closed by user 2026-06-17; stage-7 review skipped — companion approved every Phase-5 commit)",
+  "intent": "Fix the companion-mode reliability defects from issue #50 (minih v0.2.1): orchestrator blind to a live run during its active window (A/B/C), local-time run IDs mislabeled Z (D), child MINIH_PROJECT_ROOT points at the run dir (E), inside-lane findings invisible to the documented operator read-path (F), clean runs misclassified as failed/degraded (G).",
+  "milestones_total": 9,
+  "milestones_done": 8,
+  "last_checkpoint_at": "2026-06-17T04:28:43Z",
+  "compacted_seams": [],
+  "status": "complete"
+}

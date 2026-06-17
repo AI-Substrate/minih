@@ -19,7 +19,11 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { writeFileAtomicAsync } from './atomic-write.js';
 import { ManifestSchemaVersionError } from './human-view-errors.js';
-import { DEFAULT_IDLE_BUDGET_MS, type LiveRunManifest } from './types.js';
+import {
+  DEFAULT_IDLE_BUDGET_MS,
+  type LiveRunManifest,
+  SURVIVE_GAPS_HEARTBEAT_INTERVAL_MS,
+} from './types.js';
 
 const MANIFEST_FILENAME = 'run.json';
 const SUPPORTED_SCHEMA_VERSION = 1 as const;
@@ -73,6 +77,27 @@ export function readIdleBudgetMs(runDir: string): number {
     // absent / torn / pre-#35 run.json → fall back to the schema default
   }
   return DEFAULT_IDLE_BUDGET_MS;
+}
+
+/**
+ * Plan 028 Phase 5b (workshop 003) — synchronous read of the survive-gaps
+ * posture recorded into run.json `budgets.surviveGaps` at run start. Returns
+ * false when run.json is absent, unparseable, or predates the field. Sync (like
+ * {@link readIdleBudgetMs}) so #49's future runner-side idle trigger reads the
+ * posture the same way it reads the idle budget. A survive-gaps run is never
+ * stood down on idle alone — only the wall-clock backstop (see
+ * `evaluateIdlePolicy`).
+ */
+export function readSurviveGaps(runDir: string): boolean {
+  try {
+    const parsed = JSON.parse(readFileSync(manifestPath(runDir), 'utf8')) as {
+      budgets?: { surviveGaps?: unknown };
+    };
+    return parsed.budgets?.surviveGaps === true;
+  } catch {
+    // absent / torn / pre-5b run.json → default posture (not survive-gaps)
+  }
+  return false;
 }
 
 export async function readManifest(
@@ -156,6 +181,58 @@ export async function flushThrottled(runDir: string): Promise<void> {
     state.timer = null;
   }
   await enqueueManifestWrite(runDir, () => applyPatch(runDir, patch));
+}
+
+/**
+ * Plan 028 Phase 5 (#50 follow-up) — opt-in survive-gaps heartbeat.
+ *
+ * Starts a timer that bumps `run.json.updatedAt` (via {@link updateManifest},
+ * which always re-stamps `updatedAt` on apply) on a cadence that beats the 60s
+ * run-active staleness window — so a survive-gaps companion waiting quietly
+ * through a long human gap keeps satisfying the Phase-1 active predicate
+ * (pid-alive ∧ recent `updatedAt`) instead of being read as `stale`.
+ *
+ * Decoupled from the stall watchdog BY CONSTRUCTION: this module has no access
+ * to `resetStallDeadline` (runner.ts) — it only writes the manifest. The
+ * provider-event-driven watchdog stays the progress guard and the wall-clock
+ * timeout stays the backstop (Finding 11: a heartbeat proves the process is
+ * alive, not that the agent is progressing). Opt-in — the runner starts one
+ * only when `config.surviveGaps` is set, so default runs keep the strict
+ * freshness signal plan 026 relies on.
+ *
+ * @returns a stop function — call it on terminal/cleanup to clear the timer.
+ */
+export function startManifestHeartbeat(
+  runDir: string,
+  intervalMs: number = SURVIVE_GAPS_HEARTBEAT_INTERVAL_MS,
+): () => void {
+  // F002 (companion review of P5 wrap) — a fully-silent catch would hide a
+  // PERSISTENTLY broken heartbeat: a real fault (permissions, disk) would let a
+  // survive-gaps run go stale with no operator clue. So surface the first
+  // non-teardown failure ONCE on stderr (then stay quiet — no 20s spam), while
+  // still ignoring the expected teardown race (`ENOENT` = run dir gone / torn
+  // manifest after cleanup). Never throws either way — the heartbeat is
+  // advisory; the stall watchdog + wall-clock timeout are the real guards.
+  let warnedOnce = false;
+  const timer = setInterval(() => {
+    void updateManifest(runDir, { updatedAt: new Date().toISOString() }).catch(
+      (err: unknown) => {
+        const code = (err as NodeJS.ErrnoException | undefined)?.code;
+        if (!warnedOnce && code !== 'ENOENT') {
+          warnedOnce = true;
+          console.error(
+            `[survive-gaps heartbeat] manifest bump failed for ${runDir} (${code ?? 'unknown'}); heartbeat continues but the run may read stale`,
+          );
+        }
+      },
+    );
+  }, intervalMs);
+  // Never hold the process open on the heartbeat alone — the run lifecycle owns
+  // liveness (mirrors the watchdog/timeout handles cleared in runner.ts).
+  timer.unref?.();
+  return () => {
+    clearInterval(timer);
+  };
 }
 
 async function enqueueManifestWrite(

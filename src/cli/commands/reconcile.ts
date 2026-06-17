@@ -93,18 +93,35 @@ export function registerReconcileCommand(program: Command): void {
           );
 
           if (process.stderr.isTTY) {
-            if (report.healed.length === 0) {
+            if (
+              report.healed.length === 0 &&
+              report.reconciledClean.length === 0
+            ) {
               process.stderr.write(
                 `\n  Nothing to heal (${report.scanned} run${report.scanned === 1 ? '' : 's'} scanned).\n\n`,
               );
             } else {
-              process.stderr.write(
-                `\n  ${chalk.bold(`Healed ${report.healed.length} run${report.healed.length === 1 ? '' : 's'}:`)}\n`,
-              );
-              for (const healed of report.healed) {
+              if (report.healed.length > 0) {
                 process.stderr.write(
-                  `  ${chalk.red('☠')} ${healed.slug}/${healed.runId}  pid ${healed.pid ?? '?'} gone → crashed\n`,
+                  `\n  ${chalk.bold(`Healed ${report.healed.length} run${report.healed.length === 1 ? '' : 's'}:`)}\n`,
                 );
+                for (const healed of report.healed) {
+                  process.stderr.write(
+                    `  ${chalk.red('☠')} ${healed.slug}/${healed.runId}  pid ${healed.pid ?? '?'} gone → crashed\n`,
+                  );
+                }
+              }
+              // Plan 028 Phase 4 (G) — a dead pid behind a clean-stop marker is
+              // reconciled to completed, not crashed.
+              if (report.reconciledClean.length > 0) {
+                process.stderr.write(
+                  `\n  ${chalk.bold(`Reconciled ${report.reconciledClean.length} clean stop${report.reconciledClean.length === 1 ? '' : 's'}:`)}\n`,
+                );
+                for (const clean of report.reconciledClean) {
+                  process.stderr.write(
+                    `  ${chalk.green('✓')} ${clean.slug}/${clean.runId}  pid ${clean.pid ?? '?'} gone → completed (clean stop)\n`,
+                  );
+                }
               }
               process.stderr.write('\n');
             }
@@ -120,6 +137,8 @@ export function registerReconcileCommand(program: Command): void {
               scanned: report.scanned,
               healed: report.healed,
               healedCount: report.healed.length,
+              reconciledClean: report.reconciledClean,
+              reconciledCleanCount: report.reconciledClean.length,
               skipped: report.skipped,
             }),
           );

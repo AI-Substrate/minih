@@ -1,7 +1,12 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { withReconcileLock } from './reconcile-lock.js';
 import { isProcessAliveDefault } from './run-eligibility.js';
-import { ManifestSchemaVersionError, readManifest } from './run-manifest.js';
+import {
+  ManifestSchemaVersionError,
+  readManifest,
+  updateManifest,
+} from './run-manifest.js';
 import type {
   CompletedMetadata,
   LiveRunManifest,
@@ -19,6 +24,19 @@ const ACTIVE_STATUSES = new Set<LiveRunManifest['status']>([
   'completing',
 ]);
 
+/**
+ * Plan 028 (defect B) — the best-effort heal-on-read seam. Defaults to
+ * {@link healDeadPidOrphan}; injectable so tests can assert the read survives a
+ * failing heal (mirrors the existing `isProcessAlive` / `now` seams).
+ */
+export type HealOrphanFn = (args: {
+  agentsDir: string;
+  slug: string;
+  runId: string;
+  isProcessAlive: (pid: number) => boolean;
+  now: () => number;
+}) => Promise<void>;
+
 export interface ListRunInventoryInput {
   agentsDir?: string;
   slug?: string;
@@ -28,6 +46,8 @@ export interface ListRunInventoryInput {
   staleThresholdMs?: number;
   now?: () => number;
   isProcessAlive?: (pid: number) => boolean;
+  /** Plan 028 (defect B) — override the heal-on-read step (tests only). */
+  healOrphan?: HealOrphanFn;
 }
 
 export interface GetRunStatusesInput {
@@ -46,8 +66,14 @@ export async function listRunInventory(
   const slugs = input.slug ? [input.slug] : await listAgentSlugs(agentsDir);
   const rows: RunInventoryRow[] = [];
 
+  // Plan 028 (defect B) — dead-pid `active` orphans found during enumeration,
+  // healed (best-effort) after the rows are projected so a slow/locked heal
+  // never delays the read.
+  const orphanTargets: Array<{ slug: string; runId: string }> = [];
+
   for (const slug of slugs) {
     const runDirs = await listRunDirs(path.join(agentsDir, slug));
+    const slugRows: RunInventoryRow[] = [];
     for (const run of runDirs) {
       const row = await projectRunRow({
         agentsDir,
@@ -56,6 +82,15 @@ export async function listRunInventory(
         input,
       });
       if (!row) continue;
+      // An ACTIVE-status manifest whose pid is dead reads 'dead' here but still
+      // claims 'active' on disk — an unhealed orphan worth persisting (below).
+      if (
+        row.liveness === 'dead' &&
+        row.manifestStatus != null &&
+        row.manifestStatus !== 'crashed'
+      ) {
+        orphanTargets.push({ slug, runId: row.runId });
+      }
       // 'dead' stays in the --active view: those rows surfaced as 'stale'
       // before plan 025 and are exactly the runs needing attention. Healed
       // runs (manifest 'crashed') have left the attention queue — that is
@@ -67,7 +102,37 @@ export async function listRunInventory(
           continue;
         }
       }
-      rows.push(row);
+      slugRows.push(row);
+    }
+    // Plan 028 (defect B) — the default view is "active or recent": every live
+    // row for this agent plus its single newest terminal row, so the table
+    // shows what is running and what last finished. Full terminal history is
+    // `--all` (previously a silent no-op). `--active` keeps its own filter.
+    if (!input.active && !input.all) {
+      rows.push(...selectActiveOrRecent(slugRows));
+    } else {
+      rows.push(...slugRows);
+    }
+  }
+
+  // Plan 028 (defect B) — best-effort heal-on-read. Strictly swallowed: a held
+  // reconcile lock (ReconcileLockHeldError) or any write error leaves the orphan
+  // un-healed and the read still returns. Skipped entirely when there are no
+  // orphans (no lock taken on the common path).
+  const heal = input.healOrphan ?? healDeadPidOrphan;
+  const healIsAlive = input.isProcessAlive ?? isProcessAliveDefault;
+  const healNow = input.now ?? Date.now;
+  for (const target of orphanTargets) {
+    try {
+      await heal({
+        agentsDir,
+        slug: target.slug,
+        runId: target.runId,
+        isProcessAlive: healIsAlive,
+        now: healNow,
+      });
+    } catch {
+      // best-effort: never let a heal failure surface to the read.
     }
   }
 
@@ -270,4 +335,61 @@ function compareRows(a: RunInventoryRow, b: RunInventoryRow): number {
   const bt = b.startedAt ?? b.updatedAt ?? '';
   const byTime = bt.localeCompare(at);
   return byTime !== 0 ? byTime : b.runId.localeCompare(a.runId);
+}
+
+/**
+ * A row that belongs to the live "attention" set: actively running, live-but-
+ * quiet (stale), or an unhealed dead-pid run. Healed `crashed` runs have left
+ * the attention queue and read as terminal here.
+ */
+function isLiveRow(row: RunInventoryRow): boolean {
+  return (
+    row.liveness === 'active' ||
+    row.liveness === 'stale' ||
+    (row.liveness === 'dead' && row.manifestStatus !== 'crashed')
+  );
+}
+
+/**
+ * Plan 028 (defect B) — the default "active or recent" projection for a single
+ * agent's rows: keep every live row, plus the single newest terminal row so the
+ * table shows what is running and what last finished. Full terminal history is
+ * surfaced by `--all`.
+ */
+function selectActiveOrRecent(slugRows: RunInventoryRow[]): RunInventoryRow[] {
+  const live = slugRows.filter(isLiveRow);
+  const terminal = slugRows.filter((row) => !isLiveRow(row)).sort(compareRows);
+  return terminal.length > 0 ? [...live, terminal[0]] : live;
+}
+
+/**
+ * Plan 028 (defect B) — best-effort heal-on-read. When an inventory read finds
+ * an ACTIVE-status manifest whose pid is dead, persist the diagnosis (status →
+ * `crashed`, `terminalReason` → `pid-vanished` if unset) so the orphan stops
+ * masquerading as live. Re-reads and re-probes immediately before the write
+ * (TOCTOU-minimal, mirroring `reconcile.ts`) under the reconcile lock; a live or
+ * already-terminal manifest is left untouched. The caller swallows every error
+ * (a held lock, a torn manifest, a write failure) so the read always returns.
+ */
+async function healDeadPidOrphan(args: {
+  agentsDir: string;
+  slug: string;
+  runId: string;
+  isProcessAlive: (pid: number) => boolean;
+  now: () => number;
+}): Promise<void> {
+  const { agentsDir, slug, runId, isProcessAlive, now } = args;
+  const runDir = path.join(agentsDir, slug, 'runs', runId);
+  await withReconcileLock({ agentsDir, isProcessAlive, now }, async () => {
+    const manifest = await readManifest(runDir);
+    if (!manifest) return;
+    if (!ACTIVE_STATUSES.has(manifest.status)) return;
+    if (manifest.pid == null || isProcessAlive(manifest.pid)) return;
+    await updateManifest(runDir, {
+      status: 'crashed',
+      ...(manifest.terminalReason === undefined && {
+        terminalReason: 'pid-vanished',
+      }),
+    });
+  });
 }

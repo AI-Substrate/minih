@@ -5,7 +5,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { makeManifest } from '../../src/runner/human-view-fixtures.js';
 import { isProcessAliveDefault } from '../../src/runner/run-eligibility.js';
 import { writeManifest } from '../../src/runner/run-manifest.js';
-import { resolveRun } from '../../src/runner/run-resolver.js';
+import {
+  listActiveRunCandidates,
+  resolveRun,
+} from '../../src/runner/run-resolver.js';
 
 let agentsDir: string;
 let cwd: string;
@@ -377,5 +380,48 @@ describe('resolveRun latest-completed', () => {
     });
     expect(result?.runId).toBe(runId);
     expect(result?.liveness).toBe('completed');
+  });
+});
+
+// Companion F002 (defect D) — listActiveRunCandidates feeds the `--latest`
+// active-run tie-break in status/view/connect/tail (they take candidates[0]).
+// Candidates must come back newest-first by startedAt, not folder name.
+describe('listActiveRunCandidates — newest-first by startedAt (defect D)', () => {
+  it('orders active candidates by startedAt even when runId names sort the opposite way', async () => {
+    // OLD: name 13-50 (local-as-Z), started EARLIER at 03:50 UTC.
+    const oldDir = makeRunFolder('demo', '2026-06-16T13-50-25-287Z-8a55');
+    await writeManifest(
+      oldDir,
+      makeManifest({
+        runDir: oldDir,
+        slug: 'demo',
+        runId: '2026-06-16T13-50-25-287Z-8a55',
+        status: 'active',
+        startedAt: '2026-06-16T03:50:25.286Z',
+      }),
+    );
+    // NEW: name 05-58 (true UTC), started LATER at 05:58 UTC.
+    const newDir = makeRunFolder('demo', '2026-06-16T05-58-44-285Z-573c');
+    await writeManifest(
+      newDir,
+      makeManifest({
+        runDir: newDir,
+        slug: 'demo',
+        runId: '2026-06-16T05-58-44-285Z-573c',
+        status: 'active',
+        startedAt: '2026-06-16T05:58:44.284Z',
+      }),
+    );
+
+    const { candidates } = await listActiveRunCandidates({
+      slug: 'demo',
+      mode: { kind: 'latest-active' },
+      agentsDir,
+      isProcessAlive: () => true,
+      staleThresholdMs: Number.MAX_SAFE_INTEGER,
+    });
+
+    // A folder-name sort would put 13-50 first; startedAt puts 05-58 first.
+    expect(candidates[0]?.runId).toBe('2026-06-16T05-58-44-285Z-573c');
   });
 });

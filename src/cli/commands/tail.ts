@@ -116,9 +116,8 @@ async function resolveTailTarget(opts: {
       mode: { kind: 'latest-active' },
       agentsDir: opts.agentsDir,
     });
-    const newest = active.candidates.sort((a, b) =>
-      b.runId.localeCompare(a.runId),
-    )[0];
+    // candidates are returned newest-first by startedAt (defect D).
+    const newest = active.candidates[0];
     if (newest) {
       const resolved = await resolveRunWithDiagnostics({
         slug: opts.slug,

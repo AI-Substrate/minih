@@ -21,6 +21,20 @@ export interface AgentDefinition {
   reasoning?: string;
   /** Default timeout in seconds from prompt.md frontmatter (overridable via --timeout) */
   timeout?: number;
+  /**
+   * Plan 028 Phase 5 — default inactivity (stall) budget in seconds from
+   * prompt.md frontmatter (overridable via `--stall-timeout`). `0` disables the
+   * watchdog. Threaded into `resolveEffectiveBudgets` as the frontmatter
+   * fallback (the per-run flag still wins).
+   */
+  stallTimeout?: number;
+  /**
+   * Plan 028 Phase 5 — survive-gaps profile switch from prompt.md frontmatter.
+   * When `true`, the runner starts the opt-in manifest heartbeat (see
+   * {@link AgentRunConfig.surviveGaps}) so a long-running companion keeps
+   * reading `active` across long human-in-the-loop gaps.
+   */
+  surviveGaps?: boolean;
   dir: string;
   promptPath: string;
   schemaPath: string | null;
@@ -69,6 +83,16 @@ export const DEFAULT_STALL_TIMEOUT_SEC = 300;
  */
 export const DEFAULT_IDLE_BUDGET_MS = 1_800_000;
 
+/**
+ * Plan 028 Phase 5 (#50 follow-up) — survive-gaps heartbeat interval in ms.
+ * The opt-in heartbeat bumps `run.json.updatedAt` on this cadence so a quietly
+ * waiting survive-gaps companion keeps reading `active` (Phase-1 predicate:
+ * pid-alive ∧ updatedAt < 60s). Must comfortably beat the hardcoded 60s
+ * staleness window (`status.ts` / `run-inventory.ts` / `run-resolver.ts`):
+ * 20s is a 3× margin. Internal-only; tests pass a tiny interval explicitly.
+ */
+export const SURVIVE_GAPS_HEARTBEAT_INTERVAL_MS = 20_000;
+
 /** Configuration for a single agent run. */
 export interface AgentRunConfig {
   slug: string;
@@ -93,6 +117,23 @@ export interface AgentRunConfig {
    * production uses the default.
    */
   cleanupGraceMs?: number;
+  /**
+   * Plan 028 Phase 5 (#50 follow-up) — survive-gaps profile switch. When true,
+   * the runner starts an opt-in manifest heartbeat that bumps
+   * `run.json.updatedAt` independent of provider events, so the run keeps
+   * reading `active` through long human-in-the-loop gaps. Unset/false = no
+   * heartbeat: the strict Phase-1 `updatedAt`-staleness signal (plan 026) is
+   * preserved. The event-based stall watchdog is unaffected either way — the
+   * heartbeat never resets it (Finding 11: it proves the process is alive, not
+   * that the agent is progressing).
+   */
+  surviveGaps?: boolean;
+  /**
+   * Plan 028 Phase 5 — heartbeat interval (ms) override. Internal test seam
+   * only (mirrors `cleanupGraceMs`); production uses
+   * {@link SURVIVE_GAPS_HEARTBEAT_INTERVAL_MS}.
+   */
+  heartbeatIntervalMs?: number;
   cwd?: string;
   params?: Record<string, unknown>;
   /** Session ID to resume — if set, uses resumeSession() instead of createSession() */
@@ -578,7 +619,25 @@ export interface LiveRunManifest {
     | 'pid-vanished'
     | 'timeout'
     | 'stalled-stream'
-    | 'max-turns';
+    | 'max-turns'
+    // Plan 028 Phase 4 (G) — clean terminals. Recordable now; producers are
+    // follow-up: `operator-stop` = a `minih stop` command, `idle-budget` /
+    // `no-engagement` = #49's idle trigger (see CLEAN_TERMINAL_REASONS).
+    | 'operator-stop'
+    | 'idle-budget'
+    | 'no-engagement';
+  /**
+   * Plan 028 Phase 4 (G) — clean-stop marker. `cleanStop: true` means the run
+   * reached a clean terminal (the agent farewelled / a clean result), so a
+   * later dead-pid sighting must reconcile to `completed`, NOT `crashed`
+   * (`reconcile.ts` honours this). `farewellAt` is the Unix-ms instant the
+   * clean stop was observed. Both absent on runs that never reached a clean
+   * terminal and on runs written before plan 028. The full operator-stop /
+   * idle producers (a `minih stop` command, #49's idle trigger) are follow-up;
+   * this phase lands the vocabulary + the reconcile honouring.
+   */
+  cleanStop?: boolean;
+  farewellAt?: number;
   /**
    * Plan 026 — the effective run budgets, recorded at run start so
    * operators can see what limits a run was under without consulting
@@ -594,6 +653,14 @@ export interface LiveRunManifest {
      * (AC-12). Absent on non-coordination runs and on runs written before #35.
      */
     idleBudgetMs?: number;
+    /**
+     * Plan 028 Phase 5b (workshop 003) — the survive-gaps posture, recorded so
+     * #49's future idle trigger cannot be written ignorant of it. When true,
+     * `evaluateIdlePolicy` suppresses the idle-budget stand-down (branch b) and
+     * only the wall-clock backstop terminates the companion. Absent on
+     * non-survive-gaps runs and on runs written before 5b.
+     */
+    surviveGaps?: boolean;
   };
   /**
    * Plan 018 R1 — populated alongside `terminalReason: 'permission-denied'`.
@@ -617,6 +684,27 @@ export interface LiveRunManifest {
    * never thrown).
    */
   coordinationSignals?: Array<{ signal: string; error: string }>;
+}
+
+/**
+ * Plan 028 Phase 4 (G) — the `terminalReason` members that denote a *clean*
+ * stop (farewell / operator stop / idle stand-down), as opposed to a failure.
+ * Single source of truth: `reconcile.ts` (honours these as `completed`, not
+ * `crashed`) and `status.ts` (renders them dim, not red) both consume this —
+ * never re-list the members inline, so the vocabulary can't drift across
+ * consumers.
+ */
+export const CLEAN_TERMINAL_REASONS = new Set<string>([
+  'operator-stop',
+  'idle-budget',
+  'no-engagement',
+]);
+
+/** True when `reason` is a clean terminal (see {@link CLEAN_TERMINAL_REASONS}). */
+export function isCleanTerminalReason(
+  reason: string | null | undefined,
+): boolean {
+  return reason != null && CLEAN_TERMINAL_REASONS.has(reason);
 }
 
 /** Mode passed to `resolveRun({ slug, mode })`. */

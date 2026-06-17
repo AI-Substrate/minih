@@ -6,7 +6,11 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import chalk from 'chalk';
 import type { Command } from 'commander';
-import { resolveAgent, validateSlug } from '../../runner/index.js';
+import {
+  resolveAgent,
+  sortRunIdsNewestFirst,
+  validateSlug,
+} from '../../runner/index.js';
 import {
   ErrorCodes,
   exitWithEnvelope,
@@ -52,12 +56,15 @@ export function registerLastRunCommand(program: Command): void {
         return;
       }
 
-      const entries = fs
+      // Newest by recorded startedAt (true UTC), not by folder name — old
+      // folders encode local time mislabeled `Z` (defect D).
+      const runIds = fs
         .readdirSync(runsDir, { withFileTypes: true })
         .filter((e) => e.isDirectory())
-        .sort((a, b) => b.name.localeCompare(a.name));
+        .map((e) => e.name);
+      const ordered = sortRunIdsNewestFirst(runsDir, runIds);
 
-      if (entries.length === 0) {
+      if (ordered.length === 0) {
         exitWithEnvelope(
           formatError(
             'last-run',
@@ -68,7 +75,7 @@ export function registerLastRunCommand(program: Command): void {
         return;
       }
 
-      const latestRun = entries[0].name;
+      const latestRun = ordered[0];
       const runDir = path.join(runsDir, latestRun);
       const reportPath = path.join(runDir, 'output', 'report.json');
       const completedPath = path.join(runDir, 'completed.json');

@@ -82,5 +82,22 @@ The live `code-review-companion` reviewed all 4 commits. Verdicts: T001/T002 **A
 - **GREEN** (workshop 003, Option C): (1) `IdlePolicyInput.surviveGaps?: boolean` (`idle-policy.ts`); (2) `evaluateIdlePolicy` suppresses branch (b) under `!surviveGaps` only — branch (a) backstop + `unresolvedPeerRequests` continue unchanged; fall-through `continue` reason made conditional so a survive-gaps-over-budget continue reads honestly; (3) durable record — `budgets.surviveGaps` added to the manifest `budgets` type (`types.ts`), recorded at run start in `runner.ts` (independent of `coordinationEnabled`), read via new sync `readSurviveGaps` (`run-manifest.ts`, mirrors `readIdleBudgetMs`), exported from `runner/index.ts`. `evaluateIdlePolicy` stays **unwired** — #49 wires the trigger.
 - **Purity preserved**: `idle-policy.ts` gains no fs/SDK imports — durability reading lives in `run-manifest.ts`/`runner.ts`.
 - **Evidence**: typecheck clean (`tsc --noEmit`); `just fft` green through to sdk-check (`@github/copilot-sdk 1.0.1 latest`); audit = pre-existing transitive vulns only (hono/ws/qs/tar/vitest), non-fatal. Full suite **1432 passed / 16 skipped** (+6 over 5a's 1426 — the new 5b tests).
+- **Commits**: `8a42708` (code + tests + workshop 003) — companion-reviewed; `c1a643c` (runner domain.md).
+
+### Companion debrief (dogfood) — 5b
+
+- Briefed → review-request (`8a42708`) → drain ping → `control:stop`. Companion processed all and exited **clean**: `minih status` verdict `completed`, the `minih run` process exited 0.
+- Final farewell (`minih companion findings`, the #50-F read-path — NOT the wrong inbox lane): **2 reviewed · 0 findings · 2 summaries** → clean **APPROVE** of 5b. No inline fixes needed (contrast 5a's F001/F002).
+- **Live Phase-4 confirmation (again)**: the companion's `control:stop` exit reconciled to `completed`, not `crashed` — exactly the clean-terminal classification Phase 4 built.
+
+### Phase-end harness seam
+
+- 5b closes Phase 5. The phase-end seam (`--event phase-end`, router owns drain-vs-harvest) already fired at the 5a close (T0z) → routed to `--drain` (observe buffer non-empty: DL-001 inbox-read-path + dogfood notes). Those entries remain pending in the buffer; the drain offer stands at the next harness seam. 5b's dogfood was friction-free (clean review, clean stop) — no new blocking observe entry.
+
+## Phase 5 COMPLETE (5a + 5b)
+
+- All Phase-5 tasks `[x]`: T000–T004, T007, T0z (5a) + T005, T006 (5b). The survival half (heartbeat + stallTimeout frontmatter leg + survive-gaps profile) **and** the compose half (typed `surviveGaps` idle-policy seam, durable `budgets.surviveGaps`, unwired for #49) are both landed and companion-reviewed.
+- **Survival ≠ engagement** holds: longevity keeps the companion alive to be driven; the `git log`-cursor → `outside inbox send` feeder (the engagement half, Finding 12) remains the documented fast-follow.
+- Next: stage 7 review (skippable — a companion reviewed every Phase-5 commit) → stage 8 merge.
 
 

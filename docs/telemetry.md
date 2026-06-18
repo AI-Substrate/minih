@@ -5,15 +5,16 @@ minih supports OpenTelemetry instrumentation for traces, metrics, and structured
 ## Quick start
 
 ```bash
-# Start the observability stack
-docker compose up -d
+# Start the local observability stack (idempotent; waits until ready)
+just lgtm-up
 
-# Enable telemetry and run an agent
-export MINIH_TELEMETRY=true
-minih run hello-world
+# Run an agent with telemetry flowing into the stack
+just telemetry-run hello-world
+# …or manually — note this stack's OTLP port is 4328, not the 4318 default:
+# MINIH_TELEMETRY=true OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4328 minih run hello-world
 
-# View traces in Grafana
-open http://localhost:3000
+# View traces in Grafana (anonymous admin)
+open http://localhost:3060
 ```
 
 ## Environment variables
@@ -23,7 +24,7 @@ open http://localhost:3000
 | `MINIH_TELEMETRY` | unset | Set to `true` to enable telemetry |
 | `MINIH_TELEMETRY_VERBOSE` | unset | Set to `true` to include prompt content and tool outputs in spans |
 | `MINIH_LOG_LEVEL` | `info` | Minimum log severity: `debug`, `info`, `warn`, `error` |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | OTLP collector endpoint |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | OTLP collector endpoint. The bundled `just lgtm-up` stack listens on `http://localhost:4328` (remapped to coexist with other stacks); `just telemetry-run` sets this for you. |
 | `OTEL_SERVICE_NAME` | `minih` | Override the service name in traces |
 | `OTEL_RESOURCE_ATTRIBUTES` | — | Additional resource attributes (e.g., `deployment.environment=ci`) |
 
@@ -72,7 +73,7 @@ Structured logs are emitted at key points (run start/complete, validation result
 
 ### Traces (Tempo)
 
-1. Open Grafana at `http://localhost:3000`
+1. Open Grafana at `http://localhost:3060`
 2. Go to **Explore** → select **Tempo** data source
 3. Search by service name `minih` or browse recent traces
 4. Click a trace to see the span waterfall
@@ -92,15 +93,21 @@ Structured logs are emitted at key points (run start/complete, validation result
 
 The `docker-compose.yml` runs [Grafana LGTM](https://github.com/grafana/docker-otel-lgtm) v0.27.0, which bundles:
 
-- **Loki** — log aggregation
-- **Grafana** — visualization UI (port 3000)
-- **Tempo** — distributed tracing
-- **Mimir** — metrics (Prometheus-compatible)
-- **OpenTelemetry Collector** — receives OTLP on ports 4317 (gRPC) and 4318 (HTTP)
+- **Loki** — log aggregation (host port 3160)
+- **Grafana** — visualization UI (host port 3060)
+- **Tempo** — distributed tracing (host port 3260)
+- **Mimir** — metrics, Prometheus-compatible (host port 9190)
+- **OpenTelemetry Collector** — receives OTLP on host ports 4327 (gRPC) and 4328 (HTTP)
+
+Host ports are shifted off the OTel defaults so this stack coexists with any other
+LGTM/OTLP stack already running on the host (container-internal ports are unchanged).
 
 ```bash
-docker compose up -d    # start
-docker compose down     # stop
+just lgtm-up        # start + wait until every backend is ready
+just lgtm-down      # stop (keeps the data volume)
+just lgtm-clean     # stop + wipe the data volume (fresh slate)
+just lgtm-logs      # tail the container logs
+# (plain `docker compose up -d` / `down` also work)
 ```
 
 ## Sensitive data
@@ -117,16 +124,16 @@ If minih detects `TRACEPARENT` and `TRACESTATE` environment variables, it uses t
 
 **No traces appearing?**
 - Verify `MINIH_TELEMETRY=true` is set
-- Check that the LGTM container is running: `docker compose ps`
-- Confirm port 4318 is accessible: `curl -s http://localhost:4318/v1/traces`
+- Check that the LGTM container is running: `docker compose ps` (or `just lgtm-check`)
+- Confirm the OTLP port is accessible: `curl -s http://localhost:4328/v1/traces`
 - If running inside a devcontainer with Docker-outside-of-Docker, `localhost` won't reach the LGTM container. Use the host gateway IP instead:
 
 ```bash
 # Find the host gateway IP
 ip route | grep default | awk '{print $3}'
 
-# Export the correct endpoint (typically 172.17.0.1)
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://172.17.0.1:4318
+# Export the correct endpoint (typically 172.17.0.1, this stack's port)
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://172.17.0.1:4328
 ```
 
 **Telemetry slowing down CLI?**

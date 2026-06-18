@@ -1,10 +1,30 @@
+# Local OpenTelemetry LGTM stack for minih telemetry (MINIH_TELEMETRY=true).
+# Single all-in-one image: Grafana + Tempo (traces) + Loki (logs) +
+# Prometheus/Mimir (metrics) + an OTLP collector. Drive it via `just lgtm-up`.
+#
+# Host ports are shifted off the OTel defaults so this stack coexists with any
+# other LGTM/OTLP stack already running on the host. Container-internal ports
+# are unchanged; only the host side is remapped. MINIH must therefore point at
+# the remapped OTLP port: OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4328
+# (handled by `just telemetry-run`).
 services:
   lgtm:
     image: grafana/otel-lgtm:0.27.0
+    container_name: minih-lgtm
     ports:
-      - "3000:3000"   # Grafana UI
-      - "4317:4317"   # OTLP gRPC
-      - "4318:4318"   # OTLP HTTP (OTel SDK default)
+      - "3060:3000"   # Grafana UI            (host 3060)
+      - "4328:4318"   # OTLP HTTP ingest       (host 4328 — MINIH sends here)
+      - "4327:4317"   # OTLP gRPC ingest       (host 4327)
+      - "3260:3200"   # Tempo query API        (host 3260, traces)
+      - "9190:9090"   # Prometheus query API   (host 9190, metrics)
+      - "3160:3100"   # Loki query API         (host 3160, logs)
     environment:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+    volumes:
+      # Persist traces/metrics/logs/dashboards across restarts.
+      # `just lgtm-clean` wipes this volume for a fresh slate.
+      - lgtm-data:/data
+
+volumes:
+  lgtm-data:

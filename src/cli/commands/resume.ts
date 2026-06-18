@@ -21,6 +21,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createInterface } from 'node:readline';
+import { context } from '@opentelemetry/api';
 import type { Command } from 'commander';
 import { buildInsideMcpServerConfig } from '../../mcp/index.js';
 import type {
@@ -48,12 +49,19 @@ import {
   validateSlug,
   waitForResumeLock,
 } from '../../runner/index.js';
+import {
+  createLogger,
+  getParentContext,
+  setBaggage,
+  withSpan,
+} from '../../telemetry/index.js';
 import { parseBudgetFlag, resolveEffectiveBudgets } from '../budget-flags.js';
 import {
   ErrorCodes,
   exitWithEnvelope,
   formatError,
   formatSuccess,
+  printEnvelope,
 } from '../output.js';
 import { assertOutsideContext } from '../preaction-context.js';
 import { hasSkillErrors, resolveSkillsConfig } from '../skills.js';
@@ -737,69 +745,106 @@ async function runResumed(args: RunResumedArgs): Promise<void> {
   const runtime = await createSdkRuntime('resume', () => pretty?.cleanup());
 
   try {
-    const onEvent = pretty
-      ? (e: import('../../adapter/events.js').AgentEvent) =>
-          pretty.handleEvent(e)
-      : opts.human
-        ? undefined
-        : displayEvent;
-    const result = await runAgent(
-      runtime.adapter,
-      definition,
-      config,
-      onEvent,
-      agentsDir,
-    );
+    const log = createLogger('cli.resume');
+    log.info(`Command started: resume ${slug}`, {
+      'command.name': 'resume',
+      'agent.slug': slug,
+    });
 
-    pretty?.cleanup();
-    if (opts.human && humanHandle.ref) {
-      humanHandle.ref.unmount();
-      humanHandle.ref = null;
-    }
-    if (isTTY && !opts.human) {
-      displaySummary(result);
-    }
+    // Set baggage for automatic propagation to all child spans (DD5)
+    const baggageCtx = setBaggage({
+      'minih.agent.slug': slug,
+    });
 
-    const status =
-      result.metadata.result === 'completed'
-        ? 'ok'
-        : result.metadata.result === 'degraded'
-          ? 'degraded'
-          : 'error';
+    await context.with(baggageCtx, async () => {
+      await withSpan(
+        'minih.cli.command',
+        async (rootSpan) => {
+          rootSpan.setAttribute('command.name', 'resume');
+          rootSpan.setAttribute('agent.slug', slug);
+          rootSpan.setAttribute('session.id', session.sessionId);
 
-    if (status === 'error') {
-      const errorCode =
-        result.metadata.result === 'timeout'
-          ? ErrorCodes.AGENT_TIMEOUT
-          : ErrorCodes.AGENT_EXECUTION_FAILED;
-      exitWithEnvelope(
-        formatError('resume', errorCode, result.agentResult.output, {
-          runDir: result.runDir,
-          metadata: result.metadata,
-        }),
-      );
-    } else {
-      exitWithEnvelope(
-        formatSuccess(
-          'resume',
-          {
-            slug,
-            runId: result.metadata.runId,
-            runDir: result.runDir,
-            sessionId: result.metadata.sessionId,
-            resumedFromRunId: session.runId,
-            originalSessionId: session.sessionId,
-            inPlace: args.useInPlace,
-            fromState: args.fromState,
+          const onEvent = pretty
+            ? (e: import('../../adapter/events.js').AgentEvent) =>
+                pretty.handleEvent(e)
+            : opts.human
+              ? undefined
+              : displayEvent;
+          const result = await runAgent(
+            runtime.adapter,
+            definition,
+            config,
+            onEvent,
+            agentsDir,
+          );
+
+          pretty?.cleanup();
+          if (opts.human && humanHandle.ref) {
+            humanHandle.ref.unmount();
+            humanHandle.ref = null;
+          }
+          if (isTTY && !opts.human) {
+            displaySummary(result);
+          }
+
+          rootSpan.setAttribute('run.id', result.metadata.runId);
+          rootSpan.setAttribute('result', result.metadata.result);
+          rootSpan.setAttribute('duration_ms', result.metadata.durationMs);
+
+          log.info(`Command completed: resume ${slug}`, {
+            'command.name': 'resume',
+            'agent.slug': slug,
+            'run.id': result.metadata.runId,
             result: result.metadata.result,
-            durationMs: result.metadata.durationMs,
-            eventCount: result.metadata.eventCount,
-            toolCallCount: result.metadata.toolCallCount,
-          },
-          status as 'ok' | 'degraded',
-        ),
-      );
-    }
+            duration_ms: result.metadata.durationMs,
+          });
+
+          const status =
+            result.metadata.result === 'completed'
+              ? 'ok'
+              : result.metadata.result === 'degraded'
+                ? 'degraded'
+                : 'error';
+
+          if (status === 'error') {
+            const errorCode =
+              result.metadata.result === 'timeout'
+                ? ErrorCodes.AGENT_TIMEOUT
+                : ErrorCodes.AGENT_EXECUTION_FAILED;
+            printEnvelope(
+              formatError('resume', errorCode, result.agentResult.output, {
+                runDir: result.runDir,
+                metadata: result.metadata,
+              }),
+            );
+            process.exitCode = 1;
+          } else {
+            printEnvelope(
+              formatSuccess(
+                'resume',
+                {
+                  slug,
+                  runId: result.metadata.runId,
+                  runDir: result.runDir,
+                  sessionId: result.metadata.sessionId,
+                  resumedFromRunId: session.runId,
+                  originalSessionId: session.sessionId,
+                  inPlace: args.useInPlace,
+                  fromState: args.fromState,
+                  result: result.metadata.result,
+                  durationMs: result.metadata.durationMs,
+                  eventCount: result.metadata.eventCount,
+                  toolCallCount: result.metadata.toolCallCount,
+                },
+                status as 'ok' | 'degraded',
+              ),
+            );
+          }
+        },
+        undefined,
+        getParentContext(),
+      ); // withSpan
+    }); // context.with
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     const isSessionError =
@@ -827,6 +872,6 @@ async function runResumed(args: RunResumedArgs): Promise<void> {
       formatError('resume', ErrorCodes.AGENT_EXECUTION_FAILED, msg),
     );
   } finally {
-    runtime.cleanup();
+    await runtime.cleanup();
   }
 }

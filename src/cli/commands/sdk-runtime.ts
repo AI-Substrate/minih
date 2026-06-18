@@ -8,6 +8,7 @@
  * duplicating ~80 lines of SDK wiring between run.ts and resume.ts.
  */
 
+import { context, propagation } from '@opentelemetry/api';
 import chalk from 'chalk';
 import type {
   CopilotModelInfo,
@@ -28,7 +29,7 @@ export interface SdkRuntime {
     model?: string;
     reasoningEffort?: CopilotReasoningEffort;
   }) => Promise<ModelValidation>;
-  cleanup: () => void;
+  cleanup: () => Promise<void>;
 }
 
 export type ModelValidation =
@@ -99,8 +100,22 @@ export async function createSdkRuntime(
   // Suppress Node.js ExperimentalWarning in SDK subprocess (SQLite warning)
   process.env.NODE_NO_WARNINGS = '1';
 
-  // Create client + adapter
-  const sdkClient = new CopilotClient();
+  // Create client + adapter (DD13: pass onGetTraceContext for trace stitching)
+  const otlpEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
+  const sdkClient = new (
+    CopilotClient as new (
+      opts?: unknown,
+    ) => { stop(): Promise<unknown> }
+  )({
+    onGetTraceContext: () => {
+      const carrier: Record<string, string> = {};
+      propagation.inject(context.active(), carrier);
+      return carrier;
+    },
+    ...(otlpEndpoint && {
+      telemetry: { otlpEndpoint },
+    }),
+  });
   // biome-ignore lint/suspicious/noExplicitAny: CopilotClient doesn't implement our ICopilotClient exactly
   const adapter = new SdkCopilotAdapter(sdkClient as any);
   const client = sdkClient as ICopilotClient;
@@ -195,10 +210,16 @@ export async function createSdkRuntime(
   };
   process.on('SIGINT', sigintHandler);
 
-  const cleanup = () => {
+  const cleanup = async () => {
     process.removeListener('SIGINT', sigintHandler);
     delete process.env.NODE_NO_WARNINGS;
-    client.stop().catch(() => {});
+    // When telemetry is active, give the CLI's OTel batch exporter time to
+    // flush its pending spans (including the session root span) before we
+    // terminate the process.
+    if (process.env.MINIH_TELEMETRY === 'true') {
+      await new Promise((r) => setTimeout(r, 5000));
+    }
+    await client.stop().catch(() => {});
   };
 
   return { adapter, validateModelConfig, cleanup };

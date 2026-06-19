@@ -1,5 +1,7 @@
+import { trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  getParentContext,
   initTelemetry,
   isTelemetryEnabled,
   shutdownTelemetry,
@@ -12,6 +14,8 @@ describe('telemetry/init', () => {
   beforeEach(() => {
     delete process.env.MINIH_TELEMETRY;
     delete process.env.MINIH_TELEMETRY_VERBOSE;
+    delete process.env.TRACEPARENT;
+    delete process.env.TRACESTATE;
   });
 
   afterEach(async () => {
@@ -65,5 +69,23 @@ describe('telemetry/init', () => {
         throw new Error('test error');
       }),
     ).rejects.toThrow('test error');
+  });
+
+  it('getParentContext is undefined without TRACEPARENT', () => {
+    process.env.MINIH_TELEMETRY = 'true';
+    initTelemetry();
+    expect(getParentContext()).toBeUndefined();
+  });
+
+  it('extracts an UPPERCASE TRACEPARENT env var into the parent context (DD11)', () => {
+    process.env.MINIH_TELEMETRY = 'true';
+    process.env.TRACEPARENT =
+      '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01';
+    initTelemetry();
+    const parent = getParentContext();
+    expect(parent).toBeDefined();
+    const sc = parent ? trace.getSpanContext(parent) : undefined;
+    expect(sc?.traceId).toBe('0af7651916cd43dd8448eb211c80319c');
+    expect(sc?.spanId).toBe('b7ad6b7169203331');
   });
 });

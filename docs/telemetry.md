@@ -71,6 +71,11 @@ Inbox messages carry the producer's `traceparent` (W3C). When the forwarder deli
 message to the inside agent, it creates a `minih.coordination.message_received` span **linked** to
 the producer's span — async messaging connects sender↔receiver with span links, not parent/child.
 
+Coordination spans carry message metadata as attributes: `message.id`, `message.type`,
+`message.sender`, `message.subject`, and `message.body.length`. The full `message.body` is added
+only when `MINIH_TELEMETRY_VERBOSE=true` (DD3 — privacy-safe by default). The same applies to the
+inside agent's `minih.mcp.inbox_send` spans.
+
 Other commands only get telemetry lifecycle (init + flush for logs) but no spans.
 
 ### Metrics

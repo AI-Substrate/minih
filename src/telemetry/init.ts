@@ -120,9 +120,20 @@ export function initTelemetry(): void {
   // DD11: Extract TRACEPARENT/TRACESTATE from env for cross-process stitching.
   // Store as parent context — root spans should use getParentContext() so they
   // appear as children of the calling process's trace.
-  const parentContext = propagation.extract(context.active(), process.env);
-  if (parentContext !== context.active()) {
-    extractedParentContext = parentContext;
+  //
+  // Env vars are UPPERCASE by convention, but the W3C trace-context propagator
+  // reads LOWERCASE carrier keys (`traceparent`/`tracestate`). Passing
+  // `process.env` directly therefore never matches. Build a normalized carrier
+  // (accept either casing) so cross-process stitching actually works.
+  const traceparent = process.env.TRACEPARENT ?? process.env.traceparent;
+  const tracestate = process.env.TRACESTATE ?? process.env.tracestate;
+  if (traceparent) {
+    const carrier: Record<string, string> = { traceparent };
+    if (tracestate) carrier.tracestate = tracestate;
+    const parentContext = propagation.extract(context.active(), carrier);
+    if (parentContext !== context.active()) {
+      extractedParentContext = parentContext;
+    }
   }
 }
 

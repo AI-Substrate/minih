@@ -9,8 +9,10 @@ import {
 import type { InboxMessage, Side } from '../../runner/types.js';
 import { ulid } from '../../runner/ulid.js';
 import {
+  addSpanAttributes,
   coordinationMessagesSent,
   getTraceparent,
+  isVerboseEnabled,
 } from '../../telemetry/index.js';
 import type { McpServerContext } from '../context.js';
 import {
@@ -115,6 +117,15 @@ export function inboxSend(
 
   appendMessage(lanePath(context, 'inside'), message);
   coordinationMessagesSent.add(1, { type: message.type, sender: 'inside' });
+  // Enrich the active minih.mcp.inbox_send dispatch span with message content.
+  addSpanAttributes({
+    'message.id': message.id,
+    'message.type': message.type,
+    'message.subject': subject,
+    'message.body.length': body.length,
+    // Full body only in verbose mode (DD3 — privacy-safe default).
+    ...(isVerboseEnabled() ? { 'message.body': body } : {}),
+  });
   return jsonResult({ message });
 }
 

@@ -100,6 +100,20 @@ export async function createSdkRuntime(
   // Suppress Node.js ExperimentalWarning in SDK subprocess (SQLite warning)
   process.env.NODE_NO_WARNINGS = '1';
 
+  // Telemetry flush reliability: the SDK spawns the Copilot CLI inheriting our
+  // process env. The CLI's long-lived `invoke_agent` root span ends last and
+  // sits in the batch processor's pending queue; `client.stop()` SIGTERMs the
+  // subprocess, which can kill it before that final batch is exported (orphaned
+  // SDK spans). Shrinking the standard OTel batch schedule delay makes the
+  // subprocess export frequently, so the root span is flushed within a few
+  // hundred ms of ending — well before stop(). Deterministic, unlike a sleep.
+  if (
+    process.env.MINIH_TELEMETRY === 'true' &&
+    process.env.OTEL_BSP_SCHEDULE_DELAY === undefined
+  ) {
+    process.env.OTEL_BSP_SCHEDULE_DELAY = '500';
+  }
+
   // Create client + adapter (DD13: pass onGetTraceContext for trace stitching)
   const otlpEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
   const sdkClient = new (

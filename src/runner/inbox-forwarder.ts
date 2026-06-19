@@ -3,6 +3,7 @@ import type { Context } from '@opentelemetry/api';
 import type { SessionSender } from '../adapter/events.js';
 import {
   coordinationMessagesReceived,
+  isVerboseEnabled,
   spanContextFromTraceparent,
   withSpan,
 } from '../telemetry/index.js';
@@ -234,6 +235,12 @@ async function deliverMessage(
       span.setAttribute('message.id', message.id);
       span.setAttribute('message.type', message.type);
       span.setAttribute('message.sender', message.sender);
+      span.setAttribute('message.subject', message.subject);
+      span.setAttribute('message.body.length', message.body.length);
+      // Full body content only in verbose mode (DD3 — privacy-safe default).
+      if (isVerboseEnabled()) {
+        span.setAttribute('message.body', message.body);
+      }
       await options.sender.send(renderInboxMessageForAgent(message));
     },
     producer ? { links: [{ context: producer }] } : undefined,

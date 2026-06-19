@@ -365,6 +365,13 @@ export interface InboxMessage {
   /** ULID of a message this message acknowledges. */
   ackOf?: string;
   meta?: Record<string, unknown>;
+  /**
+   * W3C `traceparent` of the producer's active span at send time (telemetry on).
+   * Enables the consumer (forwarder) to link delivery to the producer's trace.
+   */
+  traceparent?: string;
+  /** W3C `tracestate` companion to `traceparent` (optional). */
+  tracestate?: string;
 }
 
 /** Outside state — mirrors `src/schemas/outside-state.json`. */

@@ -38,6 +38,10 @@ import {
   writeState,
 } from '../../runner/index.js';
 import {
+  coordinationMessagesSent,
+  getTraceContext,
+} from '../../telemetry/index.js';
+import {
   appendInboxMessage,
   type CoordinationRunTarget,
   invalidArgs,
@@ -240,6 +244,7 @@ function handleOutsideInboxSend(root: Command) {
       'outside',
       message,
     );
+    coordinationMessagesSent.add(1, { type: message.type, sender: 'outside' });
 
     // Derive peer activity AFTER append so the snapshot reflects observed state
     // at the moment the message lands. Tolerates any errors silently — peer is
@@ -607,6 +612,9 @@ export function buildOutsideMessage(input: OutsideMessageInput): InboxMessage {
   };
   if (input.ackOf !== undefined) message.ackOf = input.ackOf;
   if (input.meta !== undefined) message.meta = input.meta;
+  const tc = getTraceContext();
+  if (tc.traceparent !== undefined) message.traceparent = tc.traceparent;
+  if (tc.tracestate !== undefined) message.tracestate = tc.tracestate;
   return message;
 }
 

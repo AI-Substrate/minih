@@ -10,6 +10,10 @@ import {
   writeState,
 } from '../../runner/state.js';
 import type { InsideState, Side, SideState } from '../../runner/types.js';
+import {
+  addSpanAttributes,
+  coordinationStateTransitions,
+} from '../../telemetry/index.js';
 import type { McpServerContext } from '../context.js';
 import { jsonResult, McpToolError, type McpToolResult } from '../types.js';
 import { insideStateSchemaPath } from './inside-state-schema.js';
@@ -111,6 +115,17 @@ export function stateTransition(
       reason: parseOptionalReason(input.reason),
     });
     writeState(location, 'inside', next);
+
+    // OPP-3/OPP-4: enrich the dispatch span (minih.mcp.state_transition) and
+    // record the transition counter. Only on a real transition.
+    addSpanAttributes({
+      'state.from': current.status,
+      'state.to': next.status,
+    });
+    coordinationStateTransitions.add(1, {
+      from: current.status,
+      to: next.status,
+    });
 
     return jsonResult({
       state: next,

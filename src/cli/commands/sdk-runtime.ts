@@ -100,6 +100,20 @@ export async function createSdkRuntime(
   // Suppress Node.js ExperimentalWarning in SDK subprocess (SQLite warning)
   process.env.NODE_NO_WARNINGS = '1';
 
+  // Telemetry flush reliability: the SDK spawns the Copilot CLI inheriting our
+  // process env. The CLI's long-lived `invoke_agent` root span ends last and
+  // sits in the batch processor's pending queue; `client.stop()` SIGTERMs the
+  // subprocess, which can kill it before that final batch is exported (orphaned
+  // SDK spans). Shrinking the standard OTel batch schedule delay makes the
+  // subprocess export frequently, so the root span is flushed within a few
+  // hundred ms of ending — well before stop(). Deterministic, unlike a sleep.
+  if (
+    process.env.MINIH_TELEMETRY === 'true' &&
+    process.env.OTEL_BSP_SCHEDULE_DELAY === undefined
+  ) {
+    process.env.OTEL_BSP_SCHEDULE_DELAY = '500';
+  }
+
   // Create client + adapter (DD13: pass onGetTraceContext for trace stitching)
   const otlpEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
   const sdkClient = new (
@@ -213,16 +227,35 @@ export async function createSdkRuntime(
   const cleanup = async () => {
     process.removeListener('SIGINT', sigintHandler);
     delete process.env.NODE_NO_WARNINGS;
-    // When telemetry is active, give the CLI's OTel batch exporter time to
-    // flush its pending spans (including the session root span) before we
-    // terminate the process.
+    // When telemetry is active, give the Copilot CLI subprocess's OTel batch
+    // exporter time to flush its pending spans (including its session root span)
+    // before we terminate it. The wait is bounded + tunable via
+    // MINIH_TELEMETRY_FLUSH_MS (default 1500ms; 0 disables). The minih process's
+    // own spans flush deterministically via shutdownTelemetry(); this settle is
+    // only for the subprocess exporter, which we can't forceFlush() directly.
     if (process.env.MINIH_TELEMETRY === 'true') {
-      await new Promise((r) => setTimeout(r, 5000));
+      const flushMs = resolveFlushMs(process.env.MINIH_TELEMETRY_FLUSH_MS);
+      if (flushMs > 0) {
+        await new Promise((r) => setTimeout(r, flushMs));
+      }
     }
     await client.stop().catch(() => {});
   };
 
   return { adapter, validateModelConfig, cleanup };
+}
+
+/**
+ * Resolve the telemetry flush settle window (ms) from MINIH_TELEMETRY_FLUSH_MS.
+ * Default 1500ms; clamped to [0, 30000]. Non-numeric → default.
+ */
+function resolveFlushMs(raw: string | undefined): number {
+  const DEFAULT = 1500;
+  const MAX = 30_000;
+  if (raw === undefined || raw === '') return DEFAULT;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return DEFAULT;
+  return Math.min(Math.floor(n), MAX);
 }
 
 /** Pick the closest known model id by Levenshtein distance — null if no plausible match. */

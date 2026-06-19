@@ -117,3 +117,54 @@ export const sessionDuration = {
     _sessionDuration.record(value, attrs);
   },
 };
+
+/** Coordination inbox messages sent (attrs: type, sender). */
+let _coordinationMessagesSent: Counter | undefined;
+export const coordinationMessagesSent = {
+  add(value: number, attrs?: Attributes) {
+    if (!_coordinationMessagesSent) {
+      _coordinationMessagesSent = getMeter().createCounter(
+        'minih.coordination.messages_sent',
+        {
+          description: 'Coordination inbox messages sent',
+          unit: '{messages}',
+        },
+      );
+    }
+    _coordinationMessagesSent.add(value, attrs);
+  },
+};
+
+/** Coordination inbox messages delivered to the inside agent (attrs: type). */
+let _coordinationMessagesReceived: Counter | undefined;
+export const coordinationMessagesReceived = {
+  add(value: number, attrs?: Attributes) {
+    if (!_coordinationMessagesReceived) {
+      _coordinationMessagesReceived = getMeter().createCounter(
+        'minih.coordination.messages_received',
+        {
+          description: 'Coordination inbox messages delivered to the agent',
+          unit: '{messages}',
+        },
+      );
+    }
+    _coordinationMessagesReceived.add(value, attrs);
+  },
+};
+
+/** Coordination inside-state transitions (attrs: from, to). */
+let _coordinationStateTransitions: Counter | undefined;
+export const coordinationStateTransitions = {
+  add(value: number, attrs?: Attributes) {
+    if (!_coordinationStateTransitions) {
+      _coordinationStateTransitions = getMeter().createCounter(
+        'minih.coordination.state_transitions',
+        {
+          description: 'Coordination inside-state transitions',
+          unit: '{transitions}',
+        },
+      );
+    }
+    _coordinationStateTransitions.add(value, attrs);
+  },
+};

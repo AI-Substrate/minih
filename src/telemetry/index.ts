@@ -19,6 +19,9 @@ export type { Logger, LogLevel } from './logger.js';
 export { createLogger } from './logger.js';
 // Metrics
 export {
+  coordinationMessagesReceived,
+  coordinationMessagesSent,
+  coordinationStateTransitions,
   eventCount,
   promptTokens,
   runCount,
@@ -29,11 +32,15 @@ export {
 } from './metrics.js';
 // Spans
 export {
+  addSpanAttributes,
   BaggageCopyProcessor,
   captureContext,
+  contextFromTraceparent,
+  getTraceContext,
   getTraceparent,
   runInContext,
   setBaggage,
+  spanContextFromTraceparent,
   withSpan,
   withSpanSync,
 } from './spans.js';

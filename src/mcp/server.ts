@@ -8,6 +8,13 @@ import {
   ListToolsRequestSchema,
   type Tool,
 } from '@modelcontextprotocol/sdk/types.js';
+import {
+  contextFromTraceparent,
+  getParentContext,
+  initTelemetry,
+  shutdownTelemetry,
+  withSpan,
+} from '../telemetry/index.js';
 import { loadMcpContext, type McpServerContext } from './context.js';
 import { coordinationStatus } from './tools/coordination-status.js';
 import { inboxAck, inboxList, inboxSend } from './tools/inbox.js';
@@ -40,6 +47,7 @@ export function createMinihMcpServer(context: McpServerContext): Server {
       context,
       request.params.name,
       request.params.arguments ?? {},
+      request.params._meta,
     ),
   );
 
@@ -66,6 +74,7 @@ export function dispatchToolCall(
   context: McpServerContext,
   name: string,
   args: Record<string, unknown>,
+  requestMeta?: Record<string, unknown>,
 ): Promise<CallToolResult> {
   const toolName = normalizeMcpToolName(name);
   if (toolName === null) {
@@ -76,17 +85,55 @@ export function dispatchToolCall(
     );
   }
 
-  return dispatchNormalizedToolCall(context, toolName, args).catch((error) => {
-    if (error instanceof McpToolError) {
-      return toCallToolResult(errorResult(error));
-    }
-    return toCallToolResult(
-      errorResult(new McpToolError('MCP_INTERNAL_ERROR', 'MCP tool failed')),
-    );
-  });
+  return dispatchNormalizedToolCall(context, toolName, args, requestMeta).catch(
+    (error) => {
+      if (error instanceof McpToolError) {
+        return toCallToolResult(errorResult(error));
+      }
+      return toCallToolResult(
+        errorResult(new McpToolError('MCP_INTERNAL_ERROR', 'MCP tool failed')),
+      );
+    },
+  );
 }
 
 async function dispatchNormalizedToolCall(
+  context: McpServerContext,
+  toolName: NonNullable<ReturnType<typeof normalizeMcpToolName>>,
+  args: Record<string, unknown>,
+  requestMeta?: Record<string, unknown>,
+): Promise<CallToolResult> {
+  // One span per MCP tool call. Per-call trace context (SEP-414): the Copilot
+  // CLI injects the invoking `execute_tool` span's `traceparent` into
+  // `params._meta`, so we nest this span directly under it. Fall back to the
+  // spawn-time run context (DD11) when absent (telemetry off / older CLI).
+  // No-op when telemetry is disabled (noop tracer).
+  const perCallParent = contextFromTraceparent(
+    typeof requestMeta?.traceparent === 'string'
+      ? requestMeta.traceparent
+      : undefined,
+  );
+  const spawnParent = getParentContext();
+  const parent = perCallParent ?? spawnParent;
+  const contextSource = perCallParent
+    ? 'per-call'
+    : spawnParent
+      ? 'spawn'
+      : 'none';
+  return withSpan(
+    `minih.mcp.${toolName}`,
+    async (span) => {
+      span.setAttribute('mcp.tool', toolName);
+      span.setAttribute('agent.slug', context.agentSlug);
+      span.setAttribute('mcp.trace_context', contextSource);
+      return runMcpTool(context, toolName, args);
+    },
+    undefined,
+    parent,
+  );
+}
+
+async function runMcpTool(
   context: McpServerContext,
   toolName: NonNullable<ReturnType<typeof normalizeMcpToolName>>,
   args: Record<string, unknown>,
@@ -119,9 +166,12 @@ export function applyProcessMarker(context: McpServerContext): void {
 
 export function installSignalHandlers(server: Server): () => void {
   const shutdown = (): void => {
-    void server.close().finally(() => {
-      process.exit(0);
-    });
+    void server
+      .close()
+      .then(() => shutdownTelemetry())
+      .finally(() => {
+        process.exit(0);
+      });
   };
   process.once('SIGTERM', shutdown);
   process.once('SIGINT', shutdown);
@@ -134,6 +184,9 @@ export function installSignalHandlers(server: Server): () => void {
 export async function runStdioMcpServer(
   env: Record<string, string | undefined> = process.env,
 ): Promise<void> {
+  // OPP-1: initialize telemetry for the coordination MCP subprocess. No-op unless
+  // MINIH_TELEMETRY=true was injected at spawn; reads TRACEPARENT for trace stitch.
+  initTelemetry();
   const { server } = createMinihMcpServerFromEnv(env);
   installSignalHandlers(server);
   await server.connect(new StdioServerTransport());

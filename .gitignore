@@ -153,3 +153,6 @@ scratch/
 
 # Engineering-harness transient scratch (defense-in-depth above the CLI's self-healed nested .gitignore)
 .harness/temp/
+
+# Local planning/research scratch for in-progress work (not committed)
+temp/

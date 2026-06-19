@@ -102,6 +102,52 @@ describe('buildInsideMcpServerConfig', () => {
       }),
     ).toThrow(/command/);
   });
+
+  it('omits telemetry env when telemetry is disabled (OPP-1)', () => {
+    const prev = process.env.MINIH_TELEMETRY;
+    delete process.env.MINIH_TELEMETRY;
+    try {
+      const entry = buildInsideMcpServerConfig({
+        runId: 'run-123',
+        runDir: path.join(tmpDir, 'agents', 'code-review', 'runs', 'run-123'),
+        agentSlug: 'code-review',
+        agentsDir: path.join(tmpDir, 'agents'),
+        serverEntryPath: makeServerEntry('dist/mcp/server.js'),
+      })[MINIH_COORDINATION_SERVER_NAME];
+      expect(entry.env.MINIH_TELEMETRY).toBeUndefined();
+      expect(entry.env.OTEL_EXPORTER_OTLP_ENDPOINT).toBeUndefined();
+      expect(entry.env.TRACEPARENT).toBeUndefined();
+    } finally {
+      if (prev !== undefined) process.env.MINIH_TELEMETRY = prev;
+    }
+  });
+
+  it('injects telemetry env when telemetry is enabled (OPP-1)', () => {
+    const prevTel = process.env.MINIH_TELEMETRY;
+    const prevOtlp = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
+    process.env.MINIH_TELEMETRY = 'true';
+    process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://localhost:4318';
+    try {
+      const entry = buildInsideMcpServerConfig({
+        runId: 'run-123',
+        runDir: path.join(tmpDir, 'agents', 'code-review', 'runs', 'run-123'),
+        agentSlug: 'code-review',
+        agentsDir: path.join(tmpDir, 'agents'),
+        serverEntryPath: makeServerEntry('dist/mcp/server.js'),
+      })[MINIH_COORDINATION_SERVER_NAME];
+      expect(entry.env.MINIH_TELEMETRY).toBe('true');
+      expect(entry.env.OTEL_EXPORTER_OTLP_ENDPOINT).toBe(
+        'http://localhost:4318',
+      );
+      // TRACEPARENT only present when an active span exists; none in this unit test.
+    } finally {
+      if (prevTel !== undefined) process.env.MINIH_TELEMETRY = prevTel;
+      else delete process.env.MINIH_TELEMETRY;
+      if (prevOtlp !== undefined)
+        process.env.OTEL_EXPORTER_OTLP_ENDPOINT = prevOtlp;
+      else delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
+    }
+  });
 });
 
 describe('resolveInsideMcpServerEntry', () => {

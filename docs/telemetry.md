@@ -27,6 +27,7 @@ open http://localhost:3060
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | OTLP collector endpoint. The bundled `just lgtm-up` stack listens on `http://localhost:4328` (remapped to coexist with other stacks); `just telemetry-run` sets this for you. |
 | `OTEL_SERVICE_NAME` | `minih` | Override the service name in traces |
 | `OTEL_RESOURCE_ATTRIBUTES` | — | Additional resource attributes (e.g., `deployment.environment=ci`) |
+| `MINIH_TELEMETRY_FLUSH_MS` | `1500` | Settle window (ms) after a run so the Copilot CLI subprocess flushes its span exporter before shutdown. Bounded to `[0, 30000]`; `0` disables the wait. |
 
 ## What is instrumented
 
@@ -51,6 +52,30 @@ minih.cli.command                              (minih)
 
 SDK spans from `github-copilot` are automatically stitched into the same trace via `onGetTraceContext` (DD13). Two services appear in one trace — this is standard distributed tracing.
 
+#### Coordinated runs
+
+Coordinated agents (those with `coordination: enabled`) add spans for the inter-agent channel.
+The **inside MCP coordination server** runs as a separate process; its tool calls are stitched
+into the run trace via a `TRACEPARENT` injected at spawn (it roots under `minih.run.execution`):
+
+```
+minih.run.execution                            (minih)
+  └── minih.mcp.inbox_send                     (minih · MCP subprocess)
+  └── minih.mcp.state_transition               (minih · MCP subprocess)  [state.from, state.to]
+  └── minih.coordination.message_received      (minih · inbox forwarder)
+        ⇢ link → producer span (from the message's traceparent)
+  └── minih.coordination.state_change          (minih · state forwarder)
+```
+
+Inbox messages carry the producer's `traceparent` (W3C). When the forwarder delivers an outside
+message to the inside agent, it creates a `minih.coordination.message_received` span **linked** to
+the producer's span — async messaging connects sender↔receiver with span links, not parent/child.
+
+Coordination spans carry message metadata as attributes: `message.id`, `message.type`,
+`message.sender`, `message.subject`, and `message.body.length`. The full `message.body` is added
+only when `MINIH_TELEMETRY_VERBOSE=true` (DD3 — privacy-safe by default). The same applies to the
+inside agent's `minih.mcp.inbox_send` spans.
+
 Other commands only get telemetry lifecycle (init + flush for logs) but no spans.
 
 ### Metrics
@@ -64,6 +89,9 @@ Other commands only get telemetry lifecycle (init + flush for logs) but no spans
 | `minih.validation.count` | Counter | Validation attempts by result |
 | `minih.prompt.tokens` | Histogram | Prompt token count (GPT tokenizer) |
 | `minih.adapter.session_duration` | Histogram | SDK session duration (ms) |
+| `minih.coordination.messages_sent` | Counter | Inbox messages sent (attrs: `type`, `sender`) |
+| `minih.coordination.messages_received` | Counter | Inbox messages delivered to the inside agent (attr: `type`) |
+| `minih.coordination.state_transitions` | Counter | Inside-state transitions (attrs: `from`, `to`) |
 
 ### Logs
 
@@ -119,6 +147,27 @@ Set `MINIH_TELEMETRY_VERBOSE=true` to include prompt bodies and tool outputs —
 ## Cross-process trace stitching
 
 If minih detects `TRACEPARENT` and `TRACESTATE` environment variables, it uses them as the parent context. This allows stitching traces across process boundaries (e.g., when an agent runs `minih check` during a `minih run`).
+
+### Cross-run stitching (orchestrator → agent)
+
+minih reads `TRACEPARENT` at startup but never sets it for you — so an orchestrator that shells out
+to `minih run` can stitch the child's entire trace under its own span by exporting the active
+context first:
+
+```bash
+# Inside an already-traced process (TRACEPARENT reflects the active span):
+TRACEPARENT="00-<trace>-<span>-01" \
+  MINIH_TELEMETRY=true OTEL_EXPORTER_OTLP_ENDPOINT=$OTEL_EXPORTER_OTLP_ENDPOINT \
+  minih run worker-agent
+```
+
+The child run's root span (`minih.cli.command`) becomes a child of the supplied context (DD11), so
+the orchestrator and worker appear in one trace.
+
+For **inter-agent messages** (one run writing to another's inbox via `minih outside inbox send`),
+linking is automatic and finer-grained: each message carries the sender's `traceparent`, and the
+receiving run's forwarder emits a `minih.coordination.message_received` span **linked** to the
+sender's span — no env wiring required.
 
 ## Troubleshooting
 

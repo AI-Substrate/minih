@@ -335,6 +335,40 @@ describe('inboxSend', () => {
     expect(lines).toHaveLength(20);
     expect(lines.map((line) => JSON.parse(line))).toHaveLength(20);
   });
+
+  it('round-trips a traceparent stamped on an outside message through inbox_list', async () => {
+    const traceparent =
+      '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01';
+    writeMessage('outside', {
+      id: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+      sender: 'outside',
+      type: 'task',
+      subject: 'Traced request',
+      body: 'do the thing',
+      ts: '2026-04-26T00:00:00Z',
+      traceparent,
+    });
+    const result = await listed();
+    expect(result?.messages?.[0]).toMatchObject({ traceparent });
+  });
+
+  it('round-trips traceparent AND tracestate through inbox_list', async () => {
+    const traceparent =
+      '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01';
+    const tracestate = 'vendorA=t61rcWkgMzE,vendorB=abc';
+    writeMessage('outside', {
+      id: '01ARZ3NDEKTSV4RRFFQ69G5FAW',
+      sender: 'outside',
+      type: 'task',
+      subject: 'Traced with state',
+      body: 'do the thing',
+      ts: '2026-04-26T00:00:00Z',
+      traceparent,
+      tracestate,
+    });
+    const result = await listed();
+    expect(result?.messages?.[0]).toMatchObject({ traceparent, tracestate });
+  });
 });
 
 describe('inboxAck', () => {

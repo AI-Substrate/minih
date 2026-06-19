@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  coordinationMessagesReceived,
+  coordinationMessagesSent,
+  coordinationStateTransitions,
   eventCount,
   promptTokens,
   runCount,
@@ -41,6 +44,21 @@ describe('telemetry/metrics', () => {
     ).not.toThrow();
     expect(() =>
       validationCount.add(1, { valid: false, type: 'system' }),
+    ).not.toThrow();
+  });
+
+  it('coordination counters are defined and do not throw', () => {
+    expect(coordinationMessagesSent).toBeDefined();
+    expect(coordinationMessagesReceived).toBeDefined();
+    expect(coordinationStateTransitions).toBeDefined();
+    expect(() =>
+      coordinationMessagesSent.add(1, { type: 'task', sender: 'outside' }),
+    ).not.toThrow();
+    expect(() =>
+      coordinationMessagesReceived.add(1, { type: 'task' }),
+    ).not.toThrow();
+    expect(() =>
+      coordinationStateTransitions.add(1, { from: 'idle', to: 'in-progress' }),
     ).not.toThrow();
   });
 });

@@ -6,6 +6,7 @@ import {
   inboxLanePath,
   stateFilePath,
 } from '../runner/folder.js';
+import { getTraceparent, isTelemetryEnabled } from '../telemetry/index.js';
 import { MCP_ENV_KEYS } from './context.js';
 import { MINIH_COORDINATION_SERVER_NAME } from './types.js';
 
@@ -65,9 +66,26 @@ export function buildInsideMcpServerConfig(
         [MCP_ENV_KEYS.agentSlug]: options.agentSlug,
         [MCP_ENV_KEYS.agentsDir]: agentsDir,
         [MCP_ENV_KEYS.processMarker]: `minih-mcp-${options.runId}`,
+        ...buildTelemetryEnv(),
       },
     },
   };
+}
+
+/**
+ * Telemetry passthrough for the spawned MCP coordination server (OPP-1).
+ * Only emitted when the parent process has telemetry enabled, so the server is
+ * a true no-op when telemetry is off. `TRACEPARENT` carries the active span
+ * (run.execution) so MCP tool spans (DD11) root into the run's distributed trace.
+ */
+function buildTelemetryEnv(): Record<string, string> {
+  if (!isTelemetryEnabled()) return {};
+  const env: Record<string, string> = { MINIH_TELEMETRY: 'true' };
+  const otlpEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
+  if (otlpEndpoint) env.OTEL_EXPORTER_OTLP_ENDPOINT = otlpEndpoint;
+  const traceparent = getTraceparent();
+  if (traceparent) env.TRACEPARENT = traceparent;
+  return env;
 }
 
 export function resolveInsideMcpServerEntry(

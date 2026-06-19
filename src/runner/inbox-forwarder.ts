@@ -1,5 +1,12 @@
 import * as fs from 'node:fs';
+import type { Context } from '@opentelemetry/api';
 import type { SessionSender } from '../adapter/events.js';
+import {
+  coordinationMessagesReceived,
+  isVerboseEnabled,
+  spanContextFromTraceparent,
+  withSpan,
+} from '../telemetry/index.js';
 import {
   type FileWatcher,
   type WatchFactory,
@@ -24,6 +31,12 @@ export interface InboxForwarderOptions {
   debounceMs?: number;
   onError?: (error: Error) => void;
   watchFactory?: WatchFactory;
+  /**
+   * Run-execution span context for rooting receive spans (OPP-3). Forwarders
+   * fire from fs.watch callbacks that break the async context chain, so the
+   * caller captures the execution context and passes it here.
+   */
+  parentContext?: Context;
 }
 
 export interface InboxDrainResult {
@@ -186,7 +199,7 @@ async function drainOnce(
 
   for (const line of completeLinesFrom(content, startOffset)) {
     const message = parseInboxMessage(line.text, line.startOffset);
-    await options.sender.send(renderInboxMessageForAgent(message));
+    await deliverMessage(options, message);
     if (options.commitProgress !== 'manual') {
       updateForwarderWatermark(options, (current) =>
         withInboxOffset(current, line.endOffset),
@@ -203,6 +216,37 @@ async function drainOnce(
     sent,
     stoppedOnTornLine: cursor < content.length,
   };
+}
+
+/**
+ * Deliver one outside message to the agent inside a `minih.coordination.message_received`
+ * span (OPP-2/OPP-3). The span LINKS to the producer's span (from the message's
+ * `traceparent`) — async messaging connects sender↔receiver via links, not parent/child.
+ * Rooted under the run's execution context (`options.parentContext`).
+ */
+async function deliverMessage(
+  options: InboxForwarderOptions,
+  message: InboxMessage,
+): Promise<void> {
+  const producer = spanContextFromTraceparent(message.traceparent);
+  await withSpan(
+    'minih.coordination.message_received',
+    async (span) => {
+      span.setAttribute('message.id', message.id);
+      span.setAttribute('message.type', message.type);
+      span.setAttribute('message.sender', message.sender);
+      span.setAttribute('message.subject', message.subject);
+      span.setAttribute('message.body.length', message.body.length);
+      // Full body content only in verbose mode (DD3 — privacy-safe default).
+      if (isVerboseEnabled()) {
+        span.setAttribute('message.body', message.body);
+      }
+      await options.sender.send(renderInboxMessageForAgent(message));
+    },
+    producer ? { links: [{ context: producer }] } : undefined,
+    options.parentContext,
+  );
+  coordinationMessagesReceived.add(1, { type: message.type });
 }
 
 function watchOptions(
@@ -302,6 +346,25 @@ function parseInboxMessage(text: string, offset: number): InboxMessage {
       throw new InvalidInboxMessageError(offset, 'meta must be an object');
     }
     message.meta = meta as Record<string, unknown>;
+  }
+
+  const traceparent = record.traceparent;
+  if (traceparent !== undefined) {
+    if (typeof traceparent !== 'string') {
+      throw new InvalidInboxMessageError(
+        offset,
+        'traceparent must be a string',
+      );
+    }
+    message.traceparent = traceparent;
+  }
+
+  const tracestate = record.tracestate;
+  if (tracestate !== undefined) {
+    if (typeof tracestate !== 'string') {
+      throw new InvalidInboxMessageError(offset, 'tracestate must be a string');
+    }
+    message.tracestate = tracestate;
   }
 
   return message;

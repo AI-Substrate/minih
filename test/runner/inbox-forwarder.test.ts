@@ -103,6 +103,18 @@ function message(id: string, subject: string, body = 'Body text') {
   })}\n`;
 }
 
+function tracedMessage(id: string, subject: string, traceparent: string) {
+  return `${JSON.stringify({
+    id,
+    sender: 'outside',
+    type: 'task',
+    subject,
+    body: 'Body text',
+    ts: '2026-04-26T00:00:00Z',
+    traceparent,
+  })}\n`;
+}
+
 function forwarder(testSender = sender()) {
   return createInboxForwarder({
     slug,
@@ -127,6 +139,20 @@ describe('inbox forwarder', () => {
     expect(readForwarderWatermark({ slug, agentsDir, runId }).value).toEqual(
       defaultForwarderWatermark(),
     );
+  });
+
+  it('forwards a message carrying a producer traceparent (link path) without error', async () => {
+    const traceparent =
+      '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01';
+    writeInbox([
+      tracedMessage('01ARZ3NDEKTSV4RRFFQ69G5FAV', 'Traced', traceparent),
+    ]);
+    const testSender = sender();
+    const result = await forwarder(testSender).drain();
+
+    expect(result.sent).toBe(1);
+    expect(testSender.prompts).toHaveLength(1);
+    expect(testSender.prompts[0]).toContain('Traced');
   });
 
   it('forwards complete outside inbox messages in order and advances byte offset', async () => {

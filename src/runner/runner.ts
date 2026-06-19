@@ -13,7 +13,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { context } from '@opentelemetry/api';
+import { type Context, context } from '@opentelemetry/api';
 import { withDeadline } from '../adapter/deadline.js';
 import type {
   AgentEvent,
@@ -1192,6 +1192,10 @@ export async function runAgent(
 
       let inboxForwarder: InboxForwarder | null = null;
       let stateForwarder: StateForwarder | null = null;
+      // Captured inside the execution span so forwarder spans (which fire from
+      // fs.watch callbacks that break the async context chain) root under
+      // minih.run.execution (OPP-3).
+      let executionContext: Context | undefined;
       const forwarderErrors: Error[] = [];
       const pendingForwarderCount = (): number =>
         (inboxForwarder?.pendingCount() ?? 0) +
@@ -1231,6 +1235,7 @@ export async function runAgent(
           sender,
           commitProgress: 'manual' as const,
           onError: handleForwarderError,
+          ...(executionContext && { parentContext: executionContext }),
         };
         inboxForwarder = createInboxForwarder(forwarderOptions);
         stateForwarder = createStateForwarder(forwarderOptions);
@@ -1261,6 +1266,9 @@ export async function runAgent(
           async (execSpan) => {
             execSpan.setAttribute('agent.slug', definition.slug);
             execSpan.setAttribute('timeout_ms', timeoutMs);
+            // Capture this span's context so coordination forwarder spans can
+            // root under it from broken-async-chain fs.watch callbacks (OPP-3).
+            executionContext = captureContext();
             log.info(`Agent run started: ${definition.slug}`, {
               'agent.slug': definition.slug,
               model: config.model ?? '',

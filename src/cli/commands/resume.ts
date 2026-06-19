@@ -847,30 +847,30 @@ async function runResumed(args: RunResumedArgs): Promise<void> {
     }); // context.with
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    const isSessionError =
-      /session.*not found|expired|resume|cannot resume/i.test(msg);
-    if (isSessionError) {
-      exitWithEnvelope(
-        formatError(
-          'resume',
-          ErrorCodes.SESSION_EXPIRED,
-          `SDK session for run ${session.runId} has expired; start a fresh run with \`minih run ${slug}\`.`,
-          { originalError: msg },
-        ),
-      );
-    }
-    if (/spawn|ENOENT|MCP/i.test(msg)) {
-      exitWithEnvelope(
-        formatError(
-          'resume',
-          ErrorCodes.MCP_SPAWN_FAILED,
-          `MCP subprocess failed to start: ${msg}`,
-        ),
-      );
-    }
-    exitWithEnvelope(
-      formatError('resume', ErrorCodes.AGENT_EXECUTION_FAILED, msg),
+    // Flush-safe error path (F002): build the envelope, then print + set
+    // exitCode rather than exitWithEnvelope's process.exit(), so the `finally`
+    // cleanup runs and the telemetry root span / metrics flush before exit.
+    let errorEnvelope = formatError(
+      'resume',
+      ErrorCodes.AGENT_EXECUTION_FAILED,
+      msg,
     );
+    if (/session.*not found|expired|resume|cannot resume/i.test(msg)) {
+      errorEnvelope = formatError(
+        'resume',
+        ErrorCodes.SESSION_EXPIRED,
+        `SDK session for run ${session.runId} has expired; start a fresh run with \`minih run ${slug}\`.`,
+        { originalError: msg },
+      );
+    } else if (/spawn|ENOENT|MCP/i.test(msg)) {
+      errorEnvelope = formatError(
+        'resume',
+        ErrorCodes.MCP_SPAWN_FAILED,
+        `MCP subprocess failed to start: ${msg}`,
+      );
+    }
+    printEnvelope(errorEnvelope);
+    process.exitCode = 1;
   } finally {
     await runtime.cleanup();
   }

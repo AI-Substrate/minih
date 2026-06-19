@@ -819,9 +819,13 @@ export function registerRunCommand(program: Command): void {
           }); // context.with
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          exitWithEnvelope(
+          // Flush-safe error path (F002): print + set exitCode rather than
+          // exitWithEnvelope's process.exit(), so the `finally` cleanup runs
+          // and the telemetry root span / metrics flush before exit.
+          printEnvelope(
             formatError('run', ErrorCodes.AGENT_EXECUTION_FAILED, msg),
           );
+          process.exitCode = 1;
         } finally {
           await runtime.cleanup();
         }

@@ -11,7 +11,12 @@
     "body": { "type": "string", "minLength": 0, "maxLength": 10000 },
     "ts": { "type": "string", "format": "date-time" },
     "ackOf": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$" },
-    "meta": { "type": "object" }
+    "meta": { "type": "object" },
+    "traceparent": {
+      "type": "string",
+      "pattern": "^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$"
+    },
+    "tracestate": { "type": "string", "maxLength": 512 }
   },
   "additionalProperties": false
 }

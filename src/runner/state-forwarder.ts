@@ -1,6 +1,8 @@
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
+import type { Context } from '@opentelemetry/api';
 import type { SessionSender } from '../adapter/events.js';
+import { withSpan } from '../telemetry/index.js';
 import {
   type FileWatcher,
   type WatchFactory,
@@ -26,6 +28,8 @@ export interface StateForwarderOptions {
   debounceMs?: number;
   onError?: (error: Error) => void;
   watchFactory?: WatchFactory;
+  /** Run-execution span context for rooting state-change spans (OPP-3). */
+  parentContext?: Context;
 }
 
 export interface StateDrainResult {
@@ -184,7 +188,15 @@ async function drainOnce(
     return { sent: false, fingerprint: nextFingerprint };
   }
 
-  await options.sender.send(renderStateChangeForAgent(state));
+  await withSpan(
+    'minih.coordination.state_change',
+    async (span) => {
+      span.setAttribute('state.status', state.status);
+      await options.sender.send(renderStateChangeForAgent(state));
+    },
+    undefined,
+    options.parentContext,
+  );
   if (options.commitProgress !== 'manual') {
     updateForwarderWatermark(options, (current) =>
       withStateFingerprint(current, nextFingerprint),

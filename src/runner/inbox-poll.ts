@@ -411,6 +411,24 @@ function parseMessageLine(
     }
     message.meta = value.meta;
   }
+  if (value.traceparent !== undefined) {
+    if (typeof value.traceparent !== 'string') {
+      throw new InboxPollError(
+        'INBOX_POLL_CORRUPT',
+        `inbox message at line ${lineNumber} has invalid traceparent`,
+      );
+    }
+    message.traceparent = value.traceparent;
+  }
+  if (value.tracestate !== undefined) {
+    if (typeof value.tracestate !== 'string') {
+      throw new InboxPollError(
+        'INBOX_POLL_CORRUPT',
+        `inbox message at line ${lineNumber} has invalid tracestate`,
+      );
+    }
+    message.tracestate = value.tracestate;
+  }
   return message;
 }
 

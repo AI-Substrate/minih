@@ -7,12 +7,15 @@
  */
 
 import {
+  type Attributes,
   type Context,
   context,
   propagation,
   type Span,
+  type SpanContext,
   type SpanOptions,
   SpanStatusCode,
+  TraceFlags,
   trace,
 } from '@opentelemetry/api';
 import type {
@@ -57,13 +60,17 @@ export async function withSpan<T>(
 
 /**
  * Start a synchronous span with the minih tracer.
+ * If parentContext is provided, the span is created as a child of that context
+ * (used when the active async context has been broken, e.g. fs.watch callbacks).
  */
 export function withSpanSync<T>(
   name: string,
   fn: (span: Span) => T,
   options?: SpanOptions,
+  parentContext?: Context,
 ): T {
-  return tracer.startActiveSpan(name, options ?? {}, (span) => {
+  const opts = options ?? {};
+  const callback = (span: Span): T => {
     try {
       const result = fn(span);
       return result;
@@ -76,7 +83,11 @@ export function withSpanSync<T>(
     } finally {
       span.end();
     }
-  });
+  };
+  if (parentContext) {
+    return tracer.startActiveSpan(name, opts, parentContext, callback);
+  }
+  return tracer.startActiveSpan(name, opts, callback);
 }
 
 /**
@@ -101,6 +112,16 @@ export function captureContext(): Context {
 }
 
 /**
+ * Set attributes on the currently-active span, if any. No-op when there is no
+ * recording span (telemetry off or outside any span). Useful for enriching a
+ * span created by an outer wrapper (e.g. the MCP dispatch span) from within an
+ * inner function without creating a nested span.
+ */
+export function addSpanAttributes(attributes: Attributes): void {
+  trace.getActiveSpan()?.setAttributes(attributes);
+}
+
+/**
  * Serialize the current active span context as a W3C traceparent string.
  * Returns undefined if there is no active span or the context is invalid.
  * Format: 00-{traceId}-{spanId}-{traceFlags}
@@ -113,6 +134,35 @@ export function getTraceparent(): string | undefined {
     return undefined;
   const flags = ctx.traceFlags.toString(16).padStart(2, '0');
   return `00-${ctx.traceId}-${ctx.spanId}-${flags}`;
+}
+
+/**
+ * Parse a W3C traceparent string into a remote SpanContext, suitable for use as
+ * a span link target (async messaging: link producer↔consumer across processes).
+ * Manual parse — does not depend on a globally-registered propagator, so it works
+ * even when the OTel SDK is not initialized in the current process.
+ * Returns undefined for any malformed input.
+ */
+export function spanContextFromTraceparent(
+  traceparent: string | undefined,
+): SpanContext | undefined {
+  if (!traceparent) return undefined;
+  const match = /^00-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})$/.exec(
+    traceparent,
+  );
+  if (!match) return undefined;
+  const [, traceId, spanId, flagsHex] = match;
+  if (
+    traceId === '00000000000000000000000000000000' ||
+    spanId === '0000000000000000'
+  ) {
+    return undefined;
+  }
+  const traceFlags =
+    Number.parseInt(flagsHex, 16) & TraceFlags.SAMPLED
+      ? TraceFlags.SAMPLED
+      : TraceFlags.NONE;
+  return { traceId, spanId, traceFlags, isRemote: true };
 }
 
 /**

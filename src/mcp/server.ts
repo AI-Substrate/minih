@@ -8,6 +8,12 @@ import {
   ListToolsRequestSchema,
   type Tool,
 } from '@modelcontextprotocol/sdk/types.js';
+import {
+  getParentContext,
+  initTelemetry,
+  shutdownTelemetry,
+  withSpan,
+} from '../telemetry/index.js';
 import { loadMcpContext, type McpServerContext } from './context.js';
 import { coordinationStatus } from './tools/coordination-status.js';
 import { inboxAck, inboxList, inboxSend } from './tools/inbox.js';
@@ -91,6 +97,26 @@ async function dispatchNormalizedToolCall(
   toolName: NonNullable<ReturnType<typeof normalizeMcpToolName>>,
   args: Record<string, unknown>,
 ): Promise<CallToolResult> {
+  // OPP-1: one span per MCP tool call, rooted under the run's execution span via
+  // the TRACEPARENT injected at spawn (getParentContext / DD11). No-op when
+  // telemetry is disabled (noop tracer).
+  return withSpan(
+    `minih.mcp.${toolName}`,
+    async (span) => {
+      span.setAttribute('mcp.tool', toolName);
+      span.setAttribute('agent.slug', context.agentSlug);
+      return runMcpTool(context, toolName, args);
+    },
+    undefined,
+    getParentContext(),
+  );
+}
+
+async function runMcpTool(
+  context: McpServerContext,
+  toolName: NonNullable<ReturnType<typeof normalizeMcpToolName>>,
+  args: Record<string, unknown>,
+): Promise<CallToolResult> {
   switch (toolName) {
     case 'inbox_list':
       return toCallToolResult(await inboxList(context, args));
@@ -119,9 +145,12 @@ export function applyProcessMarker(context: McpServerContext): void {
 
 export function installSignalHandlers(server: Server): () => void {
   const shutdown = (): void => {
-    void server.close().finally(() => {
-      process.exit(0);
-    });
+    void server
+      .close()
+      .then(() => shutdownTelemetry())
+      .finally(() => {
+        process.exit(0);
+      });
   };
   process.once('SIGTERM', shutdown);
   process.once('SIGINT', shutdown);
@@ -134,6 +163,9 @@ export function installSignalHandlers(server: Server): () => void {
 export async function runStdioMcpServer(
   env: Record<string, string | undefined> = process.env,
 ): Promise<void> {
+  // OPP-1: initialize telemetry for the coordination MCP subprocess. No-op unless
+  // MINIH_TELEMETRY=true was injected at spawn; reads TRACEPARENT for trace stitch.
+  initTelemetry();
   const { server } = createMinihMcpServerFromEnv(env);
   installSignalHandlers(server);
   await server.connect(new StdioServerTransport());

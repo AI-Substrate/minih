@@ -213,16 +213,35 @@ export async function createSdkRuntime(
   const cleanup = async () => {
     process.removeListener('SIGINT', sigintHandler);
     delete process.env.NODE_NO_WARNINGS;
-    // When telemetry is active, give the CLI's OTel batch exporter time to
-    // flush its pending spans (including the session root span) before we
-    // terminate the process.
+    // When telemetry is active, give the Copilot CLI subprocess's OTel batch
+    // exporter time to flush its pending spans (including its session root span)
+    // before we terminate it. The wait is bounded + tunable via
+    // MINIH_TELEMETRY_FLUSH_MS (default 1500ms; 0 disables). The minih process's
+    // own spans flush deterministically via shutdownTelemetry(); this settle is
+    // only for the subprocess exporter, which we can't forceFlush() directly.
     if (process.env.MINIH_TELEMETRY === 'true') {
-      await new Promise((r) => setTimeout(r, 5000));
+      const flushMs = resolveFlushMs(process.env.MINIH_TELEMETRY_FLUSH_MS);
+      if (flushMs > 0) {
+        await new Promise((r) => setTimeout(r, flushMs));
+      }
     }
     await client.stop().catch(() => {});
   };
 
   return { adapter, validateModelConfig, cleanup };
+}
+
+/**
+ * Resolve the telemetry flush settle window (ms) from MINIH_TELEMETRY_FLUSH_MS.
+ * Default 1500ms; clamped to [0, 30000]. Non-numeric → default.
+ */
+function resolveFlushMs(raw: string | undefined): number {
+  const DEFAULT = 1500;
+  const MAX = 30_000;
+  if (raw === undefined || raw === '') return DEFAULT;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return DEFAULT;
+  return Math.min(Math.floor(n), MAX);
 }
 
 /** Pick the closest known model id by Levenshtein distance — null if no plausible match. */

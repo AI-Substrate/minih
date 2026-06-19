@@ -10,6 +10,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { context } from '@opentelemetry/api';
 import chalk from 'chalk';
 import type { Command } from 'commander';
 import { buildInsideMcpServerConfig } from '../../mcp/index.js';
@@ -32,12 +33,19 @@ import {
   validateRunLabel,
   validateSlug,
 } from '../../runner/index.js';
+import {
+  createLogger,
+  getParentContext,
+  setBaggage,
+  withSpan,
+} from '../../telemetry/index.js';
 import { resolveEffectiveBudgets } from '../budget-flags.js';
 import {
   ErrorCodes,
   exitWithEnvelope,
   formatError,
   formatSuccess,
+  printEnvelope,
 } from '../output.js';
 import { parseParamFlags } from '../param-parser.js';
 import { assertOutsideContext } from '../preaction-context.js';
@@ -660,7 +668,7 @@ export function registerRunCommand(program: Command): void {
         });
         if (!modelCheck.ok) {
           pretty?.cleanup();
-          runtime.cleanup();
+          await runtime.cleanup();
           exitWithEnvelope(
             formatError(
               'run',
@@ -672,102 +680,154 @@ export function registerRunCommand(program: Command): void {
         }
 
         try {
-          const onEvent = pretty
-            ? (e: import('../../adapter/events.js').AgentEvent) =>
-                pretty.handleEvent(e)
-            : opts.human
-              ? undefined
-              : displayEvent;
-          const result = await runAgent(
-            runtime.adapter,
-            definition,
-            config,
-            onEvent,
-            agentsDir,
-          );
+          const log = createLogger('cli.run');
+          log.info(`Command started: run ${slug}`, {
+            'command.name': 'run',
+            'agent.slug': slug,
+            model,
+          });
 
-          pretty?.cleanup();
-          // Plan 009 Phase 2 — when --human owns the renderer, the live TUI
-          // already shows the final state; don't double-print the pretty summary.
-          if (opts.human && humanHandle.ref) {
-            humanHandle.ref.unmount();
-            humanHandle.ref = null;
-          }
-          if (isTTY && !opts.human) {
-            displaySummary(result);
-          }
+          // Set baggage for automatic propagation to all child spans (DD5)
+          const baggageCtx = setBaggage({
+            'minih.agent.slug': slug,
+            'minih.model': model,
+          });
 
-          const status =
-            result.metadata.result === 'completed'
-              ? 'ok'
-              : result.metadata.result === 'degraded'
-                ? 'degraded'
-                : 'error';
+          await context.with(baggageCtx, async () => {
+            await withSpan(
+              'minih.cli.command',
+              async (rootSpan) => {
+                rootSpan.setAttribute('command.name', 'run');
+                rootSpan.setAttribute('agent.slug', slug);
+                rootSpan.setAttribute('model', model);
 
-          if (status === 'error') {
-            // FX008-4 — route permission denials to dedicated error codes.
-            // `permissionError.kind === 'coord-write-deny'` → E205 (FX008
-            // boot precondition). Any other kind (shell/write/mcp/read/...)
-            // → E200 (the canonical permission-denied code allocated in
-            // Plan 018 R1; previously unwired). Falls through to E120 for
-            // non-permission failures and E123 for timeouts.
-            const permissionKind = result.metadata.permissionError?.kind;
-            let errorCode: string = ErrorCodes.AGENT_EXECUTION_FAILED;
-            if (result.metadata.result === 'timeout') {
-              errorCode = ErrorCodes.AGENT_TIMEOUT;
-            } else if (permissionKind === 'coord-write-deny') {
-              errorCode = ErrorCodes.COORDINATION_WRITE_DENIED;
-            } else if (permissionKind) {
-              errorCode = ErrorCodes.PERMISSION_DENIED;
-            }
-            exitWithEnvelope(
-              formatError('run', errorCode, result.agentResult.output, {
-                runDir: result.runDir,
-                metadata: result.metadata,
-              }),
-            );
-          } else {
-            exitWithEnvelope(
-              formatSuccess(
-                'run',
-                {
-                  slug,
-                  runId: result.metadata.runId,
-                  runDir: result.runDir,
-                  sessionId: result.metadata.sessionId,
-                  ...(result.metadata.label && {
-                    label: result.metadata.label,
-                  }),
-                  ...(result.metadata.paramsSummary && {
-                    paramsSummary: result.metadata.paramsSummary,
-                  }),
+                const onEvent = pretty
+                  ? (e: import('../../adapter/events.js').AgentEvent) =>
+                      pretty.handleEvent(e)
+                  : opts.human
+                    ? undefined
+                    : displayEvent;
+                const result = await runAgent(
+                  runtime.adapter,
+                  definition,
+                  config,
+                  onEvent,
+                  agentsDir,
+                );
+
+                pretty?.cleanup();
+                // Plan 009 Phase 2 — when --human owns the renderer, the live
+                // TUI already shows the final state; don't double-print the
+                // pretty summary.
+                if (opts.human && humanHandle.ref) {
+                  humanHandle.ref.unmount();
+                  humanHandle.ref = null;
+                }
+                if (isTTY && !opts.human) {
+                  displaySummary(result);
+                }
+
+                rootSpan.setAttribute('run.id', result.metadata.runId);
+                rootSpan.setAttribute('result', result.metadata.result);
+                rootSpan.setAttribute(
+                  'duration_ms',
+                  result.metadata.durationMs,
+                );
+                rootSpan.setAttribute(
+                  'validated',
+                  result.metadata.validated ?? false,
+                );
+
+                log.info(`Command completed: run ${slug}`, {
+                  'command.name': 'run',
+                  'agent.slug': slug,
+                  'run.id': result.metadata.runId,
                   result: result.metadata.result,
-                  durationMs: result.metadata.durationMs,
-                  validated: result.metadata.validated,
-                  validationErrors: result.metadata.validationErrors,
-                  eventCount: result.metadata.eventCount,
-                  toolCallCount: result.metadata.toolCallCount,
-                  ...(result.metadata.velocity && {
-                    velocity: result.metadata.velocity,
-                  }),
-                  ...(result.parsedReport && {
-                    summary: result.parsedReport.summary,
-                    magicWand: result.parsedReport.magicWand,
-                    magicWandTarget: result.parsedReport.magicWandTarget,
-                    difficulties: result.parsedReport.difficulties,
-                  }),
-                },
-                status as 'ok' | 'degraded',
-              ),
-            );
-          }
+                  duration_ms: result.metadata.durationMs,
+                });
+
+                const status =
+                  result.metadata.result === 'completed'
+                    ? 'ok'
+                    : result.metadata.result === 'degraded'
+                      ? 'degraded'
+                      : 'error';
+
+                if (status === 'error') {
+                  // FX008-4 — route permission denials to dedicated error
+                  // codes. `permissionError.kind === 'coord-write-deny'` →
+                  // E205 (FX008 boot precondition). Any other kind
+                  // (shell/write/mcp/read/...) → E200 (the canonical
+                  // permission-denied code allocated in Plan 018 R1;
+                  // previously unwired). Falls through to E120 for
+                  // non-permission failures and E123 for timeouts.
+                  const permissionKind = result.metadata.permissionError?.kind;
+                  let errorCode: string = ErrorCodes.AGENT_EXECUTION_FAILED;
+                  if (result.metadata.result === 'timeout') {
+                    errorCode = ErrorCodes.AGENT_TIMEOUT;
+                  } else if (permissionKind === 'coord-write-deny') {
+                    errorCode = ErrorCodes.COORDINATION_WRITE_DENIED;
+                  } else if (permissionKind) {
+                    errorCode = ErrorCodes.PERMISSION_DENIED;
+                  }
+                  printEnvelope(
+                    formatError('run', errorCode, result.agentResult.output, {
+                      runDir: result.runDir,
+                      metadata: result.metadata,
+                    }),
+                  );
+                  process.exitCode = 1;
+                } else {
+                  printEnvelope(
+                    formatSuccess(
+                      'run',
+                      {
+                        slug,
+                        runId: result.metadata.runId,
+                        runDir: result.runDir,
+                        sessionId: result.metadata.sessionId,
+                        ...(result.metadata.label && {
+                          label: result.metadata.label,
+                        }),
+                        ...(result.metadata.paramsSummary && {
+                          paramsSummary: result.metadata.paramsSummary,
+                        }),
+                        result: result.metadata.result,
+                        durationMs: result.metadata.durationMs,
+                        validated: result.metadata.validated,
+                        validationErrors: result.metadata.validationErrors,
+                        eventCount: result.metadata.eventCount,
+                        toolCallCount: result.metadata.toolCallCount,
+                        ...(result.metadata.velocity && {
+                          velocity: result.metadata.velocity,
+                        }),
+                        ...(result.parsedReport && {
+                          summary: result.parsedReport.summary,
+                          magicWand: result.parsedReport.magicWand,
+                          magicWandTarget: result.parsedReport.magicWandTarget,
+                          difficulties: result.parsedReport.difficulties,
+                        }),
+                      },
+                      status as 'ok' | 'degraded',
+                    ),
+                  );
+                }
+              },
+              undefined,
+              getParentContext(),
+            ); // withSpan
+          }); // context.with
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          exitWithEnvelope(
+          // Flush-safe error path (F002): print + set exitCode rather than
+          // exitWithEnvelope's process.exit(), so the `finally` cleanup runs
+          // and the telemetry root span / metrics flush before exit.
+          printEnvelope(
             formatError('run', ErrorCodes.AGENT_EXECUTION_FAILED, msg),
           );
+          process.exitCode = 1;
         } finally {
-          runtime.cleanup();
+          await runtime.cleanup();
         }
       },
     );

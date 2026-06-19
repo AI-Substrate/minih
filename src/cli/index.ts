@@ -12,6 +12,11 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
+import { initTelemetry, shutdownTelemetry } from '../telemetry/index.js';
+
+// Initialize telemetry before any command logic (DD1, Option A: top-of-entry-point)
+initTelemetry();
+
 import { registerAgentCommand } from './commands/agent.js';
 import { registerAgentReadmeCommand } from './commands/agent-readme.js';
 import { registerAttachCommand } from './commands/attach.js';
@@ -73,6 +78,11 @@ program.hook('preAction', (thisCommand) => {
   }
 });
 
+// Flush telemetry after every command (DD1)
+program.hook('postAction', async () => {
+  await shutdownTelemetry();
+});
+
 registerQuickstartCommand(program);
 registerListCommand(program);
 registerRunCommand(program);
@@ -103,4 +113,4 @@ registerAttachCommand(program);
 registerAgentCommand(program);
 registerProbeCommand(program);
 
-program.parse();
+await program.parseAsync();

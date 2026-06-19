@@ -16,6 +16,13 @@
  * escalates to client.forceStop() (SIGKILL on the subprocess).
  */
 
+import {
+  captureContext,
+  createLogger,
+  runInContext,
+  sessionDuration,
+  withSpan,
+} from '../telemetry/index.js';
 import type {
   CopilotSessionEventLike,
   ICopilotClient,
@@ -77,6 +84,8 @@ export class SdkCopilotAdapter implements IAgentAdapter {
       permissionHandler,
     } = options;
 
+    const log = createLogger('adapter');
+
     const validationError = validatePrompt(prompt);
     if (validationError) {
       return {
@@ -124,28 +133,43 @@ export class SdkCopilotAdapter implements IAgentAdapter {
         }
       : approveAll;
 
-    const session = sessionId
-      ? await this._client.resumeSession(sessionId, {
-          onPermissionRequest: wrappedHandler,
-          ...(options.cwd && { workingDirectory: options.cwd }),
-          ...(model && { model }),
-          ...(reasoningEffort && { reasoningEffort }),
-          ...(configDir && { configDir }),
-          ...(mcpServers && { mcpServers }),
-          ...(skillDirectories && { skillDirectories }),
-          ...(disabledSkills && { disabledSkills }),
-        })
-      : await this._client.createSession({
-          streaming: !!onEvent,
-          onPermissionRequest: wrappedHandler,
-          ...(options.cwd && { workingDirectory: options.cwd }),
-          ...(model && { model }),
-          ...(reasoningEffort && { reasoningEffort }),
-          ...(configDir && { configDir }),
-          ...(mcpServers && { mcpServers }),
-          ...(skillDirectories && { skillDirectories }),
-          ...(disabledSkills && { disabledSkills }),
-        });
+    const sessionStart = Date.now();
+
+    // ── Session Create Span ──
+    const session = await withSpan(
+      'minih.adapter.session_create',
+      async (createSpan) => {
+        createSpan.setAttribute('is_resume', !!sessionId);
+        if (model) createSpan.setAttribute('model', model);
+        createSpan.setAttribute('has_mcp', !!mcpServers);
+
+        const s = sessionId
+          ? await this._client.resumeSession(sessionId, {
+              onPermissionRequest: wrappedHandler,
+              ...(options.cwd && { workingDirectory: options.cwd }),
+              ...(model && { model }),
+              ...(reasoningEffort && { reasoningEffort }),
+              ...(configDir && { configDir }),
+              ...(mcpServers && { mcpServers }),
+              ...(skillDirectories && { skillDirectories }),
+              ...(disabledSkills && { disabledSkills }),
+            })
+          : await this._client.createSession({
+              streaming: !!onEvent,
+              onPermissionRequest: wrappedHandler,
+              ...(options.cwd && { workingDirectory: options.cwd }),
+              ...(model && { model }),
+              ...(reasoningEffort && { reasoningEffort }),
+              ...(configDir && { configDir }),
+              ...(mcpServers && { mcpServers }),
+              ...(skillDirectories && { skillDirectories }),
+              ...(disabledSkills && { disabledSkills }),
+            });
+
+        createSpan.setAttribute('session.id', s.sessionId);
+        return s;
+      },
+    ); // end session create span
 
     // Emit session_start so the runner can capture sessionId for timeout termination
     if (onEvent) {
@@ -170,46 +194,52 @@ export class SdkCopilotAdapter implements IAgentAdapter {
       let hasStreamedThinking = false;
       let idleSettled = false;
 
+      // Capture context before callback registration (Key Finding #02)
+      const eventContext = captureContext();
+
       const idlePromise = new Promise<void>((resolve, reject) => {
         const unsubscribe = session.on((event: CopilotSessionEventLike) => {
-          // Suppress the duplicate consolidated reasoning the SDK re-emits
-          // after reasoning deltas. The consolidated assistant.message is NOT
-          // suppressed (plan 026 review F001): it is the single
-          // turn-accounting `message` event the runner counts for --max-turns.
-          // Display dedup by messageId happens downstream (pretty.ts,
-          // human-view-model.ts).
-          if (event.type === 'assistant.reasoning_delta') {
-            hasStreamedThinking = true;
-          }
-          if (event.type === 'assistant.message_delta') {
-            inFlightMessage = { messageId: event.data?.messageId };
-          }
-          if (event.type === 'assistant.reasoning' && hasStreamedThinking) {
-            return;
-          }
-
-          const agentEvent = translateEvent(event);
-          if (agentEvent && onEvent) {
-            onEvent(agentEvent);
-          }
-
-          if (event.type === 'assistant.message') {
-            output = event.data?.content ?? '';
-            inFlightMessage = null;
-          }
-
-          if (isSessionIdleEvent(event)) {
-            hasStreamedThinking = false;
-            inFlightMessage = null;
-            if (!idleSettled) {
-              idleSettled = true;
-              resolve();
+          // Restore context inside callback for span correlation
+          runInContext(eventContext, () => {
+            // Suppress the duplicate consolidated reasoning the SDK re-emits
+            // after reasoning deltas. The consolidated assistant.message is NOT
+            // suppressed (plan 026 review F001): it is the single
+            // turn-accounting `message` event the runner counts for --max-turns.
+            // Display dedup by messageId happens downstream (pretty.ts,
+            // human-view-model.ts).
+            if (event.type === 'assistant.reasoning_delta') {
+              hasStreamedThinking = true;
             }
-          }
-          if (isSessionErrorEvent(event) && !idleSettled) {
-            idleSettled = true;
-            reject(new Error(sessionErrorMessage(event)));
-          }
+            if (event.type === 'assistant.message_delta') {
+              inFlightMessage = { messageId: event.data?.messageId };
+            }
+            if (event.type === 'assistant.reasoning' && hasStreamedThinking) {
+              return;
+            }
+
+            const agentEvent = translateEvent(event);
+            if (agentEvent && onEvent) {
+              onEvent(agentEvent);
+            }
+
+            if (event.type === 'assistant.message') {
+              output = event.data?.content ?? '';
+              inFlightMessage = null;
+            }
+
+            if (isSessionIdleEvent(event)) {
+              hasStreamedThinking = false;
+              inFlightMessage = null;
+              if (!idleSettled) {
+                idleSettled = true;
+                resolve();
+              }
+            }
+            if (isSessionErrorEvent(event) && !idleSettled) {
+              idleSettled = true;
+              reject(new Error(sessionErrorMessage(event)));
+            }
+          }); // end runInContext
         });
         unsubscribeRun = unsubscribe;
       });
@@ -221,15 +251,26 @@ export class SdkCopilotAdapter implements IAgentAdapter {
         },
       };
 
-      const initialSend = session.send({ prompt: prompt.trim() });
-      try {
-        options.onSessionReady?.(sender);
-      } catch (error) {
+      // ── Session Send Span ──
+      await withSpan('minih.adapter.session_send', async (sendSpan) => {
+        sendSpan.setAttribute('prompt.length', prompt.trim().length);
+        const initialSend = session.send({ prompt: prompt.trim() });
+        try {
+          options.onSessionReady?.(sender);
+        } catch (error) {
+          await initialSend;
+          throw error;
+        }
         await initialSend;
-        throw error;
-      }
-      await initialSend;
-      await idlePromise;
+        await idlePromise;
+      }); // end session send span
+
+      const sessionMs = Date.now() - sessionStart;
+      sessionDuration.record(sessionMs, { 'session.id': session.sessionId });
+      log.info('SDK session completed', {
+        'session.id': session.sessionId,
+        duration_ms: sessionMs,
+      });
 
       return {
         output,
@@ -261,6 +302,10 @@ export class SdkCopilotAdapter implements IAgentAdapter {
           },
         });
       }
+
+      log.error(`SDK session error: ${errorMessage}`, {
+        'session.id': session.sessionId,
+      });
 
       if (onEvent) {
         onEvent({

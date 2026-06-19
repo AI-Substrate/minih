@@ -1,6 +1,6 @@
 {
   "name": "minih",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Standalone declarative agent runner with self-improving feedback",
   "type": "module",
   "bin": {

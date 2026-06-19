@@ -35,6 +35,8 @@ export {
   addSpanAttributes,
   BaggageCopyProcessor,
   captureContext,
+  contextFromTraceparent,
+  getTraceContext,
   getTraceparent,
   runInContext,
   setBaggage,

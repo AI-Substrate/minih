@@ -1,7 +1,10 @@
+import { trace } from '@opentelemetry/api';
 import { describe, expect, it } from 'vitest';
 import {
   BaggageCopyProcessor,
   captureContext,
+  contextFromTraceparent,
+  getTraceContext,
   runInContext,
   setBaggage,
   spanContextFromTraceparent,
@@ -106,6 +109,30 @@ describe('telemetry/spans', () => {
           '00-0af7651916cd43dd8448eb211c80319c-0000000000000000-01',
         ),
       ).toBeUndefined();
+    });
+  });
+
+  describe('contextFromTraceparent', () => {
+    it('builds a parent context that nests a child span under the remote parent', () => {
+      const tp = '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01';
+      const parent = contextFromTraceparent(tp);
+      expect(parent).toBeDefined();
+      const sc = parent ? trace.getSpanContext(parent) : undefined;
+      expect(sc?.traceId).toBe('0af7651916cd43dd8448eb211c80319c');
+      expect(sc?.spanId).toBe('b7ad6b7169203331');
+      expect(sc?.isRemote).toBe(true);
+    });
+
+    it('returns undefined for missing or malformed traceparent', () => {
+      expect(contextFromTraceparent(undefined)).toBeUndefined();
+      expect(contextFromTraceparent('garbage')).toBeUndefined();
+    });
+  });
+
+  describe('getTraceContext', () => {
+    it('returns an empty object when there is no active span', () => {
+      // No SDK registered in unit tests → noop propagator → empty carrier.
+      expect(getTraceContext()).toEqual({});
     });
   });
 });

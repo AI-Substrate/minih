@@ -11,7 +11,7 @@ import { ulid } from '../../runner/ulid.js';
 import {
   addSpanAttributes,
   coordinationMessagesSent,
-  getTraceparent,
+  getTraceContext,
   isVerboseEnabled,
 } from '../../telemetry/index.js';
 import type { McpServerContext } from '../context.js';
@@ -112,8 +112,9 @@ export function inboxSend(
   // (inside-acks-inside) is intentionally allowed for thread continuation.
   if (ackOf !== undefined) message.ackOf = ackOf;
 
-  const traceparent = getTraceparent();
-  if (traceparent !== undefined) message.traceparent = traceparent;
+  const tc = getTraceContext();
+  if (tc.traceparent !== undefined) message.traceparent = tc.traceparent;
+  if (tc.tracestate !== undefined) message.tracestate = tc.tracestate;
 
   appendMessage(lanePath(context, 'inside'), message);
   coordinationMessagesSent.add(1, { type: message.type, sender: 'inside' });
@@ -161,8 +162,9 @@ export function inboxAck(
     ts: new Date().toISOString(),
     ackOf: msgId,
   };
-  const ackTraceparent = getTraceparent();
-  if (ackTraceparent !== undefined) ack.traceparent = ackTraceparent;
+  const ackTc = getTraceContext();
+  if (ackTc.traceparent !== undefined) ack.traceparent = ackTc.traceparent;
+  if (ackTc.tracestate !== undefined) ack.tracestate = ackTc.tracestate;
   appendMessage(lanePath(context, 'inside'), ack);
   coordinationMessagesSent.add(1, { type: 'ack', sender: 'inside' });
   return jsonResult({ acked: true, alreadyAcked: false, msgId, ack });

@@ -68,6 +68,24 @@ describe('MCP server dispatcher', () => {
     });
   });
 
+  it('accepts per-call _meta.traceparent (SEP-414) without affecting the result', async () => {
+    // Per-call trace context is used to parent the span; it must not change the
+    // tool result or throw. (Span nesting itself is verified end-to-end via LGTM.)
+    const result = await dispatchToolCall(
+      context,
+      'inbox_send',
+      { subject: 'Traced', body: 'Body' },
+      {
+        traceparent: '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01',
+      },
+    );
+
+    expect(result.isError).toBeUndefined();
+    expect(result.structuredContent).toMatchObject({
+      message: { sender: 'inside', subject: 'Traced', body: 'Body' },
+    });
+  });
+
   it('dispatches typed tool errors through _meta.code', async () => {
     const result = await dispatchToolCall(context, 'inbox_ack', {
       msgId: 'missing',

@@ -39,7 +39,7 @@ import {
 } from '../../runner/index.js';
 import {
   coordinationMessagesSent,
-  getTraceparent,
+  getTraceContext,
 } from '../../telemetry/index.js';
 import {
   appendInboxMessage,
@@ -612,8 +612,9 @@ export function buildOutsideMessage(input: OutsideMessageInput): InboxMessage {
   };
   if (input.ackOf !== undefined) message.ackOf = input.ackOf;
   if (input.meta !== undefined) message.meta = input.meta;
-  const traceparent = getTraceparent();
-  if (traceparent !== undefined) message.traceparent = traceparent;
+  const tc = getTraceContext();
+  if (tc.traceparent !== undefined) message.traceparent = tc.traceparent;
+  if (tc.tracestate !== undefined) message.tracestate = tc.tracestate;
   return message;
 }
 

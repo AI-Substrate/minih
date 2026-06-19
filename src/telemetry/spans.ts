@@ -11,6 +11,7 @@ import {
   type Context,
   context,
   propagation,
+  ROOT_CONTEXT,
   type Span,
   type SpanContext,
   type SpanOptions,
@@ -137,6 +138,23 @@ export function getTraceparent(): string | undefined {
 }
 
 /**
+ * W3C trace context (`traceparent` + `tracestate`) of the active span, for
+ * stamping on outbound messages. Uses the global propagator so both keys are
+ * captured per W3C Trace Context. Empty object when there is no active span.
+ */
+export function getTraceContext(): {
+  traceparent?: string;
+  tracestate?: string;
+} {
+  const carrier: Record<string, string> = {};
+  propagation.inject(context.active(), carrier);
+  const out: { traceparent?: string; tracestate?: string } = {};
+  if (carrier.traceparent) out.traceparent = carrier.traceparent;
+  if (carrier.tracestate) out.tracestate = carrier.tracestate;
+  return out;
+}
+
+/**
  * Parse a W3C traceparent string into a remote SpanContext, suitable for use as
  * a span link target (async messaging: link producer↔consumer across processes).
  * Manual parse — does not depend on a globally-registered propagator, so it works
@@ -163,6 +181,25 @@ export function spanContextFromTraceparent(
       ? TraceFlags.SAMPLED
       : TraceFlags.NONE;
   return { traceId, spanId, traceFlags, isRemote: true };
+}
+
+/**
+ * Build a parent Context from a W3C traceparent string (e.g. a per-call
+ * `_meta.traceparent` from an MCP `tools/call`, per SEP-414). Pass the result
+ * to `withSpan`/`withSpanSync` so the new span nests under the remote parent
+ * (the caller's `execute_tool` span). Returns undefined for malformed input.
+ *
+ * `tracestate` is accepted for forward-compatibility but not attached to the
+ * span context — nesting only needs trace/span ids; the value is preserved on
+ * the message envelope instead.
+ */
+export function contextFromTraceparent(
+  traceparent: string | undefined,
+  _tracestate?: string,
+): Context | undefined {
+  const spanContext = spanContextFromTraceparent(traceparent);
+  if (!spanContext) return undefined;
+  return trace.setSpanContext(ROOT_CONTEXT, spanContext);
 }
 
 /**

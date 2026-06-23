@@ -143,6 +143,35 @@ describe('copilot-home (plan 029)', () => {
 
       expect(spy).not.toHaveBeenCalled();
     });
+
+    it("neg-control: MINIH_COPILOT_HOME_WARN_MB='0' falls back to 500, not a literal 0 threshold — stays silent", () => {
+      const home = join(tmp, 'zero');
+      mkdirSync(home, { recursive: true });
+      // 4 KB would warn if '0' were taken literally as the threshold (4KB > 0).
+      seedLogs(home, 4096);
+      process.env.MINIH_COPILOT_HOME_WARN_MB = '0';
+      const spy = vi
+        .spyOn(process.stderr, 'write')
+        .mockImplementation(() => true);
+
+      warnIfHomeLogsLarge(home);
+
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('neg-control: a non-numeric MINIH_COPILOT_HOME_WARN_MB falls back to 500 — stays silent', () => {
+      const home = join(tmp, 'nan');
+      mkdirSync(home, { recursive: true });
+      seedLogs(home, 4096);
+      process.env.MINIH_COPILOT_HOME_WARN_MB = 'not-a-number';
+      const spy = vi
+        .spyOn(process.stderr, 'write')
+        .mockImplementation(() => true);
+
+      warnIfHomeLogsLarge(home);
+
+      expect(spy).not.toHaveBeenCalled();
+    });
   });
 
   describe('buildCopilotClientOptions', () => {

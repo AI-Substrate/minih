@@ -20,6 +20,7 @@ import {
   buildCopilotClientOptions,
   resolveCopilotHome,
   resolveCopilotLogLevel,
+  warnIfHomeLogsLarge,
 } from './copilot-home.js';
 
 export interface SdkRuntime {
@@ -112,6 +113,7 @@ export async function createSdkRuntime(
   const otlpEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
   const copilotHome = resolveCopilotHome();
   const logLevel = resolveCopilotLogLevel();
+  warnIfHomeLogsLarge(copilotHome);
   const sdkClient = new (
     CopilotClient as new (
       opts?: unknown,

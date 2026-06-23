@@ -10,7 +10,7 @@
  * (`sdk-runtime.ts`) wires the results into `new CopilotClient(...)`.
  */
 
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { context, propagation } from '@opentelemetry/api';
 
@@ -38,6 +38,9 @@ const LOG_LEVELS: readonly CopilotLogLevel[] = [
 
 /** Default runtime verbosity — toggleable via `MINIH_COPILOT_LOG_LEVEL`. */
 const DEFAULT_LOG_LEVEL: CopilotLogLevel = 'info';
+
+/** Default large-logs warning threshold in MB — override `MINIH_COPILOT_HOME_WARN_MB`. */
+const DEFAULT_WARN_MB = 500;
 
 /**
  * Resolve the per-repo Copilot home and ensure the directory exists.
@@ -109,4 +112,48 @@ export function buildCopilotClientOptions(
     logLevel,
     ...(otlpEndpoint ? { telemetry: { otlpEndpoint } } : {}),
   };
+}
+
+/**
+ * Warn (once, to stderr) when a repo's Copilot logs have grown large.
+ *
+ * Shallow-sums the file sizes directly under `<home>/logs` (one level only —
+ * cheap even at multi-GB) and, if the total exceeds `MINIH_COPILOT_HOME_WARN_MB`
+ * (default 500), prints a single line naming the area + the remedy. Silent when
+ * the threshold isn't crossed or there is no `logs` directory. AC-06.
+ */
+export function warnIfHomeLogsLarge(home: string): void {
+  const overrideMb = Number(process.env.MINIH_COPILOT_HOME_WARN_MB);
+  const thresholdMb =
+    Number.isFinite(overrideMb) && overrideMb > 0
+      ? overrideMb
+      : DEFAULT_WARN_MB;
+  const logsDir = join(home, 'logs');
+
+  let entries: string[];
+  try {
+    entries = readdirSync(logsDir);
+  } catch {
+    return; // no logs dir (or unreadable) → silent
+  }
+
+  let totalBytes = 0;
+  for (const name of entries) {
+    try {
+      const st = statSync(join(logsDir, name));
+      if (st.isFile()) totalBytes += st.size;
+    } catch {
+      // entry vanished or can't be stat'd mid-scan — skip it
+    }
+  }
+
+  const totalMb = totalBytes / (1024 * 1024);
+  if (totalMb > thresholdMb) {
+    process.stderr.write(
+      `⚠️  minih: Copilot logs in ${logsDir} are large ` +
+        `(${totalMb.toFixed(0)} MB > ${thresholdMb} MB threshold). ` +
+        `Lower verbosity with MINIH_COPILOT_LOG_LEVEL=error, raise the limit ` +
+        `with MINIH_COPILOT_HOME_WARN_MB, or clear that directory.\n`,
+    );
+  }
 }

@@ -12,6 +12,7 @@
 
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { context, propagation } from '@opentelemetry/api';
 
 /**
  * Mirror of the SDK's `CopilotClientOptions.logLevel` union
@@ -66,4 +67,46 @@ export function resolveCopilotLogLevel(): CopilotLogLevel {
     return raw as CopilotLogLevel;
   }
   return DEFAULT_LOG_LEVEL;
+}
+
+/**
+ * The subset of `CopilotClientOptions` minih sets, plus the trace-context hook.
+ * Typed locally so this module never imports `@github/copilot-sdk`.
+ */
+export interface CopilotClientOptions {
+  onGetTraceContext: () => Record<string, string>;
+  baseDirectory: string;
+  gitHubToken: string | undefined;
+  logLevel: CopilotLogLevel;
+  telemetry?: { otlpEndpoint: string };
+}
+
+/**
+ * Build the options passed to `new CopilotClient(...)`.
+ *
+ * Sets `baseDirectory` (→ `COPILOT_HOME` on the spawned runtime, relocating the
+ * session store), `gitHubToken` (→ token auth, independent of
+ * `~/.copilot/m-auth`; the SDK flips `useLoggedInUser` to false when a token is
+ * present), and the toggleable `logLevel` — while PRESERVING the existing
+ * `onGetTraceContext` trace-stitch hook (DD13) and the conditional `telemetry`
+ * block. Pure (no SDK import, no I/O) so the wiring is the deterministic sensor
+ * for AC-01 / AC-03 / AC-05.
+ */
+export function buildCopilotClientOptions(
+  home: string,
+  token: string | undefined,
+  logLevel: CopilotLogLevel,
+  otlpEndpoint?: string,
+): CopilotClientOptions {
+  return {
+    onGetTraceContext: () => {
+      const carrier: Record<string, string> = {};
+      propagation.inject(context.active(), carrier);
+      return carrier;
+    },
+    baseDirectory: home,
+    gitHubToken: token,
+    logLevel,
+    ...(otlpEndpoint ? { telemetry: { otlpEndpoint } } : {}),
+  };
 }

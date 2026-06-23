@@ -1,0 +1,331 @@
+{
+  "schema_version": 1,
+  "kind": "flight-plan",
+  "slug": "copilot-home-isolation",
+  "created_at": "2026-06-23T00:07:49.597Z",
+  "provenance": {
+    "record_kind": "flow",
+    "harness_version": "0.5.0",
+    "branch": "main",
+    "repo": "https://github.com/AI-Substrate/minih.git",
+    "created_at": "2026-06-23T00:07:49.597Z",
+    "agent": "the-flow",
+    "plan_id": null
+  },
+  "events": [
+    {
+      "id": "CRT-001",
+      "kind": "created",
+      "origin": "engine",
+      "fired_at": "2026-06-23T00:07:49.608Z",
+      "details": {
+        "kind": "flight-plan",
+        "slug": "copilot-home-isolation"
+      }
+    },
+    {
+      "id": "NOD-001",
+      "kind": "node-created",
+      "origin": "engine",
+      "fired_at": "2026-06-23T00:07:49.680Z",
+      "details": {
+        "node": "ship",
+        "type": "ship"
+      }
+    },
+    {
+      "id": "NOD-002",
+      "kind": "node-created",
+      "origin": "engine",
+      "fired_at": "2026-06-23T00:07:49.746Z",
+      "details": {
+        "node": "plan",
+        "type": "plan"
+      }
+    },
+    {
+      "id": "NOD-003",
+      "kind": "node-created",
+      "origin": "engine",
+      "fired_at": "2026-06-23T00:07:49.815Z",
+      "details": {
+        "node": "research",
+        "type": "research"
+      }
+    },
+    {
+      "id": "CUR-001",
+      "kind": "cursor-moved",
+      "origin": "engine",
+      "fired_at": "2026-06-23T00:07:49.882Z",
+      "details": {
+        "from": "",
+        "to": "research"
+      }
+    },
+    {
+      "id": "STA-001",
+      "kind": "status-changed",
+      "origin": "engine",
+      "fired_at": "2026-06-23T00:11:46.366Z",
+      "details": {
+        "node": "research",
+        "from": "in_progress",
+        "to": "done"
+      }
+    },
+    {
+      "id": "UPD-001",
+      "kind": "node-updated",
+      "origin": "engine",
+      "fired_at": "2026-06-23T00:11:46.437Z",
+      "details": {
+        "node": "research",
+        "fields": [
+          "note"
+        ]
+      }
+    },
+    {
+      "id": "CUR-002",
+      "kind": "cursor-moved",
+      "origin": "engine",
+      "fired_at": "2026-06-23T00:11:46.507Z",
+      "details": {
+        "from": "research",
+        "to": "plan"
+      }
+    },
+    {
+      "id": "STA-002",
+      "kind": "status-changed",
+      "origin": "engine",
+      "fired_at": "2026-06-23T00:24:19.324Z",
+      "details": {
+        "node": "plan",
+        "from": "assumed",
+        "to": "done"
+      }
+    },
+    {
+      "id": "UPD-002",
+      "kind": "node-updated",
+      "origin": "engine",
+      "fired_at": "2026-06-23T00:24:19.424Z",
+      "details": {
+        "node": "plan",
+        "fields": [
+          "note"
+        ]
+      }
+    },
+    {
+      "id": "CUR-003",
+      "kind": "cursor-moved",
+      "origin": "engine",
+      "fired_at": "2026-06-23T00:24:19.516Z",
+      "details": {
+        "from": "plan",
+        "to": "plan"
+      }
+    },
+    {
+      "id": "NOD-004",
+      "kind": "node-created",
+      "origin": "engine",
+      "fired_at": "2026-06-23T00:31:07.888Z",
+      "details": {
+        "node": "ehf-pre-flight",
+        "type": "chore",
+        "chore": {
+          "kind": "command",
+          "importance": "strongly-recommended"
+        }
+      }
+    },
+    {
+      "id": "NOD-005",
+      "kind": "node-created",
+      "origin": "engine",
+      "fired_at": "2026-06-23T00:31:07.949Z",
+      "details": {
+        "node": "ehf-pre-coding",
+        "type": "chore",
+        "chore": {
+          "kind": "command",
+          "importance": "recommended"
+        }
+      }
+    },
+    {
+      "id": "NOD-006",
+      "kind": "node-created",
+      "origin": "engine",
+      "fired_at": "2026-06-23T00:31:08.019Z",
+      "details": {
+        "node": "ehf-post-coding",
+        "type": "chore",
+        "chore": {
+          "kind": "command",
+          "importance": "recommended"
+        }
+      }
+    },
+    {
+      "id": "NOD-007",
+      "kind": "node-created",
+      "origin": "engine",
+      "fired_at": "2026-06-23T00:31:08.087Z",
+      "details": {
+        "node": "ehf-post-flight",
+        "type": "chore",
+        "chore": {
+          "kind": "command",
+          "importance": "recommended"
+        }
+      }
+    },
+    {
+      "id": "STA-003",
+      "kind": "status-changed",
+      "origin": "engine",
+      "fired_at": "2026-06-23T00:44:53.888Z",
+      "details": {
+        "node": "ehf-pre-coding",
+        "from": "known",
+        "to": "done",
+        "chore": {
+          "kind": "command",
+          "importance": "recommended"
+        }
+      }
+    },
+    {
+      "id": "UPD-003",
+      "kind": "node-updated",
+      "origin": "engine",
+      "fired_at": "2026-06-23T01:50:43.092Z",
+      "details": {
+        "node": "plan",
+        "fields": [
+          "comments"
+        ]
+      }
+    }
+  ],
+  "nodes": [
+    {
+      "id": "ship",
+      "type": "ship",
+      "label": "Ship",
+      "status": "assumed",
+      "next": [],
+      "created_at": "2026-06-23T00:07:49.680Z",
+      "modified_at": "2026-06-23T00:07:49.680Z",
+      "zone": "postflight"
+    },
+    {
+      "id": "plan",
+      "type": "plan",
+      "label": "Plan",
+      "status": "done",
+      "next": [
+        "ship"
+      ],
+      "created_at": "2026-06-23T00:07:49.746Z",
+      "modified_at": "2026-06-23T01:50:43.092Z",
+      "ran_at": "2026-06-23T00:24:19.324Z",
+      "note": "copilot-home-isolation-plan.md: Simple, CS-2, READY (gates all PASS/N-A). validate-v2 ran (4 agents) → VALIDATED WITH FIXES: T002 dependency made explicit, logLevel validator added, Depends column, concurrency risk row, AC-07 + tightened T004. SDK options all source-verified.",
+      "comments": [
+        {
+          "at": "2026-06-23T01:50:43.092Z",
+          "text": "Simple build T001-T007 complete on branch 029-copilot-home-isolation (HEAD 7f01f11); companion APPROVE_WITH_NOTES, F001 fixed; all 7 ACs met.",
+          "kind": "note"
+        }
+      ]
+    },
+    {
+      "id": "research",
+      "type": "research",
+      "label": "Research",
+      "status": "done",
+      "next": [
+        "plan"
+      ],
+      "created_at": "2026-06-23T00:07:49.815Z",
+      "modified_at": "2026-06-23T00:11:46.437Z",
+      "ran_at": "2026-06-23T00:11:46.366Z",
+      "note": "research-dossier.md: COPILOT_HOME via baseDirectory is the one knob; per-repo .minih/copilot-home + gitignore; pass gitHubToken for auth; logLevel toggle (default info) + large-logs warning; verified configDir→configDirectory mismatch (side-finding); prior art all agrees."
+    },
+    {
+      "id": "ehf-pre-flight",
+      "type": "chore",
+      "label": "Boot (pre-flight)",
+      "status": "known",
+      "next": [],
+      "created_at": "2026-06-23T00:31:07.888Z",
+      "modified_at": "2026-06-23T00:31:07.888Z",
+      "zone": "preflight",
+      "command": "run /eng-harness-flow --hook pre-flight",
+      "chore": {
+        "kind": "command",
+        "importance": "strongly-recommended"
+      }
+    },
+    {
+      "id": "ehf-pre-coding",
+      "type": "chore",
+      "label": "Backpressure (pre-coding)",
+      "status": "done",
+      "next": [],
+      "created_at": "2026-06-23T00:31:07.949Z",
+      "modified_at": "2026-06-23T00:44:53.888Z",
+      "zone": "preflight",
+      "command": "run /eng-harness-flow --hook pre-coding",
+      "chore": {
+        "kind": "command",
+        "importance": "recommended"
+      },
+      "ran_at": "2026-06-23T00:44:53.888Z"
+    },
+    {
+      "id": "ehf-post-coding",
+      "type": "chore",
+      "label": "Retro drain (post-coding)",
+      "status": "known",
+      "next": [],
+      "created_at": "2026-06-23T00:31:08.018Z",
+      "modified_at": "2026-06-23T00:31:08.018Z",
+      "zone": "flight",
+      "command": "run /eng-harness-flow --hook post-coding",
+      "chore": {
+        "kind": "command",
+        "importance": "recommended"
+      }
+    },
+    {
+      "id": "ehf-post-flight",
+      "type": "chore",
+      "label": "Harvest+improve (post-flight)",
+      "status": "known",
+      "next": [],
+      "created_at": "2026-06-23T00:31:08.087Z",
+      "modified_at": "2026-06-23T00:31:08.087Z",
+      "zone": "postflight",
+      "command": "run /eng-harness-flow --hook post-flight",
+      "chore": {
+        "kind": "command",
+        "importance": "recommended"
+      }
+    }
+  ],
+  "nav": {
+    "now": "plan",
+    "next": "ship",
+    "intent": "Isolate Copilot SDK sessions into a per-repo, git-ignored ./.minih/copilot-home (COPILOT_HOME) so they stop polluting the main copilot CLI's resume list; toggleable log level (default info) + a CLI warning when an area's logs grow large.",
+    "bag": {
+      "mode": "Simple",
+      "status": "active"
+    }
+  }
+}

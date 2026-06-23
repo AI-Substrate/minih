@@ -54,6 +54,13 @@
 - `permission_status` MCP tool (T-S2) for self-introspection by coordinated agents.
 - `permission-prober` agent pack + `minih probe --matrix all/--scenario/--ci` orchestrator (workshop 004) — security validation fleet that fires N parallel scenarios and cross-references each agent's self-report against events.ndjson + run.json truth (untrusted-by-default with nonce + schema gates).
 
+## [0.2.4](https://github.com/AI-Substrate/minih/compare/minih-v0.2.3...minih-v0.2.4) (2026-06-23)
+
+
+### Features
+
+* per-repo Copilot home isolation (COPILOT_HOME under ./.minih) — plan 029 ([#61](https://github.com/AI-Substrate/minih/issues/61)) ([ee17917](https://github.com/AI-Substrate/minih/commit/ee179172b27b5b01854464d116e270748a7bdd95))
+
 ## [0.2.3](https://github.com/AI-Substrate/minih/compare/minih-v0.2.2...minih-v0.2.3) (2026-06-19)
 
 

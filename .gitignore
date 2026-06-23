@@ -148,6 +148,10 @@ session-state/
 session-store.db
 session-store.db*
 
+# Per-repo Copilot home — isolated SDK session store (plan 029).
+# Directory-only rule (trailing slash) so the tracked .minih.json config is unaffected.
+.minih/
+
 # Local scratch — screenshots, pane dumps, paste artifacts (not committed)
 scratch/
 

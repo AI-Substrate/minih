@@ -8,7 +8,6 @@
  * duplicating ~80 lines of SDK wiring between run.ts and resume.ts.
  */
 
-import { context, propagation } from '@opentelemetry/api';
 import chalk from 'chalk';
 import type {
   CopilotModelInfo,
@@ -17,6 +16,12 @@ import type {
 } from '../../adapter/index.js';
 import { SdkCopilotAdapter } from '../../adapter/index.js';
 import { ErrorCodes, exitWithEnvelope, formatError } from '../output.js';
+import {
+  buildCopilotClientOptions,
+  resolveCopilotHome,
+  resolveCopilotLogLevel,
+  warnIfHomeLogsLarge,
+} from './copilot-home.js';
 
 export interface SdkRuntime {
   adapter: SdkCopilotAdapter;
@@ -100,22 +105,27 @@ export async function createSdkRuntime(
   // Suppress Node.js ExperimentalWarning in SDK subprocess (SQLite warning)
   process.env.NODE_NO_WARNINGS = '1';
 
-  // Create client + adapter (DD13: pass onGetTraceContext for trace stitching)
+  // Create client + adapter. Per-repo COPILOT_HOME isolation (plan 029):
+  // baseDirectory relocates the Copilot store under <repo>/.minih/copilot-home,
+  // gitHubToken keeps auth working on the fresh home, logLevel is toggleable.
+  // onGetTraceContext (DD13 trace stitching) + telemetry are preserved by the
+  // pure builder.
   const otlpEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
+  const copilotHome = resolveCopilotHome();
+  const logLevel = resolveCopilotLogLevel();
+  warnIfHomeLogsLarge(copilotHome);
   const sdkClient = new (
     CopilotClient as new (
       opts?: unknown,
     ) => { stop(): Promise<unknown> }
-  )({
-    onGetTraceContext: () => {
-      const carrier: Record<string, string> = {};
-      propagation.inject(context.active(), carrier);
-      return carrier;
-    },
-    ...(otlpEndpoint && {
-      telemetry: { otlpEndpoint },
-    }),
-  });
+  )(
+    buildCopilotClientOptions(
+      copilotHome,
+      process.env.GH_TOKEN,
+      logLevel,
+      otlpEndpoint,
+    ),
+  );
   // biome-ignore lint/suspicious/noExplicitAny: CopilotClient doesn't implement our ICopilotClient exactly
   const adapter = new SdkCopilotAdapter(sdkClient as any);
   const client = sdkClient as ICopilotClient;

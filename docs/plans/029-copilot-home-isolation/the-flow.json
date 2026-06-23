@@ -81,9 +81,7 @@
       "fired_at": "2026-06-23T00:11:46.437Z",
       "details": {
         "node": "research",
-        "fields": [
-          "note"
-        ]
+        "fields": ["note"]
       }
     },
     {
@@ -114,9 +112,7 @@
       "fired_at": "2026-06-23T00:24:19.424Z",
       "details": {
         "node": "plan",
-        "fields": [
-          "note"
-        ]
+        "fields": ["note"]
       }
     },
     {
@@ -207,9 +203,7 @@
       "fired_at": "2026-06-23T01:50:43.092Z",
       "details": {
         "node": "plan",
-        "fields": [
-          "comments"
-        ]
+        "fields": ["comments"]
       }
     }
   ],
@@ -229,9 +223,7 @@
       "type": "plan",
       "label": "Plan",
       "status": "done",
-      "next": [
-        "ship"
-      ],
+      "next": ["ship"],
       "created_at": "2026-06-23T00:07:49.746Z",
       "modified_at": "2026-06-23T01:50:43.092Z",
       "ran_at": "2026-06-23T00:24:19.324Z",
@@ -249,9 +241,7 @@
       "type": "research",
       "label": "Research",
       "status": "done",
-      "next": [
-        "plan"
-      ],
+      "next": ["plan"],
       "created_at": "2026-06-23T00:07:49.815Z",
       "modified_at": "2026-06-23T00:11:46.437Z",
       "ran_at": "2026-06-23T00:11:46.366Z",
